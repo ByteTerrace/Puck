@@ -7,6 +7,9 @@
             "include": "#comments"
         },
         {
+            "include": "#embeddedSql"
+        },
+        {
             "include": "#control"
         },
         {
@@ -32,6 +35,36 @@
         }
     ],
     "repository": {
+        "embeddedSql": {
+            "patterns": [
+                {
+                    "name": "meta.embedded.block.sql.puck",
+                    "begin": "\\b(sql)\\b(?:\\s+(\"[^\"]*\"))?\\s*(\\{)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.declaration.embedded.sql.puck"
+                        },
+                        "2": {
+                            "name": "string.quoted.double.puck"
+                        },
+                        "3": {
+                            "name": "punctuation.section.embedded.begin.puck"
+                        }
+                    },
+                    "end": "\\}",
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.section.embedded.end.puck"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "source.sql"
+                        }
+                    ]
+                }
+            ]
+        },
         "comments": {
             "patterns": [
                 {

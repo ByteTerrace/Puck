@@ -1,6 +1,6 @@
+using System.Text;
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
+using Puck.Abstractions.Documents;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -17,8 +17,10 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(Source);
-        var lowered = WorldDocumentEmitter.Lower(doc);
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: Source
+        ).RequireJson();
 
         var addons = Assert.IsType<JsonArray>(@object: lowered["addons"]);
 
@@ -50,8 +52,10 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(Source);
-        var jsonObj = WorldDocumentEmitter.Lower(doc);
+        var jsonObj = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: Source
+        ).RequireJson();
 
         Assert.Equal(
             "puck.world.definition.v1",
@@ -78,7 +82,7 @@ public class EmitterTests {
             host["targetHertz"]?.GetValue<long>()
         );
 
-        var canonicalJson = WorldDocumentEmitter.CompileToJson(doc);
+        var canonicalJson = Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: jsonObj));
 
         Assert.Contains(
             actualString: canonicalJson,
@@ -155,8 +159,10 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(PuckPipeline);
-        var lowered = WorldDocumentEmitter.Lower(doc);
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: PuckPipeline
+        ).RequireJson();
 
         var views = Assert.IsType<JsonObject>(@object: lowered["views"]);
         var layouts = Assert.IsType<JsonArray>(@object: views["layouts"]);
@@ -238,8 +244,10 @@ public class EmitterTests {
             }
             """;
 
-        var doc = PuckParser.ParseDocument(Source);
-        var lowered = WorldDocumentEmitter.Lower(doc);
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: Source
+        ).RequireJson();
 
         var host = Assert.IsType<JsonObject>(@object: lowered["host"]);
 

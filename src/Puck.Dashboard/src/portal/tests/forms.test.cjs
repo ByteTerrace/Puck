@@ -28,7 +28,7 @@ const bundle = readSchemaBundle(__dirname);
 // with no cells, under an otherwise-empty world.
 function smallDocument() {
   return {
-    schema: 'puck.world.def.v1',
+    schema: 'puck.world.definition.v1',
     state: {
       world: [
         { name: 'score', kind: 'Int', value: 0, min: 0, cells: [{ key: '0', value: 3 }] },
@@ -69,7 +69,7 @@ test('SchemaNode renders an Int64-extreme cell value as an EDITABLE integer text
   // The Int64.MaxValue literal MUST come from parsed TEXT, never a JS numeric literal written in
   // this test's own source — V8 would round a bare `9223372036854775807` the moment this file
   // itself parses, before parseDocumentText ever saw it (the exact corruption this feature fixes).
-  const text = '{"schema":"puck.world.def.v1","state":{"world":[' +
+  const text = '{"schema":"puck.world.definition.v1","state":{"world":[' +
     '{"name":"score","kind":"Int","value":0,"cells":[{"key":"0","value":9223372036854775807}]}' +
     ']}}';
   const document = parseDocumentText(text);

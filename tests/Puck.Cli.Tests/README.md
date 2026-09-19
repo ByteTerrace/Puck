@@ -1,7 +1,8 @@
 # Puck.Cli.Tests
 
 This xUnit suite tests [Puck.Cli](../../src/Puck.Cli/README.md), including
-formatting, authored-content tooling, canary accounting, parity comparison,
+formatting, authored-content tooling, `.puck` source migration, canary
+accounting, parity comparison,
 process handling, branding asset synchronization, and MCP behavior. Individual fixtures define their inputs
 and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.

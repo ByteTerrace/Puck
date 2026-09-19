@@ -419,10 +419,141 @@ public static class WorldModuleNamespace {
         reason = string.Empty;
         return true;
     }
+    // The IR's wire shape flattens an instruction's payload onto the instruction object, so the walk reaches a
+    // payload's registered names by the operation's payload shape rather than through a JSON type info.
+    private static void VisitExpressionProgram(JsonNode node, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+        VisitInstructions(
+            node: node?["instructions"],
+            visitor: visitor
+        );
+        if (node?["subprograms"] is JsonArray subprograms) {
+            foreach (var subprogram in subprograms) {
+                VisitInstructions(
+                    node: subprogram?["instructions"],
+                    visitor: visitor
+                );
+            }
+        }
+    }
+    private static void VisitInstructions(JsonNode? node, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+        if (node is not JsonArray instructions) {
+            return;
+        }
+
+        foreach (var instruction in instructions) {
+            if (
+                (instruction is not JsonObject obj) ||
+                (obj["op"] is not JsonValue opValue) ||
+                !opValue.TryGetValue<string>(value: out var op) ||
+                !Enum.TryParse(
+                ignoreCase: false,
+                result: out ExpressionOp operation,
+                value: op
+            )
+            ) {
+                continue;
+            }
+            switch (ExpressionOperators.PayloadOf(operation: operation)) {
+                case PayloadShape.State:
+                    VisitMember(
+                        declaringType: typeof(InstructionPayload.State),
+                        jsonName: "name",
+                        member: nameof(InstructionPayload.State.Name),
+                        obj: obj,
+                        visitor: visitor
+                    );
+                    VisitMember(
+                        declaringType: typeof(InstructionPayload.State),
+                        jsonName: "key",
+                        member: nameof(InstructionPayload.State.Key),
+                        obj: obj,
+                        visitor: visitor
+                    );
+                    break;
+                case PayloadShape.Board:
+                    VisitMember(
+                        declaringType: typeof(InstructionPayload.Board),
+                        jsonName: "topology",
+                        member: nameof(InstructionPayload.Board.Topology),
+                        obj: obj,
+                        visitor: visitor
+                    );
+                    break;
+                case PayloadShape.Fold:
+                    VisitMember(
+                        declaringType: typeof(InstructionPayload.Fold),
+                        jsonName: "family",
+                        member: nameof(InstructionPayload.Fold.Family),
+                        obj: obj,
+                        visitor: visitor
+                    );
+                    break;
+                case PayloadShape.Vector:
+                    VisitVectorOperand(
+                        node: obj["left"],
+                        visitor: visitor
+                    );
+                    VisitVectorOperand(
+                        node: obj["right"],
+                        visitor: visitor
+                    );
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    private static void VisitVectorOperand(JsonNode? node, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+        if (
+            (node is not JsonObject obj) ||
+            (obj["$type"] is not JsonValue kindValue) ||
+            !kindValue.TryGetValue<string>(value: out var kind) ||
+            !string.Equals(
+            a: kind,
+            b: "cell",
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return;
+        }
+        VisitMember(
+            declaringType: typeof(VectorOperand.Cell),
+            jsonName: "name",
+            member: nameof(VectorOperand.Cell.Name),
+            obj: obj,
+            visitor: visitor
+        );
+        VisitMember(
+            declaringType: typeof(VectorOperand.Cell),
+            jsonName: "key",
+            member: nameof(VectorOperand.Cell.Key),
+            obj: obj,
+            visitor: visitor
+        );
+    }
+    private static void VisitMember(JsonObject obj, string jsonName, Type declaringType, string member, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+        if (
+            (obj[jsonName] is not { } value) ||
+            !WorldNameRegistry.TryResolve(
+            declaringType: declaringType,
+            field: out var field,
+            member: member,
+            propertyType: typeof(string)
+        )
+        ) {
+            return;
+        }
+        visitor(
+            obj,
+            jsonName,
+            value,
+            field
+        );
+    }
     /// <summary>Walks a raw tree type-directed, calling <paramref name="visitor"/> at every registered name-bearing
     /// site with the holding object, the member's JSON name, the value, and the registration: each present member
     /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
-    /// converter-backed shapes (an expression's token object, a reaction scalar's row object) are followed by
+    /// converter-backed shapes (an expression's instruction list, a reaction scalar's row object) are followed by
     /// hand.</summary>
     /// <param name="node">The tree, or the subtree to walk.</param>
     /// <param name="type">The model type <paramref name="node"/> holds.</param>
@@ -434,11 +565,10 @@ public static class WorldModuleNamespace {
             return;
         }
 
-        if (type == typeof(ValueExpression)) {
+        if (type == typeof(ExpressionProgram)) {
             if (node is JsonObject) {
-                Visit(
+                VisitExpressionProgram(
                     node: node,
-                    type: typeof(ValueExpressionTokens),
                     visitor: visitor
                 );
             }
@@ -823,7 +953,7 @@ public static class WorldModuleNamespace {
             return key;
         }
         // Colon segments outside brackets are names; a bracketed span is a live-zone index, a cell key in its own
-        // right. A $bind: read names a rule-local binding, never a row.
+        // right. A $local: read names a rule-scoped local, never a row.
         private string RewriteReserved(string name) {
             if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
@@ -840,7 +970,7 @@ public static class WorldModuleNamespace {
             }
             if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
-                value: RuleFacts.BindPrefix
+                value: RuleFacts.LocalPrefix
             )) {
                 return name;
             }

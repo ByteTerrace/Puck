@@ -9,9 +9,9 @@ namespace Puck.World.Tests;
 /// no motion and received no intent for the authored ticks, and wakes on an adopted intent, a contact-field version
 /// bump, or a designation targeting it.</summary>
 public sealed class BodySleepLawTests {
-    // Comfortably above one fixture Step's own engine-tick width (240 Hz => 210 engine ticks/step), so a body that
-    // wakes for one tick genuinely stays awake that tick rather than crossing straight back over the floor from the
-    // single step's own stepTicks alone.
+    // Below one fixture Step's own engine-tick width, so a single idle step crosses the floor and the body is
+    // asleep after it. A woken body therefore re-crosses the floor within the very step that woke it: an
+    // observation of the wake reads the sleep latch's own tick (AsleepSinceTick), never a still-awake body.
     private const int SleepAfterTicks = 1000;
 
     // Zero gravity on the fixture kit's one Free hold — Fixtures.BuildDocument's kit carries no collider and no
@@ -94,6 +94,7 @@ public sealed class BodySleepLawTests {
 
         Assert.True(condition: body.Asleep);
 
+        var sleptAt = body.AsleepSinceTick;
         var versionBeforeBump = population.ContactFieldVersion;
 
         // A no-op collision retune still recompiles the analytic contact field — an install, by this population's
@@ -108,7 +109,24 @@ public sealed class BodySleepLawTests {
             expected: versionBeforeBump,
             actual: population.ContactFieldVersion
         );
-        Assert.False(condition: body.Asleep);
+
+        // The bump woke it: only WorldBody.Advance's own sleep bookkeeping writes the latch, so a latch naming a
+        // later tick than the one the body first slept at is proof the body advanced — motion program and contact
+        // solve — under the reinstalled field.
+        var wokeAt = body.AsleepSinceTick;
+
+        Assert.True(
+            (wokeAt > sleptAt),
+            userMessage: $"the contact-field bump never woke the body; latch still names tick {sleptAt}"
+        );
+
+        // The control: exactly once. A further step with no install behind it leaves the latch where the wake put
+        // it, so the assertion above reads a wake rather than a body that advances every tick regardless.
+        fixture.Step();
+        Assert.Equal(
+            expected: wokeAt,
+            actual: body.AsleepSinceTick
+        );
     }
     [Fact]
     public void RestingBodyWakesOnDesignationTargetingIt() {

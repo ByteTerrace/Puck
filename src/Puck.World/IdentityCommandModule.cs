@@ -144,10 +144,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             ? "none"
             : string.Join(
                 separator: ",",
-                values: cells.Select(selector: cell => string.Create(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"{cell.Key}:{cell.Value}"
-                ))
+                values: cells.Select(selector: static cell => $"{cell.Key}:{(cell.Value.HasValue ? Puck.State.StateSpelling.Value(value: cell.Value) : "none")}")
             )
         );
 
@@ -196,11 +193,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} cells={(row.Cells?.Count ?? 0)}]");
         }
 
-        var cell = row.Cells![0];
-        var value = ((row.Kind == CellKind.Text)
-            ? $"'{cell.Text}'"
-            : cell.Value.ToString(provider: CultureInfo.InvariantCulture)
-        );
+        var value = StateSpelling.Value(value: row.Cells![0].Value);
 
         return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} value={value}]");
     }

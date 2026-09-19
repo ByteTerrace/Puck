@@ -180,7 +180,7 @@ if (!HAS_FIXTURES) {
       type: 'OPEN_TEXT',
       name: 'preview-fixture.world.json',
       text: JSON.stringify({
-        schema: 'puck.world.def.v1',
+        schema: 'puck.world.definition.v1',
         documentId: 'shell-preview-fixture',
         state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] },
       }),

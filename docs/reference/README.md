@@ -25,6 +25,7 @@ For an introduction, start with the [engine overview](../overview.md) or the
 | [World schema](../../src/Puck.World.Schema/README.md) | Document fields, validation, and composition. |
 | [World name registry](../world-name-registry.md) | Generated names and field ownership; regenerate through the owning CLI command. |
 | [Puck DSL](dsl.md) | Language syntax, values, units, templates, and diagnostics. |
+| [World vocabulary](world-vocabulary.md) | Generated: every world authoring construct, its members, the document member it lowers to, and what the printer requires to print it back. |
 | [Shader documents](shaders.md) | Shader manifests, pipeline resources, bindings, and compilation. |
 | [Cartridge documents](../emulation/shared/cartridge-forge.md) | Native cartridge authoring, pointer editing, and target restrictions. |
 | [Puck API reference](../api/index.md) | Generated members for the libraries selected by the DocFX configuration. |

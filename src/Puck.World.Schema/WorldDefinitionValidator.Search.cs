@@ -2,7 +2,7 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     // Runs only over a candidate whose rules compiled: every plan derives from the compiled rules and the work sheet.
-    private static void ValidateSearch(WorldDefinition definition, CompiledWorldRule[] rules, List<string> errors) {
+    private static void ValidateSearch(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, List<string> errors) {
         var rows = definition.Search.Rows;
 
         if (rows.Count == 0) {
@@ -67,7 +67,8 @@ public static partial class WorldDefinitionValidator {
             judge: out _,
             plans: out _,
             reason: out var reason,
-            rules: rules
+            rules: rules,
+            scores: out _
         )) {
             errors.Add(item: $"{reason}.");
         }

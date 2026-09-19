@@ -74,7 +74,7 @@ Part of [`puck.world.def.v1`](documents.md). See
   `adjacencies` row name, required for `Presence` and refused for `Endowed`)
   and `graceSeconds` are AUTHORED; `contributor` and `retractDeadlineTick` are
   SERVER-STAMPED and a submission naming either is refused BY NAME
-  (`Server/WorldServer.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
+  (`Server/WorldTick.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
   contributor off the acting principal — accepting an authored one would be the
   laundering the acting-principal rule forbids). An UNFILLED slot shows its own
   `slotCreationId`, so no creationless placement has to be representable, and
@@ -108,7 +108,7 @@ Part of [`puck.world.def.v1`](documents.md). See
   row's capacity), carrying the template's prototype and `solid`/`grip`/
   `region`/`emission`; `deal.variants` maps a second keyed row's same-keyed
   cell text to a prototype. The per-tick `SweepPlacementDeals` pass
-  (`WorldServer.Deals.cs`, right after the response sweep) lands children as
+  (`WorldTick.Deals.cs`, right after the response sweep) lands children as
   ordinary placement mutations in one `Batch` under `WorldPrincipal.World`:
   a child keeps its offset while its cell is present, a departing cell frees
   its offset and moves no sibling, an arriving cell takes the lowest free

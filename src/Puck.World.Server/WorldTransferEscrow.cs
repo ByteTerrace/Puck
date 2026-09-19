@@ -34,7 +34,14 @@ public sealed record WorldTransferReservationRequest(
 public readonly record struct WorldTransferKey(string SourceAuthority, ulong TransferId);
 /// <summary>A traveler identity that survives authority-local index changes. The incarnation is minted once from a
 /// complete generation-addressed origin; the epoch advances exactly once at each committed ownership handoff.</summary>
-public readonly record struct WorldMobilityIdentity(WorldEntityAddress Incarnation, ulong Epoch) {
+/// <param name="Incarnation">The origin address the identity was minted from; it never changes.</param>
+/// <param name="Epoch">The count of committed ownership handoffs.</param>
+/// <param name="DepartedFrom">The generation-addressed slot that held the traveler under the authority it last left:
+/// the source stamps its own slot when it offers the traveler, and the destination keeps that stamp until it offers
+/// the traveler onward itself. A generation-addressed slot names one occupant for all time, so an entity a
+/// neighbour's delivered image still shows at this address is this traveler seen before its handoff, not a second
+/// body.</param>
+public readonly record struct WorldMobilityIdentity(WorldEntityAddress Incarnation, ulong Epoch, WorldEntityAddress DepartedFrom) {
     /// <summary>Returns the next committed ownership epoch.</summary>
     public WorldMobilityIdentity Advance() => this with { Epoch = checked((Epoch + 1UL)) };
 }
@@ -731,11 +738,11 @@ public sealed partial class WorldTransferEscrow {
 
             if (lease.Request.PeerAdmission) {
                 reply = (reservationMember.Source.IsLive
-                    ? m_server.AdmitTransferredPeer(
+                    ? m_server.GrantTable.AdmitTransferredPeer(
                         slot: slot,
                         verdict: lease.Arrival
                     )
-                    : m_server.AdmitTransferredEntity(
+                    : m_server.GrantTable.AdmitTransferredEntity(
                         slot: slot,
                         source: reservationMember.Source,
                         identity: reservationMember.Identity
@@ -753,7 +760,7 @@ public sealed partial class WorldTransferEscrow {
             if (!reply.Accepted) {
                 foreach (var landedSlot in landed) {
                     if (lease.Request.PeerAdmission) {
-                        m_server.RollbackTransferredEntity(slot: landedSlot);
+                        m_server.GrantTable.RollbackTransferredEntity(slot: landedSlot);
                     } else {
                         _ = m_server.Population.TryDetachSeatForTransfer(
                             profile: out _,
@@ -787,6 +794,15 @@ public sealed partial class WorldTransferEscrow {
                 catalogRig: reservationMember.CatalogRig
             );
 
+            // The occupant is identified before it is placed: placing resolves contact, and the identity is what
+            // tells contact that a neighbour's record of the slot it departed from shows this same occupant.
+            var committedMobility = reservationMember.Mobility!.Value.Advance();
+
+            m_server.Population.SetMobility(
+                index: slot,
+                mobility: in committedMobility
+            );
+
             if (member.HasMappedArrival) {
                 m_server.Population.ApplyMappedArrival(
                     slot: slot,
@@ -803,13 +819,6 @@ public sealed partial class WorldTransferEscrow {
                     destinationCompletedEngineTick: m_server.CompletedEngineTicks
                 );
             }
-
-            var committedMobility = reservationMember.Mobility!.Value.Advance();
-
-            m_server.Population.SetMobility(
-                index: slot,
-                mobility: in committedMobility
-            );
 
             landed.Add(item: slot);
             m_borderAdmissions[slot] = lease.Request.Border;

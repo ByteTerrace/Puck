@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Embeddings</AssemblyName>
+        <Description>Deterministic embedding providers, batching, and unit vector quantization for Puck simulation state.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Embeddings</PackageId>
+        <PackageTags>puck;embeddings;simulation;vectors</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RootNamespace>Puck.Embeddings</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
+        <PackageReference Include="Azure.Identity" Version="1.21.0" />
+        <PackageReference Include="Microsoft.Extensions.AI" Version="[10.*, )" />
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="[10.*, )" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+</Project>

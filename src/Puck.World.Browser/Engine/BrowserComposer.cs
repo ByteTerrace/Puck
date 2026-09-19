@@ -211,7 +211,6 @@ public static class BrowserComposer {
         var deferred = new List<string>();
 
         if (!BrowserParser.TryParseAndValidate(
-            compilation: out _,
             definition: out var definition,
             deferred: deferred,
             errors: errors,

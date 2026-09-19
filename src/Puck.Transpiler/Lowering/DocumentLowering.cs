@@ -102,6 +102,17 @@ public static class DocumentLowering {
 
                 return JsonValue.Create(value: ident.Name);
 
+            case MemberAccessExpressionNode memberAccess when (memberAccess.Target is IdentifierExpressionNode targetId):
+                var qualified = $"{targetId.Name}.{memberAccess.Member}";
+                if (scope.TryEvaluateBinding(
+                    fieldKey: fieldKey,
+                    name: qualified,
+                    value: out var qBound
+                )) {
+                    return qBound;
+                }
+                return JsonValue.Create(value: qualified);
+
             case ArrayExpressionNode arr: {
                     scope.Budget.Collection(
                         count: arr.Elements.Count,
@@ -314,21 +325,21 @@ public static class DocumentLowering {
 
         return NumberNode(
             value: bin.Operator switch {
-            "+" => (lNum + rNum),
-            "-" => (lNum - rNum),
-            "*" => (lNum * rNum),
-            "/" => ((rNum != 0)
-            ? (lNum / rNum)
-            : 0),
-            // There is deliberately no `//` for integer division: `//` opens a line comment, so `a // b` can only
-            // ever read as `a` followed by a comment. `floor(a / b)` is the spelling, and it is the rule language's
-            // own `floor` — the same name, the same rounding — rather than a second one invented here.
-            // A zero divisor yields zero rather than failing, matching division.
-            "%" => ((rNum != 0)
-            ? (lNum % rNum)
-            : 0),
-            _ => 0,
-        },
+                "+" => (lNum + rNum),
+                "-" => (lNum - rNum),
+                "*" => (lNum * rNum),
+                "/" => ((rNum != 0)
+                ? (lNum / rNum)
+                : 0),
+                // There is deliberately no `//` for integer division: `//` opens a line comment, so `a // b` can only
+                // ever read as `a` followed by a comment. `floor(a / b)` is the spelling, and it is the rule language's
+                // own `floor` — the same name, the same rounding — rather than a second one invented here.
+                // A zero divisor yields zero rather than failing, matching division.
+                "%" => ((rNum != 0)
+                ? (lNum % rNum)
+                : 0),
+                _ => 0,
+            },
             span: bin.Span
         );
     }
@@ -561,18 +572,29 @@ public static class DocumentLowering {
     // A block whose NAME is a template parameter takes the bound value as its name, so one template can declare a
     // differently named row per invocation.
     private static StatementNode Rename(StatementNode statement, DocumentScope scope) {
+        var written = (statement switch {
+            BlockNode block => block.Name,
+            RuleBlockNode rule => rule.Name,
+            _ => null,
+        });
+
         if (
-            (statement is not BlockNode block) ||
-            (block.Name is null) ||
+            string.IsNullOrEmpty(value: written) ||
             !scope.TryLowerBinding(
-            block.Name,
+            written,
             out var nameValue
         )
         ) {
             return statement;
         }
 
-        return (block with { Name = (nameValue?.ToString() ?? block.Name) });
+        var bound = (nameValue?.ToString() ?? written);
+
+        return (statement switch {
+            BlockNode block => (block with { Name = bound }),
+            RuleBlockNode rule => (rule with { Name = bound }),
+            _ => statement,
+        });
     }
 
     /// <summary>Writes a lowered value into a section, extending rather than replacing when both the value and
@@ -947,18 +969,41 @@ public static class DocumentLowering {
         ArgumentNullException.ThrowIfNull(block);
         ArgumentNullException.ThrowIfNull(scope);
 
-        if (block.NameExpression is null) {
-            return block.Name;
+        return ResolveHeaderName(
+            nameExpression: block.NameExpression,
+            scope: scope,
+            written: block.Name
+        );
+    }
+    /// <summary>Returns a rule's name, resolving an interpolated header the way a block's is.</summary>
+    /// <param name="rule">The rule.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>The resolved name, or the written one when the header carries no interpolation.</returns>
+    public static string? ResolveRuleName(RuleBlockNode rule, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        return ResolveHeaderName(
+            nameExpression: rule.NameExpression,
+            scope: scope,
+            written: rule.Name
+        );
+    }
+
+    private static string? ResolveHeaderName(ExpressionNode? nameExpression, string? written, DocumentScope scope) {
+        if (nameExpression is null) {
+            return written;
         }
 
         return (((LowerValue(
-            expr: block.NameExpression,
+            expr: nameExpression,
             scope: scope
         ) is JsonValue value) && value.TryGetValue<string>(value: out var text))
             ? text
-            : block.Name
+            : written
         );
     }
+
     /// <summary>Reads a lowered number whatever JSON numeric kind it landed as.</summary>
     /// <param name="node">The node to read.</param>
     /// <param name="number">The value read, or zero.</param>

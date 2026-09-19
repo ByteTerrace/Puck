@@ -17,7 +17,7 @@ public sealed class EngineTimeAdvanceRateLawTests {
         Max: max,
         Cells: [new StateCell(
                 Key: StateRow.SlotKey,
-                Value: 0
+                Value: CellValue.Int(value: 0L)
             )]
     );
 

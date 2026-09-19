@@ -16,7 +16,7 @@ each admitting an EXISTING `WorldMutation` kind into the rule effect set (riding
 the exact seam `generate` proved, never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
 (a placement row); the rest read or write per-body state (velocity/impulse/
-designate/timer) and are refused BY NAME by `WorldRuleCompiler`. `pose` is the
+designate/timer) and are refused BY NAME by `WorldFactsCompiler`. `pose` is the
 rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 `position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two),
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
@@ -36,14 +36,15 @@ body-reference token `cell:<row>:<key>` does the same inside
 `$distance:`/`$los:`/`$nearest:`; `placement:<id>` and (over a forEach row
 keyed by placement ids) `placement:$each` name the body inhabiting a
 placement. `$zone:<ordered-zone>:first|last` resolves an endpoint's original
-string key from the active store, including a scratch frame. An empty zone's
+string key from the arena, including an uncommitted transfer inside the
+current journal scope. An empty zone's
 endpoint names no cell: a `compareState` over it never holds (not even
 `NotEqual`), an expression over it refuses, and a write it addresses refuses by
 name. A rule's `zones` table (ordered zones over one token domain, in index
 order, `""` a gap) makes `$zones[<index>]` a row position anywhere in the rule —
 `compareState` `state`, `$reduce:`/`$match:` rows, a `$zone:` endpoint's zone,
 transfer ends, expression rows — with an infix key as the index (`game[from]`,
-`$each`, `$bind:<name>`, an expression); an evaluation whose index selects no zone
+`$each`, `$local:<name>`, an expression); an evaluation whose index selects no zone
 reads its gate closed (`world.rule.trace` shows `zones [<spelling> -> <zone|none>]`);
 `forEach: "$zones"` iterates the table. Rule-authored
 transfers resolve their `key`, `from`, and `to` before each transaction step;
@@ -52,8 +53,8 @@ cost, and pattern read sets include attribute and expression dependencies.
 The [Solitaire guide](../../../../src/Puck.World/Assets/worlds/games/README.md)
 owns the collection's table selector, pile IDs, and request protocol.
 A placement's `parent` composes its frame over another's, and a
-`board`-named Grid topology anchors its origin to that placement. `$bind:<name>` reads a value the
-enclosing rule's `bindings` list computed for this evaluation (feed-forward,
+`board`-named Grid topology anchors its origin to that placement. `$local:<name>` reads a value the
+enclosing rule's `locals` list computed for this evaluation (feed-forward,
 declared order, never stored). Any `expression`/`left`/`right`/`score`/affinity
 member accepts an infix string (`"min(damage, hp[$each]) * 2"`, C precedence,
 named forms as calls, `row[key]`/`row.key` reads (the dot form takes exactly one
@@ -85,7 +86,7 @@ the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `la
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
 a keyed read is `row[key]` or `row.key` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
 `row[from + 1]` / `row[(from)]` (any other expression as the key — an implicit int binding evaluated before the
-gate, traced as `$key<n>`, one of the rule's bindings; identical expression-key spellings share a binding within
+gate, traced as `$key<n>`, one of the rule's locals; identical expression-key spellings share a local within
 the same binding scope, never across rules or pattern-local scopes; parenthesize a bare name to read its row's value);
 `sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
 an overflow does — and is counted: a faulting binding, effect, or `compareValue` conjunct reports `Arithmetic`
@@ -101,7 +102,7 @@ over whole board rows, one journaled mutation each); a `transfer` of `count > 1`
 and an interior run is `slice`: the keyed token and everything after it, in order; a pile's order is one integer
 through `$reduce:arrangementRank:<zone>` (k ≤ 20) and the `arrange` transform puts it back. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
-integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
+integer literal, a `$cell:` indirection, `$each`, or an int `$local:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
 state effect is its own boundary; only a `transaction` groups effects
 atomically, and it journals once (a `Batch` mutation whose replay composes its
@@ -118,7 +119,7 @@ branch at any depth (`EffectFamily.AllowsInsideBranch`). `world.rule.trace` narr
 `neither`/`condition failed`) beside the `if`'s own applied/refused/skipped verdict. `if` is refused by name in a
 kit's per-body actions (`ActionSpec`/`WorldBodyMotionProgram`) — a per-body action compiles to a flat instruction
 stream with no branch of its own, the same terms `transaction` and the other world-only effects are refused there.
-`BoardCombination` owns the compiler/frame/live board operation contract; `copy` preserves all source values,
+`BoardCombination` owns the compile-time-fold and live-arena board operation contract; `copy` preserves all source values,
 including its empty value when the target's differs. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
 `canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
@@ -174,7 +175,7 @@ every tick the gate holds) or `Edge` (fires once per crossing, re-arming when th
 gate closes) — a rule that writes a row almost always wants `Edge`. A rule's `name`
 is a `CellName`, the SAME validated-identifier type a state row and a cell
 key ride (dot-free, free of the reserved character set, refused by name at the
-JSON converter and at `world.row.remove rules`), and `WorldRuleCompiler` additionally
+JSON converter and at `world.row.remove rules`), and `WorldFactsCompiler` additionally
 refuses the reserved `$` prefix — `$` marks what the engine mints, and nothing
 mints a rule. Read back with `world.rules`, whose `latch=held|open` column is the
 gate-held latch (`held` = the gate held at the last evaluation, so an edge rule
@@ -270,10 +271,10 @@ ordered zone membership, position attributes, phase progression, and knowledge
 stamps inside the canonical state row converter and authoritative hash. A
 `cellsOf` row's `inverse` trait (`Puck.State.StateInverse`) declares it derived
 from a keyed token row and a codes row rather than authored — the board is
-refused by name at the mutation door and the validator alike, and the engine
-recomposes it from `tokens`/`codes` at compose and install
-(`Puck.State.DerivedBoards.Compose`); a frame recomputes only the moved
-token's two cells. The
+refused by name at the mutation door and the validator alike, and
+`Puck.State.StateArena` recomputes it from `tokens`/`codes` fully on load and
+incrementally — only the moved token's two cells — on a later keyed write to
+either row. The
 closed transform union is shared by mutations and rule transactions. Readers,
 secret draws, and observation payloads have separate authority/presentation
 semantics; see the owning contract in

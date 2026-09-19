@@ -568,7 +568,7 @@ absolute coordinates: chess's squares and pieces carry `parent: tabletop`, its
 board topology anchors to that placement, its piece rows are keyed by
 placement id and read through `placement:$each`, and dominoes, billiards, and
 bowling anchor to marker placements of their own—so a module composes into
-any host that declares the placement it names. Hex lines (`hexlines.world.json`)
+any host that declares the placement it names. Hex lines (`hexlines.puck`)
 is a radius-4 hexagonal disk of 61 pointy-top tiles on `hexTable` with two stone
 trays, its `hexLinesBoard` topology unanchored today (a `board` facet admits only
 a Grid topology, so a host restating `hexTable` restates the topology's origin
@@ -1378,7 +1378,10 @@ covers tabletop/card rules and turn-based tactics. `world.state.transform`
 submits a closed atomic operation; `world.state.act <phase-row> <sequence>`
 adds its phase guard. `world.topologies` reads topology declarations,
 `world.state` reads authority state, and `world.state.observe` requests the
-calling principal's explicitly disclosed literal observations. The headless
+calling principal's explicitly disclosed literal observations.
+`world.state.similar <row> <key> <table> [top]` ranks a vector table's cells
+against a query vector by cosine similarity and dot product, reading through
+the caller's visibility and writing nothing. The headless
 [tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 includes legal/blocked moves, ray flips, ordered card transfer, and replay.
 

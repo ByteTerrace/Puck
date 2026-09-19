@@ -136,7 +136,35 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 : "unknown"
             );
 
-            _ = builder.Append(value: $" state=open overlap={overlap} tick={neighbour.SnapshotTick} composed={composed} entities={((addresses.Count == 0)
+            var localFrame = boundary.CompileFrame();
+            var turn = ((((double)WorldFrameIsometry.YawDelta(
+                destination: neighbour.CounterpartFrame,
+                source: localFrame
+            )) * 180d) / Math.PI);
+            var threshold = ((WorldAdjacencyPolicy.TryReciprocalHysteresis(
+                definition: definition,
+                depth: out var hysteresis,
+                reason: out _
+            ) && WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
+                definition: definition,
+                depth: out var deadband,
+                reason: out _
+            ))
+                ? ((double)WorldAdjacencyPolicy.OwnershipThreshold(
+                    frame: in localFrame,
+                    reciprocalHysteresis: hysteresis,
+                    verticalOwnershipDeadband: deadband
+                )).ToString(
+                    format: "0.####",
+                    provider: CultureInfo.InvariantCulture
+                )
+                : "REFUSED"
+            );
+
+            _ = builder.Append(value: $" state=open overlap={overlap} threshold={threshold} turn={turn.ToString(
+                format: "0.###",
+                provider: CultureInfo.InvariantCulture
+            )} tick={neighbour.SnapshotTick} composed={composed} entities={((addresses.Count == 0)
                 ? "none"
                 : string.Join(
                     separator: ",",

@@ -105,12 +105,17 @@ public sealed class AdmissionArrivalLawTests {
                 BodyColor: default,
                 CatalogRig: 0,
                 Mobility: new WorldMobilityIdentity(
-                    Incarnation: new WorldEntityAddress(
+                    DepartedFrom: new WorldEntityAddress(
                         Authority: "origin/world",
                         Generation: 7,
                         Index: 4
                     ),
-                    Epoch: 0
+                    Epoch: 0,
+                    Incarnation: new WorldEntityAddress(
+                        Authority: "origin/world",
+                        Generation: 7,
+                        Index: 4
+                    )
                 )
             )]
     );

@@ -60,9 +60,9 @@ public sealed class AuthoredBoardRulesLawTests {
                 r,
                 60
             ),
-                "move" => r with { Cells = [.. r.Cells!.Select(selector: c => c with { Value = ((c.Key.Value == "kind")
+                "move" => r with { Cells = [.. r.Cells!.Select(selector: c => c with { Value = CellValue.Int(value: ((c.Key.Value == "kind")
         ? moveKind
-        : -1) })] },
+        : -1)) })] },
                 _ => r,
             })],
         Lattices: [ChessModule.StateRaw!.Lattices!.Single(predicate: t => (t.Name == "chessBoard"))]
@@ -71,7 +71,7 @@ public sealed class AuthoredBoardRulesLawTests {
     };
     private void CheckChess(long[] board) {
         var position = Chess(board: board);
-        var fixture = m_chessJudge ??= new RuleFrameFixture(definition: position);
+        var fixture = m_chessJudge ??= new RuleArenaFixture(definition: position);
 
         fixture.Evaluate(position: position);
         for (var side = 0; (side < 2); side++) {
@@ -197,7 +197,7 @@ public sealed class AuthoredBoardRulesLawTests {
         ),
             Rules = [Garden.Rules!.Single(predicate: r => (r.Name.Value == "ttt-check-win"))],
         };
-        var fixture = m_qubicJudge ??= new RuleFrameFixture(definition: source);
+        var fixture = m_qubicJudge ??= new RuleArenaFixture(definition: source);
 
         fixture.Evaluate(position: source);
         return fixture.Read("tttWinner");
@@ -207,7 +207,7 @@ public sealed class AuthoredBoardRulesLawTests {
             CellName.Parse(candidate: ((values.Length == 1)
         ? WorldStateRow.SlotKey
         : index.ToString())),
-            value
+            CellValue.Int(value: value)
         ))],
     };
     // The board is derived from its token rows (inverse), so a position is seeded as tokens: one token per occupied
@@ -221,11 +221,11 @@ public sealed class AuthoredBoardRulesLawTests {
             if (board[cell] != 0) {
                 cells[next] = new StateCell(
                     CellName.Parse(candidate: $"piece{next}"),
-                    cell
+                    CellValue.Int(value: cell)
                 );
                 codes[next] = new StateCell(
                     CellName.Parse(candidate: $"piece{next}"),
-                    board[cell]
+                    CellValue.Int(value: board[cell])
                 );
                 next++;
             }
@@ -233,11 +233,11 @@ public sealed class AuthoredBoardRulesLawTests {
         for (; (next < 32); next++) {
             cells[next] = new StateCell(
                 CellName.Parse(candidate: $"piece{next}"),
-                -1
+                CellValue.Int(value: -1L)
             );
             codes[next] = new StateCell(
                 CellName.Parse(candidate: $"piece{next}"),
-                0
+                CellValue.Int(value: 0L)
             );
         }
         return (cells, codes);
@@ -250,7 +250,7 @@ public sealed class AuthoredBoardRulesLawTests {
     [Theory]
     public void CastleTransitAttacksReadPiecesAtEverySquare(string side, int transit, int sign) {
         var empty = new long[64];
-        var fixture = new RuleFrameFixture(definition: CastlePosition(
+        var fixture = new RuleArenaFixture(definition: CastlePosition(
             empty,
             empty,
             "tabletop-castle-transit-attacked"
@@ -301,37 +301,11 @@ public sealed class AuthoredBoardRulesLawTests {
     [Fact]
     public void ChessAttacksAgreeWithCoordinatesForEveryPairOfSquares() {
         var board = new long[64];
-        var definition = Chess(board: board);
-        var rows = definition.State;
-        var layout = new FrameLayout(
-            rows: rows,
-            topology: name => WorldTopologyCompilation.Find(
-                definition: definition,
-                name: name
-            )
-        );
-        var host = new FrameHost(
-            layout,
-            rows,
-            definition.StateCatalog,
-            CompiledPatterns.Empty,
-            []
-        );
-
-        host.Frame.Load(source: new RowStore(rows: rows));
-        var rules = WorldRuleCompiler.CompileAll(definition: definition);
-        var tokenRow = WorldDefinitionRows.FindStateRow(
-            name: "pieceCell",
-            rows: rows
-        )!;
-        var codeRow = WorldDefinitionRows.FindStateRow(
-            name: "pieceCode",
-            rows: rows
-        )!;
-        var check = WorldDefinitionRows.FindStateRow(
-            name: "inCheck",
-            rows: rows
-        )!;
+        var fixture = new RuleArenaFixture(definition: Chess(board: board));
+        string[] tokens = [.. Enumerable.Range(
+            count: 32,
+            start: 0
+        ).Select(selector: index => $"piece{index}")];
         // The board derives from its tokens, so a square is set by moving a token onto it (or off the board for 0):
         // the token already standing there, else the first token off the board.
         void Put(int square, long code) {
@@ -339,53 +313,34 @@ public sealed class AuthoredBoardRulesLawTests {
             var token = -1;
 
             for (var candidate = 0; ((candidate < 32) && (token < 0)); candidate++) {
-                if (
-                    host.Frame.TryStoredAt(
-                    index: candidate,
-                    row: tokenRow,
-                    value: out var standing
-                ) &&
-                    (standing == square)
-                ) { token = candidate; }
+                if (fixture.ReadAt(
+                    position: candidate,
+                    row: "pieceCell"
+                ) == square) { token = candidate; }
             }
             for (var candidate = 0; ((candidate < 32) && (token < 0)); candidate++) {
-                if (
-                    host.Frame.TryStoredAt(
-                    index: candidate,
-                    row: tokenRow,
-                    value: out var standing
-                ) &&
-                    (standing < 0)
-                ) { token = candidate; }
+                if (fixture.ReadAt(
+                    position: candidate,
+                    row: "pieceCell"
+                ) < 0) { token = candidate; }
             }
             Assert.True(condition: (token >= 0));
-            var key = CellName.Parse(candidate: $"piece{token}");
-
-            Assert.True(
-                condition: host.Frame.TryWrite(
-                    key: key,
-                    reason: out var codeReason,
-                    row: codeRow,
-                    value: code,
-                    write: StateWriteKind.Set
-                ),
-                userMessage: codeReason
+            fixture.Write(
+                key: tokens[token],
+                row: "pieceCode",
+                value: code
             );
-            Assert.True(
-                condition: host.Frame.TryWrite(
-                    key: key,
-                    reason: out var reason,
-                    row: tokenRow,
-                    value: ((code == 0)
-                ? -1
-                : square),
-                    write: StateWriteKind.Set
-                ),
-                userMessage: reason
+            fixture.Write(
+                key: tokens[token],
+                row: "pieceCell",
+                value: ((code == 0)
+                    ? -1
+                    : square
+                )
             );
         }
         // Compile the shipped judge once, then exhaust every origin/target/piece/colour
-        // through its real frame evaluator. The expected answer uses coordinate rays.
+        // through its real evaluator. The expected answer uses coordinate rays.
         for (var side = 0; (side < 2); side++) {
             var sign = ((side == 0)
                 ? -1
@@ -404,17 +359,7 @@ public sealed class AuthoredBoardRulesLawTests {
                             code: (sign * piece),
                             square: target
                         );
-                        host.Judge(
-                            rules: rules,
-                            tick: 1,
-                            engineTick: 1
-                        );
-                        Assert.True(condition: host.Frame.TryStored(
-                            check,
-                            CellName.Parse(candidate: side.ToString()),
-                            out var actual,
-                            out _
-                        ));
+                        fixture.Judge();
                         Assert.Equal(
                             (Attacked(
                                 attackerSign: sign,
@@ -423,7 +368,10 @@ public sealed class AuthoredBoardRulesLawTests {
                             )
                             ? 1L
                             : 0L),
-                            actual
+                            fixture.Read(
+                                key: side.ToString(),
+                                row: "inCheck"
+                            )
                         );
                         Put(
                             code: 0,
@@ -439,7 +387,7 @@ public sealed class AuthoredBoardRulesLawTests {
         }
         Assert.Equal(
             0,
-            host.Refusals
+            fixture.Refusals
         );
     }
     [InlineData(-1)]
@@ -514,6 +462,6 @@ public sealed class AuthoredBoardRulesLawTests {
         );
     }
 
-    private RuleFrameFixture? m_chessJudge;
-    private RuleFrameFixture? m_qubicJudge;
+    private RuleArenaFixture? m_chessJudge;
+    private RuleArenaFixture? m_qubicJudge;
 }

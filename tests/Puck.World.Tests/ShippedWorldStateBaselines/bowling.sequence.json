@@ -1,0 +1,13 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/bowling.world.json",
+  "host": {
+    "kind": "spliced"
+  },
+  "expectsStateChange": false,
+  "steps": [
+    {
+      "advance": 600
+    }
+  ]
+}

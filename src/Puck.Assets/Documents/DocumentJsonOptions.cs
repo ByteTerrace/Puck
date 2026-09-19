@@ -24,4 +24,25 @@ public static class DocumentJsonOptions {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         WriteIndented = true,
     };
+
+    /// <summary>Returns <see cref="Shared"/>'s shape with one document family's own converters ahead of it — the
+    /// seam a family uses when its vocabulary spells a shared model type differently from every other family's
+    /// (<c>puck.cartridge.v1</c> spells an expression program as infix text where a world document holds the IR).
+    /// A converter passed here outranks the type's own <c>JsonConverter</c> attribute on both read and write, so
+    /// the family's own store and the canonical writer agree.</summary>
+    /// <param name="converters">The family's converters.</param>
+    /// <returns>The options; cached by the caller, never rebuilt per document.</returns>
+    public static JsonSerializerOptions With(params JsonConverter[] converters) {
+        ArgumentNullException.ThrowIfNull(argument: converters);
+
+        var result = new JsonSerializerOptions(options: Shared);
+
+        for (var index = 0; (index < converters.Length); index++) {
+            result.Converters.Insert(
+                index: index,
+                item: converters[index]
+            );
+        }
+        return result;
+    }
 }

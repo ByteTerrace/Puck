@@ -309,7 +309,7 @@ public sealed class WorldThemeValidationLawTests {
                 Cells: [
                     new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: Puck.Maths.FixedQ4816.FromDouble(value: 0.2).Value
+                        Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: 0.2).Value)
                     ),
                 ]
             ),

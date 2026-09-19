@@ -598,6 +598,11 @@ public sealed class WorldRenderEnvelopeLawTests {
         public WorldEntityAddress LocalEntityAddress(int index) => default;
         public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) { neighbour = null; return false; }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+
+            return false;
+        }
     }
     private sealed class SilentLink(WorldDefinition definition) : IServerLink {
         public void Query(WorldQuery query, Action<QueryAnswer> completion) {

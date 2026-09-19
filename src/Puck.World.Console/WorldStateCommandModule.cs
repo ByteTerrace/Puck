@@ -1,4 +1,8 @@
 using System.Globalization;
+using CompiledRule = Puck.State.Rules.CompiledRule;
+using RuleEvaluator = Puck.State.Rules.RuleEvaluator;
+using RuleHazardKind = Puck.State.Rules.RuleHazardKind;
+using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -30,11 +34,10 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
-    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
+    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, CellValue value, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
-            raw: raw,
             row: row,
-            text: text
+            value: value
         )}{DescribeCellAdvance(
             advance: advance,
             clock: clock
@@ -92,22 +95,20 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         var eased = string.Empty;
 
         if (
-            WorldStateReader.TryReadEased(
+            WorldStateReader.TryReadEasedValue(
             definition: server.Definition,
             key: key,
-            rawValue: out var easedRaw,
             row: out _,
             rowName: row.Name,
-            text: out var easedText,
+            value: out var easedValue,
             tick: CompletedTick(server: server),
             engineTick: CompletedEngineTick(server: server)
         ) &&
-            (easedRaw is { } raw)
+            easedValue.HasValue
         ) {
             eased = $" eased={DescribeValue(
-                raw: raw,
                 row: row,
-                text: easedText
+                value: easedValue
             )}";
         }
 
@@ -215,23 +216,26 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         ? $" overflow={row.Overflow}"
         : string.Empty
     );
+    private static string DescribeSpace(WorldStateRow row) => (((row.Kind == CellKind.Vector) && (row.Space is not null))
+        ? $" space={row.Space}"
+        : string.Empty
+    );
     // The one-cell grain, resolved through WorldStateReader — the SAME (row, key) read the rule gates and the HUD
     // binding run, so this read-back cannot report a cell the engine would not have read.
     private static CommandResult DescribeOneCell(WorldServer server, string rowName, string key) {
-        if (!WorldStateReader.TryRead(
+        if (!WorldStateReader.TryReadValue(
             definition: server.Definition,
             rowName: rowName,
             key: key,
             tick: CompletedTick(server: server),
             engineTick: CompletedEngineTick(server: server),
             row: out var row,
-            rawValue: out var rawValue,
-            text: out var text
+            value: out var value
         )) {
             return CommandResult.Error(output: $"[world.state {rowName}: no such row]");
         }
 
-        if (rawValue is not { } raw) {
+        if (!value.HasValue) {
             return CommandResult.Error(output: $"[world.state {rowName} {key}: no such cell]");
         }
 
@@ -248,8 +252,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             server: server,
             row: row,
             key: key,
-            raw: raw,
-            text: text,
+            value: value,
             advance: behavior.Advance,
             dynamics: behavior.Dynamics,
             cycle: behavior.Cycle,
@@ -278,15 +281,14 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         // so an advancing row's slot cell reads LIVE here exactly as it does on the row line above — one command's
         // output can never show the same cell two ways.
         foreach (var cell in cells) {
-            _ = WorldStateReader.TryRead(
+            _ = WorldStateReader.TryReadValue(
                 definition: server.Definition,
                 rowName: row.Name,
                 key: cell.Key.Value,
                 tick: CompletedTick(server: server),
                 engineTick: CompletedEngineTick(server: server),
                 row: out _,
-                rawValue: out var raw,
-                text: out var text
+                value: out var value
             );
             var behavior = EffectiveBehavior.Resolve(
                 cell: cell,
@@ -297,8 +299,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 server: server,
                 row: row,
                 key: cell.Key.Value,
-                raw: (raw ?? 0L),
-                text: text,
+                value: value,
                 advance: behavior.Advance,
                 dynamics: behavior.Dynamics,
                 cycle: behavior.Cycle,
@@ -319,8 +320,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         );
 
         return (min, max) switch {
-            ({ } lo, { } hi) => $" range={Describe(raw: lo)}..{Describe(raw: hi)}",
-            ({ } lo, null) => $" min={Describe(raw: lo)}",
+            ( { } lo, { } hi) => $" range={Describe(raw: lo)}..{Describe(raw: hi)}",
+            ( { } lo, null) => $" min={Describe(raw: lo)}",
             (null, { } hi) => $" max={Describe(raw: hi)}",
             _ => string.Empty,
         };
@@ -337,7 +338,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             ? slotCells[0].Clock
             : null
         );
-        var head = $"[world.state.row '{row.Name}' kind={DescribeKind(kind: row.Kind)}{DescribeGatesDrive(row: row)}{DescribeEvicts(row: row)}";
+        var head = $"[world.state.row '{row.Name}' kind={DescribeKind(kind: row.Kind)}{DescribeSpace(row: row)}{DescribeGatesDrive(row: row)}{DescribeEvicts(row: row)}";
         var tail = $"{DescribeRange(
             kind: row.Kind,
             min: row.Min,
@@ -374,21 +375,19 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         // IsSlot already proved this row carries exactly the cell a null key addresses, and the row came out of the
         // very section the reader looks it up in.
-        _ = WorldStateReader.TryRead(
+        _ = WorldStateReader.TryReadValue(
             definition: server.Definition,
             rowName: row.Name,
             key: null,
             tick: CompletedTick(server: server),
             engineTick: CompletedEngineTick(server: server),
             row: out _,
-            rawValue: out var slot,
-            text: out var slotText
+            value: out var slot
         );
 
         return $"{head} value={DescribeValue(
-            raw: (slot ?? 0L),
             row: row,
-            text: slotText
+            value: slot
         )}{tail}";
     }
     private static string DescribeSourceShape(StateGenerator? generator) =>
@@ -398,7 +397,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         );
     private static CommandResult DescribeWhy(WorldDefinition definition, string name) {
         var rule = Array.Find(
-            array: WorldRuleCompiler.CompileAll(definition: definition),
+            array: WorldFactsCompiler.CompileAll(definition: definition),
             match: candidate => string.Equals(
                 a: candidate.Name,
                 b: name,
@@ -406,7 +405,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             )
         );
         var interaction = Array.Find(
-            array: WorldRuleCompiler.CompileAllInteractions(definition: definition),
+            array: WorldFactsCompiler.CompileAllInteractions(definition: definition),
             match: candidate => string.Equals(
                 a: candidate.Name,
                 b: name,
@@ -423,24 +422,28 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         var lines = new List<string>(capacity: 2);
 
-        if (rule is not null) { lines.Add(item: DescribeWhyLine(
+        if (rule is not null) {
+            lines.Add(item: DescribeWhyLine(
             definition: definition,
             isInteraction: false,
             rule: rule
-        )); }
-        if (interaction is not null) { lines.Add(item: DescribeWhyLine(
+        ));
+        }
+        if (interaction is not null) {
+            lines.Add(item: DescribeWhyLine(
             definition: definition,
             isInteraction: true,
             rule: interaction
-        )); }
+        ));
+        }
 
         return new CommandResult(Output: string.Join(
             separator: Environment.NewLine,
             values: lines
         ));
     }
-    private static string DescribeWhyLine(CompiledWorldRule rule, WorldDefinition definition, bool isInteraction) {
-        var context = WorldRuleCompiler.Context(definition: definition);
+    private static string DescribeWhyLine(CompiledRule rule, WorldDefinition definition, bool isInteraction) {
+        var context = WorldFactsCompiler.Context(definition: definition);
         var effects = new List<string>(capacity: rule.Effects.Length);
 
         foreach (var effect in rule.Effects) {
@@ -493,14 +496,18 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             _ => CommandResult.Error(output: "[world.state: expected no arguments, <row>, or <row> <key>]"),
         };
     }
-    private static string DescribeValue(WorldStateRow row, long raw, string? text) => row.Kind switch {
-        CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
-        CellKind.Bool => ((raw != 0)
-        ? "true"
-        : "false"),
-        CellKind.Text => $"'{text}'",
-        _ => raw.ToString(provider: CultureInfo.InvariantCulture),
-    };
+    // An absent cell carries no case at all, so what the line prints for one is a function of the row's declared
+    // kind alone — the neutral reading of that kind, never a value.
+    private static string DescribeValue(WorldStateRow row, CellValue value) => (value.HasValue
+        ? StateSpelling.Value(value: value)
+        : (row.Kind switch {
+            CellKind.Fixed => FixedQ4816.FromRawBits(value: 0L).ToString(),
+            CellKind.Bool => "false",
+            CellKind.Text => "''",
+            CellKind.Vector => "vector",
+            _ => "0",
+        })
+    );
     private static WorldStateRow? FindRow(WorldServer server, string name) => WorldDefinitionRows.FindStateRow(
         rows: server.Definition.State,
         name: name
@@ -517,18 +524,40 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     private CommandResult HandleCellSet(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count < 2) {
             return CommandResult.Usage(
-                form: "<row> <key> <value> [add] | <row> <key> <text...>",
+                form: "<row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>",
                 verb: "world.state.cell.set"
             );
         }
 
         var rowName = args[0].ToString();
-
-        if (
-            (FindRow(
+        var row = FindRow(
             name: rowName,
             server: server
-        ) is { Kind: CellKind.Text }) &&
+        );
+
+        if (
+            (row is { Kind: CellKind.Vector }) &&
+            (args.Count == 3)
+        ) {
+            var vectorString = args[2].ToString();
+
+            if (!StateVector.TryParseBase64Url(error: out var vectorError, text: vectorString, vector: out var parsedVector)) {
+                return CommandResult.Error(output: $"[world.state.cell.set: invalid vector '{vectorString}': {vectorError}]");
+            }
+
+            return link.Submit(mutation: new WorldMutation.UpsertStateCell(
+                Principal: context.ActingPrincipal(),
+                Row: rowName,
+                Key: args[1].ToString(),
+                Value: 0L,
+                Kind: WorldDocumentWriteKind.Set,
+                RawToken: vectorString,
+                Vector: parsedVector
+            ));
+        }
+
+        if (
+            (row is { Kind: CellKind.Text }) &&
             (args.Count >= 3)
         ) {
             var text = WorldCommandArguments.RawAfter(
@@ -552,7 +581,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             (args.Count != 4)
         ) {
             return CommandResult.Usage(
-                form: "<row> <key> <value> [add] | <row> <key> <text...>",
+                form: "<row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>",
                 verb: "world.state.cell.set"
             );
         }
@@ -724,7 +753,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0)
                         ? $" exclusive {string.Join(
                             separator: ",",
-                            values: line.Discriminators.Select(selector: static pinned => pinned.Describe())
+                            values: line.Discriminators.Select(selector: pinned => pinned.Describe(catalog: server.Definition.StateCatalog))
                         )}"
                         : string.Empty)}]");
                 }
@@ -770,7 +799,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         ? "done"
                         : (job.Running
                             ? "running"
-                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
+                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerStep} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
                 }
                 return new CommandResult(Output: string.Join(
                     separator: Environment.NewLine,
@@ -1069,8 +1098,140 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             },
             routing: CommandRouting.Immediate
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.state.similar",
+            description: "Ranks cells of a target vector row against a query vector by cosine similarity and dot product (Immediate): world.state.similar <row> <key> <table> [top]. Reads through the caller's visibility; never writes.",
+            handler: (context, args) => {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.state.similar"
+                )) {
+                    return error;
+                }
+
+                return HandleStateSimilar(
+                    args: args,
+                    context: context,
+                    server: server
+                );
+            },
+            routing: CommandRouting.Immediate
+        );
     }
 
+    private static CommandResult HandleStateSimilar(WorldServer server, CommandContext context, WireArgs args) {
+        if ((args.Count != 3) && (args.Count != 4)) {
+            return CommandResult.Usage(
+                form: "<row> <key> <table> [top]",
+                verb: "world.state.similar"
+            );
+        }
+
+        var queryRowName = args[0].ToString();
+        var queryKeyName = args[1].ToString();
+        var tableRowName = args[2].ToString();
+        var top = int.MaxValue;
+
+        if (args.Count == 4) {
+            if (!int.TryParse(s: args[3].ToString(), style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out top) || (top <= 0)) {
+                return CommandResult.Error(output: $"[world.state.similar: invalid top count '{args[3]}']");
+            }
+        }
+
+        var queryRow = FindRow(name: queryRowName, server: server);
+
+        if (queryRow is null) {
+            return CommandResult.Error(output: $"[world.state.similar: no such query row '{queryRowName}']");
+        }
+
+        if (queryRow.Kind != CellKind.Vector) {
+            return CommandResult.Error(output: $"[world.state.similar: query row '{queryRowName}' is not a vector row]");
+        }
+
+        if (!CellName.TryParse(candidate: queryKeyName, name: out var parsedQueryKey, reason: out var keyReason)) {
+            return CommandResult.Error(output: $"[world.state.similar: invalid query key '{queryKeyName}': {keyReason}]");
+        }
+
+        var queryCell = StateRows.FindCell(cells: queryRow.Cells, key: parsedQueryKey);
+
+        if ((queryCell is null) || !queryCell.Value.HasValue) {
+            return CommandResult.Error(output: $"[world.state.similar: no such query vector '{queryRowName}.{queryKeyName}']");
+        }
+
+        var principal = context.ActingPrincipal();
+
+        if (!WorldStateDisclosure.CanRead(arena: server.Arena, definition: server.Definition, key: queryCell.Key, row: queryRow, recipient: principal)) {
+            return CommandResult.Error(output: $"[world.state.similar: query cell '{queryRowName}.{queryKeyName}' is hidden]");
+        }
+
+        var targetRow = FindRow(name: tableRowName, server: server);
+
+        if (targetRow is null) {
+            return CommandResult.Error(output: $"[world.state.similar: no such table row '{tableRowName}']");
+        }
+
+        if (targetRow.Kind != CellKind.Vector) {
+            return CommandResult.Error(output: $"[world.state.similar: table row '{tableRowName}' is not a vector row]");
+        }
+
+        var queryVector = queryCell.Value.AsVector;
+        var candidateCells = (targetRow.Cells ?? []);
+        var scoredList = new List<(string Key, FixedQ4816 Similarity, long Dot)>();
+
+        foreach (var cell in candidateCells) {
+            if (!cell.Value.HasValue) {
+                continue;
+            }
+
+            if (!WorldStateDisclosure.CanRead(arena: server.Arena, definition: server.Definition, key: cell.Key, row: targetRow, recipient: principal)) {
+                continue;
+            }
+
+            var candidateVector = cell.Value.AsVector;
+
+            if (candidateVector.Length != queryVector.Length) {
+                continue;
+            }
+
+            var simQ16 = SignedByteVectorFunctions.CosineQ16(left: queryVector.Span, right: candidateVector.Span);
+            var sim = FixedQ4816.FromRawBits(value: simQ16);
+            var dot = SignedByteVectorFunctions.Dot(left: queryVector.Span, right: candidateVector.Span);
+
+            scoredList.Add(item: (cell.Key.Value, sim, dot));
+        }
+
+        scoredList.Sort(comparison: static (first, second) => {
+            var similarityComparison = second.Similarity.CompareTo(other: first.Similarity);
+
+            if (similarityComparison != 0) {
+                return similarityComparison;
+            }
+
+            var dotComparison = second.Dot.CompareTo(value: first.Dot);
+
+            if (dotComparison != 0) {
+                return dotComparison;
+            }
+
+            return string.CompareOrdinal(strA: first.Key, strB: second.Key);
+        });
+
+        var takeCount = Math.Min(val1: top, val2: scoredList.Count);
+        var lines = new List<string>(capacity: (1 + takeCount)) {
+            $"[world.state.similar {queryRowName}.{queryKeyName} -> {tableRowName}: {scoredList.Count} candidate(s), showing {takeCount}]",
+        };
+
+        for (var index = 0; (index < takeCount); index++) {
+            var item = scoredList[index];
+
+            lines.Add(item: $"[world.state.similar '{tableRowName}'.'{item.Key}' similarity={item.Similarity} dot={item.Dot}]");
+        }
+
+        return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: lines));
+    }
     // The tick this module's reads answer AS OF: the server's most recently COMPLETED tick, derived the same way
     // WorldInstance.CompletedTicks derives it (NextInputTick is m_lastCompletedTick + 1, and its one writer is Step).
     // This is the tick a Cycle row's value is computed at, and it is the completed one rather than the next one

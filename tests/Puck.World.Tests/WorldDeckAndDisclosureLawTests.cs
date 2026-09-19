@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldDeckAndDisclosureLawTests {
     private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 transform,
                 WorldPrincipal.World,
@@ -23,9 +23,9 @@ public sealed class WorldDeckAndDisclosureLawTests {
         );
         return candidate!;
     }
-    private static StateCell Cell(string key, long value = 1) => new(
+    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
         Name(value: key),
-        value
+        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0L)) : CellValue.Int(value: value))
     );
     private static WorldDefinition Deck(int count) {
         var keys = Enumerable.Range(
@@ -44,7 +44,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 new(
                 Name(value: "deck"),
                 CellKind.Bool,
-                Cells: keys.Select(selector: k => Cell(k)).ToArray(),
+                Cells: keys.Select(selector: k => Cell(key: k, kind: CellKind.Bool)).ToArray(),
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -84,7 +84,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
             new(
             Name(value: "hand"),
             CellKind.Bool,
-            Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }],
+            Cells: [Cell(key: "ace", kind: CellKind.Bool) with { Visibility = new(["seat1"]) }, Cell(key: "king", kind: CellKind.Bool) with { Visibility = new(["seat1"]) }],
             Domain: new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
                 Ordered: true
@@ -100,11 +100,11 @@ public sealed class WorldDeckAndDisclosureLawTests {
     public void HiddenCellsLeaveExactlyWhatThePolicyAllows() {
         foreach (var (policy, cells, count) in new[] { (HiddenCells.Omit, 0, 0), (HiddenCells.Count, 0, 2), (HiddenCells.Placeholder, 2, 2) }) {
             var definition = Hand(hidden: policy);
-            var opponent = WorldStateDisclosure.Compose(
+            var opponent = Fixtures.Disclose(
                 definition: definition,
                 recipient: WorldPrincipal.Seat(slot: 1)
             )!.Single(predicate: r => (r.Name == "hand"));
-            var owner = WorldStateDisclosure.Compose(
+            var owner = Fixtures.Disclose(
                 definition: definition,
                 recipient: WorldPrincipal.Seat(slot: 0)
             )!.Single(predicate: r => (r.Name == "hand"));
@@ -119,10 +119,12 @@ public sealed class WorldDeckAndDisclosureLawTests {
             );
             Assert.All(
                 opponent.Cells,
-                c => { Assert.True(condition: c.Hidden); Assert.Equal(
+                c => {
+                    Assert.True(condition: c.Hidden); Assert.Equal(
                 string.Empty,
                 c.Key
-            ); Assert.Null(@object: c.Text); }
+            ); Assert.Null(@object: c.Text);
+                }
             );
             Assert.Equal(
                 0,
@@ -133,7 +135,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 owner.Cells.Select(selector: c => c.Key)
             );
 
-            var json = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: WorldProjection.Compose(
+            var json = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: Fixtures.Project(
                 definition,
                 WorldDisclosureTier.Presentation,
                 "test",
@@ -181,14 +183,20 @@ public sealed class WorldDeckAndDisclosureLawTests {
         // gameplay-meaningful (a pile) or incidental, but a keyed row's cells can always be permuted either way.
         var unordered = Deck(count: 4) with { };
 
-        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(selector: r => ((r.Name.Value == "deck")
-            ? r with { Domain = new StateDomain.KeysOf(
+        unordered = unordered with {
+            StateRaw = unordered.StateRaw! with {
+                World = unordered.StateRaw.World!.Select(selector: r => ((r.Name.Value == "deck")
+            ? r with {
+                Domain = new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
                 Ordered: false
-            ) }
-            : r)).ToArray() } };
+            ),
+            }
+            : r)).ToArray(),
+            },
+        };
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 unordered,
                 new StateTransform.Shuffle(
                     Draw: "dice",
@@ -205,13 +213,21 @@ public sealed class WorldDeckAndDisclosureLawTests {
 
         var slotOnly = Deck(count: 4) with { };
 
-        slotOnly = slotOnly with { StateRaw = slotOnly.StateRaw! with { World = slotOnly.StateRaw.World!.Select(selector: r => ((r.Name.Value == "deck")
-            ? r with { Domain = null, Capacity = null, Cells = [new(
+        slotOnly = slotOnly with {
+            StateRaw = slotOnly.StateRaw! with {
+                World = slotOnly.StateRaw.World!.Select(selector: r => ((r.Name.Value == "deck")
+            ? r with {
+                Domain = null,
+                Capacity = null,
+                Cells = [new(
                     WorldStateRow.SlotKey,
-                    0
-                )] }
-            : r)).ToArray() } };
-        Assert.False(condition: WorldStateTransforms.TryApply(
+                    CellValue.Bool(value: false)
+                )],
+            }
+            : r)).ToArray(),
+            },
+        };
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             slotOnly,
             new StateTransform.Shuffle(
                 Draw: "dice",
@@ -225,15 +241,19 @@ public sealed class WorldDeckAndDisclosureLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "keyed row"
+            expectedSubstring: "keyed or ordered row"
         );
 
         var bootSite = Deck(count: 4);
 
-        bootSite = bootSite with { StateRaw = bootSite.StateRaw! with { World = bootSite.StateRaw.World!.Select(selector: r => ((r.Name.Value == "dice")
+        bootSite = bootSite with {
+            StateRaw = bootSite.StateRaw! with {
+                World = bootSite.StateRaw.World!.Select(selector: r => ((r.Name.Value == "dice")
             ? r with { Draw = r.Draw! with { Timing = DrawTiming.Boot } }
-            : r)).ToArray() } };
-        Assert.False(condition: WorldStateTransforms.TryApply(
+            : r)).ToArray(),
+            },
+        };
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             bootSite,
             new StateTransform.Shuffle(
                 Draw: "dice",
@@ -250,13 +270,15 @@ public sealed class WorldDeckAndDisclosureLawTests {
             expectedSubstring: "streamDraw site"
         );
 
-        var ruled = Deck(count: 4) with { Rules = [new WorldRule(
+        var ruled = Deck(count: 4) with {
+            Rules = [new WorldRule(
                 CellName.Parse(candidate: "shuffle"),
                 [new ActionEffect.TransformState(Transform: new StateTransform.Shuffle(
                         Draw: "dice",
                         Row: "deck"
                     ))]
-            )] };
+            )],
+        };
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
@@ -265,13 +287,15 @@ public sealed class WorldDeckAndDisclosureLawTests {
             ),
             userMessage: ok
         );
-        var badRule = Deck(count: 4) with { Rules = [new WorldRule(
+        var badRule = Deck(count: 4) with {
+            Rules = [new WorldRule(
                 CellName.Parse(candidate: "shuffle"),
                 [new ActionEffect.TransformState(Transform: new StateTransform.Shuffle(
                         Draw: "deck",
                         Row: "deck"
                     ))]
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: badRule,

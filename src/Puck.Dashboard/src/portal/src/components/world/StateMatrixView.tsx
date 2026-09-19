@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Button, Card, Group, ScrollArea, Stack, Table, Text, TextInput } from "@mantine/core";
 import { StudioContext, useStudioDocument, useStudioPreview } from "../../context/StudioContext";
 import { listStateRows, type CellsOfDomain, type WorldStateRow } from "../../authoring/documentTools";
-import type { RowInfo } from "../../native/engineTypes";
+import { cellNumber, cellText, sameCellValue, type RowInfo } from "../../native/engineTypes";
 
 function isScalarLive(row: RowInfo | undefined): boolean {
   return row !== undefined && !row.keyed;
@@ -12,7 +12,7 @@ function isScalarLive(row: RowInfo | undefined): boolean {
 export function sameCells(left: RowInfo["cells"], right: RowInfo["cells"]): boolean {
   return left === right || (left.length === right.length && left.every((cell, index) => {
     const other = right[index];
-    return cell.key === other.key && cell.value === other.value && cell.text === other.text;
+    return cell.key === other.key && sameCellValue(cell.value, other.value);
   }));
 }
 
@@ -118,7 +118,10 @@ export const StateMatrixView: React.FC = () => {
             {boundRows.map(row => {
               const live = liveByName.get(row.name);
               const scalar = isScalarLive(live);
-              const value = live?.cells[0]?.value ?? 0n;
+              const carried = live?.cells[0]?.value ?? null;
+              // Only a numeric carrier is editable in place: a text, bool, or vector row has no whole-number
+              // operand the register input takes.
+              const value = cellNumber(carried);
               return <Table.Tr
                 key={row.name}
                 style={{ background: changed.has(row.name) ? "var(--quote-bg)" : undefined }}><Table.Td><Text
@@ -128,7 +131,7 @@ export const StateMatrixView: React.FC = () => {
                     c="var(--ink-soft)">changed</Text>}
               </Table.Td><Table.Td><Text
                 size="xs"
-                c="var(--ink-soft)">{row.kind}</Text></Table.Td><Table.Td>{previewActive && scalar
+                c="var(--ink-soft)">{row.kind}</Text></Table.Td><Table.Td>{previewActive && scalar && value !== null
                 ? <RegisterInput
                   name={row.name}
                   value={value}
@@ -136,7 +139,7 @@ export const StateMatrixView: React.FC = () => {
                   onApply={next => actor.send({ type: "PREVIEW_WRITE", row: row.name, value: next, write: "set" })} />
                 : <Text
                   size="sm"
-                  ff="monospace">{live ? (scalar ? value.toString() : live.cells.length + " cells") : (row.value ?? row.min ?? "—")}</Text>}</Table.Td></Table.Tr>;
+                  ff="monospace">{live ? (scalar ? (cellText(carried) ?? "—") : live.cells.length + " cells") : (row.value ?? row.min ?? "—")}</Text>}</Table.Td></Table.Tr>;
             })}
           </Table.Tbody></Table></ScrollArea>
       <Text

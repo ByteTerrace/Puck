@@ -518,7 +518,14 @@
         {
           "$type": "setState",
           "state": "lapStart",
-          "expression": "$tick"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$tick"
+              }
+            ]
+          }
         }
       ]
     },
@@ -574,7 +581,21 @@
         {
           "$type": "setState",
           "state": "lapTicks",
-          "expression": "$tick - lapStart"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$tick"
+              },
+              {
+                "op": "Operand",
+                "name": "lapStart"
+              },
+              {
+                "op": "Subtract"
+              }
+            ]
+          }
         },
         {
           "$type": "addState",

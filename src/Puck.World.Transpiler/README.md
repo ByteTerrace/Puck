@@ -11,6 +11,27 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 `Decompiler/WorldDecompiler.cs` (JSON → tree → source) → `Validation/{PuckLinter,WorldSemanticValidator}.cs` →
 `Lsp/PuckLanguageServer.cs` (editor integration). The core's `ModuleResolver` composes `import`s.
 
+`WorldCompiler.Compile`/`CompileFile` ([`WorldCompiler.cs`](WorldCompiler.cs)) is the one entry point into that
+pipeline: source text in, canonical document out, having parsed with this vocabulary, walked the import graph
+(`ImportHandling` picks validate, bundle, or neither) and resolved authored vector text against the
+`.embeddings.json` lock beside the source. `WorldDocumentEmitter`'s lowering is internal to this assembly, so
+`puck compile`, `puck lint`, `puck embed`, the game's boot path, the basis composer and every test harness run the
+same stages in the same order rather than each assembling its own. The cartridge vocabulary is this one's peer and
+lowers through `CartridgeDocumentEmitter`, which no world code reaches.
+
+## The construct table
+
+Every construct of this vocabulary is described once, in
+[`Vocabulary/`](Vocabulary/): its keyword, the members it carries with their
+kinds and defaults, the document member it lowers to, and what the printer
+requires before it may print a document node back as that construct.
+`Puck.Transpiler`'s parser asks it which identifiers open an embedded language,
+`Decompiler/`'s sugar guards take their admitted and required key sets from it,
+`Lsp/`'s completion and hover are generated from it, and `puck vocabulary`
+writes [the manual's table](../../docs/reference/world-vocabulary.md) from it
+(`puck vocabulary --check` fails on drift). Adding a member to a construct is
+one edit there; the sections below narrate what those rows mean.
+
 ## Grammar
 
 ### Documents and blocks
@@ -80,42 +101,9 @@ and a `compareValue` carrying no `kind` at all over two plain reads has no sugar
 
 ### Rules
 
-```puck
-rule "name" {
-    when Gate
-    bind localName : Int|Fixed = <operand>
-    mode: Edge|Level
-    forEach: "rowName"
-    zones [...]
-    decision { ... }                          // see below
-    <effect statement>*
-}
-```
-
-Effect statements:
-
-```puck
-row[key] = rhs           // setState
-row[key] += rhs          // addState
-push row = rhs           // pushState (no key)
-countdown row[key]        // countdownState
-remove row[key]            // removeStateCell
-schedule row in Ns          // scheduleState — the 's' suffix is required
-transform local = call(...)  // wraps transformState around a StateTransform call-form value
-transaction {
-    <effect statement>*
-} [onFailure {
-    <effect statement>*
-}]
-name(k: v, ...)             // generate(...), or any Puck.World.Schema extension arm — call-form only
-if Gate {
-    <effect statement>*
-} [else if Gate {
-    <effect statement>*
-}]* [else {
-    <effect statement>*
-}]
-```
+A rule's own spelling, the effect statements its body admits, and the decision block's members are rows of
+[the construct table](../../docs/reference/world-vocabulary.md) — read each construct's `Grammar` there rather
+than a second copy here. What those rows mean, and what the lowering refuses, is below.
 
 `if`/`else if`/`else` lowers to the state engine's conditional effect (`"$type": "if"`): `condition` through
 the same predicate lowering `when` uses, `then` for the branch a true condition fires, and `else` (omitted when
@@ -136,26 +124,9 @@ the `s` unit (`ValueSeconds`), or opaque operand text the lowering stage classif
 
 ### Decisions
 
-```puck
-decision {
-    periodSeconds: 1s
-    mode: HighestScore
-    scoreKind: Fixed
-    commitmentSeconds: 0s
-    incumbentBonus: 0
-    seed: 0
-    interrupt Gate
-    onNoChoice { <effect statement>* }
-    option "name" {
-        when Gate
-        score: <operand>
-        neighbors { range: 10, candidateBudget: 12, maxCandidates: 4, halfAngleDegrees: 180, requiresLineOfSight: false, retainCurrent: true }
-        <effect statement>*
-    }
-}
-```
-
-`periodSeconds` and each option's `score` are required.
+`decision`, `option`, `interrupt` and `onNoChoice` are rows of
+[the construct table](../../docs/reference/world-vocabulary.md). `periodSeconds` and each option's `score` are
+required.
 
 ### Shapes, placements, and prototypes
 
@@ -187,34 +158,8 @@ unconditionally, like `material` or `parent`.
 (`world { ... }`), never both authoring the same section twice — the second authoring of `world` (either form)
 is PUCK050. Only `state.world` accepts declarations; `state.body`/`state.identity` are unrelated per-participant
 slot lanes, and `table`/`slot`/`pile`/`grid` anywhere else in the document (including `state.body`/`state.identity`)
-is PUCK049. Inside the block, five statements are admitted:
-
-```puck
-state {
-    world {
-        table name : Kind [capacity(n)] [bounds(minimum: v, maximum: v, overflow: Refuse|Saturate)] [advance(perSecond: rate)] {
-            key = value [advance(perSecond: rate)] [behavior(none)]
-            ...
-        }
-
-        slot name : Kind [= value] [bounds(minimum: v, maximum: v, overflow: Refuse|Saturate)] [advance(perSecond: rate)]
-
-        pile name of tokenRow [capacity(n)] {
-            token
-            ...
-        }
-
-        grid name : Int|Bool dimensions(width: w, depth: d) [wrap(None|X|Y|Both)] [cellSize(v)] [origin(x, y, z)]
-            [band(v)] [empty(v)] [positions(tokenRow)] [inverse(tokens: tokensRow, codes: codesRow)]
-            [bounds(minimum: v, maximum: v, overflow: Refuse|Saturate)] {
-            "cellOrdinal" = value
-            ...
-        }
-
-        row { <explicit row fields, exactly as the array form authors one> }
-    }
-}
-```
+is PUCK049. Inside the block, five statements are admitted — `table`, `slot`, `pile`, `grid` and `row`, each a row
+of [the construct table](../../docs/reference/world-vocabulary.md), which carries every modifier each one takes.
 
 Author an explicit `state.lattices` array, if any, before `world { }` in the same `state { }` block: a `grid`
 declaration's duplicate-topology check (PUCK066) only sees `state.lattices` entries already present at its own
@@ -339,6 +284,236 @@ sugar (a second board over a topology a `grid` already declared, or a `pile`/boa
 authored the same way it always has been, nested one level deeper inside `world { }` instead of as one element of
 the `world [ ]` array.
 
+### State SQL dialect (`sql { ... }`)
+
+```puck
+sql {
+    CREATE TABLE characters (
+        id   TEXT PRIMARY KEY,
+        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
+    ) CAPACITY 32;
+
+    INSERT INTO characters (id, hp, mana) VALUES
+        ('hero', 80, 50),
+        ('goblin', 30, 0);
+
+    DECLARE turnCount INT DEFAULT 0 CHECK (turnCount >= 0) ADVANCE 1 PER SECOND;
+
+    CREATE TABLE deck (id TEXT PRIMARY KEY REFERENCES cardNames) ORDERED CAPACITY 3;
+
+    CREATE RULE healHero ON ENTER AS
+        UPDATE characters SET hp = hp + 10 WHERE id = 'hero';
+
+    CREATE RULE spendMana EVERY TICK AS
+        BEGIN ATOMIC
+            UPDATE characters SET mana = mana - 1 WHERE id = 'hero';
+        END;
+}
+```
+
+A hermetic SQL authoring dialect embedded in `.puck` world documents via `sql { ... }` blocks.
+It compiles directly to native Puck state rows and rules without external or embedded SQLite dependencies.
+A SQL form and its independently authored native equivalent compile byte-identically — this is a spelling, not a
+second engine, so rows emit in column order and cells in `INSERT` order for that reason.
+
+`Puck.Transpiler` stays schema-agnostic through `IDocumentVocabulary.IsEmbeddedLanguage`; the world vocabulary
+registers `sql`, supplies its lexer, and owns parsing and lowering. The cartridge vocabulary never sees it.
+
+### What the dialect does not mean
+
+- **Close to SQL, never falsely SQL.** Where SQL's meaning matches Puck's, the dialect uses SQL's spelling; where
+  it doesn't, it uses a distinct Puck clause (`ADVANCE ... PER SECOND`, `ON OVERFLOW SATURATE`). A construct whose
+  SQL meaning Puck cannot honor is refused (PUCK073), never approximated.
+- **A set-based `UPDATE` cannot read what it writes at another key.** `forEach` fires locals in order, and a
+  later local sees an earlier one's writes, while SQL's `WHERE`/`SET` read a snapshot taken before the
+  statement. Reading a column the statement writes at another key — an aggregate, a subquery, a self-join — is
+  refused as PUCK074; the engine's evaluation order does not change to accommodate it.
+- **`NULL` is an absent cell**, following Puck's absent-fact rules, not SQL's three-valued logic. Aggregates
+  (`COUNT`, `MIN`, `MAX`, `SUM`) are admitted only where `Puck.State.ExpressionVocabulary` already has an
+  equivalent over a row; `GROUP BY`, `HAVING`, `ORDER BY` (outside a `nearest` query), `LIMIT` outside that query,
+  cross-key `JOIN`, `UNION`, window functions, triggers, and views are refused.
+- **`table.column` and native `row.key` don't share a meaning.** Outside `sql { }`, `row.key` keeps its native
+  dot-access meaning; inside the block, `table.column` has SQL's.
+- **A rule body is wholly SQL or wholly native**, never mixed. `cycle`, `draw`, `valuesFrom`, `inverse`, `phase`,
+  `phaseOf`, `knowledge`, `evicts`, `gatesDrive`, ring domains, grids, topologies, generators, patterns, search,
+  and body/identity state stay native; so do `push`, `countdown`, `schedule`, `transform`, `generate`, locals,
+  zones, and decisions. A SQL clause attempting one of them is refused, naming the native spelling instead.
+
+- **Multi-column tables**: `CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT, mana INT) CAPACITY n;` decomposes
+  into prefix-named state rows (`fightersHp`, `fightersMana`) sharing the primary key domain and capacity.
+  Columns admit `NOT NULL`, `DEFAULT <val>`, `CHECK (<col> BETWEEN min AND max | >= min | <= max)`,
+  `ON OVERFLOW SATURATE`, `ADVANCE <rate> PER SECOND`, and `DYNAMICS <row>`.
+- **Scalar slots**: `DECLARE name TYPE [DEFAULT v] [CHECK ...] [ADVANCE r PER SECOND];` compiles directly into
+  a single scalar state row.
+- **Piles**: `CREATE TABLE name (id TEXT PRIMARY KEY REFERENCES target) ORDERED CAPACITY n;` spells an ordered
+  sequence table (native pile).
+- **Rules**: `CREATE RULE name EVERY TICK | ON ENTER AS <statement>` compiles directly into native rules JSON.
+- **Transactions**: `BEGIN ATOMIC <statement>* [EXCEPTION <statement>*] END;` compiles to atomic transaction
+  effects (`transaction` with optional `onFailure`).
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK070 | Error | Floating-point column type (`REAL`, `FLOAT`, `DOUBLE`) in a SQL table declaration — state holds no floats, use `FIXED`. |
+| PUCK071 | Error | Composite `PRIMARY KEY (a, b)` in a SQL table declaration — a state cell has exactly one key. |
+| PUCK072 | Error | `CHECK` constraint shape outside `BETWEEN a AND b`, `>= a`, or `<= b`. |
+| PUCK073 | Error | Unsupported SQL clause or construct (`GROUP BY`, `HAVING`, `WINDOW`, `LIMIT`, cross-key `JOIN`, `UNION`, `TRIGGER`, etc.). |
+| PUCK074 | Error | Set-based `UPDATE` reading a column it writes at other keys — self-referential multi-key updates are refused. |
+| PUCK075 | Error | Inserted row missing a `NOT NULL` column that declares no default value. |
+| PUCK076 | Error | Syntax or grammatical refusal inside a `sql { ... }` block. |
+
+Shared state declaration and semantic codes also apply:
+- **PUCK051**: Duplicate table/slot name or duplicate inserted primary key.
+- **PUCK053**: Default value or SET assignment literal that does not fit the target column or slot's kind.
+- **PUCK054**: Table `CAPACITY` smaller than inserted row count.
+- **PUCK058**: `ADVANCE` rate that does not reduce to an exact 64-bit fraction.
+- **PUCK059**: Unknown table, column, or slot reference.
+
+## Vector embeddings and spaces
+
+`state.world` supports vector state, semantic embedding spaces, and companion offline lock files (`.embeddings.json`).
+
+- **Embedding spaces**: declared via `spaces { space <name> { model: "...", revision: "...", dimensions: <d> } }`. Dimensions must be in `[8, 1024]`.
+- **Vector tables and slots**: `table <name> : Vector [space(<name>)] [capacity(<n>)] [evicts]` and `slot <name> : Vector = "literal text"`.
+- **`embeds(targetRow)`**: applied to Text tables (`table lines : Text embeds(lineVectors)`), automatically coupling text entries to companion vector rows sharing the same keys.
+- **Vector literals & lock resolution**: authored string values in vector slots or `embed("...")` rule expressions are resolved into unit-normalized signed 8-bit vectors (`sbyte[]`, radius 127) using committed companion `.embeddings.json` lock files generated by `puck embed`.
+- **SQL vector columns**: in `sql { ... }` blocks, a vector column is spelled `VECTOR(<space>)`, or bare `VECTOR` to take the document's default space. There is no SQL spelling for `embeds`; a Text table couples to its companion vector row through the non-SQL `table t : Text embeds(vectors)` modifier above.
+
+### Embedding diagnostics
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK077 | Error | Embedding space is malformed: unknown or missing property, dimensions outside `[8, 1024]`, duplicate space name, or exceeds 16 spaces limit. |
+| PUCK078 | Error | Vector row names no space and document has no default, names an undeclared space, or a non-Vector row declares a space. |
+| PUCK079 | Error | Authored text in a vector slot or `embed(...)` has no lock entry; run `puck embed`. |
+| PUCK080 | Error | Lock file's model, revision, or dimensions differ from the declared space; run `puck embed`. |
+| PUCK081 | Error | Vector literal is not valid base64url, has wrong dimension count, contains prohibited -128, or fails unit sphere admission. |
+| PUCK082 | Error | Vector literal or `embed(...)` appears where no vector value is admitted. |
+| PUCK083 | Error | Vector row capacity × dimensions exceeds per-row cell ceiling or section budget. |
+| PUCK084 | Error | Vector operation names a non-vector operand, mixes spaces, or provides invalid arguments to `nearest` / `remember`. |
+| PUCK085 | Error | An `embed(...)` expression cannot determine its embedding space because no operand, destination, or default space is available. |
+| PUCK086 | Error | `embeds(...)` appears on something other than a Text table, or names a colliding row name. |
+| PUCK087 | Error | `mix` term count or weight is out of range, or a term weight is zero. |
+| PUCK088 | Error | Vector filter `where` is not a keyed Bool row, or `exclude` condition is malformed. |
+| PUCK_LINT_010 | Warning | A literal `mix` term weight's share is below 1/64 (weight stall); consider `mean` over a history table instead. |
+
+## Patterns
+
+`pattern <name> : <Kind> { … }` declares one `patterns` row. Its body carries an optional `attribute:` or `value:`
+(the word's source, the second as an infix expression evaluated once per token), an optional `maxStates:` budget, a
+`symbols { }` block whose entries are `name = value` or `name = low..high`, and a `match:` language:
+
+```puck
+pattern solitaireKlondikeRun : Int {
+  value: "solitaireKlondikeFace[$token] * (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1)"
+  symbols {
+    face = 1..2
+    next = 2
+  }
+  match: face next*
+}
+```
+
+The match language is `Puck.State.PatternSpelling`, loosest operator first: `|` choice, `&` intersection,
+juxtaposition sequence, `~` complement, and the postfix repetitions `*`, `+`, `?`, `{m}`, `{m, n}`. Its atoms are
+`any` (one token of any value), `empty` (the empty word), `none` (no word at all), `except(sym)`, and a symbol
+name — quoted (`"any"`) when it collides with one of those words.
+
+The declaration is compiled while it lowers, so a refusal names the line that declared it.
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK097 | Error | A `match:` language, a symbol's value band, a pattern kind, or a name the pattern algebra refuses. |
+| PUCK098 | Error | The derivative machine needs more states than the row budgets, or the budget is outside `1..256`. |
+
+## Cell sets
+
+The same operator vocabulary spells a set over the positions of a board, a zone, or a family through
+`Puck.State.CellSetSpelling`. `set <name>: <expression>` declares one `sets` row:
+
+```puck
+set liberties: board(grid, 0..0) & ~zone(stones, 1..1)
+```
+
+Operators loosest first: `|` union, `&` intersection, `~` complement, with parentheses. The atoms are `all`,
+`none`, and the three sources `board(row, low..high)`, `zone(row, low..high)` and `family(name, low..high)`, the
+range being the inclusive band a position's value must fall in.
+
+Every source in one expression must agree on a width, because complement is relative to it:
+
+| Source | Positions | Width |
+|---|---|---|
+| `board(row, …)` | the lattice row's topology cells | the row's cell capacity |
+| `zone(row, …)` | the ordered or keyed row's own positions | the row's cell capacity |
+| `family(name, …)`, slot members | the family's member rows | the family's member count |
+| `family(name, …)`, ordered or keyed members | the members' token domain's keys | the token domain's size |
+
+A family whose members are ordered or keyed rows therefore stands over the tokens, not over the members: a token is
+in the set when some member row holds it with a value inside the band, so such a set combines with any other source
+over the same token domain and with none of a different width. A family that mixes slot members with ordered or
+keyed ones, or whose members stand over different token domains, has no one carrier and is refused.
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK101 | Error | A `set` declaration the cell-set algebra refuses. |
+
+## Rule groups
+
+`stabilize` and `workflow` each lower to one `ruleGroups` row plus the rules it claims, named
+`<group>_<rule>`:
+
+```puck
+stabilize settleBoard maxPasses(32) until board.unstable == 0 {
+    rule "collapse" {
+        board.unstable = 0
+    }
+}
+
+workflow turn {
+    step beginTurn {
+        board.unstable = 1
+    }
+
+    step endTurn skip {
+        board.unstable = 0
+    }
+}
+```
+
+A `stabilize` body is a rule scope: its `when`, `local` and property statements apply to every member, and each
+`rule` block is one member. `maxPasses(N)` is the pass ceiling whose breach is one counted refusal naming the
+group; `until G` arms the group while `G` reads false, so it lowers as that gate's negation. A fixpoint group with
+no `until` re-arms after a breach and starts a fresh set of passes on the next tick — nothing else could lift a
+latched breach, and a cascade that did not settle inside one tick is what `stabilize` is for.
+
+A `workflow` step's body IS one rule's body, so its `when` and effect statements are written directly and a `rule`
+block inside a step is refused. `skip` after a step's name advances the cursor past that step's own refusal instead
+of stalling on it. `repeatStep` and `forEachStep` still parse and are refused: a staged cursor advances one step per
+committed firing and carries neither a repeat nor an iteration of its own.
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK099 | Error | A malformed pass ceiling, a group with no member, or a step shape a staged cursor does not carry. |
+
+## Families
+
+`table`/`slot`/`pile`/`grid` take a bracketed family declaration after the row name. `[N]` is a count: N rows named
+`<name>0`..`<name>N-1`, referenced as `<name>[i]` and lowered to a numbered row plus a per-rule `zones` list. A
+bracketed member list instead declares the family in the document's own `state.families` member and keeps the
+`<name>[i]` spelling for the rule compiler to resolve:
+
+```puck
+table Pile[0, 2..12] : Int
+```
+
+A member list is either index ranges — where an index nothing names is a gap that selects no row — or member rows
+named outright (`table Pile["stock", "waste"] : Int`), never a mix of the two, because a named row carries no
+family index to select it by.
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK102 | Error | A duplicate member index, a descending range, or a member list that mixes named rows with indices. |
+
 ## Decompiling
 
 `WorldDecompiler.Decompile` opens every file with a one-time-import header comment (`let`/`template` cannot be
@@ -410,8 +585,8 @@ no text that recompiles to a null comparand.
 ## Diagnostics
 
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
-state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word), PUCK006 (`bind` missing its kind),
-PUCK007 (`bind` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
+state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word), PUCK006 (`local` missing its kind),
+PUCK007 (`local` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
 on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
@@ -420,7 +595,14 @@ flag and an explicit `solid { }`), PUCK029 (`decision` missing `periodSeconds`),
 refused), PUCK036 (a statement inside `prototypes`/`placements` that the section's grammar cannot carry), PUCK037
 (`repeat`/`break`—not `if`, which lowers to the conditional effect above—has nothing to lower onto in this
 vocabulary's straight-line rule body), PUCK039 (a compound-assignment operator; this vocabulary carries only
-`setState`/`addState`). The
+`setState`/`addState`), PUCK100 (a rule whose name position is a bound template parameter's own identifier, so
+every instantiation would mint the same name — write `rule $"…{param}"` instead), PUCK103 (a `transform` written
+with a result label; the destination is the call's own argument, so write `transform call(...)`), PUCK104 (a
+`test` declaration's own shape — a body member that is not `given`/`when`/`expect`, one of those twice or out of
+order, a `with module(...)` subject, no expectation, a test outside the document's root, or two tests generating one
+world), PUCK105 (a line inside a `test` block a generated test world cannot carry — a `given` line that is not a
+cell assignment to a literal, a `when` step that is neither `ticks <n>` nor `seat<n>: <command line>`, a step
+acting as something other than a seat, or a command outside the scheduled step vocabulary). The
 `table`/`slot`/`pile`/`grid` declaration refusals (PUCK049–PUCK066) are listed in
 [State declarations](#state-declarations) above.
 
@@ -449,11 +631,13 @@ composing and validating a document as a world. The one check that ignores this 
 scoped to sibling shapes in the same `shapes` array, a purely local scope no basis or importer could change, so it
 always runs and always reports. Every other check is Information severity; the shape-parent check is Warning:
 
-- `PUCK_LINT_005`—a `state`/`comparandState`/`fromState` name, or a `State` token inside a `compareValue`
-  predicate's `left`/`right` operand or any `expression`/`score` operand, that resolves to no declared
-  `state.*[].name` row. `left`/`right` are checked ONLY on a `compareValue`-discriminated object—every other
-  `left`/`right` pair in the document model (e.g. an interaction row's property/placement-id pair) is a different
-  name kind and is never read as an expression.
+- `PUCK_LINT_005`—a `state`/`comparandState`/`fromState` name, a `State` token inside a `compareValue`
+  predicate's `left`/`right` operand or any `expression`/`score` operand, or a row-naming field of a
+  `StateTransform` arm, that resolves to no declared `state.*[].name` row. `left`/`right` are checked ONLY on a
+  `compareValue`-discriminated object—every other `left`/`right` pair in the document model (e.g. an interaction
+  row's property/placement-id pair) is a different name kind and is never read as an expression. An arm's fields
+  are read only where the arm sits, as the value of a `transform` key, and only the fields whose value is a row
+  name: a cell key, a slot or cell spelling, a literal, and a row of another vocabulary are all left alone.
 - `PUCK_LINT_006`—a `prototypeId` that resolves to no `prototypes[].id`.
 - `PUCK_LINT_007`—a placement row's `parent` that resolves to no `placements.rows[].id`.
 - `PUCK_LINT_008`—a `camera`/`spawnPoint` reference that resolves to no `cameras[].name`/`spawnPoints[].id`.
@@ -474,7 +658,7 @@ The [VS Code extension](../../editors/vscode/README.md) starts this server throu
 `origin`/`band`/`empty`/`positions`/`inverse` modifiers, and the `Puck.State` predicate/effect/`CellKind`
 discriminators; hover on a declared `state` row name (its `kind`, and `capacity`/`domain` when present, via a
 best-effort lower of the open document) and on each declaration keyword and modifier itself; and `documentSymbol`
-entries for `rule` blocks (with `when`/`bind`/`decision` children) and for a `state.world` declaration block (with
+entries for `rule` blocks (with `when`/`local`/`decision` children) and for a `state.world` declaration block (with
 `table`/`slot`/`pile`/`grid`/`row` children — a table's own cell keys and a pile's own tokens as their children in
 turn).
 
@@ -486,7 +670,7 @@ braces/brackets/parens it is still owed, so an unclosed rule or block being type
 far enough to see its declared rows.
 
 Hover also shows declarations for document-level `let` constants, templates (including parameter defaults),
-import aliases, template and lambda parameters, loop variables, and rule bindings. Local parameters and bindings
+import aliases, template and lambda parameters, loop variables, and rule locals. Loop parameters and rule locals
 are resolved within their enclosing scope. Contiguous `//` comments immediately above a declaration accompany
 its popup. Collection functions show their signatures and behavior; scalar function arity, domain, and operation
 come from `Puck.State.ExpressionVocabulary`. Declaration cards quote source rather than evaluating it, so units
@@ -498,15 +682,19 @@ Creation descriptions come from the authoring model XML comments; no editor-spec
 Comments, string contents, and whitespace do not trigger symbol hover. Imported member definitions and inferred
 expression result types are not resolved by these cards.
 
-`Formatting/PuckFormatter.cs` is a meaning-preserving pass: formatting a document never changes what it compiles
-to. A `$name:segment` reserved channel—including a folded `$zones[...]` selector—is one opaque token, so its
-internal colons never splice `$physics:quiescent` into `$physics: quiescent`; a backquoted name (`` `N,S,E,W` ``,
-`` `seat-1` ``, per `Puck.State.ExpressionSpelling`) is opaque the same way a `"..."` string literal is, so its
-commas never gain the space the comma rule inserts everywhere else. A colon that already carries a single space
-before it—`bind name : Kind`, a `when Gate : Kind`/`as Kind` suffix, and a ternary's `? a : b`, all
-`ExpressionSpelling`'s own spacing—keeps that space rather than being squeezed into an unspaced property colon;
-only a run of two or more spaces before a colon is ever collapsed. The decompiler's one-time-import header comment,
-and every other comment, survives formatting in place.
+Formatting is printing: `Puck.Transpiler`'s `PuckPrinter` parses a source and prints its tree, and the language
+server's formatting request and `puck fmt` are the same pass. Reader and printer share one escape grammar
+(`Parsing/PuckStrings.cs`) - a backslash, a quote, `n`, `r`, `t`, `0`, a `uXXXX` code unit, and a backslash in
+front of anything else refused - so the printer writes only what the reader reads back and a formatted source
+cannot mean something else. A raw fence carries no escapes and is printed back as a fence whenever it reads
+back exactly. Layout is the printer's own — two spaces, Egyptian braces, one statement per line — except for what the parse
+carries in as trivia: every comment keeps its line, a run of blank lines keeps its length, an array, object or
+argument list keeps the line breaks and the line-end commas its author wrote, a numeric literal keeps its base, and
+a name keeps its bare-or-quoted spelling. A cell key prints through `Puck.State`'s own fold, so an effect target
+reads the way the gate above it does. One comment moves: one written inside a construct's header, between its
+first word and its `{`, since a `//` left in place would swallow the brace — it prints above the statement, and a
+`/* */` written after the header's name prints right after the first word. A document that does not parse has no tree to
+print, so the editor keeps what is being typed and `puck fmt` reports the failure rather than writing a file.
 
 Unused-binding analysis follows references in loops, array indexing, lambda bodies, interpolated strings, and exports.
 

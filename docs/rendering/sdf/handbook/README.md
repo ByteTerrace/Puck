@@ -31,6 +31,6 @@ shading, and recorded technique decisions. The [`Puck.SdfVm` README](../../../..
 documents the runtime and host-facing render assembly. Shared shader manifests
 and connected pipelines are documented in the [`Puck.Shaders` README](../../../../src/Puck.Shaders/README.md).
 
-The [shader pipeline evolution plan](../../../plans/shader-pipeline-evolution.md)
+The [rendering programme](../../../plans/rendering.md)
 describes planned work beyond the current renderer. It is separate from this
 handbook's description of implemented behavior.

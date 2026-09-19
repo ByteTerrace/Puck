@@ -15,9 +15,19 @@ separate lets the composition root choose a platform without making this
 library depend on a GPU backend.
 
 `Release/` owns launcher-side release verification, staging, and update
-application. The [launcher stub](../Puck.Launcher.Stub/README.md) selects the
-installed version to start and handles the health-based rollback decision.
-The [release guide](../../docs/development/ci.md) owns the shared publishing
+application. A launcher-based program — the desktop client or a
+player-hosted headless authority — updates itself from a signed
+`puck.release.v1` manifest: per-RID file lists addressed by content hash (so
+an unchanged file costs nothing to restage), a signature chain rooted at the
+publisher, a deterministic staged rollout bucket, revocation, and a
+minimum-supported version. `IUpdateStager` stages a new version side by side
+with the running one; `IUpdateApplier` swaps to it only after one health-gated
+boot succeeds, and rolls back on failure. `IReleaseVerifier` checks the
+signature chain — `PlaceholderReleaseVerifier` refuses every manifest at
+build time, standing in until a real signing chain replaces it. The
+[launcher stub](../Puck.Launcher.Stub/README.md) selects the installed
+version to start and handles the health-based rollback decision. The
+[release guide](../../docs/development/ci.md) owns the shared publishing
 workflow and its environment requirements.
 
 ## Verification

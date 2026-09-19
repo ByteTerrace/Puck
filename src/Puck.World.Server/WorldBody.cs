@@ -292,8 +292,10 @@ public sealed partial class WorldBody {
     private readonly CompiledActionSpec?[] m_laneBindings = new CompiledActionSpec?[ActionLaneCount];
     private readonly LaneActionRuntime[] m_laneActions = new LaneActionRuntime[ActionLaneCount];
     private CompiledActionStateSlot[] m_actionStateDefinitions = [];
-    private FixedQ4816[] m_actionStateValues = [];
-    private ulong[] m_actionStateTimers = [];
+    // Named counters and timers are stored in the arena's slot lanes, addressed by this body's own entity index —
+    // the body holds the address, never the values.
+    private WorldActionStateLane? m_stateLane;
+    private int m_stateOrdinal = -1;
     private long[] m_actionStateRequested = [];
     private string[] m_actionStateLastWriter = [];
     private string[] m_actionStateLastReason = [];

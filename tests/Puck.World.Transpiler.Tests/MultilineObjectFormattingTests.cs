@@ -1,17 +1,18 @@
-using Puck.Transpiler.Formatting;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
+/// <summary>The printer's line-break rule: an array or object keeps the shape its author gave it, and a block body
+/// always occupies its own lines.</summary>
 public class MultilineObjectFormattingTests {
     [Fact]
     public void DelimitersInCommentsAndStringsRemainLiteral() {
         const string Source = "items [\n{ name: \"{[,] }\", value: 2 } // { ,\n]\n";
-        var formatted = PuckFormatter.Format(Source);
+        var formatted = PuckFormat.Format(Source);
 
         Assert.Contains(
             actualString: formatted,
-            expectedSubstring: "name: \"{[,] }\",\n    value: 2"
+            expectedSubstring: "{ name: \"{[,] }\", value: 2 }"
         );
         Assert.Contains(
             actualString: formatted,
@@ -19,7 +20,7 @@ public class MultilineObjectFormattingTests {
         );
         Assert.Equal(
             formatted,
-            PuckFormatter.Format(formatted)
+            PuckFormat.Format(formatted)
         );
     }
     [InlineData(2, true, "  ")]
@@ -27,7 +28,7 @@ public class MultilineObjectFormattingTests {
     [InlineData(4, false, "\t")]
     [Theory]
     public void ExplicitIndentationIsHonored(int tabSize, bool insertSpaces, string indent) {
-        var formatted = PuckFormatter.Format(
+        var formatted = PuckFormat.Format(
             insertSpaces: insertSpaces,
             source: "host { width: 1280, height: 720 }",
             tabSize: tabSize
@@ -35,11 +36,11 @@ public class MultilineObjectFormattingTests {
 
         Assert.Equal(
             actual: formatted,
-            expected: $"host {{\n{indent}width: 1280,\n{indent}height: 720\n}}\n"
+            expected: $"host {{\n{indent}width: 1280\n{indent}height: 720\n}}\n"
         );
         Assert.Equal(
             formatted,
-            PuckFormatter.Format(
+            PuckFormat.Format(
                 insertSpaces: insertSpaces,
                 source: formatted,
                 tabSize: tabSize
@@ -47,10 +48,10 @@ public class MultilineObjectFormattingTests {
         );
     }
     [Fact]
-    public void RecordsExpandTheirMembersAndKeepVectorsCompact() {
+    public void AnObjectWrittenOnOneLineStaysOnOneLine() {
         const string Source = "stations [{ index: 0, name: \"isolated\", p [0, 0, 0], yaw: 0 }]";
-        const string Expected = "stations [\n  {\n    index: 0,\n    name: \"isolated\",\n    p [0, 0, 0],\n    yaw: 0\n  }\n]\n";
-        var formatted = PuckFormatter.Format(Source);
+        const string Expected = "stations [{ index: 0, name: \"isolated\", p [0, 0, 0], yaw: 0 }]\n";
+        var formatted = PuckFormat.Format(Source);
 
         Assert.Equal(
             actual: formatted,
@@ -58,7 +59,17 @@ public class MultilineObjectFormattingTests {
         );
         Assert.Equal(
             formatted,
-            PuckFormatter.Format(formatted)
+            PuckFormat.Format(formatted)
+        );
+    }
+    [Fact]
+    public void AnObjectWrittenOverSeveralLinesKeepsThem() {
+        const string Source = "stations [\n  {\n    index: 0\n    name: \"isolated\"\n  }\n]\n";
+        var formatted = PuckFormat.Format(Source);
+
+        Assert.Equal(
+            actual: formatted,
+            expected: Source
         );
     }
 }

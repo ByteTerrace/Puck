@@ -43,7 +43,10 @@ public static partial class WorldSchema {
     // Every assembly whose types the document embeds; each one's generated XML doc file rides beside the DLL.
     private static readonly (string FileName, Type Anchor)[] XmlDocumentationFiles = [
         ("Puck.World.Schema.xml", typeof(WorldDefinition)),
-        ("Puck.State.xml", typeof(ValueExpression)),
+        ("Puck.State.xml", typeof(ExpressionProgram)),
+        ("Puck.State.Rules.xml", typeof(Puck.State.Rules.RuleGroupDeclaration)),
+        ("Puck.State.Topology.xml", typeof(PatternRow)),
+        ("Puck.State.Generators.xml", typeof(TableDocument)),
         ("Puck.World.Authoring.xml", typeof(Puck.World.Authoring.CreationDocument)),
         ("Puck.SignedDistance.xml", typeof(Puck.SignedDistance.SdfSolidPrimitive)),
     ];

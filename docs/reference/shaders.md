@@ -143,6 +143,13 @@ bindings. Planner defaults admit the Vulkan portable minimums: 128 total push
 constant bytes (112 bytes are frame constants, leaving 16 config bytes) and
 workgroups of at most 128x128x64 with 128 invocations; hosts with larger limits
 may supply an explicitly verified `ShaderPipelineLimits` policy.
+
+The document schema reserves the `Depth` resource kind, but the compiler refuses
+it with `SHADERPIPE_UNSUPPORTED_DEPTH` before producing an execution plan.
+Multiple compute outputs are supported (`MaxOutputsPerPass`, 8 by default);
+fullscreen passes are capped by the compiler to exactly one color output,
+regardless of that general per-pass limit.
+
 ## API
 
 ```csharp
@@ -166,7 +173,7 @@ back the pass's own render target—the composed result—and prints
 `[capture] <set name> -> <path>` on stderr; a frame the pass passes through
 untouched forwards the same request to its inner node instead. The request
 reports write completion or failure and is failed if disposed before service;
-see [capture completion](../Puck.SdfVm/README.md#capture-completion).
+see [capture completion](../../src/Puck.SdfVm/README.md#capture-completion).
 `ShaderSetManifest.ConfigJsonSchema()` emits the config schema as a JSON
 Schema object; `manifest.TryBindConfig(config, out values, out reason)` is
 the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and
@@ -292,16 +299,26 @@ quad—retroreflective tape on a real wall becomes a tracked painting frame.
 
 ## Shader pipelines and live development
 
-The [pipeline evolution plan](../../docs/plans/shader-pipeline-evolution.md) preserves the remaining execution, timing, packaging and hybrid-rendering work, with dependencies and completion evidence.
+The [rendering programme](../plans/rendering.md) holds the remaining execution, timing, packaging, and hybrid-rendering work, with dependencies and completion evidence.
 
 A shader is source code for a GPU stage. A pass dispatches compute work or
 renders a fullscreen triangle. A pipeline connects those passes through named
 images and buffers. Each running instance owns its clock, parameters and
-feedback history. A one-off shader is a pipeline with one pass.
+feedback history. A one-off shader is a pipeline with one pass. *Stage* is
+reserved for a shader's vertex, fragment and compute stages; a pass or a
+pipeline is never called one. This runtime's
+former “study” name was accidental; neither the runtime, the document
+vocabulary, nor a compatibility alias restores it.
 
 `puck.shader.pipeline.v1` documents declare resources, passes and named outputs.
+JSON is the authoritative pipeline model; any future `.puck` pipeline
+vocabulary must lower into it and reuse its validation rather than introduce a
+second graph compiler. A world names a pipeline document by path, and that
+path loads the JSON model: no `.puck` vocabulary for authoring one exists yet.
 A pass input names a resource; `previousFrame: true` explicitly reads history.
-Current-frame connections must be acyclic. History resources declare their
+Current-frame connections must be acyclic, and a cycle is reported
+(`SHADERPIPE_CYCLE`) as the chain of passes that forms it rather than as one
+offending name. History resources declare their
 initial contents, so the first frame never samples uninitialized memory.
 Named outputs can expose intermediate results as well as the final image.
 The planner reserves explicit descriptor bindings, then assigns omitted
@@ -313,7 +330,7 @@ The Shadertoy adapter uses image output binding 0 and image input bindings
 from 1. The planned references carry the resolved numbers for both the
 compiler and executor.
 
-See the [three-pass ink pipeline](../Puck.World/Assets/pipelines/ink.pipeline.json)
+See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.pipeline.json)
 for a complete example: a floating-point feedback simulation feeds a color
 pass, followed by a fullscreen HLSL finish. Each source file lives beside its
 pipeline document. Source paths in the pipeline resolve relative to that
@@ -324,7 +341,10 @@ pass leaves the last successful pipeline running. Watched editing includes
 the pipeline document, shader files and includes. A candidate captures each
 source revision, and a source edit during compilation triggers a debounced
 whole-pipeline retry. Superseded compiler tasks are canceled and retired after
-their native processes finish. Pause holds time and history;
+their native processes finish. Retiring the replaced graph accounts for its
+downstream readers as well as its own work: a compositor can still sample the
+previous output after its own submission fence, so the swap waits for the
+device to go idle before disposing those resources. Pause holds time and history;
 step advances one logical frame; reset initializes history and resets time.
 A ready paused instance holds a reload candidate until the next step or resume.
 Compatible history and unchanged parameter schemas retain their live values;
@@ -332,8 +352,9 @@ changed schemas bind their new defaults.
 Resizing invalidates history whose dimensions change.
 
 `ShaderPipelineCompiler` validates the document without creating GPU objects.
-It checks resources, bindings and initialization and produces a stable
-topological execution order. Execution retains every pass needed by a named
+It checks resource kinds, bindings, initialization and the backend limits a
+plan must fit, so a document that cannot run is refused before anything is
+allocated on the GPU, and produces a stable topological execution order. Execution retains every pass needed by a named
 output, including writers reached through previous-frame inputs; other branches
 are excluded. Resource entries report first and last pass access, with public
 outputs and persistent state retained through publication. Allocation remains
@@ -343,8 +364,14 @@ host-owned inputs are reported separately. GPU timings currently report unavaila
 Both active and paused capture complete against the selected output.
 `ShaderPipelineLoader` resolves source and invokes
 `ShaderCompiler` for both backend bytecodes. `ShaderPipelineRenderNode` owns
-execution and GPU resources. World supplies inputs and routes named instances
-to layout slots; it does not compile individual passes itself.
+execution and GPU resources: however many passes a pipeline holds, it records
+them all into one queue submission rather than fencing per pass, makes every
+inter-pass image transition explicit, and protects command buffers and
+descriptors with one fence per frame slot. World supplies inputs and routes
+named instances to layout slots; it does not compile individual passes itself.
+The shader subsystem owns planning and execution and the backends own GPU
+mechanics, so a new producer of shader work connects through those seams
+instead of adding a case to World or to the SDF engine.
 
 ### One-off shaders
 

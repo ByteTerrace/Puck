@@ -8,7 +8,7 @@ using Puck.GamingBricks.Forge;
 
 namespace Puck.GamingBricks.Transpiler;
 
-/// <summary>Reads and writes a cartridge operand: a <c>ValueExpression</c> for a read, and a state-and-key pair for a
+/// <summary>Reads and writes a cartridge operand: a <c>ExpressionProgram</c> for a read, and a state-and-key pair for a
 /// write.</summary>
 /// <remarks>An expression is carried as its canonical infix spelling, which is the same text an author wrote, so a
 /// compiled cartridge reads as arithmetic rather than as nested operand objects. The one thing this does beyond
@@ -30,16 +30,16 @@ public static class CartridgeOperand {
 
         return null;
     }
-    private static List<ValueToken>? Resolve(IReadOnlyList<ValueToken> tokens, DocumentScope scope, out string? reason) {
+    private static List<Instruction>? Resolve(IReadOnlyList<Instruction> tokens, DocumentScope scope, out string? reason) {
         using var evaluation = scope.Budget.Enter(span: default);
 
         reason = null;
 
-        var result = new List<ValueToken>(capacity: tokens.Count);
+        var result = new List<Instruction>(capacity: tokens.Count);
 
         foreach (var token in tokens) {
             switch (token) {
-                case ValueToken.Constant constant:
+                case { Payload: InstructionPayload.Constant constant }:
                     // The widest slot a document may declare. Whether a literal fits the slot it is actually paired
                     // with is the forge validator's question, since only it knows that slot's declared ceiling.
                     if (
@@ -52,17 +52,17 @@ public static class CartridgeOperand {
                         return null;
                     }
 
-                    result.Add(item: constant);
+                    result.Add(item: token);
 
                     break;
-                case ValueToken.State { Key: null } state: {
+                case { Payload: InstructionPayload.State { Key: null } state }: {
                         // A name bound by a `for` is not machine state either, and it shadows a constant of the same
                         // name: the loop already lowered its value, so it needs no second pass.
                         if (!scope.TryLowerBinding(
                             state.Name,
                             out var bound
                         )) {
-                            result.Add(item: state);
+                            result.Add(item: token);
 
                             break;
                         }
@@ -81,8 +81,8 @@ public static class CartridgeOperand {
 
                         break;
                     }
-                case ValueToken.State state: {
-                        ValueExpression? index;
+                case { Payload: InstructionPayload.State state }: {
+                        ExpressionProgram? index;
 
                         try {
                             index = CartridgeExpressions.Index(key: state.Key);
@@ -99,7 +99,7 @@ public static class CartridgeOperand {
                         }
 
                         var inner = Resolve(
-                            tokens: index.Tokens,
+                            tokens: index.Instructions,
                             scope: scope,
                             reason: out reason
                         );
@@ -108,9 +108,9 @@ public static class CartridgeOperand {
                             return null;
                         }
 
-                        result.Add(item: new ValueToken.State(
-                            Name: state.Name,
-                            Key: CartridgeExpressions.Key(index: new ValueExpression(Tokens: inner))
+                        result.Add(item: Instruction.Operand(
+                            key: CartridgeExpressions.Key(index: new ExpressionProgram(Instructions: inner)),
+                            name: state.Name
                         ));
 
                         break;
@@ -124,7 +124,7 @@ public static class CartridgeOperand {
 
         return result;
     }
-    private static List<ValueToken>? Substitute(JsonNode? node, DocumentScope scope, out string? reason) {
+    private static List<Instruction>? Substitute(JsonNode? node, DocumentScope scope, out string? reason) {
         reason = null;
 
         if (node is not JsonValue value) {
@@ -137,7 +137,7 @@ public static class CartridgeOperand {
             if (!ExpressionSpelling.TryParse(
                 error: out var error,
                 text: text,
-                tokens: out var tokens
+                program: out var parsed
             )) {
                 reason = error;
 
@@ -147,7 +147,7 @@ public static class CartridgeOperand {
             return Resolve(
                 reason: out reason,
                 scope: scope,
-                tokens: tokens
+                tokens: parsed.Instructions
             );
         }
 
@@ -164,7 +164,7 @@ public static class CartridgeOperand {
                 return null;
             }
 
-            return [new ValueToken.Constant(Value: number)];
+            return [Instruction.Constant(value: number)];
         }
 
         reason = "a bound name stands for a number or an expression";
@@ -177,14 +177,14 @@ public static class CartridgeOperand {
     /// <param name="scope">The lowering scope.</param>
     /// <param name="reason">Why the conversion failed, or <see langword="null"/>.</param>
     /// <returns>The expression, or <see langword="null"/> when <paramref name="reason"/> says why not.</returns>
-    public static ValueExpression? Expression(string text, DocumentScope scope, out string? reason) {
+    public static ExpressionProgram? Expression(string text, DocumentScope scope, out string? reason) {
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(text);
 
         if (!ExpressionSpelling.TryParse(
             error: out var error,
             text: text,
-            tokens: out var tokens
+            program: out var parsed
         )) {
             reason = error;
 
@@ -194,12 +194,12 @@ public static class CartridgeOperand {
         var resolved = Resolve(
             reason: out reason,
             scope: scope,
-            tokens: tokens
+            tokens: parsed.Instructions
         );
 
         return ((resolved is null)
             ? null
-            : new ValueExpression(Tokens: resolved)
+            : new ExpressionProgram(Instructions: resolved)
         );
     }
     /// <summary>Lowers an authored expression without folding machine state as compile-time data.</summary>
@@ -364,7 +364,7 @@ public static class CartridgeOperand {
             return null;
         }
 
-        return JsonValue.Create(value: ExpressionSpelling.Print(tokens: expression.Tokens));
+        return JsonValue.Create(value: ExpressionSpelling.Print(instructions: expression.Instructions));
     }
     /// <summary>Writes a write target back as the source text that addresses it.</summary>
     /// <param name="node">The target node.</param>
@@ -380,7 +380,7 @@ public static class CartridgeOperand {
             return state;
         }
 
-        return $"{state}[{ExpressionSpelling.Print(tokens: (CartridgeExpressions.Index(key: key)?.Tokens ?? []))}]";
+        return $"{state}[{ExpressionSpelling.Print(instructions: (CartridgeExpressions.Index(key: key)?.Instructions ?? []))}]";
     }
     /// <summary>Writes an operand back as the source text that reads it.</summary>
     /// <param name="node">The operand node.</param>

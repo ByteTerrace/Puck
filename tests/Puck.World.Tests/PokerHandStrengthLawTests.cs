@@ -35,7 +35,7 @@ public sealed class PokerHandStrengthLawTests {
         );
 
         Assert.NotNull(@object: found);
-        return found!.Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+        return found!.Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
     }
     private static int Count(WorldDefinition definition, string row) => (WorldDefinitionRows.FindStateRow(
         definition.State,
@@ -333,7 +333,7 @@ public sealed class PokerHandStrengthLawTests {
                 row: "table"
             )
         );
-        Assert.Null(@object: WorldStateDisclosure.Compose(
+        Assert.Null(@object: Fixtures.Disclose(
             definition: dealt,
             recipient: WorldPrincipal.Seat(slot: 1)
         )?.SingleOrDefault(predicate: r => (r.Name == "hand1"))); // seat 2 cannot see hand 1
@@ -511,14 +511,14 @@ public sealed class PokerHandStrengthLawTests {
         );
         Assert.Equal(
             2,
-            WorldStateDisclosure.Compose(
+            Fixtures.Disclose(
                 definition: shown,
                 recipient: WorldPrincipal.Seat(slot: 1)
             )?.SingleOrDefault(predicate: r => (r.Name == "hand1"))?.Cells.Count
         ); // revealed to seat 2
         Assert.Equal(
             2,
-            WorldStateDisclosure.Compose(
+            Fixtures.Disclose(
                 definition: shown,
                 recipient: WorldPrincipal.Seat(slot: 0)
             )?.SingleOrDefault(predicate: r => (r.Name == "hand2"))?.Cells.Count

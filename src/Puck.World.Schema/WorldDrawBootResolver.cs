@@ -27,6 +27,13 @@ namespace Puck.World;
 public static class WorldDrawBootResolver {
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
+    // A numeric draw's own raw encoding, by the site's declared kind — Fixed carries raw FixedQ4816 bits, Bool its
+    // 0/1 reading, and Int the plain value.
+    private static CellValue NumericCellValue(CellKind kind, long raw) => kind switch {
+        CellKind.Fixed => CellValue.Fixed(rawBits: raw),
+        CellKind.Bool => CellValue.Bool(value: (raw != 0L)),
+        _ => CellValue.Int(value: raw),
+    };
     private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
         fired = default;
 
@@ -162,7 +169,7 @@ public static class WorldDrawBootResolver {
         }
 
         for (var slot = 0; (slot < selected.Count); slot++) {
-            cells[selected[slot]] = cells[selected[slot]] with { Value = values[slot] };
+            cells[selected[slot]] = cells[selected[slot]] with { Value = NumericCellValue(kind: row.Kind, raw: values[slot]) };
         }
 
         filled = row with { Cells = cells, DrawCursor = checked((row.DrawCursor + selected.Count)), DrawnMasks = GeneratorEngine.MasksAfter(
@@ -247,14 +254,14 @@ public static class WorldDrawBootResolver {
             var cell = ((fired.Text is { } text)
                 ? new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: text
+                    Value: CellValue.Text(value: text)
                 )
                 : new StateCell(
                     Key: WorldStateRow.SlotKey,
                     // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
                     // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill
                     // all share.
-                    Value: fired.Numeric!.Value
+                    Value: NumericCellValue(kind: row.Kind, raw: fired.Numeric!.Value)
                 )
             );
 
@@ -282,13 +289,16 @@ public static class WorldDrawBootResolver {
                 comparisonType: StringComparison.Ordinal
             ));
 
-            if (declared?.Cells is not [{ } censusCell, ..]) {
-                reason = $"bodies.capacityRow '{capacityRow}' names no filled scalar row this boot could read";
+            if (
+                (declared?.Cells is not [{ } censusCell, ..]) ||
+                (censusCell.Value.Kind is not (CellKind.Bool or CellKind.Fixed or CellKind.Int))
+            ) {
+                reason = $"bodies.capacityRow '{capacityRow}' names no filled numeric scalar row this boot could read";
 
                 return false;
             }
 
-            var census = censusCell.Value;
+            var census = censusCell.Value.Raw;
 
             if (
                 (census < 0) ||
@@ -316,8 +326,8 @@ public static class WorldDrawBootResolver {
                 b: backendRow,
                 comparisonType: StringComparison.Ordinal
             ));
-            var token = (((declared?.Cells is [{ } tokenCell, ..])
-                ? tokenCell.Text
+            var token = (((declared?.Cells is [{ Value.Kind: CellKind.Text } tokenCell, ..])
+                ? tokenCell.Value.AsText
                 : null) ?? string.Empty);
 
             if (WorldHostTokens.ParseBackend(token: token) is not { } backend) {

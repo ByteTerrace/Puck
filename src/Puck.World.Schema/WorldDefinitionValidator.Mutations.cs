@@ -37,7 +37,10 @@ public static partial class WorldDefinitionValidator {
 
         var catalog = definition.StateCatalog;
         var rows = definition.State;
+        var spacesByName = definition.Spaces.Where(predicate: static s => (s is not null)).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
+        var enumsByName = definition.Enums.Where(predicate: static e => (e is not null)).ToDictionary(keySelector: static e => e.Name.Value, elementSelector: static e => e, comparer: StringComparer.Ordinal);
         Dictionary<string, List<WorldStateRow>>? dependentsByRow = null;
+        BoardDerivation? derivation = null;
 
         while (queue.Count > 0) {
             var rowName = queue.Dequeue();
@@ -64,10 +67,12 @@ public static partial class WorldDefinitionValidator {
 
             ValidateStateRow(
                 dynamicsNames: dynamicsNames,
+                enums: enumsByName,
                 errors: errors,
                 generators: definition.Generators,
                 path: path,
-                row: row
+                row: row,
+                spaces: spacesByName
             );
             ValidateTokenAndPhaseRow(
                 definition: definition,
@@ -79,6 +84,10 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 row: row
             );
+            ValidateVerdictRow(
+                errors: errors,
+                row: row
+            );
 
             if (
                 (row.EffectiveDomain is StateDomain.CellsOf board) &&
@@ -87,6 +96,7 @@ public static partial class WorldDefinitionValidator {
                 ValidateBoardRow(
                     board: board,
                     definition: definition,
+                    derivation: (derivation ??= new BoardDerivation(definition: definition)),
                     errors: errors,
                     row: row
                 );
@@ -213,6 +223,35 @@ public static partial class WorldDefinitionValidator {
                 names.Add(item: clear.Row);
 
                 break;
+            case StateTransform.Mix mix:
+                AddSpellingRowName(mix.Into, names);
+                foreach (var term in (mix.Terms ?? [])) {
+                    AddSpellingRowName(term?.From, names);
+                }
+
+                break;
+            case StateTransform.Mean mean:
+                AddSpellingRowName(mean.From, names);
+                AddSpellingRowName(mean.Into, names);
+                if (!string.IsNullOrWhiteSpace(value: mean.Where)) {
+                    AddSpellingRowName(mean.Where, names);
+                }
+
+                break;
+            case StateTransform.Nearest nearest:
+                AddSpellingRowName(nearest.From, names);
+                AddSpellingRowName(nearest.Query, names);
+                AddSpellingRowName(nearest.Into, names);
+                if (!string.IsNullOrWhiteSpace(value: nearest.Where)) {
+                    AddSpellingRowName(nearest.Where, names);
+                }
+
+                break;
+            case StateTransform.Remember remember:
+                AddSpellingRowName(remember.Into, names);
+                AddSpellingRowName(remember.From, names);
+
+                break;
             default:
                 reason = $"transform kind '{transform.GetType().Name}' is not recognized";
 
@@ -221,4 +260,27 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
+
+    private static void AddSpellingRowName(string? spelling, ISet<string> names) {
+        if (string.IsNullOrWhiteSpace(value: spelling)) {
+            return;
+        }
+        spelling = spelling.Trim();
+        if (spelling.StartsWith(comparisonType: StringComparison.Ordinal, value: "vector(")) {
+            return;
+        }
+        var bracketIndex = spelling.IndexOf(value: '[');
+
+        if ((bracketIndex > 0) && spelling.EndsWith(value: ']')) {
+            var rowName = spelling[..bracketIndex].Trim();
+
+            if (rowName.Length > 0) {
+                names.Add(item: rowName);
+            }
+            return;
+        }
+        names.Add(item: spelling);
+    }
+
 }
+

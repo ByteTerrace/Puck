@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -10,35 +8,25 @@ namespace Puck.World.Transpiler.Tests;
 // produce before a section's own dispatcher reads them, so a generated row sits wherever a written one may, and a
 // gate operand resolves the `let` bindings in scope rather than reading every bare name as a state row.
 public class GenerationPositionTests {
-    private static JsonObject Lower(string body) {
-        var diagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            PuckParser.ParseDocument($"schema: \"puck.world.definition.v1\"\n\n{body}"),
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+    private static WorldCompilation Compile(string body) =>
+        WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: $"schema: \"puck.world.definition.v1\"\n\n{body}"
         );
+    private static JsonObject Lower(string body) {
+        var compilation = Compile(body: body);
 
         Assert.False(
-            condition: diagnostics.HasErrors,
+            condition: compilation.Diagnostics.HasErrors,
             userMessage: string.Join(
                 separator: "\n",
-                values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
+                values: compilation.Diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
             )
         );
 
-        return lowered.Value!;
+        return compilation.RequireJson();
     }
-    private static DiagnosticBag LowerForDiagnostics(string body) {
-        var diagnostics = new DiagnosticBag();
-
-        WorldDocumentEmitter.LowerWithDiagnostics(
-            PuckParser.ParseDocument($"schema: \"puck.world.definition.v1\"\n\n{body}"),
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        return diagnostics;
-    }
+    private static DiagnosticBag LowerForDiagnostics(string body) => Compile(body: body).Diagnostics;
 
     [Fact]
     public void TestAForMayInvokeATemplateAndKeepDocumentOrder() {
@@ -178,6 +166,47 @@ public class GenerationPositionTests {
         Assert.Equal(
             "[[1,0],[2,0],[3,0]]",
             Assert.IsType<JsonArray>(@object: lowered["curve"]).ToJsonString()
+        );
+    }
+    [Fact]
+    public void TestARuleNameSubstitutesATemplateParameterAndInterpolates() {
+        var rules = Assert.IsType<JsonArray>(@object: Lower(body: """
+            template flipper(n) {
+                rule n {
+                    phase = 2
+                }
+            }
+
+            flipper(n: "flip")
+            flipper(n: "flop")
+
+            rule $"gen-{1 + 1}" {
+                phase = 3
+            }
+            """)["rules"]);
+
+        Assert.Equal(
+            ["flip", "flop", "gen-2"],
+            rules.Select(selector: rule => Assert.IsType<JsonObject>(@object: rule)["name"]!.GetValue<string>()).ToArray()
+        );
+    }
+    [Fact]
+    public void TestARuleNamedAfterAnUnsubstitutedTemplateParameterReportsPuck100() {
+        // Substitution reaches a template's own top-level statements, so a rule nested inside a `rules` scope keeps
+        // the parameter's spelling and every instantiation would mint the same name.
+        Assert.Contains(
+            collection: LowerForDiagnostics(body: """
+                template flipper(n) {
+                    rules group {
+                        rule n {
+                            phase = 2
+                        }
+                    }
+                }
+
+                flipper(n: "flip")
+                """),
+            filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.RuleNameNotLiteral)
         );
     }
 }

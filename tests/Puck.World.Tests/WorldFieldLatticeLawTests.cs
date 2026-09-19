@@ -300,12 +300,9 @@ public sealed class WorldFieldLatticeLawTests {
         var inputBefore = lattice.Input;
         var cellsBefore = lattice.Capture().Raw.Select(selector: static field => field.ToArray()).ToArray();
         var revisionBefore = lattice.Revision;
-        var solidsField = typeof(WorldServer).GetField(
-            bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic,
-            name: "m_solids"
-        )!;
-        var solidsBefore = solidsField.GetValue(obj: fixture.Server);
-        var baseField = typeof(WorldServer).GetField(
+        var document = fixture.Server.Document;
+        var solidsBefore = document.SolidField;
+        var baseField = typeof(WorldDocument).GetField(
             bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic,
             name: "m_base"
         )!;
@@ -316,7 +313,7 @@ public sealed class WorldFieldLatticeLawTests {
         WorldEditEcho? echo = null;
 
         baseField.SetValue(
-            obj: fixture.Server,
+            obj: document,
             value: incompatibleBase
         );
         fixture.Server.EchoTap = next => echo = next;
@@ -357,7 +354,7 @@ public sealed class WorldFieldLatticeLawTests {
         );
         Assert.Same(
             expected: solidsBefore,
-            actual: solidsField.GetValue(obj: fixture.Server)
+            actual: document.SolidField
         );
     }
     [Fact]

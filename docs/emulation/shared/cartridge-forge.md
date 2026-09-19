@@ -123,7 +123,7 @@ Names are unique within each collection, case-sensitive, 1–64 ASCII letters,
 digits, underscores or hyphens, and an array may not reuse a variable's name.
 Initial values run 0 through the slot's declared ceiling.
 
-A value is a `ValueExpression`—the engine's own expression, spelled infix:
+A value is an `ExpressionProgram`—the engine's own expression, spelled infix:
 
 ```json
 "42"
@@ -236,6 +236,9 @@ on both. `save` writes the declared state to the cartridge's
 battery-backed window behind a magic, version and checksum header, and `load`
 restores it—a block that fails any of those checks leaves the state at its
 authored initial values, so a fresh cartridge and a corrupted one behave alike.
+`CartridgeStateLayout` computes each declared variable's native byte offset,
+width and initial value from the validated document for both that persistence
+and each target's own boot-time initialization.
 
 Both run on either target. One compiled track drives both machines: the advanced
 machine's legacy programmable-sound channel exposes the same four registers the
@@ -312,6 +315,10 @@ The viewports are 160×144 and 240×160 pixels respectively.
 The compiler enforces code/data capacity, and validation bounds the VRAM write queue with saturating arithmetic.
 Scene guards read the frame snapshot even inside array indices. Inferred exclusive guards lose that discount
 when a direct write, saved-state load or clock read can change their variable.
+`CartridgeEffects` finds those writes — including the implicit ones a `load` or
+`clock` step makes to save-state or clock variables — for both the capacity
+analysis and this guard discount, so an implicit write is never mistaken for an
+exclusive guard's safety.
 `CartridgeCost` advises on per-frame work. That model counts abstract work units—one unit is an
 eleventh of a `set` step writing a literal to a variable—and compares the
 total against a per-frame reservation. The weights are measured, not estimated:

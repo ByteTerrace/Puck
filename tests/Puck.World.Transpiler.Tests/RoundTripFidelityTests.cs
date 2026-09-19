@@ -1,8 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
-using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -13,7 +10,11 @@ namespace Puck.World.Transpiler.Tests;
 /// spelling carries it.</summary>
 public class RoundTripFidelityTests {
     private static void AssertRoundTripsExactly(string json) {
+        // The fixture spells its expressions as infix text, exactly as an author does; the document holds the IR,
+        // so the expected side is lowered the same way a compile lowers it.
         var original = JsonNode.Parse(json);
+
+        WorldExpressionJson.Lower(node: original);
         var recompiled = RoundTrip(json: json);
         var mismatch = JsonMismatch.Find(
             actual: recompiled,
@@ -24,32 +25,22 @@ public class RoundTripFidelityTests {
         Assert.Null(@object: mismatch);
     }
     private static JsonObject RoundTrip(string json) {
-        var puck = WorldDecompiler.Decompile(jsonText: json);
+        var source = JsonNode.Parse(json);
 
-        var parseDiagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            puck,
-            diagnostics: parseDiagnostics
+        WorldExpressionJson.Lower(node: source);
+
+        var puck = WorldDecompiler.Decompile(jsonText: source!.ToJsonString());
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: puck
         );
 
         Assert.False(
-            condition: parseDiagnostics.HasErrors,
-            userMessage: $"{parseDiagnostics.FormatReport(puck)}{Environment.NewLine}{puck}"
+            condition: lowered.Diagnostics.HasErrors,
+            userMessage: $"{lowered.Diagnostics.FormatReport(puck)}{Environment.NewLine}{puck}"
         );
 
-        var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        Assert.False(
-            condition: loweringDiagnostics.HasErrors,
-            userMessage: $"{loweringDiagnostics.FormatReport(puck)}{Environment.NewLine}{puck}"
-        );
-
-        return lowered.Value!;
+        return lowered.RequireJson();
     }
 
     [Fact]
@@ -100,7 +91,7 @@ public class RoundTripFidelityTests {
     }
     [Fact]
     public void BindingWithoutAKindIsNotGivenOne() {
-        // RuleBinding.Kind has no default; inventing one would author a binding the source never asked for.
+        // RuleLocal.Kind has no default; inventing one would author a local the source never asked for.
         const string Json = """
             {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","bindings":[{"name":"x","expression":"$each"}],
@@ -198,30 +189,17 @@ public class RoundTripFidelityTests {
     [InlineData("-4.25e+2", -425.0)]
     [Theory]
     public void ExponentIsPartOfTheNumberNotAUnitSuffix(string literal, double expected) {
-        var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            $"schema: \"s\"\n\ntuning {{\n    gain: {literal}\n}}",
-            diagnostics: diagnostics
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: $"schema: \"s\"\n\ntuning {{\n    gain: {literal}\n}}"
         );
 
         Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport()
+            condition: lowered.Diagnostics.HasErrors,
+            userMessage: lowered.Diagnostics.FormatReport()
         );
 
-        var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        Assert.False(
-            condition: loweringDiagnostics.HasErrors,
-            userMessage: loweringDiagnostics.FormatReport()
-        );
-
-        var gain = Assert.IsType<JsonObject>(@object: lowered.Value!["tuning"])["gain"];
+        var gain = Assert.IsType<JsonObject>(@object: lowered.RequireJson()["tuning"])["gain"];
 
         Assert.Equal(
             expected,

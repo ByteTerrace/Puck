@@ -30,7 +30,7 @@ public sealed class PresentationReadsStateLawTests {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                value
+                CellValue.Int(value: value)
             )]
     );
     private static WorldBindingOverlay BaseOverlay() => new(
@@ -181,7 +181,7 @@ public sealed class PresentationReadsStateLawTests {
             Kind: CellKind.Text,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "zenith"),
-                    Text: "#112233"
+                    Value: CellValue.Text(value: "#112233")
                 )]
         );
         var first = track.Resolve(
@@ -205,7 +205,7 @@ public sealed class PresentationReadsStateLawTests {
             Kind: CellKind.Text,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "zenith"),
-                    Text: "#AABBCC"
+                    Value: CellValue.Text(value: "#AABBCC")
                 )]
         );
         var second = track.Resolve(

@@ -40,6 +40,29 @@ is the owning vocabulary's answer. `puck.world.definition.v1`'s `state.world` is
 grammar, lowering, defaults, and PUCK049–PUCK066 refusals are in
 [`Puck.World.Transpiler/README.md`](../../../../src/Puck.World.Transpiler/README.md#state-declarations).
 
+## State SQL dialect: `sql { ... }`
+
+```sql
+sql {
+    CREATE TABLE characters (
+        id   TEXT PRIMARY KEY,
+        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
+    ) CAPACITY 32;
+
+    INSERT INTO characters (id, hp, mana) VALUES
+        ('hero', 80, 50);
+
+    DECLARE turnCount INT DEFAULT 0;
+
+    CREATE RULE healHero ON ENTER AS
+        UPDATE characters SET hp = hp + 10 WHERE id = 'hero';
+}
+```
+
+Embedded hermetic SQL state dialect compiling to native Puck state rows and rules.
+Refusals PUCK070–PUCK076 enforce type safety, non-empty primary keys, and exact arithmetic.
+
 ## `let`, `template`, `import`/`export`
 
 ```

@@ -14,6 +14,7 @@ import { isVolumetric, projectDirections, projectScene } from "../../authoring/s
 import { appearanceFor, presentationEdit, readPresentation, type ValueAppearance } from "../../authoring/presentation";
 import { cellJsonPath } from "../../authoring/jsonReference";
 import { pathToPointer } from "../../document/jsonPath";
+import { cellNumber } from "../../native/engineTypes";
 import UniversalTopologyView from "./UniversalTopologyView";
 
 const SpatialTopology3D = lazy(() => import("./SpatialTopology3D"));
@@ -80,7 +81,11 @@ export const WorldWorkbench: React.FC = () => {
   const authoredValues = useMemo(() => authoredCellValues(row), [row]);
   const livePreviewRow = preview.rows.find(r => r.name === row?.name);
   const previewValues = useMemo(
-    () => new Map((livePreviewRow?.cells ?? []).map(cell => [Number(cell.key), cell.value] as const)),
+    // A board colouring reads whole-number cells alone; a text, bool, or vector row contributes none.
+    () => new Map((livePreviewRow?.cells ?? []).flatMap(cell => {
+      const number = cellNumber(cell.value);
+      return (number === null ? [] : [[Number(cell.key), number] as const]);
+    })),
     [livePreviewRow],
   );
   const values = source === "author" ? authoredValues : previewValues;

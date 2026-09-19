@@ -16,7 +16,7 @@ public static partial class WorldNameRegistry {
     private static readonly HashSet<string> NameShapedMembers = new(comparer: StringComparer.Ordinal) {
         "Name", "State", "Row", "Topology", "Pattern", "Table", "Zones", "Zone", "Rule", "From", "To", "Draw",
         "Source", "Attribute", "Occupancy", "Board", "Tokens", "Turn", "Verdict", "Legal", "Reach", "Held", "Counts",
-        "Best", "Move", "Plan", "Medium", "Field", "Binding", "Template", "ForEach", "Key", "FromKey", "SetKey",
+        "Best", "Move", "Plan", "Medium", "Family", "Field", "Binding", "Template", "ForEach", "Key", "FromKey", "SetKey",
         "TargetKey", "ComparandKey", "ComparandState", "FromState", "FilterRow", "SpillRow", "ValuesFrom",
         "PhaseOf", "ScaleRow", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
         "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names",
@@ -177,7 +177,7 @@ public static partial class WorldNameRegistry {
 
         if (
             (leaf == typeof(CellName)) ||
-            (leaf == typeof(ValueExpression)) ||
+            (leaf == typeof(ExpressionProgram)) ||
             (leaf == typeof(BindableScalar)) ||
             (leaf == typeof(BindableColor)) ||
             (leaf == typeof(WorldLatticeScalar))
@@ -275,14 +275,50 @@ public static partial class WorldNameRegistry {
                 Uncovered.Add(item: $"{path} ({TypeName(type: declaringType)}.{member}: {Unwrap(type: propertyType).Name})");
             }
         }
+        // A vector-operand member is itself a union whose arms carry names, so it expands one level further.
+        private void RecordPayload(Type payload, string arm) {
+            foreach (var (jsonName, declaringType, member, propertyType) in ReflectedRowMembers(type: payload)) {
+                if (Unwrap(type: propertyType) != typeof(VectorOperand)) {
+                    Record(
+                        path: $"{arm}.{jsonName}",
+                        declaringType: declaringType,
+                        member: member,
+                        propertyType: propertyType
+                    );
+
+                    continue;
+                }
+                foreach (var operand in typeof(VectorOperand).GetNestedTypes(bindingAttr: BindingFlags.Public)) {
+                    var side = $"{arm}.{jsonName}[{JsonNamingPolicy.CamelCase.ConvertName(name: operand.Name)}]";
+
+                    foreach (var (operandJsonName, operandDeclaringType, operandMember, operandPropertyType) in ReflectedRowMembers(type: operand)) {
+                        Record(
+                            path: $"{side}.{operandJsonName}",
+                            declaringType: operandDeclaringType,
+                            member: operandMember,
+                            propertyType: operandPropertyType
+                        );
+                    }
+                }
+            }
+        }
         private void VisitType(Type type, string path) {
             type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
-            if (type == typeof(ValueExpression)) {
-                VisitType(
-                    path: $"{path}{{tokens}}",
-                    type: typeof(ValueExpressionTokens)
-                );
+            // The IR flattens an instruction's payload onto the instruction object, so the walk enumerates the
+            // payload union's own cases rather than resolving a JSON type info for a case it never serializes on
+            // its own. Enumerating them, rather than naming the name-bearing ones by hand, is what lets the
+            // coverage check reach a payload member nothing registered. A subprogram's instructions are the same
+            // shape, so both lists are recorded.
+            if (type == typeof(ExpressionProgram)) {
+                foreach (var list in new[] { $"{path}{{instructions}}", $"{path}{{subprograms}}{{instructions}}" }) {
+                    foreach (var payload in typeof(InstructionPayload).GetNestedTypes(bindingAttr: BindingFlags.Public)) {
+                        RecordPayload(
+                            arm: $"{list}[{JsonNamingPolicy.CamelCase.ConvertName(name: payload.Name)}]",
+                            payload: payload
+                        );
+                    }
+                }
 
                 return;
             }

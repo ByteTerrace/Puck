@@ -38,7 +38,7 @@ public sealed partial class NavigationLawTests {
                 ))
         );
         fixture.Step(); fixture.Step();
-        var expected = WorldRuntimeStateHash.HashAuthoritative(
+        var expected = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 2
         );
@@ -46,7 +46,7 @@ public sealed partial class NavigationLawTests {
         for (var iteration = 0; (iteration < 100); iteration++) {
             Assert.Equal(
                 expected,
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: 2
                 )
@@ -64,7 +64,7 @@ public sealed partial class NavigationLawTests {
             var start = Stopwatch.GetTimestamp();
 
             for (var iteration = 0; (iteration < 1000); iteration++) {
-                actual = WorldRuntimeStateHash.HashAuthoritative(
+                actual = WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: 2
                 );
@@ -107,7 +107,7 @@ public sealed partial class NavigationLawTests {
             ),
             userMessage: reason
         );
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0
         );
@@ -115,7 +115,7 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
         Assert.NotEqual(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             )
@@ -123,7 +123,7 @@ public sealed partial class NavigationLawTests {
         fixture.Server.RestoreCheckpoint(checkpoint: original!);
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             )
@@ -157,7 +157,7 @@ public sealed partial class NavigationLawTests {
                 ));
             }
             fixture.Step();
-            var warm = WorldRuntimeStateHash.HashAuthoritative(
+            var warm = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             );
@@ -173,7 +173,7 @@ public sealed partial class NavigationLawTests {
             fixture.Server.RestoreCheckpoint(checkpoint: captured!);
             Assert.Equal(
                 warm,
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: 0
                 )
@@ -196,11 +196,16 @@ public sealed partial class NavigationLawTests {
         var captured = fixture.Server.Population.Capture();
         var entry = Assert.Single(collection: captured.Entries);
         var route = entry.Navigation!.Value;
-        var invalid = route with { ExpandedLast = (shared
+        var invalid = route with {
+            ExpandedLast = (shared
             ? 1
-            : 0), Path = [], Waypoint = 0, Status = NavigationStatus.Pending };
+            : 0),
+            Path = [],
+            Waypoint = 0,
+            Status = NavigationStatus.Pending,
+        };
         var malformed = captured with { Entries = [entry with { Navigation = invalid }] };
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0
         );
@@ -216,7 +221,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             )

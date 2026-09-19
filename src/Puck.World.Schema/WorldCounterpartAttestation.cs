@@ -20,14 +20,14 @@ namespace Puck.World;
 /// <param name="SpeedCeilingRaw">The greatest speed a body can carry through a boundary, in metres per second.</param>
 /// <param name="SimulationRateHz">The authoritative step rate, in Hz.</param>
 /// <param name="HysteresisRaw">The reciprocal handoff deadband, in metres.</param>
-/// <param name="SettleDeadbandRaw">The floor/ceiling settle deadband, in metres.</param>
+/// <param name="VerticalOwnershipDeadbandRaw">The floor/ceiling vertical ownership deadband, in metres.</param>
 public sealed record WorldOverlapTerms(
     long BodyReachRaw,
     long InteractionReachRaw,
     long SpeedCeilingRaw,
     int SimulationRateHz,
     long HysteresisRaw,
-    long SettleDeadbandRaw
+    long VerticalOwnershipDeadbandRaw
 ) {
     /// <summary>Gets the greatest collider-center reach.</summary>
     [JsonIgnore]
@@ -38,9 +38,9 @@ public sealed record WorldOverlapTerms(
     /// <summary>Gets the greatest declared interaction/targeting range.</summary>
     [JsonIgnore]
     public FixedQ4816 InteractionReach => FixedQ4816.FromRawBits(value: InteractionReachRaw);
-    /// <summary>Gets the floor/ceiling settle deadband.</summary>
+    /// <summary>Gets the floor/ceiling vertical ownership deadband.</summary>
     [JsonIgnore]
-    public FixedQ4816 SettleDeadband => FixedQ4816.FromRawBits(value: SettleDeadbandRaw);
+    public FixedQ4816 VerticalOwnershipDeadband => FixedQ4816.FromRawBits(value: VerticalOwnershipDeadbandRaw);
     /// <summary>Gets the greatest speed a body can carry through a boundary.</summary>
     [JsonIgnore]
     public FixedQ4816 SpeedCeiling => FixedQ4816.FromRawBits(value: SpeedCeilingRaw);
@@ -67,9 +67,9 @@ public sealed record WorldOverlapTerms(
             depth: out var hysteresis,
             reason: out reason
         ) ||
-            !WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            !WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
             definition: definition,
-            depth: out var settle,
+            depth: out var deadband,
             reason: out reason
         )
         ) {
@@ -82,7 +82,7 @@ public sealed record WorldOverlapTerms(
             SpeedCeilingRaw: WorldFacePortalPolicy.SpeedCeiling(definition: definition).Value,
             SimulationRateHz: definition.SimulationRateHz,
             HysteresisRaw: hysteresis.Value,
-            SettleDeadbandRaw: settle.Value
+            VerticalOwnershipDeadbandRaw: deadband.Value
         );
         reason = string.Empty;
 

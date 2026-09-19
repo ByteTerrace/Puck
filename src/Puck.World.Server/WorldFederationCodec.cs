@@ -389,6 +389,15 @@ public static partial class WorldFederationCodec {
                 refusal: WireRefusal.PayloadMalformed
             );
         }
+        if (
+            !reader.Failed &&
+            (string.IsNullOrWhiteSpace(value: mobility.DepartedFrom.Authority) || (mobility.DepartedFrom.Index < 0) || (mobility.DepartedFrom.Generation <= 0))
+        ) {
+            reader.Fail(
+                detail: $"traveler {(ordinal + 1)} mobility departure slot is invalid",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
 
         var source = ReadIntentSource(reader: ref reader);
         var bodyColor = reader.ReadFiniteVector(field: $"traveler {(ordinal + 1)} body color");
@@ -539,11 +548,33 @@ public static partial class WorldFederationCodec {
     /// <see cref="WorldDisclosureTier.Frames"/>, which carries no document at all.</exception>
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
     public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
+        // The document being encoded is whatever the caller holds — a traveller's destination world as often as
+        // this authority's own — so its store is loaded here through the one import door rather than borrowed from
+        // a server that may not own it.
+        var time = ArenaTime.At(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        if (!StateArena.TryCreate(
+            arena: out var arena,
+            catalog: definition.StateCatalog,
+            options: null,
+            reason: out var reason,
+            section: definition.StateRaw,
+            time: in time
+        )) {
+            throw new InvalidOperationException(message: $"the document's state section does not load into a store: {reason}");
+        }
+
         var payload = ((WorldProjection.Compose(
+            arena: arena,
             authority: authority,
             definition: definition,
+            recipient: recipient,
             revision: revision,
-            tier: tier
+            tier: tier,
+            time: in time
         ) is { } projection)
             ? WorldProjection.Serialize(projection: projection)
             : ((tier == WorldDisclosureTier.Replica)
@@ -1414,13 +1445,13 @@ public static partial class WorldFederationCodec {
 
         snapshot = new WorldSnapshot(
             Authority: authority,
+            EngineTick: engineTick,
             Entries: entries,
             FieldCells: deltas,
             FieldsFull: fieldsFull,
             Revision: revision,
             StepTicks: stepTicks,
-            Tick: tick,
-            EngineTick: engineTick
+            Tick: tick
         );
 
         return Finish(

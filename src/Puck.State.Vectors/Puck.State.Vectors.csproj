@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.State.Vectors</AssemblyName>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>Deterministic embedding vectors over a Puck.State arena: a typed view over a row's vector column and the mix, mean, nearest, and remember transforms that read and write it. Every component is a signed 8-bit integer, every score is an exact integer dot product or a Q48.16 cosine from Puck.Maths, and every transform runs as one journal scope over the arena, so a refused transform leaves the arena exactly as it found it and the same document replays bit-identically on every host and backend. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.State.Vectors</PackageId>
+        <PackageTags>determinism;embeddings;simulation;state;vectors</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.State</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Puck.State carries the arena, the catalog, the cell carrier, and the vector kernels the transforms
+             reduce through; Puck.Maths carries the signed-byte dot, cosine, and normalization those kernels are
+             written on. Nothing else, and nothing points back: this project is a leaf of the state graph. -->
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+    </ItemGroup>
+</Project>

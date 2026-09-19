@@ -85,7 +85,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [Fact]
@@ -307,7 +307,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [InlineData(false)]
@@ -406,7 +406,7 @@ public sealed partial class PlacementDealLawTests {
                 CellKind.Int,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        0
+                        CellValue.Int(value: 0)
                     )]
             )],
             },
@@ -455,7 +455,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
             WorldPrincipal.Console,
@@ -485,7 +485,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
         fixture.Server.EnqueueUndo(
             1,
@@ -507,7 +507,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [Fact]
@@ -590,7 +590,7 @@ public sealed partial class PlacementDealLawTests {
             StateRaw = new WorldStateSection(World: [document.State[0], document.State[1] with {
                 Min = minimum, Cells = [new StateCell(
                     WorldStateRow.SlotKey,
-                    balance
+                    CellValue.Int(value: balance)
                 )],
             }]),
         };
@@ -654,7 +654,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
 
@@ -699,7 +699,7 @@ public sealed partial class PlacementDealLawTests {
                 Max: 1000,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        100
+                        CellValue.Int(value: 100)
                     )]
             )]),
         };
@@ -774,7 +774,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [Fact]
@@ -813,7 +813,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
         Assert.Equal(
             before.Placements,

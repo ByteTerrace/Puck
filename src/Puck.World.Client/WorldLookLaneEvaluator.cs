@@ -1,11 +1,11 @@
 namespace Puck.World.Client;
 
 /// <summary>Evaluates a render lane expression against a body's live state — the client-side,
-/// presentation half of the shared <c>ExpressionSpelling</c>/<see cref="ValueExpression"/> grammar. Reads EASED
+/// presentation half of the shared <c>ExpressionSpelling</c>/<see cref="ExpressionProgram"/> grammar. Reads EASED
 /// state (<see cref="WorldGaitDrivers.TryReadStateNumber(WorldDefinition, string, ulong, out float, int, ulong)"/>, the
 /// same smoothing every other look/driver binding takes), not the raw authoritative tick a server rule reads — a
 /// lane expression drives presentation without modifying simulation values.
-/// Supports a restricted arithmetic subset of <see cref="ValueToken"/> (constants, state reads, and the basic
+/// Supports a restricted arithmetic subset of <see cref="Instruction"/> (constants, state reads, and the basic
 /// arithmetic/comparison/min/max/clamp/sign operators); every other token, a malformed stack, or a failed read
 /// (division by zero, an absent cell) evaluates to 0 — matching an unauthored lane, never a thrown exception on a
 /// per-frame render path.</summary>
@@ -46,17 +46,17 @@ public static class WorldLookLaneEvaluator {
     /// <param name="tick">The tick to read eased state at.</param>
     /// <param name="bodyIndex">The body's index, substituted for <c>$body</c> in a state key.</param>
     /// <returns>The evaluated value, or 0 for a null expression, an unsupported token, or a failed evaluation.</returns>
-    public static float Evaluate(ValueExpression? expression, WorldDefinition definition, ulong tick, int bodyIndex) {
-        if (expression is not { Tokens.Count: > 0 } authored) {
+    public static float Evaluate(ExpressionProgram? expression, WorldDefinition definition, ulong tick, int bodyIndex) {
+        if (expression is not { Instructions.Count: > 0 } authored) {
             return 0f;
         }
 
-        Span<float> stack = stackalloc float[authored.Tokens.Count];
+        Span<float> stack = stackalloc float[authored.Instructions.Count];
         var depth = 0;
 
-        foreach (var token in authored.Tokens) {
+        foreach (var token in authored.Instructions) {
             switch (token) {
-                case ValueToken.Constant constant: {
+                case { Payload: InstructionPayload.Constant constant }: {
                         if (depth >= stack.Length) {
                             return 0f;
                         }
@@ -64,7 +64,7 @@ public static class WorldLookLaneEvaluator {
                         stack[depth++] = ((float)constant.Value);
                         break;
                     }
-                case ValueToken.State state: {
+                case { Payload: InstructionPayload.State state }: {
                         if (depth >= stack.Length) {
                             return 0f;
                         }
@@ -86,7 +86,7 @@ public static class WorldLookLaneEvaluator {
                         );
                         break;
                     }
-                case ValueToken.Negate: {
+                case { Operation: ExpressionOp.Negate }: {
                         if (!TryUnary(
                             depth: ref depth,
                             stack: stack,
@@ -97,7 +97,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Abs: {
+                case { Operation: ExpressionOp.Abs }: {
                         if (!TryUnary(
                             depth: ref depth,
                             stack: stack,
@@ -108,7 +108,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Sign: {
+                case { Operation: ExpressionOp.Sign }: {
                         if (!TryUnary(
                             stack: stack,
                             depth: ref depth,
@@ -119,7 +119,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Add: {
+                case { Operation: ExpressionOp.Add }: {
                         if (!TryBinary(
                             depth: ref depth,
                             stack: stack,
@@ -130,7 +130,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Subtract: {
+                case { Operation: ExpressionOp.Subtract }: {
                         if (!TryBinary(
                             depth: ref depth,
                             stack: stack,
@@ -141,7 +141,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Multiply: {
+                case { Operation: ExpressionOp.Multiply }: {
                         if (!TryBinary(
                             depth: ref depth,
                             stack: stack,
@@ -152,7 +152,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Divide: {
+                case { Operation: ExpressionOp.Divide }: {
                         if (
                             (depth < 2) ||
                             (stack[(depth - 1)] == 0f)
@@ -164,7 +164,7 @@ public static class WorldLookLaneEvaluator {
                         depth--;
                         break;
                     }
-                case ValueToken.Min: {
+                case { Operation: ExpressionOp.Minimum }: {
                         if (!TryBinary(
                             depth: ref depth,
                             stack: stack,
@@ -175,7 +175,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Max: {
+                case { Operation: ExpressionOp.Maximum }: {
                         if (!TryBinary(
                             depth: ref depth,
                             stack: stack,
@@ -186,7 +186,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case ValueToken.Clamp: {
+                case { Operation: ExpressionOp.Clamp }: {
                         if (
                             (depth < 3) ||
                             !float.IsFinite(f: stack[(depth - 2)]) ||
@@ -220,7 +220,7 @@ public static class WorldLookLaneEvaluator {
         );
     }
     /// <summary>Evaluates the four expressions in component order; absent entries are zero.</summary>
-    public static System.Numerics.Vector4 EvaluateLanes(IReadOnlyList<ValueExpression?>? expressions, WorldDefinition definition, ulong tick, int bodyIndex) {
+    public static System.Numerics.Vector4 EvaluateLanes(IReadOnlyList<ExpressionProgram?>? expressions, WorldDefinition definition, ulong tick, int bodyIndex) {
         var result = System.Numerics.Vector4.Zero;
 
         for (var index = 0; (index < Math.Min(

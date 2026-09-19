@@ -1,0 +1,2207 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 580,
+  "engineTick": 974400,
+  "hashes": {
+    "authoritative": "6572571f70982ebc",
+    "capture": "4067872ac51a5f88",
+    "pose": "cbf29ce484222325",
+    "world": "e305d8ff1b1f0699"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "reversiBoard",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 2
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 2
+          },
+          {
+            "key": "28",
+            "value": 1
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 1
+          },
+          {
+            "key": "36",
+            "value": 2
+          },
+          {
+            "key": "37",
+            "value": 1
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 0
+          },
+          {
+            "key": "49",
+            "value": 0
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          },
+          {
+            "key": "52",
+            "value": 0
+          },
+          {
+            "key": "53",
+            "value": 0
+          },
+          {
+            "key": "54",
+            "value": 0
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 0
+          },
+          {
+            "key": "57",
+            "value": 0
+          },
+          {
+            "key": "58",
+            "value": 0
+          },
+          {
+            "key": "59",
+            "value": 0
+          },
+          {
+            "key": "60",
+            "value": 0
+          },
+          {
+            "key": "61",
+            "value": 0
+          },
+          {
+            "key": "62",
+            "value": 0
+          },
+          {
+            "key": "63",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "reversiGrid"
+        }
+      },
+      {
+        "name": "reversiMobility",
+        "kind": "Int",
+        "min": -1,
+        "max": 63,
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "43",
+            "value": 43
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "reversiGrid",
+          "empty": -1
+        },
+        "inverse": {
+          "tokens": "reversiCandidate",
+          "codes": "reversiCellIndex"
+        }
+      },
+      {
+        "name": "reversiCandidate",
+        "kind": "Int",
+        "min": -1,
+        "max": 63,
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "1",
+            "value": -1
+          },
+          {
+            "key": "2",
+            "value": -1
+          },
+          {
+            "key": "3",
+            "value": -1
+          },
+          {
+            "key": "4",
+            "value": -1
+          },
+          {
+            "key": "5",
+            "value": -1
+          },
+          {
+            "key": "6",
+            "value": -1
+          },
+          {
+            "key": "7",
+            "value": -1
+          },
+          {
+            "key": "8",
+            "value": -1
+          },
+          {
+            "key": "9",
+            "value": -1
+          },
+          {
+            "key": "10",
+            "value": -1
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": -1
+          },
+          {
+            "key": "13",
+            "value": -1
+          },
+          {
+            "key": "14",
+            "value": -1
+          },
+          {
+            "key": "15",
+            "value": -1
+          },
+          {
+            "key": "16",
+            "value": -1
+          },
+          {
+            "key": "17",
+            "value": -1
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": -1
+          },
+          {
+            "key": "20",
+            "value": -1
+          },
+          {
+            "key": "21",
+            "value": -1
+          },
+          {
+            "key": "22",
+            "value": -1
+          },
+          {
+            "key": "23",
+            "value": -1
+          },
+          {
+            "key": "24",
+            "value": -1
+          },
+          {
+            "key": "25",
+            "value": -1
+          },
+          {
+            "key": "26",
+            "value": -1
+          },
+          {
+            "key": "27",
+            "value": -1
+          },
+          {
+            "key": "28",
+            "value": -1
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "30",
+            "value": -1
+          },
+          {
+            "key": "31",
+            "value": -1
+          },
+          {
+            "key": "32",
+            "value": -1
+          },
+          {
+            "key": "33",
+            "value": -1
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "35",
+            "value": -1
+          },
+          {
+            "key": "36",
+            "value": -1
+          },
+          {
+            "key": "37",
+            "value": -1
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "39",
+            "value": -1
+          },
+          {
+            "key": "40",
+            "value": -1
+          },
+          {
+            "key": "41",
+            "value": -1
+          },
+          {
+            "key": "42",
+            "value": -1
+          },
+          {
+            "key": "43",
+            "value": 43
+          },
+          {
+            "key": "44",
+            "value": -1
+          },
+          {
+            "key": "45",
+            "value": -1
+          },
+          {
+            "key": "46",
+            "value": -1
+          },
+          {
+            "key": "47",
+            "value": -1
+          },
+          {
+            "key": "48",
+            "value": -1
+          },
+          {
+            "key": "49",
+            "value": -1
+          },
+          {
+            "key": "50",
+            "value": -1
+          },
+          {
+            "key": "51",
+            "value": -1
+          },
+          {
+            "key": "52",
+            "value": -1
+          },
+          {
+            "key": "53",
+            "value": -1
+          },
+          {
+            "key": "54",
+            "value": -1
+          },
+          {
+            "key": "55",
+            "value": -1
+          },
+          {
+            "key": "56",
+            "value": -1
+          },
+          {
+            "key": "57",
+            "value": -1
+          },
+          {
+            "key": "58",
+            "value": -1
+          },
+          {
+            "key": "59",
+            "value": -1
+          },
+          {
+            "key": "60",
+            "value": -1
+          },
+          {
+            "key": "61",
+            "value": -1
+          },
+          {
+            "key": "62",
+            "value": -1
+          },
+          {
+            "key": "63",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "reversiCellIndex",
+        "kind": "Int",
+        "min": 0,
+        "max": 63,
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          },
+          {
+            "key": "14",
+            "value": 14
+          },
+          {
+            "key": "15",
+            "value": 15
+          },
+          {
+            "key": "16",
+            "value": 16
+          },
+          {
+            "key": "17",
+            "value": 17
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": 19
+          },
+          {
+            "key": "20",
+            "value": 20
+          },
+          {
+            "key": "21",
+            "value": 21
+          },
+          {
+            "key": "22",
+            "value": 22
+          },
+          {
+            "key": "23",
+            "value": 23
+          },
+          {
+            "key": "24",
+            "value": 24
+          },
+          {
+            "key": "25",
+            "value": 25
+          },
+          {
+            "key": "26",
+            "value": 26
+          },
+          {
+            "key": "27",
+            "value": 27
+          },
+          {
+            "key": "28",
+            "value": 28
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "30",
+            "value": 30
+          },
+          {
+            "key": "31",
+            "value": 31
+          },
+          {
+            "key": "32",
+            "value": 32
+          },
+          {
+            "key": "33",
+            "value": 33
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "35",
+            "value": 35
+          },
+          {
+            "key": "36",
+            "value": 36
+          },
+          {
+            "key": "37",
+            "value": 37
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "39",
+            "value": 39
+          },
+          {
+            "key": "40",
+            "value": 40
+          },
+          {
+            "key": "41",
+            "value": 41
+          },
+          {
+            "key": "42",
+            "value": 42
+          },
+          {
+            "key": "43",
+            "value": 43
+          },
+          {
+            "key": "44",
+            "value": 44
+          },
+          {
+            "key": "45",
+            "value": 45
+          },
+          {
+            "key": "46",
+            "value": 46
+          },
+          {
+            "key": "47",
+            "value": 47
+          },
+          {
+            "key": "48",
+            "value": 48
+          },
+          {
+            "key": "49",
+            "value": 49
+          },
+          {
+            "key": "50",
+            "value": 50
+          },
+          {
+            "key": "51",
+            "value": 51
+          },
+          {
+            "key": "52",
+            "value": 52
+          },
+          {
+            "key": "53",
+            "value": 53
+          },
+          {
+            "key": "54",
+            "value": 54
+          },
+          {
+            "key": "55",
+            "value": 55
+          },
+          {
+            "key": "56",
+            "value": 56
+          },
+          {
+            "key": "57",
+            "value": 57
+          },
+          {
+            "key": "58",
+            "value": 58
+          },
+          {
+            "key": "59",
+            "value": 59
+          },
+          {
+            "key": "60",
+            "value": 60
+          },
+          {
+            "key": "61",
+            "value": 61
+          },
+          {
+            "key": "62",
+            "value": 62
+          },
+          {
+            "key": "63",
+            "value": 63
+          }
+        ]
+      },
+      {
+        "name": "reversiRay",
+        "kind": "Int",
+        "min": -1,
+        "max": 8,
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "N",
+            "value": 1
+          },
+          {
+            "key": "NE",
+            "value": 1
+          },
+          {
+            "key": "E",
+            "value": 1
+          },
+          {
+            "key": "SE",
+            "value": 1
+          },
+          {
+            "key": "S",
+            "value": 1
+          },
+          {
+            "key": "SW",
+            "value": 1
+          },
+          {
+            "key": "W",
+            "value": 2
+          },
+          {
+            "key": "NW",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "reversiTurn",
+        "kind": "Int",
+        "min": 1,
+        "max": 2,
+        "value": 2
+      },
+      {
+        "name": "reversiMoveCell",
+        "kind": "Int",
+        "min": -1,
+        "max": 63,
+        "value": 21
+      },
+      {
+        "name": "reversiMoveRequest",
+        "kind": "Int",
+        "min": 0,
+        "value": 6
+      },
+      {
+        "name": "reversiMoveApplied",
+        "kind": "Int",
+        "min": 0,
+        "value": 6
+      },
+      {
+        "name": "reversiFlipping",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "reversiMoveCount",
+        "kind": "Int",
+        "min": 0,
+        "max": 60,
+        "value": 3
+      },
+      {
+        "name": "reversiRejected",
+        "kind": "Int",
+        "min": 0,
+        "max": 50400,
+        "value": 3
+      },
+      {
+        "name": "reversiPasses",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0
+      },
+      {
+        "name": "reversiPrevOwn",
+        "kind": "Int",
+        "min": 0,
+        "max": 64,
+        "value": 3
+      },
+      {
+        "name": "reversiFlips",
+        "kind": "Int",
+        "min": 0,
+        "max": 63,
+        "value": 0
+      },
+      {
+        "name": "reversiBlack",
+        "kind": "Int",
+        "min": 0,
+        "max": 64,
+        "value": 4
+      },
+      {
+        "name": "reversiWhite",
+        "kind": "Int",
+        "min": 0,
+        "max": 64,
+        "value": 3
+      },
+      {
+        "name": "reversiMobilityCount",
+        "kind": "Int",
+        "min": 0,
+        "max": 64,
+        "value": 6
+      },
+      {
+        "name": "reversiWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "grid",
+        "width": 8,
+        "depth": 8,
+        "wrap": "None",
+        "band": 0,
+        "name": "reversiGrid",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "reversiBoard",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiMobility",
+      "cells": [
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 29,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 38,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 43,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiCandidate",
+      "cells": [
+        {
+          "key": "0",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 29,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 38,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 43,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": -1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiCellIndex",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 17,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 21,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 25,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 27,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 28,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 29,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 31,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 32,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 33,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 35,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 37,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 38,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 39,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 40,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 41,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 42,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 43,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 44,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 45,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 46,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 47,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 48,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 49,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 50,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 51,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 52,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 53,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 54,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 55,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 56,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 57,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 58,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 59,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 60,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 61,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 62,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 63,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiRay",
+      "cells": [
+        {
+          "key": "N",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "NE",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "E",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "SE",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "S",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "SW",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "W",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "NW",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiTurn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiMoveCell",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 21,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiMoveRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 6,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiMoveApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 6,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiFlipping",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiMoveCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiRejected",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiPasses",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiPrevOwn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiFlips",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiBlack",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 4,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiWhite",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiMobilityCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 6,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reversiWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

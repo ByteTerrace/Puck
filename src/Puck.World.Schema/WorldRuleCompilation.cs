@@ -4,28 +4,39 @@ namespace Puck.World;
 /// directly into installation while the definition and its collection contents remain unchanged; this is a receipt
 /// for that operation, not a cache to transfer across document edits.</summary>
 public sealed class WorldRuleCompilation {
-    internal WorldRuleCompilation(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions, CompiledTable[] tables) {
+    internal WorldRuleCompilation(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRuleGroup[] groups, Puck.State.Rules.CompiledRule[] interactions, CompiledTable[] tables) {
         Definition = definition;
         Rules = rules;
+        Groups = groups;
+        Ungrouped = Puck.State.Rules.RuleCompiler.Ungrouped(
+            groups: groups,
+            rules: rules
+        );
         Interactions = interactions;
         Tables = tables;
     }
 
     /// <summary>Gets the exact definition compiled.</summary>
     public WorldDefinition Definition { get; }
+    /// <summary>Gets the compiled rule groups in document order; each member is an index into
+    /// <see cref="Rules"/>.</summary>
+    public Puck.State.Rules.CompiledRuleGroup[] Groups { get; }
     /// <summary>Gets the compiled interactions in document order.</summary>
-    public CompiledWorldRule[] Interactions { get; }
+    public Puck.State.Rules.CompiledRule[] Interactions { get; }
     /// <summary>Gets the compiled rules in document order.</summary>
-    public CompiledWorldRule[] Rules { get; }
+    public Puck.State.Rules.CompiledRule[] Rules { get; }
+    /// <summary>Gets the rules of <see cref="Rules"/> that no group of <see cref="Groups"/> claims — the set a host
+    /// evaluates directly, because a claimed rule runs only under its group.</summary>
+    public Puck.State.Rules.CompiledRule[] Ungrouped { get; }
     /// <summary>Gets the pinned tables in document order.</summary>
     public CompiledTable[] Tables { get; }
 
-    internal static CompiledTable[] CompileTables(WorldDefinition definition, WorldRuleCompileContext? context) {
+    internal static CompiledTable[] CompileTables(WorldDefinition definition, WorldFactsCompileContext? context) {
         var rows = (definition.Tables ?? []);
         var result = new CompiledTable[rows.Count];
 
         if (rows.Count == 0) { return result; }
-        context ??= WorldRuleCompiler.Context(definition: definition);
+        context ??= WorldFactsCompiler.Context(definition: definition);
         for (var index = 0; (index < rows.Count); index++) {
             if (!context.TryTable(
                 rows[index].Name,
@@ -44,15 +55,17 @@ public sealed class WorldRuleCompilation {
     /// This compiles programs; document admission remains the validator's responsibility.</summary>
     /// <param name="definition">The definition to compile.</param>
     public static WorldRuleCompilation Compile(WorldDefinition definition) {
-        var context = WorldRuleCompiler.Context(definition: definition);
+        var context = WorldFactsCompiler.Context(definition: definition);
+        var (rules, groups) = WorldFactsCompiler.CompileDocument(
+            context: context,
+            definition: definition
+        );
 
         return new(
             definition,
-            WorldRuleCompiler.CompileAll(
-                context: context,
-                definition: definition
-            ),
-            WorldRuleCompiler.CompileAllInteractions(
+            rules,
+            groups,
+            WorldFactsCompiler.CompileAllInteractions(
                 context: context,
                 definition: definition
             ),

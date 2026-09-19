@@ -47,8 +47,8 @@ public sealed class CostModel {
         id: "puck.cost.portable-model.v1",
         referenceProfile: CostModelProfile.Portable
     );
-    /// <summary>Gets the evidence digest, or null until a real coefficient manifest has been established.</summary>
-    public string? EvidenceDigest => null;
+    /// <summary>Gets the digest of the evidence manifest this model's coefficients are read from.</summary>
+    public string? EvidenceDigest => ReferenceScheduleManifest.Digest;
     /// <summary>Gets the model identifier.</summary>
     public string Id { get; }
     /// <summary>Gets the abstract service policy.</summary>

@@ -38,6 +38,11 @@ behavior remains reproducible. Do not preserve an incorrect result merely to
 keep an old hash. Runtime versions that affect execution budgets, such as addon
 fuel accounting, are part of the replay environment and need explicit control.
 
+This register decides what presentation may do with a value. What of a world's
+document presentation code may observe at all, and the transports that carry it,
+is decided in
+[the presentation view](runtime-and-delivery.md#the-presentation-view).
+
 Rendering comparisons use suitable image tolerances and content checks;
 pixel-for-pixel equality is not the default requirement across GPU backends.
 Passing a comparison does not establish correctness without an independently
@@ -61,7 +66,7 @@ The earlier SDF-only scope is a description of the established world-rendering
 path, not a restriction on the programmable pipeline foundation. General mesh
 import, shared mesh/SDF visibility, and broader material authoring remain
 explicitly sequenced proposals in the
-[rendering evolution plan](../plans/shader-pipeline-evolution.md). That plan
+[rendering programme](../plans/rendering.md). That plan
 must update affected contracts when those features become implemented.
 
 The initial repeated-placement audio design also excluded a separate emitter
@@ -80,7 +85,7 @@ Diagnostic environment variables are documented with development tooling.
 The intended authoring experience supports work within one session. A missing
 in-session operation is a planned integration task, not evidence that an
 underlying library is absent. The [reference-game design](../game/design.md)
-and [game development plan](../plans/game-development.md) own that experience.
+and the [play programme](../plans/play.md) own that experience.
 
 ## Verification must match the claim
 

@@ -10,16 +10,19 @@ namespace Puck.World;
 /// on-demand read-back (<c>world.refusals</c> is Immediate and reads no simulation state), never a per-tick cost, and
 /// the doors themselves pay nothing for it — a refusal's own throw site names an enum member exactly as it always
 /// would; nothing here runs until an operator asks.</summary>
-/// <remarks>Scans five assemblies, not one: the split between <c>Puck.World.Schema</c>, <c>Puck.World.Server</c>,
-/// <c>Puck.World.Addons</c>, <c>Puck.World.Client</c>, and this composition root put refusal-tagged enums in
-/// Puck.World.Schema (e.g. <c>WorldGrant</c>'s), Puck.World.Server (<c>WorldReplayRefusal</c>), Puck.World.Addons
-/// (<c>AddonMutateRefusal</c>), Puck.World.Client (<c>Sdf.SdfRefusal</c>), and this composition root. A
-/// single-assembly scan would silently stop seeing most of the catalog; the assembly list below is anchored on one
-/// known type per assembly rather than an AppDomain-wide scan, so it names exactly what it means to cover.</remarks>
+/// <remarks>Refusal-tagged enums sit in every layer that owns a door — the state core's own effect host, the rule
+/// substrate's <c>state.rule.compile</c>, <c>state.rule.fire</c> and <c>state.transform</c> doors in
+/// Puck.State.Rules, the document doors in Puck.World.Schema, the tape in Puck.World.Server, <c>addon.mutate</c> in
+/// Puck.World.Addons, <c>sdf.decode</c> in Puck.World.Client, and this composition root's own. One registry covers
+/// them because there is one <see cref="RefusalAttribute"/>, declared in Puck.State, the lowest assembly every one
+/// of those projects already references. The list below anchors on one known type per assembly rather than scanning
+/// the AppDomain, so it names exactly what it covers; an assembly left off it goes silently uncataloged.</remarks>
 internal static class RefusalCatalog {
     private static readonly Assembly[] Assemblies = [
         typeof(RefusalCatalog).Assembly,
-        typeof(RefusalAttribute).Assembly,
+        typeof(CellValue).Assembly,
+        typeof(State.Rules.RuleRefusal).Assembly,
+        typeof(WorldDefinition).Assembly,
         typeof(WorldServer).Assembly,
         typeof(AddonMutateRefusal).Assembly,
         typeof(Client.Sdf.SdfRefusal).Assembly,

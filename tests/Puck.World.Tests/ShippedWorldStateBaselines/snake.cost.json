@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/snake.world.json",
+  "simulationRateHz": 30,
+  "ticks": 635,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 16,
+      "interactionRows": 0,
+      "evaluationSlots": 16,
+      "workUnitsPerTick": 109921,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 16,
+      "interactionRows": 0,
+      "evaluationSlots": 16,
+      "workUnitsPerTick": 109921,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

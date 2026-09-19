@@ -1,0 +1,21 @@
+# Positive leg — the rim drop.
+# The island deck sits at y=120; one adjacency lies flat 40 m beneath it at y=80, facing straight
+# down (outwardPitchDegrees -90), and the corner world owns everything below that plane with the
+# reciprocal +90 face. Nothing here is fenced on a wall clock: every number asserted is either a
+# settled fixed point (the corner floor at y=76.03) or a per-body counter a kit action advanced on
+# exact simulation ticks. world.wait only has to be LONG ENOUGH, never exact.
+world.wait 20
+wire.errors reset
+body.where 0
+body.state 0
+world.adjacencies
+
+# Walk off the deck's far edge. 2 s at 6.5 m/s clears the 6 m plate with margin; the body then
+# falls 40 m to the seam under its own kit gravity and is handed to the corner mid-air.
+body.fly 1 0 0 0 0 0 2
+world.wait 200
+
+# Read the arrival back. body.where and body.state both follow the seat onto the named instance.
+body.where 0
+body.state 0
+world.adjacencies

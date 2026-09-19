@@ -80,7 +80,7 @@ public sealed partial class WorldReplayTape {
         var drive = m_drive!;
 
         m_drive = null;
-        m_liveServer.CompleteExtensionReplay();
+        m_liveServer.Extensions.CompleteReplay();
         m_transport.InputMasked = false;
 
         var verdict = ((drive.DivergedAt < 0)
@@ -185,7 +185,7 @@ public sealed partial class WorldReplayTape {
 
         var tick = drive.Cursor;
         var liveHash = WorldReplaySnapshot.HashState(population: m_liveServer.Population);
-        var liveAuthoritativeHash = WorldRuntimeStateHash.HashAuthoritative(
+        var liveAuthoritativeHash = WorldStateHashComposition.HashAuthoritative(
             server: m_liveServer,
             tick: (m_liveServer.NextInputTick - 1UL)
         );
@@ -244,7 +244,7 @@ public sealed partial class WorldReplayTape {
         using var machines = m_machineHostFactory(
             definition.Screens,
             m_engines,
-            null,
+            documentPath,
             null
         );
         var shadow = new WorldServer(
@@ -271,8 +271,8 @@ public sealed partial class WorldReplayTape {
             return $"the replay boot image could not be captured: {reason}";
         }
         return m_liveServer.ExecuteAuthorityOperation<string?>(operation: () => {
-            if (m_liveServer.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
-            m_liveServer.EnterExtensionReplay();
+            if (m_liveServer.Persistence.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
+            m_liveServer.Extensions.EnterReplay();
             m_liveServer.EnqueueRebuild(
                 request: new WorldRebuildRequest(
                     Kind: WorldRebuildKind.Load,
@@ -288,7 +288,7 @@ public sealed partial class WorldReplayTape {
                 objA: m_liveServer.Definition,
                 objB: definition
             )) {
-                m_liveServer.CompleteExtensionReplay();
+                m_liveServer.Extensions.CompleteReplay();
                 return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
             }
             m_liveServer.RestoreCheckpoint(checkpoint: checkpoint!);

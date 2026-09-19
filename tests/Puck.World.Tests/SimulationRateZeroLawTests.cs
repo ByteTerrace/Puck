@@ -468,7 +468,7 @@ public sealed class SimulationRateZeroLawTests {
     /// validator now refuses it by name, and the premise — Compile really would have thrown — still holds.</summary>
     [Fact]
     public void PositiveRateDocument_CeilingSecondsOverflowsCompiledRange_Refuses() {
-        var baseDocument = Fixtures.BuildDocument();
+        var baseDocument = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
         var document = (baseDocument with {
             InputHoldRaw = (baseDocument.InputHold with { CeilingSeconds = 10_000_000f, LowerAfterSeconds = 0.25f, DefaultSeconds = 0f }),
         });
@@ -501,7 +501,7 @@ public sealed class SimulationRateZeroLawTests {
     /// did not.</summary>
     [Fact]
     public void PositiveRateDocument_SubRepresentableLowerAfterSeconds_Refuses() {
-        var baseDocument = Fixtures.BuildDocument();
+        var baseDocument = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
         var document = (baseDocument with {
             InputHoldRaw = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
         });

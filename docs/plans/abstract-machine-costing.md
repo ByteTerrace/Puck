@@ -20,134 +20,16 @@ or make universal physical deadlines a prerequisite for this work.
 
 ## Implementation status
 
-Reviewed against `ceb993cba`. The typed scaffolding and the
-accounting split exist; nothing is calibrated, and admission still runs on the
-heuristic work units.
-
-**Implemented:**
-
-- `CostBound` (`Known`, `Unmodeled`, `Overflow`) lives in `Puck.Maths`, with law
-  coverage in `tests/Puck.State.Tests/CostBoundLawTests.cs` and the Maths law
-  registry. The forge's `CartridgeCost` already reports frame work through it.
-- `RuleCost` separates setup, checks, and firing effects. `RuleWorkBudget.Tally`
-  always sums every check and applies the exclusion trie only to firing work,
-  including same-step writer counts.
-- The legacy `RuleWorkBudget.OperationCost` accepts a `CellKind` and returns the
-  rejecting `long.MaxValue` sentinel for an unregistered operation instead of 1.
-- `CostModelProfile.Portable` carries the proposed policy (3,000,000,000 cycles
-  per second, half reserved) with exact step period, allowance, engine-tick,
-  step-fraction, rate-zero, and admission arithmetic, tested in
-  `tests/Puck.World.Schema.Tests/WorldCostReportLawTests.cs`.
-- `CostModel` pins the model identifier and defines the memory access classes and
-  the `MemoryClassProfile` service formula from section 3.
-- `ReferenceSchedule.OperationCostBound` and `CostModel.MemoryCycles` exist, but
-  every non-empty result is deliberately `Unmodeled`. `EvidenceDigest` is null.
-- `WorldCostReport.Generate` produces a report for any compilable world with
-  contributors, issues, and the heuristic total kept separate. Its recurring and
-  search bounds are always `Unmodeled`, so it never admits a world.
-- Placement effects no longer carry the flat 32,768 price:
-  `WorldPlacementEffectCost.Of` derives it from the document and population the
-  install rebuilds. Decisions charge candidate-budget gates, retained-candidate
-  scores, grid lookups, and line-of-sight sampling.
-
-**Remaining:**
-
-- No coefficient evidence, State benchmark kernels, disassembly, or memory
-  profile exists. `src/Puck.Cli/Bench` still holds only Maths and whole-world
-  benchmarks.
-- The legacy table ignores `CellKind`; base rules report zero setup.
-- Interaction pricing is still population × min(neighbours, others). The `L * R`
-  scan and nearest-neighbour insertion work are not charged separately. HUD
-  effects keep their flat 4,096 price.
-- Search still derives nodes from `leftover / judgeCost` under
-  `RuleCapacity.MaxWorkUnitsPerTick` (2,000,000). Root and internal chance
-  evaluation remain recursive inside `SearchRuntime.ChanceExpectation`.
-- `WorldCostReport` has no consumer outside its tests: no validator, console,
-  CLI, `BrowserExports`, or portal wiring, and no source-path attribution.
-- The model identifier is not pinned in compiled plans, engine identity, or
-  replay identity.
-- `BenchRunner` still describes tens-of-seconds world construction, and
-  `puck bench world` currently fails before measuring: the harness supplies no
-  machine catalog, so the shipped world's arcade engines are refused at admission.
-
-## 1. Decision and alternatives
-
-**Implement a weighted semantic execution model.** Price the compiled operation
-Puck actually performs, including its implementation and surrounding evaluator
-work. Then derive the number of times that operation can execute. An authored
-`multiply` is not necessarily one machine multiply: Int overflow checking and
-Fixed rounding have different implementations.
-
-**Owner clarification: the reference is a portable ideal machine,
-not a named desktop processor.** Platform names, compiler targets, and measured
-clocks belong in offline evidence. Production pricing carries semantic
-operations and abstract service rates, with no ISA, vendor, console, or
-desktop selection. This supersedes the earlier single-processor proposal.
-
-Use this proposed semantic baseline: 64-bit scalar integer arithmetic,
-comparisons, shifts/rotates, bit operations, loads/stores, and fixed 128-bit
-vector groups for operations with equivalent lane semantics. Wide intermediate
-arithmetic, division, population counting, and bit extraction/deposit may lower
-to several instructions. Semantic support does not promise one native
-instruction, equal latency, or identical vector instruction coverage.
-Do not assume AVX2/AVX-512, BMI2/PEXT/PDEP, or scalable vector width in the
-abstract contract. Price a portable lowering where no common efficient
-capability is established; host-specific acceleration must not alter prices.
-Keep fixed-point rounding, overflow, and vector lane ordering explicit.
-
-The target evidence set includes Switch 2, PS5, Xbox Series X, Steam Deck, and
-desktop-class systems. Published specifications identify Zen 2 CPUs for
-[PS5](https://blog.playstation.com/2020/03/18/unveiling-new-details-of-playstation-5-hardware-technical-specs/),
-[Series X](https://news.xbox.com/en-us/2020/03/16/xbox-series-x-tech/), and
-[Steam Deck](https://www.steamdeck.com/en/tech/deck).
-[Nintendo's public Switch 2 specifications](https://www.nintendo.com/us/gaming-systems/switch-2/tech-specs/)
-identify a custom NVIDIA processor, not an exhaustive CPU instruction contract.
-Verify specific features through authoritative target documentation before
-claiming them; do not inspect the owner's desktop to define the model.
-General cross-ISA vector evidence comes from
-[Arm's Advanced SIMD specification](https://developer.arm.com/documentation/101028/0009/Advanced-SIMD--Neon--intrinsics)
-and [Intel's SSE/Neon mappings](https://www.intel.com/content/www/us/en/developer/articles/technical/arm-neon-to-sse-automatic-porting-solution-tips-and-tricks.html).
-These establish useful mappings, not complete instruction equivalence.
-
-Three approaches were considered:
-
-| Approach | Decision |
-|---|---|
-| Weighted Puck operations, grounded in reference implementations | Use. Small runtime surface, explainable prices, capacity-based bounds. |
-| Directly price the current host's JIT output or benchmark timings | Exclude from authoritative pricing. Useful only as performance diagnostics. |
-| Simulate an entire out-of-order processor and cache hierarchy during authoring | Defer. Substantially more machinery than this contract needs. |
-
-Instruction latency measures dependent execution; reciprocal throughput measures
-independent instruction issue. They are different inputs, and adding throughput
-figures does not establish a dependency-chain cost. Agner Fog documents both
-and the measurement conditions in his [instruction tables](https://www.agner.org/optimize/instruction_tables.pdf).
-[uops.info](https://uops.info/background.html) supplies operand-sensitive
-measurements useful for checking the selected instruction forms.
-
-## 2. Source findings that determine the work
-
-These record the original audit's reasons for the changes, not a live coverage
-inventory. The check/firing split, the rejecting unknown-op fallback, and the
-flat placement price have since been corrected; see
-[Implementation status](#implementation-status) and the owning State and World
-Schema READMEs. The remaining implementation must derive its complete operation
-list from the vocabulary.
-
-| Finding | Evidence and consequence |
-|---|---|
-| Prices ignore numeric kind. | [ExpressionOperators](../../src/Puck.State/ExpressionOperators.cs) supplies one weight per opcode; [ExpressionArithmetic](../../src/Puck.State/ExpressionArithmetic.cs) implements Int and Fixed multiplication/division differently. Carry `CellKind` into pricing. |
-| Exclusion discounts work that still executes. | [CompiledRule.Cost](../../src/Puck.State/CompiledRule.cs) combines visit, bindings, gate, and effects; [RuleWorkBudget.Tally](../../src/Puck.State/RuleWorkBudget.cs) puts the entire amount under gate exclusions. [RuleEvaluator.EvaluateOnce](../../src/Puck.State/RuleEvaluator.cs) computes bindings before testing the gate. Cold evaluations or invalidated schedules therefore pay those costs for closed rules too. |
-| A neighbor limit does not bound pair inspection. | [WorldServer.EvaluateInteraction](../../src/Puck.World.Server/WorldServer.Step.cs) scans right carriers for every left carrier to select nearest neighbors. [WorldRuleWorkBudget](../../src/Puck.World.Schema/WorldRuleWorkBudget.cs) uses the retained-neighbor limit as its evaluation multiplier. Charge the scan and selection separately from rule evaluation. |
-| Some expensive operations have flat prices. | [WorldEffectKinds](../../src/Puck.World.Schema/WorldEffectKinds.cs) charges placement upsert/removal 32,768 and HUD upsert/removal 4,096. [MutationApply](../../src/Puck.World.Server/WorldServer.MutationApply.cs) and [MutationCompose](../../src/Puck.World.Server/WorldServer.MutationCompose.cs) perform candidate validation, installation, and sometimes population rebuild. Their work depends on the document. |
-| Grid preparation is priced as visits rather than its algorithm. | [WorldRuleWorkBudget](../../src/Puck.World.Schema/WorldRuleWorkBudget.cs) charges image points plus twice the grid points. [FixedSpatialNeighborhood.Rebuild](../../src/Puck.Physics/FixedSpatialNeighborhood.cs) also sorts; queries search cells and retain neighbors. |
-| Search-node pricing omits work and does not uniformly bound a step. | [WorldSearch.TryPlanAll](../../src/Puck.World.Schema/WorldSearch.cs) divides leftover units by judge cost. [SearchRuntime.Walk](../../src/Puck.State/Search/SearchRuntime.Walk.cs) also scans candidates and copies frames. Its root chance branch precedes the ordinary node budget loop; [ChanceExpectation](../../src/Puck.State/Search/SearchRuntime.Chance.cs) can enter non-resumable recursive search. |
-| Missing operation prices can become cheap silently. | [RuleWorkBudget.OperationCost](../../src/Puck.State/RuleWorkBudget.cs) ends with `Find(operation)?.Cost ?? 1L`. Replace this with exhaustive pricing and an explicit unmodeled result. |
-| The existing ceiling has no time conversion. | [RuleCapacity](../../src/Puck.State/Rule.cs) fixes 2,000,000 work units per simulation step. [EngineTicks](../../src/Puck.Hosting/EngineTicks.cs) defines 50,400 time ticks per second. They are different units. |
-
-The original exclusion tests asserted that several mutually exclusive whole
-rules cost exactly as much as one. Their replacement retains all checks and
-tests binding evaluation behind a closed gate; the larger calibration and
-execution-accounting obligations below remain.
+The typed scaffolding and the accounting split exist. The evidence manifest
+(`src/Puck.State/ReferenceSchedule.json`) pins eight targets and prices the
+unary expression operations; every other coefficient, and the whole memory
+profile, is recorded as unmodeled, and admission still runs on the heuristic
+work units. The work is two packages of
+[the programme](state-and-language.md): [C1](state-and-language.md#c1--ceilings-as-prices)
+builds the reference schedule and activates it, and
+[the costing correction](state-and-language.md#the-costing-correction) fixes the
+accounting and bounds search. This page is their specification; the model's
+decision is in [the decisions register](../decisions/state-and-language.md#costing).
 
 ## 3. Price schedule and evidence
 
@@ -183,9 +65,9 @@ on every executing host; derive that price from the chosen reference lowering.
 1. Pin the exact .NET SDK/compiler, runtime helpers, build options, ISA, and
    analysis-tool version for each offline evidence target. Include x64 and
    AArch64 lowerings; a surrogate does not prove console-specific support.
-   The checkout currently uses
-   SDK 10.0.400, but `global.json` permits feature-band roll-forward; recording
-   only that file is insufficient. Use fixed optimized reference builds,
+   `global.json` pins the band with `rollForward: disable`; the manifest
+   records the SDK and that setting together, and a law ties them to the
+   checkout. Use fixed optimized reference builds,
    without workload-dependent PGO. A Native AOT reference build is suitable;
    an explicit instruction-set target is required, never `native`. Microsoft's
    [AOT code-generation guidance](https://github.com/dotnet/runtime/blob/main/src/coreclr/nativeaot/docs/optimizing.md)
@@ -364,10 +246,10 @@ must actually schedule them under that contract before receiving that treatment.
 
 ## 5. Reference time, tick budgets, and policy
 
-Choose reference throughput separately from instruction prices. The proposed
-initial policy is **3,000,000,000 reference cycles per second**, with **one half
-reserved for the modeled authored-work subsystem**. These are explicit product
-policy proposals, not a 3 GHz CPU requirement or measured results. They must appear
+Choose reference throughput separately from instruction prices. The policy is
+**3,000,000,000 reference cycles per second**, with **one half reserved for the
+modeled authored-work subsystem**. These are product policy, not a 3 GHz CPU
+requirement or measured results. They must appear
 as named, versioned constants with rationale, not be disguised as instruction
 measurements. The reservation does not prove the rest of the engine fits in
 the remaining half.
@@ -383,6 +265,12 @@ ReferenceEngineTicks(C) = ceil(C * H / F)
 ReferenceStepFraction(C) = C * r / F          // retain as a rational
 Admission: C * q * r <= F * p               // widened exact arithmetic
 ```
+
+That per-step allowance is the engine's one per-tick budget. It is not a
+second limit beside `RuleCapacity.MaxWorkUnitsPerTick`: that constant becomes
+this allowance, expressed in reference cycles, and
+[C1](state-and-language.md#c1--ceilings-as-prices) owns its calibration and
+every ceiling counted as a share of it.
 
 With the proposed policy, the authored subsystem receives 50,000,000 cycles
 per step at 30 Hz and 6,250,000 at 240 Hz. A cost of 1,500,000 cycles is
@@ -477,9 +365,12 @@ profile. Deliberate schedule revisions are engine-version changes.
 
 ## 8. Implementation order and acceptance
 
-Implement each step completely before moving to the next. A temporary
-comparison against the old model is useful during development; delete the old
-heuristics when the replacement becomes authoritative.
+Steps 1, 3, and 5 are the costing correction. Steps 2 and 4, the reference
+schedule and activation, are C1's, because a price and the ceilings expressed
+as shares of it cannot be calibrated apart, and one package owns every
+ceiling. Implement each step completely before moving to the next. A
+temporary comparison against the old model is useful during development; delete
+the old heuristics when the replacement becomes authoritative.
 
 1. **Correct the accounting structure.** Separate setup/check/firing costs;
    correct exclusions, pair inspections, and shared preparation. Add explicit
@@ -498,9 +389,11 @@ heuristics when the replacement becomes authoritative.
    a parallel permanent verification runner. Verify independent observed event
    counts against static bounds, not only one cost formula against another.
 4. **Activate reference-cycle admission and shared reporting.** Apply the exact
-   rate/share arithmetic, remove the 2,000,000 heuristic ceiling and old
-   fallbacks, and connect validator, console, search plans, and browser to the
-   same report. A reachable unmodeled contribution prevents certification of
+   rate/share arithmetic, retire the 2,000,000 heuristic count and the old
+   fallbacks in favor of the priced per-step allowance section 5 defines, and
+   connect validator, console, search plans, and browser to the same report.
+   The ceiling itself survives as that calibrated price, which
+   C1 derives together with every ceiling expressed as a share of it. A reachable unmodeled contribution prevents certification of
    the scoped deadline; it must not appear as zero. In-scope gaps must be
    resolved before final activation. Out-of-scope systems remain named as such.
 5. **Validate usefulness and synchronize documentation.** Compare reference
@@ -547,24 +440,6 @@ exact rate-based admission; useful source-attributed explanations; and
 verification of those properties. Merely replacing numeric literals or adding
 an attractive budget meter does not finish this work.
 
-## 9. Investigation evidence and limits
+---
 
-Source inspection traced the budget calculation, evaluator order, interaction
-selection, mutation installation, decision grids, and search/chance execution.
-Compiler-backed references confirmed `WorldRuleWorkBudget.Measure` calls the
-shared `RuleWorkBudget.Tally` within the Schema project closure.
-
-The published CLI's existing `puck bench world` completed successfully during this analysis:
-server construction 0.2 s, idle-step median 10.585 ms with 264 bytes allocated,
-and Klondike deal average 0.230 ms per step over 91 steps. These are a single
-local diagnostic run, not calibration, not an upper bound, and not proposed
-pricing constants. No complete reference disassembly or kernel coefficient
-campaign has yet been performed.
-
-The harness already exists in [WorldBenchmarks](../../src/Puck.Cli/Bench/WorldBenchmarks.cs)
-and [WorldBenchHarness](../../src/Puck.Cli/Bench/WorldBenchHarness.cs).
-The performance skill's statement that only Maths has a harness, and the
-BenchRunner comment describing tens-of-seconds construction, are stale; correct
-them when extending that workflow. BenchmarkDotNet's
-[diagnoser documentation](https://benchmarkdotnet.org/articles/configs/diagnosers.html)
-describes the disassembly and allocation tools needed for the coefficient work.
+[Plans](README.md) · [State and the authoring language](state-and-language.md)

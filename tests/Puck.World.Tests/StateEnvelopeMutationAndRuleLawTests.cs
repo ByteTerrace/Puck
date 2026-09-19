@@ -27,7 +27,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         Overflow: StateOverflow.Saturate,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Int(value: value)
             )]
     );
     private static WorldStateRow RefusingRow(long value) => new(
@@ -37,7 +37,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         Max: 10,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Int(value: value)
             )]
     );
     private static WorldStateRow TriggerRow() => new(
@@ -45,7 +45,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0
+                Value: CellValue.Int(value: 0)
             )]
     );
     private static WorldStateRow TraitsRow(long advanceValue, long dynamicsValue, long cycleValue) => new(
@@ -55,18 +55,18 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         Cycle: new StateCycle(TicksPerStep: 5),
         Cells: [new StateCell(
                 Key: CellName.Parse(candidate: "adv"),
-                Value: advanceValue,
+                Value: CellValue.Int(value: advanceValue),
                 Advance: new StateAdvance(
-                    PerSecondNumerator: 1,
-                    PerSecondDenominator: 1
+                    PerSecondDenominator: 1,
+                    PerSecondNumerator: 1
                 )
             ), new StateCell(
                 Key: CellName.Parse(candidate: "dyn"),
-                Value: dynamicsValue,
+                Value: CellValue.Int(value: dynamicsValue),
                 Dynamics: new StateDynamics(Row: "kick")
             ), new StateCell(
                 Key: CellName.Parse(candidate: "cyc"),
-                Value: cycleValue
+                Value: CellValue.Int(value: cycleValue)
             )]
     );
     private static WorldDefinition Document(params WorldStateRow[] rows) => (Fixtures.BuildDocument().WithWorldState(rows: rows) with {
@@ -104,7 +104,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             actual: Cell(
                 fixture: fixture,
                 row: "saturating"
-            ).Value
+            ).Value.Raw
         );
 
         // world.undo restores the pre-write value exactly — a saturating write is an ordinary journaled mutation.
@@ -130,7 +130,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             actual: Cell(
                 fixture: fixture,
                 row: "saturating"
-            ).Value
+            ).Value.Raw
         );
     }
     [Fact]
@@ -140,7 +140,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: (long.MaxValue - 2)
+                    Value: CellValue.Int(value: (long.MaxValue - 2))
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: Document(row));
@@ -200,13 +200,13 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             actual: Cell(
                 fixture: fixture,
                 row: "refusing"
-            ).Value
+            ).Value.Raw
         );
 
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            expected: RuleEffectRefusal.MutationRejected,
+            expected: Puck.State.Rules.RuleEffectRefusal.MutationRejected,
             actual: diagnostic.Refusal
         );
         Assert.Equal(
@@ -245,7 +245,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             actual: Cell(
                 fixture: fixture,
                 row: "saturating"
-            ).Value
+            ).Value.Raw
         );
         Assert.Empty(collection: fixture.Server.RuleRuntimeDiagnostics());
     }
@@ -274,17 +274,17 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
 
         AdminWrite(
             fixture: fixture,
-            row: "traits",
-            value: 40,
+            key: "adv",
             kind: WorldDocumentWriteKind.Set,
-            key: "adv"
+            row: "traits",
+            value: 40
         );
         AdminWrite(
             fixture: fixture,
-            row: "traits",
-            value: 40,
+            key: "dyn",
             kind: WorldDocumentWriteKind.Set,
-            key: "dyn"
+            row: "traits",
+            value: 40
         );
 
         // A behavior-parameter change is the one thing that settles (and so moves the clock of) a cycling cell:
@@ -341,7 +341,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             actual: Cell(
                 fixture: fixture,
                 row: "saturating"
-            ).Value
+            ).Value.Raw
         );
 
         Assert.True(
@@ -358,6 +358,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
+
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "envelope-clock-restore",
@@ -416,7 +417,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             actual: WorldDefinitionRows.FindStateRow(
                 rows: restored.Definition.State,
                 name: "saturating"
-            )!.Cells!.Single().Value
+            )!.Cells!.Single().Value.Raw
         );
     }
     [Fact]

@@ -30,6 +30,7 @@ public sealed class EffectiveBehaviorLawTests {
         var row = Row(dynamics: Dynamics());
         var cell = new StateCell(
             Key: Key(value: "a"),
+            Value: CellValue.Int(value: 0L),
             Advance: advance
         );
         var resolved = EffectiveBehavior.Resolve(
@@ -50,6 +51,7 @@ public sealed class EffectiveBehaviorLawTests {
         var row = Row(advance: Advance());
         var opted = new StateCell(
             Key: Key(value: "a"),
+            Value: CellValue.Int(value: 0L),
             Behavior: StateCellBehavior.None
         );
 
@@ -65,7 +67,7 @@ public sealed class EffectiveBehaviorLawTests {
     public void ACellThatInheritsAndDeclaresNoTraitOfItsOwnTakesTheRowsDefault() {
         var advance = Advance();
         var row = Row(advance: advance);
-        var inheriting = new StateCell(Key: Key(value: "a"));
+        var inheriting = new StateCell(Key: Key(value: "a"), Value: CellValue.Int(value: 0L));
 
         var resolved = EffectiveBehavior.Resolve(
             cell: inheriting,
@@ -79,7 +81,7 @@ public sealed class EffectiveBehaviorLawTests {
         Assert.False(condition: resolved.IsNone);
     }
     // A row's declared behavior applies to every cell, including a key a write mints later — modeled here by
-    // resolving against `cell: null`, the same answer StateReader/StateFrame give a key that does not exist yet.
+    // resolving against `cell: null`, the same answer StateReader and the arena give a key that does not exist yet.
     [Fact]
     public void AKeyThatDoesNotExistYetInheritsTheRowsDefaultTheSameWayAnExistingUnoverriddenCellDoes() {
         var advance = Advance(
@@ -93,7 +95,7 @@ public sealed class EffectiveBehaviorLawTests {
             row: row
         );
         var forAnOrdinaryInheritingCell = EffectiveBehavior.Resolve(
-            cell: new StateCell(Key: Key(value: "existing")),
+            cell: new StateCell(Key: Key(value: "existing"), Value: CellValue.Int(value: 0L)),
             row: row
         );
 
@@ -128,7 +130,7 @@ public sealed class EffectiveBehaviorLawTests {
     [Fact]
     public void ARowWithNoBehaviorAtAllAndACellThatDoesNotOverrideResolvesToNone() {
         var row = Row();
-        var plain = new StateCell(Key: Key(value: "a"));
+        var plain = new StateCell(Key: Key(value: "a"), Value: CellValue.Int(value: 0L));
 
         Assert.True(condition: EffectiveBehavior.Resolve(
             cell: null,
@@ -155,6 +157,7 @@ public sealed class EffectiveBehaviorLawTests {
         var row = Row(advance: rowAdvance);
         var slotCellCarryingItsOwnCycle = new StateCell(
             Key: StateRow.SlotKey,
+            Value: CellValue.Int(value: 0L),
             Cycle: Cycle()
         );
 

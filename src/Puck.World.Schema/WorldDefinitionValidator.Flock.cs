@@ -158,12 +158,16 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    private static void ValidateFlockAffinity(ValueExpression? expression, WorldDefinition definition, string path, List<string> errors) {
+    private static void ValidateFlockAffinity(ExpressionProgram? expression, WorldDefinition definition, string path, List<string> errors) {
         if (expression is null) { return; }
-        try { _ = WorldRuleCompiler.CompileFlockAffinity(
+        // The compiler the runtime binds an affinity through, so a document this walk admits is one
+        // CompiledWorldFlockAffinities can build.
+        try {
+            _ = WorldFactsCompiler.CompileFlockAffinity(
             definition: definition,
             expression: expression
-        ); } catch (RuleException exception) { errors.Add(item: $"{path}: {exception.Message}"); }
+        );
+        } catch (RuleException exception) { errors.Add(item: $"{path}: {exception.Message}"); }
     }
     private static bool FlockColliderFitsDomain(WorldKit kit, WorldDefinition definition, WorldNavigationDomain domain) {
         try {

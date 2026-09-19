@@ -25,11 +25,12 @@
               "Int",
               "Fixed",
               "Bool",
-              "Text"
+              "Text",
+              "Vector"
             ]
           },
           "value": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable16"
           },
           "cells": {
             "description": "The row\u0027s current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name \u2014 unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.",
@@ -41,7 +42,7 @@
                   "type": "string"
                 },
                 "value": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable16"
                 },
                 "advance": {
                   "$ref": "./common.schema.json#/$defs/StateAdvance"
@@ -60,7 +61,7 @@
                   ]
                 },
                 "clock": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable2"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable17"
                 },
                 "visibility": {
                   "$ref": "./common.schema.json#/$defs/StateVisibility"
@@ -393,7 +394,16 @@
             "$ref": "./common.schema.json#/$defs/StateCycle"
           },
           "clock": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable2"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable17"
+          },
+          "space": {
+            "description": "The vector space this row belongs to; required for Vector, refused for every other kind.",
+            "type": "string"
+          },
+          "enum": {
+            "description": "The StateEnum this row\u0027s integer values name, or null for a row whose values carry no symbolic domain. Legitimate only for Int cells, and only naming an enum the section declares.",
+            "type": "string",
+            "title": "CellName"
           },
           "gatesDrive": {
             "description": "Whether this row is a drive-admission gate. When set, this must be a keyed row (IsKeyed) whose per-body cell \u2014 keyed by the body\u0027s 0-based entity index \u2014 is consulted before admitting a drive or action intent for that body: a nonzero cell refuses the body\u0027s intents until the cell reads zero again, checked fresh every tick. The engine does not interpret the row\u0027s name; several independently named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring Capacity, and only for Int/Fixed/ Bool. Default false.",
@@ -607,6 +617,26 @@
               }
             },
             "additionalProperties": false
+          },
+          "verdict": {
+            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status.",
+            "type": "object",
+            "properties": {
+              "gate": {
+                "description": "The expectation, in the author\u0027s words \u2014 what a failing verdict names. Non-empty, at most MaxGateLength characters. A .puckexpect clause lowers its own source text here.",
+                "type": "string"
+              },
+              "status": {
+                "description": "The cell key carrying the status code. Must be a declared cell of the same row.",
+                "title": "CellName",
+                "type": "string"
+              }
+            },
+            "required": [
+              "gate",
+              "status"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -756,6 +786,50 @@
             }
           },
           {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "Vector"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "Unpadded base64url encoded signed 8-bit vector components."
+                },
+                "cells": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "description": "Unpadded base64url encoded signed 8-bit vector components."
+                      }
+                    }
+                  }
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "min"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "max"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
             "not": {
               "allOf": [
                 {
@@ -896,6 +970,23 @@
                     "field"
                   ]
                 }
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "enum"
+              ]
+            },
+            "then": {
+              "properties": {
+                "kind": {
+                  "const": "Int"
+                }
+              },
+              "required": [
+                "kind"
               ]
             }
           },
@@ -1705,6 +1796,139 @@
           }
         ],
         "title": "LatticeTopology"
+      },
+      "default": null
+    },
+    "spaces": {
+      "description": "The declared vector embedding spaces, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "Declares one vector embedding space with its model, revision, and component dimensions.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable space name, unique within the section.",
+            "title": "CellName",
+            "type": "string"
+          },
+          "model": {
+            "description": "The model name, non-empty and at most 128 characters.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "The model revision, non-empty and at most 128 characters.",
+            "type": "string"
+          },
+          "dimensions": {
+            "description": "The component dimension count, in [8, 1024].",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "model",
+          "revision",
+          "dimensions"
+        ],
+        "additionalProperties": false,
+        "title": "StateSpace"
+      },
+      "default": null
+    },
+    "enums": {
+      "description": "The declared symbolic value domains a row may name, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A named closed set of symbolic values a row\u0027s integer cells may hold. Member i is the value i, so the stored representation stays an ordinary integer; what the enum adds is a range a write is admitted against and a name a console listing or a decompiled source prints in place of the number.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The enum\u0027s stable name, unique within the section.",
+            "title": "CellName",
+            "type": "string"
+          },
+          "members": {
+            "description": "The member names in value order; member i is the value i.",
+            "type": "array",
+            "items": {
+              "title": "CellName",
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "members"
+        ],
+        "additionalProperties": false,
+        "title": "StateEnum"
+      },
+      "default": null
+    },
+    "families": {
+      "description": "The declared row families, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A declared row family: one authored name standing for Size sibling rows. By default the members are named \u003Cname\u003E0 through \u003Cname\u003E\u003Csize-1\u003E and are declared consecutively in the section. A family may instead declare the index set its members carry \u2014 Indices, which may have gaps, so Pile0 and Pile2..Pile12 are one family \u2014 or name its member rows outright through Members, which frees the members from both the naming convention and contiguity.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The family\u0027s stable name; never a row name of its own.",
+            "title": "CellName",
+            "type": "string"
+          },
+          "size": {
+            "description": "How many member rows the family holds, 1..MaxRows. When Indices or Members is declared, this is that list\u0027s length.",
+            "type": "integer"
+          },
+          "indices": {
+            "description": "The family index each member carries, in member order, or null when the members are indexed 0..Size-1 with no gaps. A family index is what \u003Cfamily\u003E[i] selects on, so an index the list omits is a gap that selects no row.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "default": null
+          },
+          "members": {
+            "description": "The member rows\u0027 own names, in member order, or null when the members are named by the \u003Cname\u003E\u003Cindex\u003E convention.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null,
+            "items": {
+              "title": "CellName",
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "size"
+        ],
+        "additionalProperties": false,
+        "title": "StateFamily"
       },
       "default": null
     }

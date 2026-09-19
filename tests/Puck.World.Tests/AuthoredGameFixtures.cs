@@ -41,7 +41,7 @@ internal static class AuthoredGameFixtures {
                 out var definition,
                 out var reason,
                 neighbours: neighbours,
-                catalog: catalog
+                catalog: (catalog ?? TestHookInstaller.CreateMachineCatalog())
             ),
             userMessage: reason
         );

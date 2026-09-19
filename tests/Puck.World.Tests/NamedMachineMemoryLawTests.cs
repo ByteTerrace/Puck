@@ -31,7 +31,7 @@ public sealed class NamedMachineMemoryLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: value
+                        Value: CellValue.Int(value: value)
                     )]
             )]);
     private static WorldMachineMemory Read() => new(
@@ -42,7 +42,7 @@ public sealed class NamedMachineMemoryLawTests {
         "mirror",
         Address: WideAddress
     );
-    private static long Value(WorldFixture fixture) => fixture.Server.Definition.State[0].Cells![0].Value;
+    private static long Value(WorldFixture fixture) => fixture.Server.Definition.State[0].Cells![0].Value.AsInt;
     private static WorldMachineMemory Write() => Read() with { Direction = WorldMachineMemoryDirection.Write, Access = "patch" };
 
     [Fact]
@@ -87,7 +87,7 @@ public sealed class NamedMachineMemoryLawTests {
                     Kind: CellKind.Int,
                     Cells: [new StateCell(
                             Key: WorldStateRow.SlotKey,
-                            Value: 0x12345678
+                            Value: CellValue.Int(value: 0x12345678)
                         )]
                 )]);
             using var fixture = Fixtures.FreshServer(

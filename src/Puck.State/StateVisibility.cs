@@ -67,11 +67,15 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
             return false;
         }
         for (var index = 0; (index < cells.Count); index++) {
-            if (string.Equals(
-                a: cells[index].Text,
-                b: recipient,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            // A reader row of another kind names no recipient, so it admits no one rather than faulting a disclosure.
+            if (
+                (cells[index].Value.Kind == CellKind.Text) &&
+                string.Equals(
+                    a: cells[index].Value.AsText,
+                    b: recipient,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
                 return true;
             }
         }

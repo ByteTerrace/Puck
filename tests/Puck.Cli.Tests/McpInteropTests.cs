@@ -27,7 +27,7 @@ public sealed class McpInteropTests {
             var tools = await client.ListToolsAsync(cancellationToken: Token);
 
             Assert.Equal(
-                ["puck_capture_frame", "puck_exec"],
+                ["puck_capture_frame", "puck_exec", "puck_state_vector_write"],
                 tools.Select(selector: tool => tool.Name).Order()
             );
             Assert.All(
@@ -129,7 +129,7 @@ public sealed class McpInteropTests {
         var tools = await client.ListToolsAsync(cancellationToken: Token);
 
         Assert.Equal(
-            ["puck_capture_frame", "puck_exec"],
+            ["puck_capture_frame", "puck_exec", "puck_state_vector_write"],
             tools.Select(selector: tool => tool.Name).Order()
         );
         var echo = await client.CallToolAsync(

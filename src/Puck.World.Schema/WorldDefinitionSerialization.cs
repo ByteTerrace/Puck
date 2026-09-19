@@ -64,10 +64,15 @@ namespace Puck.World;
 // WorldAnchor.Placement and WorldCameraSubject.Placement share a simple name, which the source generator would
 // otherwise resolve to one generated accessor for both (SYSLIB1031). Naming this arm explicitly keeps both.
 [JsonSerializable(typeof(WorldCameraSubject.Placement), TypeInfoPropertyName = "WorldCameraSubjectPlacement")]
-[JsonSerializable(typeof(ValueToken.Select), TypeInfoPropertyName = "ValueTokenSelect")]
-// The postfix object spelling ValueExpressionJsonConverter reads and writes; the expression type itself rides
-// the converter, so the object arm needs its own entry to be reachable.
-[JsonSerializable(typeof(ValueExpressionTokens))]
+[JsonSerializable(typeof(CellSetExpression.Board), TypeInfoPropertyName = "WorldCellSetBoard")]
+[JsonSerializable(typeof(CellSetExpression.Family), TypeInfoPropertyName = "WorldCellSetFamily")]
+[JsonSerializable(typeof(CellSetExpression.Zone), TypeInfoPropertyName = "WorldCellSetZone")]
+[JsonSerializable(typeof(CellSetExpression.Everything), TypeInfoPropertyName = "WorldCellSetEverything")]
+[JsonSerializable(typeof(CellSetExpression.Nothing), TypeInfoPropertyName = "WorldCellSetNothing")]
+[JsonSerializable(typeof(CellSetExpression.Any), TypeInfoPropertyName = "WorldCellSetAny")]
+[JsonSerializable(typeof(CellSetExpression.Both), TypeInfoPropertyName = "WorldCellSetBoth")]
+[JsonSerializable(typeof(CellSetExpression.Complement), TypeInfoPropertyName = "WorldCellSetComplement")]
+[JsonSerializable(typeof(CellSetExpression), TypeInfoPropertyName = "WorldCellSetExpression")]
 [JsonSerializable(typeof(PatternNode.Symbol), TypeInfoPropertyName = "WorldPatternNodeSymbol")]
 [JsonSerializable(typeof(PatternNode.AnySymbol), TypeInfoPropertyName = "WorldPatternNodeAnySymbol")]
 [JsonSerializable(typeof(PatternNode.None), TypeInfoPropertyName = "WorldPatternNodeNone")]
@@ -251,7 +256,7 @@ namespace Puck.World;
 // The rules section rows (the world.row.set rules payload shape). Also reachable from WorldDefinition already; this entry
 // exposes the typed WorldJsonContext.Default.WorldRule accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldRule))]
-// The world-registered action arms (WorldRuleVocabulary): registered onto ActionEffect/ActionPredicate at
+// The world-registered action arms (WorldFactsVocabulary): registered onto ActionEffect/ActionPredicate at
 // resolution by WorldJsonVocabulary.Extend, so each needs its own metadata here.
 [JsonSerializable(typeof(WorldEffect.SetVerticalVelocity))]
 [JsonSerializable(typeof(WorldEffect.ScaleVerticalVelocity))]
@@ -370,10 +375,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<StateTransform> StateTransform => Get<StateTransform>();
     /// <summary>Gets the type info for <see cref="StateVisibility"/>.</summary>
     public JsonTypeInfo<StateVisibility> StateVisibility => Get<StateVisibility>();
-    /// <summary>Gets the type info for <see cref="ValueExpression"/>.</summary>
-    public JsonTypeInfo<ValueExpression> ValueExpression => Get<ValueExpression>();
-    /// <summary>Gets the type info for <see cref="ValueExpressionTokens"/>.</summary>
-    public JsonTypeInfo<ValueExpressionTokens> ValueExpressionTokens => Get<ValueExpressionTokens>();
+    /// <summary>Gets the type info for <see cref="ExpressionProgram"/>.</summary>
+    public JsonTypeInfo<ExpressionProgram> ExpressionProgram => Get<ExpressionProgram>();
     /// <summary>Gets the type info for <see cref="WorldAddonRow"/>.</summary>
     public JsonTypeInfo<WorldAddonRow> WorldAddonRow => Get<WorldAddonRow>();
     /// <summary>Gets the type info for <see cref="WorldAudioDefaults"/>.</summary>
@@ -490,7 +493,7 @@ public static class WorldJsonVocabulary {
                 typeDiscriminator: "field"
             ));
         }
-        WorldRuleVocabulary.Instance.ExtendJson(typeInfo: typeInfo);
+        WorldFactsVocabulary.Instance.ExtendJson(typeInfo: typeInfo);
     }
 }
 
@@ -656,8 +659,8 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// every other row in the document graph's strict posture — a custom converter opts out of the context-wide
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
-/// <summary>The document row's wire shape: the engine's <see cref="StateRowJsonConverter{TRow}"/> plus the two members
-/// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c> beside the traits.</summary>
+/// <summary>The document row's wire shape: the engine's <see cref="StateRowJsonConverter{TRow}"/> plus the members
+/// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c>/<c>verdict</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
     protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
@@ -665,10 +668,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
     protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
 
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…},\"verdict\":{\"gate\":…,\"status\":…}}";
 
     /// <inheritdoc/>
-    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field");
+    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field" or "verdict");
     /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
         row: row,
@@ -688,6 +691,16 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 options: options,
                 context: $"state row '{members.Name}'.field"
             )
+        : null),
+        verdict: (members.Claimed.TryGetValue(
+            key: "verdict",
+            value: out var verdict
+        )
+        ? ReadNested<WorldVerdictTrait>(
+                element: verdict,
+                options: options,
+                context: $"state row '{members.Name}'.verdict"
+            )
         : null)
     );
     /// <inheritdoc/>
@@ -701,6 +714,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
         new(
             Name: "field",
             Schema: exportType(typeof(WorldStateFieldTrait))
+        ),
+        new(
+            Name: "verdict",
+            Schema: exportType(typeof(WorldVerdictTrait))
         ),
     ];
     /// <inheritdoc/>
@@ -728,6 +745,15 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 options: options,
                 propertyName: "field",
                 value: fieldTrait,
+                writer: writer
+            );
+        }
+
+        if (row.Verdict is { } verdictTrait) {
+            WriteNested(
+                options: options,
+                propertyName: "verdict",
+                value: verdictTrait,
                 writer: writer
             );
         }

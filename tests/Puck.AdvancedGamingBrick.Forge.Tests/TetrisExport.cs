@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick.Forge;
 
@@ -34,12 +33,7 @@ public sealed class TetrisExport {
             path2: "src/Puck.World/Assets/cartridges",
             path3: "tetris.cgb.cartridge.json"
         ));
-        var document = JsonSerializer.Deserialize<CartridgeDocument>(
-            json: json,
-            options: new JsonSerializerOptions {
-            PropertyNameCaseInsensitive = true,
-        }
-        )!;
+        var document = CartridgeDocuments.Parse(utf8: System.Text.Encoding.UTF8.GetBytes(s: json));
 
         var result = new HgbCartridgeCompiler().Compile(document: document);
         var canonical = CartridgeDocuments.Canonicalize(document: document);

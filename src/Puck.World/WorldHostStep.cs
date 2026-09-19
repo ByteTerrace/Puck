@@ -14,15 +14,19 @@ namespace Puck.World;
 /// clock a <c>world.wait</c> counts in lives here, as does the per-phase timing <c>world.timing</c> arms. Also the
 /// <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions) : IWorldSimulationClock {
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
     private readonly WorldPeerHost m_peerHost = peerHost;
     private readonly WorldInstanceHost m_instances = instances;
+    // The schedule runner publishes LAST: a scheduled command submitted here is attributed to the tick that just
+    // completed, so the capture station's state hash and the schedule's own export describe the state before this
+    // tick's commands, never a half-applied mixture.
     private readonly Action<ulong> m_publishStep = tick => {
         waitGate.PublishTick(tick: tick);
         captureScheduler.PublishTick(tick: (server.NextInputTick - 1UL));
+        scheduleRunner.PublishTick(tick: (server.NextInputTick - 1UL));
     };
     private readonly SimulationTimingReporter m_timingReporter = new();
 

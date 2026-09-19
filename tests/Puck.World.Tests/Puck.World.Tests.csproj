@@ -36,6 +36,7 @@
         <ProjectReference Include="..\..\src\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Addons\Puck.World.Addons.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Azure\Puck.World.Azure.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Embeddings\Puck.World.Embeddings.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Client\Puck.World.Client.csproj" />
         <!-- The generic world.row.step field walker (public, no InternalsVisibleTo needed) — see
              WorldRowFieldStepperLawTests. -->
@@ -49,6 +50,12 @@
         <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\..\src\Puck.Mcp\Puck.Mcp.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.AgentHarness\Puck.World.AgentHarness.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Build-time world generation only; the CLI is not a runtime dependency. Building it runs
+             build/WorldAssets.targets, the only producer of the generated .world.json twins the fixtures and
+             ShippedWorldStateBaselineTests load; no other reference in this project reaches Puck.Cli. -->
+        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

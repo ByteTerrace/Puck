@@ -35,7 +35,7 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
         ]
@@ -79,7 +79,7 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
         )
             ? row with { Cells = [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 42L
+                    Value: CellValue.Int(value: 42L)
                 )] }
             : row)).ToArray();
 

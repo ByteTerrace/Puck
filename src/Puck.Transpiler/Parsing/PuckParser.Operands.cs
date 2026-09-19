@@ -80,7 +80,7 @@ public static partial class PuckParser {
             }
 
             // The same comment terminators AtEndOfLogicalStatement recognizes: an operand span ends where a
-            // trailing comment begins, so a `when`/`bind` line accepts one the way an effect line already does.
+            // trailing comment begins, so a `when`/`local` line accepts one the way an effect line already does.
             if (
                 (c == '/') &&
                 ((cursor.Offset + 1) < buffer.Length) &&
@@ -181,14 +181,34 @@ public static partial class PuckParser {
         }
         return false;
     }
+    private static bool IsSugarOperand(string text) {
+        if (text.Contains(value: "].")) {
+            return true;
+        }
+        if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "all(") ||
+            text.StartsWith(comparisonType: StringComparison.Ordinal, value: "any(") ||
+            text.StartsWith(comparisonType: StringComparison.Ordinal, value: "sum(") ||
+            (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "count(") && (text.Contains(value: "->") || text.Contains(value: "=>")))) {
+            return true;
+        }
+        return false;
+    }
     /// <summary>Validates opaque operand text through <c>ExpressionSpelling.TryParse</c>, reporting PUCK002 at
     /// <paramref name="span"/> on failure. Never re-implements the expression grammar — the parse result itself is
     /// the only thing consulted (rule 8).</summary>
     private static bool ValidateOperandText(string text, SourceSpan span, DiagnosticBag? diagnostics) {
+        if (IsSugarOperand(text: text)) {
+            return true;
+        }
+
         if (ExpressionSpelling.TryParse(
             error: out var error,
+            program: out _,
+            text: text
+        ) || ExpressionSpelling.TryParseVector(
+            error: out _,
             text: text,
-            tokens: out _
+            token: out _
         )) {
             return true;
         }
@@ -215,29 +235,35 @@ public static partial class PuckParser {
             offset: start
         );
 
-        if (!TryReadExtendedName(
-            context: context,
-            name: out _
-        )) {
+        if (!TryReadName(admitted: NameForms.Extended, context: context, spelling: out _, text: out _)) {
             text = string.Empty;
             span = default;
             return false;
         }
 
-        while (
-            !cursor.Eof &&
-            (cursor.Current == '[')
-        ) {
-            var depth = 0;
+        while (!cursor.Eof) {
+            if (cursor.Current == '[') {
+                var depth = 0;
 
-            do {
-                if (cursor.Current == '[') {
-                    depth++;
-                } else if (cursor.Current == ']') {
-                    depth--;
-                }
+                do {
+                    if (cursor.Current == '[') {
+                        depth++;
+                    } else if (cursor.Current == ']') {
+                        depth--;
+                    }
+                    cursor.Advance();
+                } while (!cursor.Eof && (depth > 0));
+            } else if (cursor.Current == '.') {
+                var dotPos = cursor.Position;
+
                 cursor.Advance();
-            } while (!cursor.Eof && (depth > 0));
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
+                    cursor.ResetPosition(position: dotPos);
+                    break;
+                }
+            } else {
+                break;
+            }
         }
 
         text = context.Scanner.Buffer[start..cursor.Offset];
@@ -254,10 +280,21 @@ public static partial class PuckParser {
     /// the span does not even parse). The token's own <c>Name</c>/<c>Key</c> become the result — the parser never
     /// re-derives that split itself.</summary>
     private static RowRefNode ResolveRowRef(string text, SourceSpan span, DiagnosticBag? diagnostics) {
+        if (text.Contains(value: "].")) {
+            return new RowRefNode(
+                text,
+                null,
+                span.Offset,
+                span.Length,
+                span.Line,
+                span.Column
+            );
+        }
+
         if (!ExpressionSpelling.TryParse(
             error: out var error,
-            text: text,
-            tokens: out var tokens
+            program: out var parsed,
+            text: text
         )) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.OperandParse,
@@ -273,10 +310,7 @@ public static partial class PuckParser {
                 span.Column
             );
         }
-        if (
-            (tokens.Count != 1) ||
-            (tokens[0] is not ValueToken.State state)
-        ) {
+        if (parsed.Instructions is not [{ Payload: InstructionPayload.State state }]) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RowReferenceExpected,
                 message: $"expected a single state-row reference here, not an expression ('{text}')",
@@ -373,29 +407,6 @@ public static partial class PuckParser {
         int i => i,
         _ => 0m,
     };
-    /// <summary>Reads a name on the same terms <c>ExpressionSpelling</c>'s own lexer does for a reserved channel:
-    /// letters/digits/<c>_</c>/<c>$</c>/<c>.</c>, plus, once the name starts with <c>$</c>, <c>:name</c>
-    /// continuations, signed <c>:-N</c> segments, and a <c>$zones[...]</c> group folded whole into the name (§9-A8).
-    /// The walk itself is <c>ExpressionSpelling.ScanBareName</c>'s — the owner of that grammar — never a copy of it
-    /// (rule 8).</summary>
-    private static bool TryReadExtendedName(ParseContext context, out string name) {
-        var buffer = context.Scanner.Buffer;
-        var cursor = context.Scanner.Cursor;
-        var start = cursor.Offset;
-        var length = ExpressionSpelling.ScanBareName(
-            start: start,
-            text: buffer
-        );
-
-        if (length == 0) {
-            name = string.Empty;
-            return false;
-        }
-
-        name = buffer[start..(start + length)];
-        cursor.Advance(count: length);
-        return true;
-    }
     private static string? LongestMatchingPunctuation(string buffer, int offset, string[] candidates) {
         foreach (var candidate in candidates) {
             if (
@@ -536,7 +547,7 @@ public static partial class PuckParser {
 
         return (((i - lineStart) + 1) > keywordColumn);
     }
-    /// <summary>Matches one cell-kind keyword a <c>: Kind</c>/<c>as Kind</c> annotation or a <c>bind</c> admits,
+    /// <summary>Matches one cell-kind keyword a <c>: Kind</c>/<c>as Kind</c> annotation or a <c>local</c> admits,
     /// spelled from the enum through <see cref="PuckDslVocabulary.ComparisonKindNames"/>. Returns
     /// <see langword="null"/>, consuming nothing, when the next word is not one.</summary>
     private static string? TryMatchKindKeyword(ParseContext context) {

@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 public sealed class WorldTabletopMatcherLawTests {
     private static readonly WorldDefinition Garden = Load();
 
-    private RuleFrameFixture? m_judge;
+    private RuleArenaFixture? m_judge;
 
     // Coordinate rays and deltas deliberately share no engine directions, bit masks, patterns, or query calls.
     private static bool Attacked(long[] board, int king, int sign) {
@@ -39,7 +39,7 @@ public sealed class WorldTabletopMatcherLawTests {
     }
     private static StateCell[] Cells(long[] board) => [.. board.Select(selector: (v, i) => new StateCell(
             CellName.Parse(candidate: i.ToString()),
-            v
+            CellValue.Int(value: v)
         ))];
     private void Check(long[] before, long[] after, bool legal, int turn = 0, int ep = -1, int rights = 0, int collisions = 0) {
         var position = Judge(
@@ -50,7 +50,7 @@ public sealed class WorldTabletopMatcherLawTests {
             rights: rights,
             turn: turn
         );
-        var fixture = m_judge ??= new RuleFrameFixture(definition: position);
+        var fixture = m_judge ??= new RuleArenaFixture(definition: position);
 
         fixture.Evaluate(position: position);
         Assert.Equal(
@@ -117,7 +117,7 @@ public sealed class WorldTabletopMatcherLawTests {
                 ),
                 "previousInCheck" => row with { Cells = [new StateCell(
                         CellName.Parse(candidate: "0"),
-                        (Attacked(
+                        CellValue.Int(value: (Attacked(
                             board: before,
                             king: Array.IndexOf(
                                 array: before,
@@ -126,11 +126,11 @@ public sealed class WorldTabletopMatcherLawTests {
                             sign: -1
                         )
             ? 1
-            : 0)
+            : 0))
                     ),
                     new StateCell(
                         CellName.Parse(candidate: "1"),
-                        (Attacked(
+                        CellValue.Int(value: (Attacked(
                             board: before,
                             king: Array.IndexOf(
                                 array: before,
@@ -139,7 +139,7 @@ public sealed class WorldTabletopMatcherLawTests {
                             sign: 1
                         )
             ? 1
-            : 0)
+            : 0))
                     )] },
                 _ => row,
             })],
@@ -201,15 +201,15 @@ public sealed class WorldTabletopMatcherLawTests {
             row
         )!;
 
-        return (state.Cells!.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value ?? 0);
+        return (state.Cells!.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value.Raw ?? 0);
     }
-    private static long Read(RuleFrameFixture fixture, string row, string key = "$value") => fixture.Read(
+    private static long Read(RuleArenaFixture fixture, string row, string key = "$value") => fixture.Read(
         key: key,
         row: row
     );
     private static WorldStateRow Slot(WorldStateRow row, long value) => row with { Cells = [new StateCell(
             WorldStateRow.SlotKey,
-            value
+            CellValue.Int(value: value)
         )] };
     // The board is derived from its token rows (inverse), so a position is seeded as tokens: one token per occupied
     // cell in cell order, the rest off the board.
@@ -222,11 +222,11 @@ public sealed class WorldTabletopMatcherLawTests {
             if (board[cell] != 0) {
                 cells[next] = new StateCell(
                     CellName.Parse(candidate: $"piece{next}"),
-                    cell
+                    CellValue.Int(value: cell)
                 );
                 codes[next] = new StateCell(
                     CellName.Parse(candidate: $"piece{next}"),
-                    board[cell]
+                    CellValue.Int(value: board[cell])
                 );
                 next++;
             }
@@ -234,11 +234,11 @@ public sealed class WorldTabletopMatcherLawTests {
         for (; (next < 32); next++) {
             cells[next] = new StateCell(
                 CellName.Parse(candidate: $"piece{next}"),
-                -1
+                CellValue.Int(value: -1)
             );
             codes[next] = new StateCell(
                 CellName.Parse(candidate: $"piece{next}"),
-                0
+                CellValue.Int(value: 0)
             );
         }
         return (cells, codes);
@@ -387,7 +387,7 @@ public sealed class WorldTabletopMatcherLawTests {
             (56, -4),
             (63, -4)
         );
-        RuleFrameFixture? judge = null;
+        RuleArenaFixture? judge = null;
 
         void CheckRights(long[] after, int rights) {
             var source = Judge(
@@ -411,14 +411,14 @@ public sealed class WorldTabletopMatcherLawTests {
                     value: 1
                 ),
                     "move" => row with { Cells = [.. row.Cells!.Select(selector: c => ((c.Key.Value == "kind")
-                ? c with { Value = 1 }
+                ? c with { Value = CellValue.Int(value: 1) }
                 : c))] },
                     _ => row,
                 })],
                 },
                 Rules = [.. source.Rules!.Where(predicate: r => (r.Name.Value == "tabletop-advance-turn"))],
             };
-            var fixture = judge ??= new RuleFrameFixture(definition: position);
+            var fixture = judge ??= new RuleArenaFixture(definition: position);
 
             fixture.Evaluate(position: position);
             Assert.Equal(
@@ -472,12 +472,12 @@ public sealed class WorldTabletopMatcherLawTests {
         );
         var codes = new[] { new StateCell(
             CellName.Parse(candidate: "piece1"),
-            (sameCode
+            CellValue.Int(value: (sameCode
             ? 1
-            : 2)
+            : 2))
         ), new StateCell(
             CellName.Parse(candidate: "piece8"),
-            1
+            CellValue.Int(value: 1)
         ) };
 
         if (reverse) { Array.Reverse(array: codes); }
@@ -485,7 +485,7 @@ public sealed class WorldTabletopMatcherLawTests {
             StateRaw = source.StateRaw! with {
                 World = [.. source.State.Select(selector: row => row.Name.Value switch {
                 "pieceCode" => row with { Cells = codes },
-                "pieceCell" => row with { Cells = [.. codes.Select(selector: c => c with { Value = 28 })] },
+                "pieceCell" => row with { Cells = [.. codes.Select(selector: c => c with { Value = CellValue.Int(value: 28) })] },
                 _ => row,
             })],
             },
@@ -496,7 +496,7 @@ public sealed class WorldTabletopMatcherLawTests {
         fixture.Step();
         // The inverse keeps the last token; the census still detects the excess occupant with either code.
         Assert.Equal(
-            codes[^1].Value,
+            codes[^1].Value.Raw,
             Read(
                 fixture: fixture,
                 key: "28",
@@ -717,7 +717,7 @@ public sealed class WorldTabletopMatcherLawTests {
     }
     [Fact]
     public void FootprintCountsAgreeWithAFullBoardComparison() {
-        RuleFrameFixture? judge = null;
+        RuleArenaFixture? judge = null;
 
         void Compare(long[] before, long[] after, int turn) {
             var source = Judge(
@@ -729,7 +729,7 @@ public sealed class WorldTabletopMatcherLawTests {
                 Rules = [.. source.Rules!.Where(predicate: r => (r.Name.Value is
                     "tabletop-candidate-cells" or "tabletop-candidate-move" or "tabletop-candidate-match"))],
             };
-            var fixture = judge ??= new RuleFrameFixture(definition: position);
+            var fixture = judge ??= new RuleArenaFixture(definition: position);
 
             fixture.Evaluate(position: position);
             var from = ((int)Read(
@@ -857,7 +857,7 @@ public sealed class WorldTabletopMatcherLawTests {
 
         for (var i = 0; (i < 8); i++) { before[i] = back[i]; before[(i + 8)] = 1; before[(i + 48)] = -1; before[(i + 56)] = -back[i]; }
         var accepted = 0;
-        var fixture = new RuleFrameFixture(definition: Judge(
+        var fixture = new RuleArenaFixture(definition: Judge(
             before,
             before
         ));
@@ -944,7 +944,7 @@ public sealed class WorldTabletopMatcherLawTests {
 
         StateCell[] Keyed(params long[] values) => [.. keys.Select(selector: (key, i) => new StateCell(
                 CellName.Parse(candidate: key),
-                values[i]
+                CellValue.Int(value: values[i])
             ))];
         var locations = Keyed(
             0,

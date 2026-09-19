@@ -1,0 +1,48 @@
+state {
+  spaces {
+    space lore {
+      model: "puck-fixture"
+      revision: "1"
+      dimensions: 256
+    }
+  }
+  world {
+    table events: Vector {
+      ambush = "Bandits ambushed the caravan on the north road"
+      gift = "A stranger shared bread and water with the guards"
+    }
+    table memories: Vector capacity(128) evicts
+    table stance: Vector capacity(4) {
+      guards = "Wary but fair"
+    }
+    table lines: Text embeds(lineVectors) {
+      warn = "Stay close to the wagons tonight."
+      thank = "Your kindness will not be forgotten."
+    }
+    slot situation: Vector = "Travellers approach the gate at dusk"
+    table recalled: Fixed capacity(3)
+    slot reply: Text = ""
+    slot caravanAttacked: Int = 0
+    slot hostile: Int = 0
+  }
+}
+
+rule "remember-ambush" {
+  mode: Edge
+  when caravanAttacked == 1
+  transform remember(into: memories, key: "ambush", from: "events[ambush]", unlessWithin: 0.9)
+  situation = events[ambush]
+  transform mix(into: "stance[guards]", terms: [
+    { from: "stance[guards]", weight: 3 }
+    { from: "events[ambush]", weight: 1 }
+  ]
+  )
+  transform nearest(from: memories, query: "situation", into: recalled, k: 3, threshold: 0.5)
+  transform nearest(from: lineVectors, query: "situation", into: reply, k: 1)
+}
+
+rule "turn-hostile" {
+  mode: Edge
+  when similarity(stance[guards], embed("danger and betrayal")) > 0.55
+  hostile = 1
+}

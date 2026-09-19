@@ -13,12 +13,12 @@ namespace Puck.Mcp;
 public static class OperatorMcpServer {
     private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["command"],"additionalProperties":false}""");
     private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"additionalProperties":false}""");
-    private static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript"],"additionalProperties":false}""");
+    internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript"],"additionalProperties":false}""");
 
     internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, CancellationToken token, long requestId = 1) {
         if (
             (parameters is null) ||
-            (parameters.Name is not ("puck_exec" or "puck_capture_frame"))
+            (parameters.Name is not ("puck_exec" or "puck_capture_frame" or "puck_state_vector_write"))
         ) {
             throw new McpProtocolException(
             errorCode: McpErrorCode.InvalidParams,
@@ -26,32 +26,64 @@ public static class OperatorMcpServer {
         );
         }
         var exec = (parameters.Name == "puck_exec");
+        var vectorWrite = (parameters.Name == "puck_state_vector_write");
         var timeout = 30_000;
         string? command = null;
+        string? row = null;
+        string? key = null;
+        string? vector = null;
 
         if (parameters.Arguments is { } arguments) {
-            foreach (var (key, value) in arguments) {
+            foreach (var (argumentKey, value) in arguments) {
                 if (
-                    (key == "timeoutMs") &&
+                    (argumentKey == "timeoutMs") &&
                     (value.ValueKind == JsonValueKind.Number) &&
                     value.TryGetInt32(value: out var parsed) &&
                     (parsed is >= 1 and <= ControlLimits.TimeoutMilliseconds)
                 ) { timeout = parsed; } else if (
-                    (key == "command") &&
+                    (argumentKey == "command") &&
                     exec &&
                     (value.ValueKind == JsonValueKind.String)
-                ) { command = value.GetString(); } else {
+                ) { command = value.GetString(); } else if (
+                    (argumentKey == "row") &&
+                    vectorWrite &&
+                    (value.ValueKind == JsonValueKind.String)
+                ) { row = value.GetString(); } else if (
+                    (argumentKey == "key") &&
+                    vectorWrite &&
+                    (value.ValueKind is (JsonValueKind.String or JsonValueKind.Null))
+                ) { key = ((value.ValueKind == JsonValueKind.Null) ? null : value.GetString()); } else if (
+                    (argumentKey == "vector") &&
+                    vectorWrite &&
+                    (value.ValueKind == JsonValueKind.String)
+                ) { vector = value.GetString(); } else {
                     return Error(
-                    $"Invalid argument: {key}.",
+                    $"Invalid argument: {argumentKey}.",
                     unknown: false
                 );
                 }
             }
         }
+        if (vectorWrite) {
+            if (string.IsNullOrWhiteSpace(value: row)) {
+                return Error(
+                    "Invalid argument: row.",
+                    unknown: false
+                );
+            }
+            if (string.IsNullOrWhiteSpace(value: vector)) {
+                return Error(
+                    "Invalid argument: vector.",
+                    unknown: false
+                );
+            }
+            var cellKey = (string.IsNullOrEmpty(key) ? "$value" : key);
+            command = $"world.state.cell.set {row} {cellKey} {vector}";
+        }
         if (LocalControlServer.Validate(request: new(
             Command: command,
             Id: 1,
-            Operation: (exec
+            Operation: ((exec || vectorWrite)
             ? "exec"
             : "capture"),
             TimeoutMilliseconds: timeout
@@ -65,7 +97,7 @@ public static class OperatorMcpServer {
             var request = new ControlRequest(
                 Command: command,
                 Id: requestId,
-                Operation: (exec
+                Operation: ((exec || vectorWrite)
                 ? "exec"
                 : "capture"),
                 TimeoutMilliseconds: timeout
@@ -201,7 +233,7 @@ public static class OperatorMcpServer {
                     },
                 },
                 Handlers = new() {
-                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [ExecTool(), CaptureTool()] }),
+                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [ExecTool(), CaptureTool(), RemoteMcpHost.StateVectorWriteTool] }),
                     CallToolHandler = (context, token) => CallAsync(
                     client,
                     context.Params,

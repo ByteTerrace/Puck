@@ -199,6 +199,138 @@ public static class WorldStateReader {
 
         return resolved;
     }
+    // The row's kind decides which of a cell record's sibling payloads is the live one, so the carrier is composed
+    // here rather than at each reader: a caller switching on CellValue.Kind cannot reach a payload the row does not
+    // declare, and an absent cell is the carrier holding no case rather than a neutral zero.
+    private static CellValue Compose(WorldStateRow row, string? key, long? rawValue, string? text) => row.Kind switch {
+        CellKind.Int => ((rawValue is { } number)
+            ? CellValue.Int(value: number)
+            : default),
+        CellKind.Fixed => ((rawValue is { } bits)
+            ? CellValue.Fixed(rawBits: bits)
+            : default),
+        CellKind.Bool => ((rawValue is { } flag)
+            ? CellValue.Bool(value: (flag != 0L))
+            : default),
+        // Presence is the raw read's, not the payload's: a scalar reader answers a raw value for every non-vector
+        // cell that exists, and a text cell holding no string is present with a null payload, not absent.
+        CellKind.Text => ((rawValue is not null)
+            ? CellValue.Text(value: text)
+            : default),
+        CellKind.Vector => ComposeVector(
+            key: key,
+            row: row
+        ),
+        _ => throw new InvalidOperationException(message: $"Unknown cell kind '{row.Kind}'."),
+    };
+    // A vector payload never rides the raw/text pair, so it is read off the cell record directly. A key no name can
+    // be parsed from addresses nothing, on this kind exactly as on every other: the scalar read answers absent for
+    // it, and a vector row must not answer the slot cell in its place.
+    private static CellValue ComposeVector(WorldStateRow row, string? key) {
+        CellName addressed;
+
+        if (key is null) {
+            addressed = WorldStateRow.SlotKey;
+        } else if (!CellName.TryParse(
+            candidate: key,
+            name: out addressed,
+            reason: out _
+        )) {
+            return default;
+        }
+
+        return (StateRows.FindCell(
+            cells: row.Cells,
+            key: addressed
+        )?.Value ?? default);
+    }
+
+    /// <summary>Resolves one (row, key) pair as the one <see cref="CellValue"/> carrier the row's kind declares.</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The simulation tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of — what a <see cref="StateAdvance"/> row's
+    /// value is computed at.</param>
+    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
+    /// <param name="value">The addressed cell's live value, or the carrier holding no case when the row declares no
+    /// cell under that key.</param>
+    /// <returns><see langword="true"/> when the row resolved.</returns>
+    public static bool TryReadValue(
+        WorldDefinition definition,
+        string rowName,
+        string? key,
+        ulong tick,
+        ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row,
+        out CellValue value
+    ) {
+        var resolved = TryRead(
+            definition: definition,
+            key: key,
+            rawValue: out var rawValue,
+            row: out row,
+            rowName: rowName,
+            text: out var text,
+            tick: tick,
+            engineTick: engineTick
+        );
+
+        value = (resolved
+            ? Compose(
+                key: key,
+                rawValue: rawValue,
+                row: row!,
+                text: text
+            )
+            : default
+        );
+
+        return resolved;
+    }
+    /// <summary>Resolves one (row, key) pair as a <see cref="CellValue"/>, reading an eased cell's follower rather
+    /// than its stored truth (see <see cref="TryReadEased"/>).</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used only by the fallback truth read.</param>
+    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
+    /// <param name="value">The addressed cell's live eased value, or the carrier holding no case when the row
+    /// declares no cell under that key.</param>
+    /// <returns><see langword="true"/> when the row resolved.</returns>
+    public static bool TryReadEasedValue(
+        WorldDefinition definition,
+        string rowName,
+        string? key,
+        ulong tick,
+        ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row,
+        out CellValue value
+    ) {
+        var resolved = TryReadEased(
+            definition: definition,
+            key: key,
+            rawValue: out var rawValue,
+            row: out row,
+            rowName: rowName,
+            text: out var text,
+            tick: tick,
+            engineTick: engineTick
+        );
+
+        value = (resolved
+            ? Compose(
+                key: key,
+                rawValue: rawValue,
+                row: row!,
+                text: text
+            )
+            : default
+        );
+
+        return resolved;
+    }
     /// <summary>Resolves one world-owned row by its compiled typed handle (see
     /// <see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>).</summary>
     /// <param name="definition">The document to read.</param>

@@ -1,20 +1,54 @@
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lowering;
 
-/// <summary>The values the <c>shape</c> and <c>placement</c> row sugar elides, and the exact node each elision
-/// stands for. The emitter fills from this table and the decompiler elides against it, so the two sides cannot
-/// disagree about what an omitted field means.</summary>
-/// <remarks><c>ShapeDocument.Group</c> is not in this table: the authored corpus omits the key on some shapes and
-/// carries it on others, so filling a default on lowering would add a key the source does not have. (The engine
-/// itself cannot tell the two apart — <c>CreationCanonicalizer</c> normalizes an absent <c>group</c> and an
-/// explicit <c>0</c> to the same value — so the constraint is round-trip fidelity, not engine semantics.) It
-/// passes through both directions like <c>material</c>/<c>parent</c> instead.</remarks>
+/// <summary>The exact node each default the <c>shape</c> and <c>placement</c> row sugar elides stands for. Which
+/// members carry a default is their construct's own description; this resolves each one to a node, so the emitter
+/// that fills it and the decompiler that elides against it cannot disagree.</summary>
+/// <remarks><c>ShapeDocument.Group</c> carries no default: the authored corpus omits the key on some shapes and
+/// carries it on others, so filling one on lowering would add a key the source does not have. (The engine itself
+/// cannot tell the two apart — <c>CreationCanonicalizer</c> normalizes an absent <c>group</c> and an explicit
+/// <c>0</c> to the same value — so the constraint is round-trip fidelity, not engine semantics.) It passes through
+/// both directions like <c>material</c>/<c>parent</c> instead.</remarks>
 public static class WorldDocumentRowDefaults {
+    // A described default is the canonical JSON text of the node it stands for, so `{"scale": [1, 1, 1]}` and
+    // `{"scale": 1}` are told apart by the text rather than by a switch here. `$index` is the one positional
+    // default: a shape's own place in its array.
+    private static JsonNode? Resolve(string keyword, string key, int index) {
+        if (!WorldConstructs.Table.TryGet(
+            construct: out var construct,
+            keyword: keyword
+        )) {
+            throw new InvalidOperationException(message: $"'{keyword}' is not a described construct.");
+        }
+        if (construct!.DefaultFor(key: key) is not { } text) {
+            return null;
+        }
+        if (string.Equals(
+            a: text,
+            b: WorldConstructMember.RowIndexDefault,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return JsonValue.Create(value: index);
+        }
+
+        return JsonNode.Parse(json: text);
+    }
+    private static IReadOnlyList<string> KeysWithDefaults(string keyword) => (WorldConstructs.Table.TryGet(
+        construct: out var construct,
+        keyword: keyword
+    )
+        ? [.. construct!.Members
+            .Where(predicate: static member => (member.Default is not null))
+            .SelectMany(selector: static member => member.DocumentKeys)]
+        : throw new InvalidOperationException(message: $"'{keyword}' is not a described construct.")
+    );
+
     /// <summary>The placement fields that carry a default.</summary>
-    public static IReadOnlyList<string> PlacementKeys { get; } = ["yawDegrees", "scale"];
-    /// <summary>The shape fields that carry a default, in the order the emitter fills them.</summary>
-    public static IReadOnlyList<string> ShapeKeys { get; } = ["id", "blend", "smooth", "rotation", "scale"];
+    public static IReadOnlyList<string> PlacementKeys { get; } = KeysWithDefaults(keyword: "placement");
+    /// <summary>The shape fields that carry a default.</summary>
+    public static IReadOnlyList<string> ShapeKeys { get; } = KeysWithDefaults(keyword: "shape");
 
     private static bool IsNumberEqualTo(JsonValue value, double expected) =>
         (TryGetNumber(
@@ -131,33 +165,21 @@ public static class WorldDocumentRowDefaults {
     /// <summary>Returns the default node for a placement field.</summary>
     /// <param name="key">The field name, from <see cref="PlacementKeys"/>.</param>
     /// <returns>The default node, or <see langword="null"/> when the field carries no default.</returns>
-    public static JsonNode? PlacementDefault(string key) => key switch {
-        // WorldPlacement.Scale is a uniform float, never a vector.
-        "yawDegrees" => JsonValue.Create(0),
-        "scale" => JsonValue.Create(1),
-        _ => null,
-    };
+    public static JsonNode? PlacementDefault(string key) => Resolve(
+        index: 0,
+        key: key,
+        keyword: "placement"
+    );
     /// <summary>Returns the default node for a shape field.</summary>
     /// <param name="key">The field name, from <see cref="ShapeKeys"/>.</param>
     /// <param name="index">The shape's 0-based position in its collection, which is the default <c>id</c>.</param>
     /// <returns>The default node, or <see langword="null"/> when the field carries no default.</returns>
-    public static JsonNode? ShapeDefault(string key, int index) => key switch {
-        "id" => JsonValue.Create(index),
-        "blend" => JsonValue.Create("Union"),
-        "smooth" => JsonValue.Create(0),
-        // The literal array only. A rotation authored as a binding reference string is a different value that
-        // `CreationCanonicalizer.NormalizeRotation` passes through untouched, and never elides to this.
-        "rotation" => new JsonArray(
-        0,
-        0,
-        0,
-        1
-    ),
-        "scale" => new JsonArray(
-        1,
-        1,
-        1
-    ),
-        _ => null,
-    };
+    /// <remarks>The literal <c>rotation</c> array only. A rotation authored as a binding reference string is a
+    /// different value that <c>CreationCanonicalizer.NormalizeRotation</c> passes through untouched, and never
+    /// elides to this.</remarks>
+    public static JsonNode? ShapeDefault(string key, int index) => Resolve(
+        index: index,
+        key: key,
+        keyword: "shape"
+    );
 }

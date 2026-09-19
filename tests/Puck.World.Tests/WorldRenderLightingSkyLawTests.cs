@@ -19,7 +19,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0L
+                    Value: CellValue.Int(value: 0L)
                 )]
         )]) with {
         RenderRaw = defaults,
@@ -29,7 +29,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         Kind: CellKind.Text,
         Cells: [new StateCell(
                 Key: CellName.Parse(candidate: "sun"),
-                Text: hex
+                Value: CellValue.Text(value: hex)
             )]
     );
     private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) => (track ?? new WorldRenderCycleTrack()).Resolve(
@@ -589,7 +589,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             Kind: CellKind.Fixed,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: Puck.Maths.FixedQ4816.FromDouble(value: 0.25d).Value
+                    Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: 0.25d).Value)
                 )]
         );
         var defaults = BaseDefaults() with {
@@ -660,7 +660,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                     Kind: CellKind.Int,
                     Cells: [new StateCell(
                             Key: WorldStateRow.SlotKey,
-                            Value: 0L
+                            Value: CellValue.Int(value: 0L)
                         )]
                 )]) with {
                 RenderRaw = BaseDefaults() with {
@@ -685,7 +685,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                     Kind: CellKind.Int,
                     Cells: [new StateCell(
                             Key: WorldStateRow.SlotKey,
-                            Value: 0L
+                            Value: CellValue.Int(value: 0L)
                         )]
                 )]) with {
                 RenderRaw = BaseDefaults() with {

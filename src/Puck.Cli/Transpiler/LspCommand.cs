@@ -19,7 +19,8 @@ internal static class LspCommand {
                 completeDocument: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Completions,
                 diagnoseDocument: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose,
                 input: stdin,
-                output: stdout
+                output: stdout,
+                vocabularyResolver: CliVocabularyResolver.Instance
             );
 
             await server.RunAsync().ConfigureAwait(continueOnCapturedContext: false);

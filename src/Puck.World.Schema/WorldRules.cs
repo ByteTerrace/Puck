@@ -1,12 +1,11 @@
 using System.Text.Json.Serialization;
 using Puck.Maths;
-using Puck.Physics.Motion;
 
 namespace Puck.World;
 
 /// <summary>A world rule: a state-library <see cref="Rule"/> plus the optional choice policy only a world evaluates.
-/// Compiled by <see cref="WorldRuleCompiler"/>, which composes the library's own compile pieces with the world's
-/// registered vocabulary (<see cref="WorldRuleVocabulary"/>).</summary>
+/// Compiled by <see cref="WorldFactsCompiler"/>, which composes the rule compiler's own pieces with the world's
+/// registered vocabulary (<see cref="WorldFactsVocabulary"/>).</summary>
 /// <param name="Name">The rule's unique, unreserved name.</param>
 /// <param name="Effects">The effects applied in order when the rule fires; with a decision, the common entry effects,
 /// which may be empty.</param>
@@ -14,10 +13,11 @@ namespace Puck.World;
 /// <param name="Mode">Level or edge; a decision requires level.</param>
 /// <param name="ForEach">A keyed state row to iterate with <c>$each</c> bound to each key, or <see langword="null"/>.</param>
 /// <param name="Decision">The optional choice policy; common effects run only when entering a selected option.</param>
-/// <param name="Bindings">The values bound once per evaluation, in declared order, read as <c>$bind:&lt;name&gt;</c>.</param>
+/// <param name="Locals">The values computed once per evaluation, in declared order, read as <c>$local:&lt;name&gt;</c>.</param>
 /// <param name="Zones">The rule's zone table (<see cref="Rule.Zones"/>), which every <c>$zones[&lt;index&gt;]</c> in
 /// the rule selects from, or <see langword="null"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+[method: JsonConstructor]
 public sealed record WorldRule(
     CellName Name,
     IReadOnlyList<ActionEffect> Effects,
@@ -25,7 +25,7 @@ public sealed record WorldRule(
     ActionTriggerMode Mode = ActionTriggerMode.Level,
     string? ForEach = null,
     [property: JsonPropertyOrder(5)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null,
-    IReadOnlyList<RuleBinding>? Bindings = null,
+    IReadOnlyList<RuleLocal>? Locals = null,
     IReadOnlyList<string>? Zones = null
 ) : Rule(
     Name: Name,
@@ -33,9 +33,24 @@ public sealed record WorldRule(
     Gate: Gate,
     Mode: Mode,
     ForEach: ForEach,
-    Bindings: Bindings,
+    Locals: Locals,
     Zones: Zones
-);
+) {
+    /// <summary>Initializes a world rule over an engine rule, adding the optional choice policy.</summary>
+    /// <param name="rule">The engine rule.</param>
+    /// <param name="decision">The choice policy, or <see langword="null"/>.</param>
+    public WorldRule(Rule rule, WorldDecision? decision = null) : this(
+        Name: rule.Name,
+        Effects: rule.Effects,
+        Gate: rule.Gate,
+        Mode: rule.Mode,
+        ForEach: rule.ForEach,
+        Decision: decision,
+        Locals: rule.Locals,
+        Zones: rule.Zones
+    ) {
+    }
+}
 /// <summary>How a body reference token resolved at compile time.</summary>
 public enum CompiledBodyRefKind : byte {
     /// <summary>A literal <c>body:&lt;n&gt;</c> index.</summary>
@@ -66,208 +81,10 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// <param name="Range">The distance range.</param>
 /// <param name="Neighbours">At most this many right carriers per left carrier for a distance interaction, the nearest first; 0 for every carrier in range.</param>
 public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range, int Neighbours = 0);
-/// <summary>A compiled body motion effect.</summary>
-public readonly record struct CompiledWorldBodyEffect(
-    BodyMotionOp Operation,
-    FixedQ4816 Value,
-    FixedVector3 Direction,
-    ulong DurationTicks,
-    string? Register = null,
-    string? TargetKey = null,
-    CompiledCellRef? TargetKeyFrom = null,
-    WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body
-);
 /// <summary>A compiled lattice field paint.</summary>
 public readonly record struct CompiledWorldFieldPaint(string Field, int X, int Y, int Z, FixedQ4816 Value, WorldFieldWriteOp Operation, int Radius);
 /// <summary>A compiled literal pose.</summary>
 public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ4816 YawRadians, FixedQ4816 PitchRadians, FixedQ4816 RollRadians);
-/// <summary>A compiled world rule or interaction: the library's <see cref="CompiledRule"/> plus the co-occurrence an
-/// interaction evaluates and the choice policy a decision rule carries.</summary>
-/// <param name="Name">The rule's name.</param>
-/// <param name="Mode">Level or edge.</param>
-/// <param name="Gate">The flattened postfix Boolean program; empty means always.</param>
-/// <param name="Effects">The compiled effects, in authored order.</param>
-/// <param name="ForEach">The keyed row a rule iterates, or <see langword="null"/>.</param>
-/// <param name="Interaction">The co-occurrence an interaction evaluates, or <see langword="null"/> for a rule.</param>
-/// <param name="Decision">The compiled choice policy, or <see langword="null"/>.</param>
-/// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
-/// <param name="Zones">The compiled zone table, or <see langword="null"/>.</param>
-/// <param name="ForEachHandle">The pre-resolved handle of <paramref name="ForEach"/>, or <see langword="default"/>.</param>
-public sealed record CompiledWorldRule(
-    string Name,
-    ActionTriggerMode Mode,
-    GateToken[] Gate,
-    EffectFact[] Effects,
-    string? ForEach = null,
-    CompiledInteraction? Interaction = null,
-    CompiledWorldDecision? Decision = null,
-    CompiledRuleBinding[]? Bindings = null,
-    ZoneTable? Zones = null,
-    StateHandle ForEachHandle = default
-) : CompiledRule(
-    Name: Name,
-    Mode: Mode,
-    Gate: Gate,
-    Effects: Effects,
-    ForEach: ForEach,
-    Bindings: Bindings,
-    Zones: Zones,
-    ForEachHandle: ForEachHandle
-) {
-    /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) {
-        base.CollectReads(into: into);
-        if (Decision is { } decision) {
-            RuleDataflow.CollectGate(
-                gate: (decision.Interrupt ?? []),
-                into: into
-            );
-            RuleDataflow.CollectEffectReads(
-                effects: decision.OnNoChoice,
-                into: into
-            );
-            foreach (var option in decision.Options) {
-                RuleDataflow.CollectGate(
-                    gate: option.Gate,
-                    into: into
-                );
-                RuleDataflow.CollectExpression(
-                    tokens: option.Score,
-                    into: into
-                );
-                RuleDataflow.CollectEffectReads(
-                    effects: option.Effects,
-                    into: into
-                );
-            }
-        }
-    }
-    /// <inheritdoc/>
-    public override void CollectWrites(List<RuleAccess> into) {
-        base.CollectWrites(into: into);
-        if (Decision is { } decision) {
-            RuleDataflow.CollectEffectWrites(
-                effects: decision.OnNoChoice,
-                into: into
-            );
-            foreach (var option in decision.Options) {
-                RuleDataflow.CollectEffectWrites(
-                    effects: option.Effects,
-                    into: into
-                );
-            }
-        }
-    }
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => CostBreakdown(context: context).Total;
-    /// <summary>Adds the decision's cost: every option's gate, the costliest branch, the score of every retained
-    /// candidate, and the perception sampling a neighbours option inspects.</summary>
-    /// <inheritdoc/>
-    public override RuleCost CostBreakdown(RuleCompileContext context) {
-        var baseBreakdown = base.CostBreakdown(context: context);
-
-        if (Decision is not { } decision) {
-            return baseBreakdown;
-        }
-
-        var check = baseBreakdown.Check;
-        var currentGate = 0L;
-        var branch = RuleWorkBudget.EffectsCost(
-            effects: decision.OnNoChoice,
-            context: context
-        );
-
-        foreach (var option in decision.Options) {
-            var gate = RuleWorkBudget.GateCost(
-                tokens: option.Gate,
-                context: context
-            );
-            var score = RuleWorkBudget.ExpressionCost(
-                tokens: option.Score,
-                context: context
-            );
-
-            currentGate = Math.Max(
-                val1: currentGate,
-                val2: gate
-            );
-            if (option.Neighbors is { } neighbors) {
-                // Physical sampling and eligibility inspect at most the candidate budget; only retained candidates score.
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: RuleWorkBudget.SaturatingMultiply(
-                        left: neighbors.Source.CandidateBudget,
-                        right: RuleWorkBudget.SaturatingAdd(
-                            left: 1L,
-                            right: gate
-                        )
-                    )
-                );
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: RuleWorkBudget.SaturatingMultiply(
-                        left: neighbors.Source.MaxCandidates,
-                        right: RuleWorkBudget.SaturatingAdd(
-                            left: 1L,
-                            right: score
-                        )
-                    )
-                );
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: 27L
-                ); // Grid cell lookups, independent of crowd density.
-                if (neighbors.Source.RequiresLineOfSight) {
-                    check = RuleWorkBudget.SaturatingAdd(
-                        left: check,
-                        right: neighbors.Source.CandidateBudget
-                    );
-                }
-            } else {
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: RuleWorkBudget.SaturatingAdd(
-                        left: RuleWorkBudget.SaturatingAdd(
-                            left: 1L,
-                            right: gate
-                        ),
-                        right: score
-                    )
-                );
-            }
-            branch = Math.Max(
-                val1: branch,
-                val2: RuleWorkBudget.EffectsCost(
-                    effects: option.Effects,
-                    context: context
-                )
-            );
-        }
-
-        check = RuleWorkBudget.SaturatingAdd(
-            left: check,
-            right: currentGate
-        );
-        check = RuleWorkBudget.SaturatingAdd(
-            left: check,
-            right: RuleWorkBudget.GateCost(
-                tokens: (decision.Interrupt ?? []),
-                context: context
-            )
-        );
-
-        var effects = RuleWorkBudget.SaturatingAdd(
-            left: baseBreakdown.Effects,
-            right: branch
-        );
-
-        return new RuleCost(
-            Setup: baseBreakdown.Setup,
-            Check: check,
-            Effects: effects
-        );
-    }
-}
 /// <summary>Hard bounds for the world's own rule arms; representation and per-tick work limits, never gameplay tuning.
 /// The library's bounds are <see cref="RuleCapacity"/>.</summary>
 public static class WorldRuleCapacity {
@@ -282,8 +99,8 @@ public static class WorldRuleCapacity {
     /// <summary>The largest cube radius a field paint covers.</summary>
     public const int MaxFieldPaintRadius = 8;
 }
-/// <summary>The compile-time refusals only a world's own arms raise; the library's are <see cref="RuleRefusal"/>.
-/// Both travel in a <see cref="RuleException"/>.</summary>
+/// <summary>The compile-time refusals only a world's own arms raise; the rule compiler's own are
+/// <see cref="Puck.State.Rules.RuleRefusal"/>. Both travel in a <see cref="RuleException"/>.</summary>
 public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a 'body:<n>' reference names an index outside the document's declared entity-table capacity", kind: RefusalKind.Verdict)]
     BodyIndexUnknown,

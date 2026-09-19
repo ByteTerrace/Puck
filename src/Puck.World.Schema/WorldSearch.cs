@@ -1,3 +1,8 @@
+using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using RuleCompiler = Puck.State.Rules.RuleCompiler;
+using CompiledRule = Puck.State.Rules.CompiledRule;
+using RuleDataflow = Puck.State.Rules.RuleDataflow;
+using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -515,14 +520,17 @@ public static class WorldSearchCompilation {
         return true;
     }
 
-    /// <summary>Returns the work units one judge run costs: every judge rule's evaluations times its unit cost.</summary>
+    /// <summary>Returns the work units one judge run costs, tallied through the same sheet the tick budget uses so
+    /// judge rules whose gates pin the same cell to disjoint ranges cost the costliest of them rather than their
+    /// sum.</summary>
     /// <param name="judge">The judge rules.</param>
     /// <param name="context">The compile context.</param>
-    public static long JudgeCost(CompiledWorldRule[] judge, WorldRuleCompileContext context) {
+    public static long JudgeCost(CompiledRule[] judge, WorldFactsCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: judge);
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        var cost = 0L;
+        var contributors = new List<Puck.State.Rules.RuleWorkContributor>(capacity: judge.Length);
+        var multiplied = new List<(CompiledRule Rule, long Multiplier)>(capacity: judge.Length);
 
         foreach (var rule in judge) {
             var multiplier = RuleWorkBudget.ForEachCount(
@@ -530,38 +538,44 @@ public static class WorldSearchCompilation {
                 rule: rule
             );
 
-            cost = RuleWorkBudget.SaturatingAdd(
-                left: cost,
-                right: RuleWorkBudget.Contributor(
-                    context: context,
-                    isInteraction: false,
-                    multiplier: multiplier,
-                    rule: rule
-                ).WorkUnits
-            );
+            contributors.Add(item: RuleWorkBudget.Contributor(
+                context: context,
+                isInteraction: false,
+                multiplier: multiplier,
+                rule: rule
+            ));
+            multiplied.Add(item: (rule, multiplier));
         }
+
+        var (_, work) = RuleWorkBudget.Tally(
+            contributors: contributors,
+            writers: RuleWorkBudget.CountWriters(rules: multiplied)
+        );
 
         return Math.Max(
             val1: 1L,
-            val2: cost
+            val2: work
         );
     }
     /// <summary>Returns the rules a frame evaluates: every rule that is neither an interaction nor a decision and
     /// reads no fact only the world host answers.</summary>
     /// <param name="rules">The compiled rules.</param>
-    public static CompiledWorldRule[] JudgeRules(CompiledWorldRule[] rules) {
+    public static CompiledRule[] JudgeRules(CompiledRule[] rules) {
         ArgumentNullException.ThrowIfNull(argument: rules);
 
-        var judge = new List<CompiledWorldRule>(capacity: rules.Length);
+        var judge = new List<CompiledRule>(capacity: rules.Length);
 
         foreach (var rule in rules) {
+            // A rule naming a facet is exactly a rule the search host cannot serve; admission would refuse the
+            // whole plan by name if one slipped through.
             if (
-                (rule.Interaction is null) &&
-                (rule.Decision is null) &&
-                !RuleDataflow.ReadsHost(rule: rule)
+                (rule is not CompiledWorldFactsRule { Decision: null, Interaction: null }) ||
+                (rule.Needs.Facets.Count != 0)
             ) {
-                judge.Add(item: rule);
+                continue;
             }
+
+            judge.Add(item: rule);
         }
 
         return judge.ToArray();
@@ -573,8 +587,10 @@ public static class WorldSearchCompilation {
     /// <param name="leftover">The work units the sheet leaves per tick, shared by every job.</param>
     /// <param name="context">The rule compile context, for compiling <see cref="WorldSearchRow.Score"/>.</param>
     /// <param name="plan">The plan.</param>
+    /// <param name="score">The compiled score program the job's judge reads, or <see langword="null"/>.</param>
     /// <param name="reason">Why the job cannot run, or empty.</param>
-    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, WorldRuleCompileContext context, out SearchPlan? plan, out string reason) {
+    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, WorldFactsCompileContext context, out SearchPlan? plan, out CompiledExpressionToken[]? score, out string reason) {
+        score = null;
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -597,7 +613,7 @@ public static class WorldSearchCompilation {
             // A zone job's tokens row is the zones' shared domain: its keys are the tokens, its values are its own.
             if (
                 (tokens is not { IsKeyed: true }) ||
-                (tokens.Kind == CellKind.Text) ||
+                (tokens.Kind is CellKind.Text or CellKind.Vector) ||
                 (tokens.EffectiveDomain is StateDomain.CellsOf or StateDomain.Ring or StateDomain.KeysOf { Ordered: true })
             ) {
                 reason = $"search '{row.Name}' tokens '{row.Tokens}' must be the keyed row the zones draw their tokens from";
@@ -880,13 +896,11 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        CompiledExpressionToken[]? score = null;
-
         if (row.Score is { } scoreText) {
             if (!ExpressionSpelling.TryParse(
                 error: out var parseError,
-                text: scoreText,
-                tokens: out var scoreTokens
+                program: out var scoreProgram,
+                text: scoreText
             )) {
                 reason = $"search '{row.Name}' score '{scoreText}' does not parse: {parseError}";
 
@@ -895,7 +909,7 @@ public static class WorldSearchCompilation {
 
             try {
                 score = RuleCompiler.CompileExpression(
-                    expression: new ValueExpression(Tokens: scoreTokens),
+                    expression: scoreProgram,
                     kind: CellKind.Int,
                     ruleName: row.Name,
                     verb: "search score",
@@ -906,8 +920,14 @@ public static class WorldSearchCompilation {
 
                 return false;
             }
-            if (RuleDataflow.ExpressionReadsHost(tokens: score)) {
-                reason = $"search '{row.Name}' score reads a fact only the world host answers; a frame cannot evaluate it";
+            var scoreNeeds = new RuleNeedsBuilder();
+
+            RuleDataflow.CollectExpressionFacts(
+                into: scoreNeeds,
+                tokens: score
+            );
+            if (scoreNeeds.Build().Facets.Count != 0) {
+                reason = $"search '{row.Name}' score reads a fact only the world host answers; a search host cannot evaluate it";
 
                 return false;
             }
@@ -1002,7 +1022,6 @@ public static class WorldSearchCompilation {
             Nodes: (row.Nodes ?? derived),
             JudgeCost: judgeCost,
             Depth: row.Depth,
-            Score: score,
             Best: row.Best,
             Shapes: shapes,
             Legal: row.Legal,
@@ -1014,7 +1033,9 @@ public static class WorldSearchCompilation {
             Iterations: row.Iterations,
             Chance: chance,
             Scores: row.Scores
-        );
+        ) {
+            Scored = (score is not null),
+        };
         reason = string.Empty;
 
         return true;
@@ -1023,9 +1044,11 @@ public static class WorldSearchCompilation {
     /// <param name="definition">The world.</param>
     /// <param name="rules">The compiled rules.</param>
     /// <param name="plans">The plans, in section order.</param>
-    /// <param name="judge">The rules a frame evaluates.</param>
+    /// <param name="judge">The rules a judge evaluates.</param>
+    /// <param name="scores">Each job's compiled score program, in section order; an entry is <see langword="null"/>
+    /// when the job declares none.</param>
     /// <param name="reason">Why a job cannot run, or empty.</param>
-    public static bool TryPlanAll(WorldDefinition definition, CompiledWorldRule[] rules, out SearchPlan[] plans, out CompiledWorldRule[] judge, out string reason) {
+    public static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[] judge, out CompiledExpressionToken[]?[] scores, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
@@ -1033,6 +1056,7 @@ public static class WorldSearchCompilation {
 
         judge = JudgeRules(rules: rules);
         plans = new SearchPlan[rows.Count];
+        scores = new CompiledExpressionToken[]?[rows.Count];
 
         if (rows.Count == 0) {
             reason = string.Empty;
@@ -1040,7 +1064,7 @@ public static class WorldSearchCompilation {
             return true;
         }
 
-        var context = WorldRuleCompiler.Context(definition: definition);
+        var context = WorldFactsCompiler.Context(definition: definition);
         var judgeCost = JudgeCost(
             context: context,
             judge: judge
@@ -1059,12 +1083,14 @@ public static class WorldSearchCompilation {
                 leftover: leftover,
                 context: context,
                 plan: out var plan,
+                score: out var compiledScore,
                 reason: out reason
             )) {
                 return false;
             }
 
             plans[index] = plan!;
+            scores[index] = compiledScore;
         }
 
         reason = string.Empty;

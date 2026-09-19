@@ -11,12 +11,12 @@ that decision.
 ```mermaid
 flowchart LR
     Source["Cell / tick / table / reduction"] --> Fact["Compiled operand"]
-    Reader["IRuleReader: current store and tick"] --> Fact
+    Reader["IStateReader: current arena and tick"] --> Fact
     Fact --> Expr["Numeric expression"]
-    Expr --> Binding["Optional named binding"]
+    Expr --> Local["Optional named local"]
     Expr --> Gate["Gate comparison"]
-    Binding --> Gate
-    Binding --> Effect["Effect value"]
+    Local --> Gate
+    Local --> Effect["Effect value"]
 ```
 
 Compilation resolves names and checks kinds once. Evaluation asks the reader
@@ -32,7 +32,7 @@ These are expression or channel fragments, not complete document fields.
 | `coins` | The slot value of a declared row | One counter. |
 | `pieceCell[rook]` or `pieceCell.rook` | A named cell's value | One piece's location. |
 | `$tick` | The evaluation tick | Compare against a deadline. |
-| `$bind:cost` | A value computed earlier in this rule evaluation | Reuse an expression across gate and effects. |
+| `$local:cost` | A value computed earlier in this rule evaluation | Reuse an expression across gate and effects. |
 | `$reduce:sum:coinsByPlayer` | Sum the row's numeric values | A total. |
 | `$zone:hand:last` | The original string key of the last member | Address a card's attributes or transfer that card. |
 
@@ -43,7 +43,7 @@ explain what happens when the pile is empty.
 `row.key` and `row[key]` parse to the same read for a literal key: the dot
 form takes exactly one dot on an unreserved, unquoted name (more than one, or
 a key half that is itself reserved — `row.$each` — is a parse error naming the
-fix). A dynamic key, `$each`, a binding, or any other expression still needs
+fix). A dynamic key, `$each`, a local, or any other expression still needs
 bracket form. A reserved (`$`-prefixed) or backquoted name never splits at a
 dot — its dotted segments stay part of the name.
 
@@ -53,15 +53,54 @@ The expression pipeline has one owner for each job:
 
 | Type | Responsibility |
 |---|---|
-| `ValueExpression` and `ValueToken` | The authored postfix expression. |
+| `ExpressionProgram` and `Instruction` | The postfix IR: instructions in evaluation order, plus the shared subprograms a fold or call indexes into. |
+| `InstructionPayload` | What an instruction addresses beyond its operation — a constant, a state read, a board query, a vector call, a fold, a call, or a call's argument. A closed union. |
 | `ExpressionSpelling` | Parse and print infix syntax and its inverse, without a second evaluator. |
-| `ValueExpressionJsonConverter` | Read either spelling and write it back in its own form. |
+| `ExpressionProgramJsonConverter` | Read and write the IR, which is the one shape `puck.world.def.v1` holds. |
+| `ExpressionSpellingJsonConverter` | Read and write a program as infix text, which is the shape `puck.cartridge.v1` holds. |
 | `ExpressionOp` | The compiled operation code. |
 | `ExpressionArithmetic` | Evaluate Int and Q48.16 operations without per-operation allocation. |
-| `ExpressionOperators` | Share spelling, operation, input count, type signature, and pricing across parsing, compilation, folding, printing, and dispatch. |
+| `RuleExpressions` | The one operator dispatch a gate, a local, an effect source, and the compiler's own constant folder share; it lives in `Puck.State.Rules`. |
+| `ExpressionOperators` | One row per operation carrying its spelling, arity, kind signature, payload shape, and pricing, consumed by the parser, compiler, folder, printer, and evaluator. |
 
-Literals, state reads, and topology payloads have specialized lowering.
-Arithmetic domain checks remain in the evaluator.
+Every operation has exactly one operator-table row, so no operation is
+described in two places. Arithmetic domain checks remain in the evaluator.
+
+### The IR on the wire
+
+A world document holds the IR and only the IR: an expression-valued member is
+an object carrying `instructions`, each an object whose `op` names the
+operation and whose remaining members are that operation's payload, plus the
+optional shared `subprograms` a fold or a call indexes into.
+
+```json
+{ "instructions": [ { "op": "Operand", "name": "hp" }, { "op": "Constant", "value": 1 }, { "op": "Subtract" } ] }
+```
+
+`puck compile` parses the authored infix text into the IR and `puck decompile`
+prints the IR back through `ExpressionSpelling`, so print-then-parse is the
+identity over every program a document can carry. A cartridge document spells
+a program as that infix text instead, because its own vocabulary is authored
+and read as text.
+
+### Reduce a family
+
+`all(family, member -> expr)` and its siblings `any`, `count`, and `sum` fold
+a family in one pass: the body becomes a subprogram of the program the fold
+belongs to and is evaluated once per member, with the member in flight read by
+the binder's own name. A fold is priced as the family's size times its body's
+cost, and nests at most once.
+
+A program carries at most sixteen subprograms, each bounded by the same token
+ceiling as the program itself. The compiler compiles each subprogram once and
+every call site shares that body, refuses a cycle by the subprogram's name, and
+so bounds how deep a chain of calls can nest at evaluation.
+
+### Answer an absent read
+
+`isAbsent(operand)` reads whether a dynamic key named no cell, and
+`operand ?? fallback` replaces the absence with a value. Every other operation
+consuming an absent read still refuses, naming these two.
 
 ### Periodic bit masks
 
@@ -86,8 +125,7 @@ constant subexpressions once using the runtime evaluator. This includes
 literal calls and immutable topology operations. Live reads remain live.
 Invalid constant subexpressions still refuse at runtime, even in an unselected
 conditional branch: `select` does not hide an invalid expression.
-Work budgets price the resulting program; serialization retains the authored
-expression.
+Work budgets price the resulting program.
 
 ### Function families
 
@@ -128,6 +166,30 @@ smaller remaining choices at successive positions.
 Every listed function is Int-only except `sqrt`, `sin`, and `cos`.
 An invalid domain, such as a negative index, a component beyond its cell, or
 a Hilbert order outside 1..31, fails the expression rather than wrapping.
+
+## Vector expressions
+
+Rules can evaluate vector similarity, dot product, and identity between Vector cells
+belonging to the same embedding space:
+
+| Function | Signature | Return kind | Meaning |
+|---|---|---|---|
+| `similarity(a, b)` | `(Vector, Vector)` | Fixed (Q48.16) | Quantized cosine similarity in `[-1.0, 1.0]`. |
+| `dot(a, b)` | `(Vector, Vector)` | Int | Raw integer sum of component products `∑(a_i * b_i)`. |
+| `identical(a, b)` | `(Vector, Vector)` | Bool (0 or 1) | Bit-exact component equality across all dimensions. |
+
+Authored vector operands can also compare against embedding literals:
+`embed("danger and betrayal")`, which resolve through companion lock files.
+
+### The cosine distinction
+
+Because `StateVector` components are quantized to signed 8-bit integers normalized on radius 127:
+- `similarity` uses `SignedByteVectorFunctions.CosineQ16` to produce a true cosine metric
+  scaled into standard fixed-point (Q48.16), compensating for slight quantization error.
+  A similarity of `1.0` means parallel unit vectors; `0.0` means orthogonal; `-1.0` means antiparallel.
+- `dot` evaluates the unscaled integer accumulator `Dot(left, right)`. For two unit-normalized vectors
+  of radius 127, the maximum dot product is approximately `127 * 127 = 16,129`. `dot` is preferred
+  when comparing relative rankings without fixed-point division overhead.
 
 ## Reductions
 

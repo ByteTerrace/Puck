@@ -24,15 +24,15 @@ function textBytes(text) {
 async function buildFixture() {
   const official = resolveOfficial(OFFICIAL_ENV);
 
-  const schemaBundleText = JSON.stringify({ 'x-puck': { schemaVersion: 'puck.world.def.v1' } });
+  const schemaBundleText = JSON.stringify({ 'x-puck': { schemaVersion: 'puck.world.definition.v1' } });
   const schemaBundleBytes = textBytes(schemaBundleText);
   const schemaBundleHash = toHashName(await sha256Hex(schemaBundleBytes));
 
-  const documentText = JSON.stringify({ schema: 'puck.world.def.v1', documentId: 'puck' });
+  const documentText = JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'puck' });
   const documentBytes = textBytes(documentText);
   const documentHash = toHashName(await sha256Hex(documentBytes));
 
-  const composedText = JSON.stringify({ schema: 'puck.world.def.v1', composed: true });
+  const composedText = JSON.stringify({ schema: 'puck.world.definition.v1', composed: true });
   const composedBytes = textBytes(composedText);
   const composedHash = toHashName(await sha256Hex(composedBytes));
 
@@ -150,7 +150,7 @@ test('loadOfficial happy path: schemaBundle, documents, composed, assets, and en
 
   assert.equal(result.source, 'network');
   assert.equal(result.build.commit, 'abc123');
-  assert.deepEqual(result.schemaBundle, { 'x-puck': { schemaVersion: 'puck.world.def.v1' } });
+  assert.deepEqual(result.schemaBundle, { 'x-puck': { schemaVersion: 'puck.world.definition.v1' } });
 
   assert.deepEqual(result.documents.names(), ['games/tictactoe.world.json']);
   assert.equal(await result.documents.get('games/tictactoe.world.json'), fixture.documentText);

@@ -340,11 +340,16 @@ public sealed class CommandRegistry {
             modality.ActiveMaps[mapIndex]
         );
     }
-    /// <summary>Whether the line's verb resolves to a <see cref="CommandRouting.Simulation"/>-routed command. Such a
-    /// line may drain behind an unapplied deferred mutation (it folds into the same pending snapshot, FIFO); an
-    /// unresolved or <see cref="CommandRouting.Immediate"/> line reads applied state, so it must wait.</summary>
+    /// <summary>Determines whether the line's verb resolves to a <see cref="CommandRouting.Simulation"/>-routed
+    /// command. Such a line may drain behind an unapplied deferred mutation (it folds into the same pending
+    /// snapshot, FIFO); an unresolved or <see cref="CommandRouting.Immediate"/> line reads applied state, so it must
+    /// wait.</summary>
     /// <param name="line">The command line whose leading verb token is classified.</param>
-    internal bool RoutesToSimulation(string line) {
+    /// <returns><see langword="true"/> when the leading verb names a Simulation-routed command.</returns>
+    /// <remarks>A caller submitting a line outside the console pump reads this to know whether the verdict it is
+    /// about to receive is the command's own (Immediate) or only its admission to the tick lane (Simulation), whose
+    /// own verdict reaches an <see cref="ICommandObserver"/> when that tick applies.</remarks>
+    public bool RoutesToSimulation(string line) {
         var verb = LeadingVerb(line: line);
 
         if (verb.IsEmpty) {
@@ -359,7 +364,21 @@ public sealed class CommandRegistry {
             (definition.Routing == CommandRouting.Simulation)
         );
     }
-    internal CommandResult SubmitSession(string line, TextCommandSession session) {
+    /// <summary>Submits one line through a host-issued session, stamped with the identity that session was bound
+    /// to at its own construction.</summary>
+    /// <param name="line">The command line.</param>
+    /// <param name="session">The ingress the line acts through.</param>
+    /// <returns>The handler's result, or <see cref="CommandResult.None"/> for a Simulation-routed line the session's
+    /// sink queued — see <see cref="Submit"/>'s remarks for what a deferred line does and does not answer.</returns>
+    /// <remarks>The session is what carries the identity, and only a host can mint one
+    /// (<see cref="TextCommandSource.CreateSession"/>/<see cref="TextCommandSource.CreateSeatSession"/>), so a
+    /// caller may submit through a door the host opened but cannot choose what the line acts as. The normal
+    /// producer is <see cref="TextCommandSource.Collect"/>, whose drain adds the read-after-write barrier and the
+    /// hold gates; a caller reaching this method directly gets neither, which is what a producer that already owns
+    /// its own ordering — a document-declared tick schedule — wants.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="line"/> or <paramref name="session"/> is
+    /// <see langword="null"/>.</exception>
+    public CommandResult SubmitSession(string line, TextCommandSession session) {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(session);
 
@@ -855,8 +874,10 @@ public sealed class CommandRegistry {
     /// <param name="definition">The command whose handler threw.</param>
     /// <param name="exception">The escaped exception.</param>
     /// <returns>An <see cref="CommandResult.IsError"/> result naming the command, the exception type, and its message.</returns>
-    private static CommandResult HandlerFault(CommandDefinition definition, Exception exception) =>
-        CommandResult.Error(output: $"[{definition.Name}: handler threw {exception.GetType().Name}: {exception.Message}]");
+    private static CommandResult HandlerFault(CommandDefinition definition, Exception exception) => new(Output: $"[{definition.Name}: handler threw {exception.GetType().Name}: {exception.Message}]") {
+        Faulted = true,
+        IsError = true,
+    };
     /// <summary>Returns the default "fully active" value used for a text invocation that supplies no explicit value.</summary>
     /// <param name="kind">The value kind of the command being invoked.</param>
     /// <returns>An active value for digital and axis kinds; an inactive value for kinds that have no meaningful impulse.</returns>

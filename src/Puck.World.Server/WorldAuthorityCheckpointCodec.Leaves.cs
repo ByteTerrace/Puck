@@ -94,6 +94,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         field: field,
         readItem: static (ref WireReader r) => r.ReadInt64()
     );
+    private static void WriteIntArray(WireWriter writer, IReadOnlyList<int> values) => WriteArray(
+        writer: writer,
+        items: values,
+        writeItem: static (w, v) => w.WriteInt32(value: v)
+    );
+    private static int[] ReadIntArray(ref WireReader reader, string field) => ReadArray(
+        reader: ref reader,
+        field: field,
+        readItem: static (ref WireReader r) => r.ReadInt32()
+    );
     private static void WriteBoolArray(WireWriter writer, IReadOnlyList<bool> values) => WriteArray(
         writer: writer,
         items: values,

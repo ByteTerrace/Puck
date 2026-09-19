@@ -1,14 +1,12 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary><c>if</c>/<c>else if</c>/<c>else</c> lowering to <c>ActionEffect.If</c> (state-authoring stage 9) and
-/// its decompiler inverse.</summary>
+/// <summary><c>if</c>/<c>else if</c>/<c>else</c> lowering to <c>ActionEffect.If</c> and its decompiler
+/// inverse.</summary>
 public class ConditionalEffectSyntaxTests {
     // JsonValue<T>.GetValue<T> refuses cross-numeric-type reads (long vs decimal vs double), and which CLR type an
     // emitted literal carries depends on whether it was integral.
@@ -21,21 +19,14 @@ public class ConditionalEffectSyntaxTests {
     };
     private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(source)
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
         );
 
-        var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        Assert.NotNull(@object: compilation.Json);
 
-        return (loweringResult.Value!, diagnostics);
+        return (compilation.Json, compilation.Diagnostics);
     }
     private static JsonObject FirstRuleEffect(JsonObject json) {
         var rules = Assert.IsType<JsonArray>(@object: json["rules"]);
@@ -259,19 +250,12 @@ public class ConditionalEffectSyntaxTests {
             expectedSubstring: "else if a == 2 {"
         );
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(decompiled);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(decompiled)
-        );
-
         var recompileDiagnostics = new DiagnosticBag();
-        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
+        var recompiled = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: recompileDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        ).Value;
+            source: decompiled
+        ).Json;
 
         Assert.False(
             condition: recompileDiagnostics.HasErrors,

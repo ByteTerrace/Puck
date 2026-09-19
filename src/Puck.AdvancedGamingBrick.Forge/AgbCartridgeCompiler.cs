@@ -533,7 +533,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             : document.Affine is null ? 0x1140u : 0x1041u;
 
         // Fills the table from a band's first scanline to the picture's end; ascending bands overwrite each other's tails.
-        void Band(int line, ValueExpression scrollX, ValueExpression scrollY) {
+        void Band(int line, ExpressionProgram scrollX, ExpressionProgram scrollY) {
             raster!.EmitFillFrom(
                 line: line,
                 scrollX: register => Load(expression: scrollX, register: register),
@@ -879,9 +879,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         // Leaves the expression's value in the given register. A single-token read emits exactly the one load it names.
         // A composed one spends the machine stack on the operands in flight and the helper routines on r5, so r4 and r5
         // are saved around it and a caller's only clobber contract stays r0 through r3.
-        void Load(ValueExpression expression, LowRegister register, bool guard = false) {
-            if (expression.Tokens.Count == 1) {
-                Payload(token: expression.Tokens[0], register: register, guard: guard);
+        void Load(ExpressionProgram expression, LowRegister register, bool guard = false) {
+            if (expression.Instructions.Count == 1) {
+                Payload(token: expression.Instructions[0], register: register, guard: guard);
 
                 return;
             }
@@ -890,8 +890,8 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
             var depth = 0;
 
-            foreach (var token in expression.Tokens) {
-                if (token is ValueToken.Constant or ValueToken.State) {
+            foreach (var token in expression.Instructions) {
+                if (token.Payload is InstructionPayload.Constant or InstructionPayload.State) {
                     if (depth > 0) {
                         emitter.Push(registers: LowRegisterMask.R0, includeLinkRegister: false);
                     }
@@ -902,7 +902,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                     continue;
                 }
 
-                var operation = ExpressionVocabulary.Operation(token: token)!.Value;
+                var operation = ExpressionVocabulary.Operation(instruction: token)!.Value;
                 var arity = ExpressionVocabulary.Arity(operation: operation);
 
                 switch (arity) {
@@ -920,8 +920,8 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             }
         }
 
-        void Payload(ValueToken token, LowRegister register, bool guard) {
-            if (token is ValueToken.Constant literal) {
+        void Payload(Instruction token, LowRegister register, bool guard) {
+            if (token.Payload is InstructionPayload.Constant literal) {
                 var constant = (int)literal.Value;
 
                 // A literal paired with a wide slot exceeds a byte, so it comes in through the constant pool rather
@@ -937,7 +937,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                 return;
             }
 
-            var state = (ValueToken.State)token;
+            var state = ((InstructionPayload.State)token.Payload!);
 
             if (CartridgeExpressions.TryKey(name: state.Name, button: out var button, mode: out var mode)) {
                 Button(button: button, mode: mode, register: register);
@@ -1124,7 +1124,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         // Leaves the addressed element in the given register, or the zeroed discard sink when the index is past the
         // declared length. The index is consumed in r3 immediately, so a nested array index reuses it safely.
-        void Element(string array, ValueExpression index, LowRegister address, bool guard = false) {
+        void Element(string array, ExpressionProgram index, LowRegister address, bool guard = false) {
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
             var length = lengths[key: array];
@@ -1145,7 +1145,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         }
 
         // Folds a document value into the attribute halfword already being built in r0.
-        void EmitFlagBits(ValueExpression value, byte mask, int shift) {
+        void EmitFlagBits(ExpressionProgram value, byte mask, int shift) {
             emitter.Push(registers: LowRegisterMask.R0, includeLinkRegister: false);
             Load(expression: value, register: LowRegister.R0);
             emitter.MoveImmediate(destination: LowRegister.R1, value: mask);

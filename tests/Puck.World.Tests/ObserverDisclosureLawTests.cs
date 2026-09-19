@@ -37,7 +37,7 @@ public sealed class ObserverDisclosureLawTests {
         var primer = new WorldSnapshot(
             1UL,
             0,
-            Fixtures.StepTicks,
+            Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz),
             new[] { Entity(
                 index: 0,
                 x: 0f
@@ -88,7 +88,7 @@ public sealed class ObserverDisclosureLawTests {
         ));
         Assert.True(condition: projected.FieldsFull);
         Assert.Equal(
-            (2UL * Fixtures.StepTicks),
+            (2UL * Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz)),
             projected.StepTicks
         );
         Assert.Equal(
@@ -106,7 +106,7 @@ public sealed class ObserverDisclosureLawTests {
         var snapshot = new WorldSnapshot(
             7UL,
             0,
-            Fixtures.StepTicks,
+            Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz),
             Array.Empty<EntitySnapshot>(),
             "boot"
         );
@@ -197,7 +197,7 @@ public sealed class ObserverDisclosureLawTests {
                     Raw: fieldRaw
                 ) }),
             Revision: 0,
-            StepTicks: Fixtures.StepTicks,
+            StepTicks: Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz),
             Tick: tick
         );
 
@@ -208,7 +208,7 @@ public sealed class ObserverDisclosureLawTests {
             snapshot: in first
         ));
         Assert.Equal(
-            Fixtures.StepTicks,
+            Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz),
             primer.StepTicks
         );
 
@@ -245,7 +245,7 @@ public sealed class ObserverDisclosureLawTests {
             snapshot: in due
         ));
         Assert.Equal(
-            expected: (8UL * Fixtures.StepTicks),
+            expected: (8UL * Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz)),
             actual: projected.StepTicks
         );
         Assert.Equal(
@@ -307,7 +307,7 @@ public sealed class ObserverDisclosureLawTests {
     }
     [Fact]
     public void UnauthoredWorld_IsDiscloseAll() {
-        var population = Fixtures.BuildDocument().Population;
+        var population = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz).Population;
 
         Assert.Null(@object: population.Disclosure);
         Assert.Equal(
@@ -325,7 +325,7 @@ public sealed class ObserverDisclosureLawTests {
     }
     [Fact]
     public void ValidatorRefusesAMisauthoredPolicyByName() {
-        var document = Fixtures.BuildDocument();
+        var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.Radius) }) }),

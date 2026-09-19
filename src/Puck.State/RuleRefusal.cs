@@ -154,6 +154,46 @@ public enum RuleRefusal : byte {
     /// a keyed row (a per-participant tally) instead.</summary>
     [Refusal(door: "world.rule.compile", condition: "an argmax/argmin body reference names a row that is not KEYED — a slot row's cell has no body-index key", kind: RefusalKind.Verdict)]
     ArgRowNotKeyed,
+
+    /// <summary>Vector operands do not share the same space or length.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector operands do not belong to the same space", kind: RefusalKind.Verdict)]
+    VectorSpaceMismatch,
+
+    /// <summary>An operand expected to be a vector is not of kind Vector.</summary>
+    [Refusal(door: "world.rule.compile", condition: "an operand is not a vector", kind: RefusalKind.Verdict)]
+    VectorOperandNotVector,
+
+    /// <summary>A vector mix produced a zero sum.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a vector mix sum of terms is zero", kind: RefusalKind.Verdict)]
+    VectorMixZero,
+
+    /// <summary>Vector mix term count or weight is out of range.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector mix terms count or weight is out of range", kind: RefusalKind.Verdict)]
+    VectorMixTerms,
+
+    /// <summary>Vector mean has no candidate cells or sum is zero.</summary>
+    [Refusal(door: "world.rule.effect", condition: "vector mean has no candidates or sum is zero", kind: RefusalKind.Verdict)]
+    VectorMeanEmpty,
+
+    /// <summary>Vector filter where row is not a keyed Bool row.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector where row is not a keyed Bool row", kind: RefusalKind.Verdict)]
+    VectorFilterShape,
+
+    /// <summary>Vector exclude key is malformed.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector exclude key is malformed", kind: RefusalKind.Verdict)]
+    VectorExcludeKey,
+
+    /// <summary>Vector nearest destination shape or parameters are invalid.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector nearest transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
+    VectorNearestShape,
+
+    /// <summary>Vector remember destination shape or parameters are invalid.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector remember transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
+    VectorRememberShape,
+
+    /// <summary>A vector cell was targeted by an effect kind that does not admit vectors.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a vector cell was targeted by an unsupported effect kind", kind: RefusalKind.Verdict)]
+    VectorEffectNotAdmitted,
 }
 /// <summary>Reports a rule compilation refusal — caught and reported by name at validation. The category is a
 /// <see cref="RuleRefusal"/> for the refusals the state-neutral compiler raises itself, or a member of a document
@@ -165,13 +205,51 @@ public sealed class RuleException : ArgumentException {
     /// <param name="detail">What was wrong, in the author's own vocabulary.</param>
     /// <param name="subject">The authored-row noun this refusal names in its message — <c>"rule"</c> (the default),
     /// or the noun of another authoring surface that compiles through the same rule machinery.</param>
-    public RuleException(Enum refusal, string ruleName, string detail, string subject = "rule")
+    /// <param name="path">Where inside the rule the refusal was drawn, as the document spells the member —
+    /// <c>gate</c>, <c>locals[0]</c>, <c>decision.options[1]</c> — or empty when it is about the rule itself.</param>
+    public RuleException(Enum refusal, string ruleName, string detail, string subject = "rule", string path = "")
         : base(message: $"{subject} '{ruleName}' refused {refusal}: {detail}") {
+        Detail = detail;
+        Path = path;
         Refusal = refusal;
+        RuleName = ruleName;
+        Subject = subject;
     }
 
+    /// <summary>Gets what was wrong, in the author's own vocabulary.</summary>
+    public string Detail { get; }
+    /// <summary>Gets where inside the rule the refusal was drawn, relative to the rule's own document node, or the
+    /// empty string when it is about the rule itself.</summary>
+    /// <remarks>A caller that knows the rule's index prepends <c>rules[i].</c> to name the authored line: the
+    /// refusal itself has no document in hand.</remarks>
+    public string Path { get; }
     /// <summary>Gets the refusal category.</summary>
     public Enum Refusal { get; }
+    /// <summary>Gets the refusing rule's name.</summary>
+    public string RuleName { get; }
+    /// <summary>Gets the authored-row noun this refusal names in its message.</summary>
+    public string Subject { get; }
+
+    /// <summary>Returns this refusal located inside <paramref name="segment"/>, leaving one already located
+    /// there.</summary>
+    /// <param name="segment">The member the refusal was drawn under, as the document spells it.</param>
+    /// <returns>The located refusal.</returns>
+    public RuleException Within(string segment) => ((Path.Length == 0)
+        ? new RuleException(
+            detail: Detail,
+            path: segment,
+            refusal: Refusal,
+            ruleName: RuleName,
+            subject: Subject
+        )
+        : new RuleException(
+            detail: Detail,
+            path: $"{segment}.{Path}",
+            refusal: Refusal,
+            ruleName: RuleName,
+            subject: Subject
+        )
+    );
 }
 /// <summary>The runtime refusals the evaluator itself draws while firing; a document project's own effect arms
 /// declare their own tagged enum and report through the same ledger.</summary>

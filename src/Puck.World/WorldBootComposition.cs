@@ -380,10 +380,12 @@ internal static class WorldBootComposition {
         // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
         // Puck.World.Server carries no reference to Puck.World.Machines' WorldMachineHost, so it cannot build
         // one itself. Mirrors the addon seam's identical factory shape (below).
+        // A host built with no document path of its own (a tape's re-drive of the booted world) resolves its
+        // cabinets' content beside the booted document, as the live host does.
         services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationFactory: static sp => (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
             screens: screens,
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
-            documentPath: documentPath,
+            documentPath: (documentPath ?? sp.GetRequiredService<WorldDefinitionSource>().SourcePath),
             narrationHub: narrationHub,
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
@@ -562,6 +564,20 @@ internal static class WorldBootComposition {
             server: sp.GetRequiredService<WorldServer>()
         ));
         services.AddSingleton<ICommandModule, WorldCaptureCommandModule>();
+        // The schedule section's tick-scheduled command submission and its state export, wired at the SAME
+        // publishTick call site as the wait gate and the capture scheduler. CORE, but inert unless --schedule-dir
+        // armed the boot (WorldScheduleRoot.IsArmed): the runner is always composed and submits nothing otherwise.
+        // Registered as the observer too: a Simulation-routed scheduled line's own verdict arrives on the observer
+        // path when its tick applies, and nothing else can correlate it back to the row.
+        services.AddSingleton(implementationFactory: static sp => new WorldScheduleRunner(
+            definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
+            registry: sp.GetRequiredService<Func<CommandRegistry>>(),
+            router: sp.GetRequiredService<Func<InputRouter>>(),
+            server: sp.GetRequiredService<WorldServer>(),
+            source: () => sp.GetRequiredService<TextCommandSource>()
+        ));
+        services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldScheduleRunner>());
+        services.AddSingleton<ICommandModule, WorldScheduleCommandModule>();
         // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
         // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
         // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.
@@ -1471,6 +1487,7 @@ internal static class WorldBootComposition {
         public void RegisterAuthentication(WorldAuthenticationProvider provider) => WorldConnectionAuthentication.Register(provider: provider);
         public void RegisterHealthCheck(string path, Func<bool, (string ContentType, string Body)> handler) { }
         public void RegisterOperation(WorldExtensionProviderType provider) => WorldServiceExtensions.Register(providerType: provider);
+        public void RegisterEmbedding(WorldExtensionEmbeddingProviderType provider) => WorldServiceExtensions.Register(embeddingType: provider);
         public void RegisterRetirement(WorldSiloRetirementProvider provider) { }
         public void RegisterStorage(WorldSiloStorageProvider provider) { }
     }

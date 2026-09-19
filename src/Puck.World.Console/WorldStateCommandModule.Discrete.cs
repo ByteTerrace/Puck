@@ -209,9 +209,12 @@ public sealed partial class WorldStateCommandModule {
                 )) {
                     return CommandResult.Error(output: $"[world.observe: unknown principal '{args[0]}' — {WorldPrincipal.TokenGrammar}]");
                 }
+                var time = server.Time;
                 var rows = (WorldStateDisclosure.Compose(
+                    arena: server.Arena,
                     definition: server.Definition,
-                    recipient: principal
+                    recipient: principal,
+                    time: in time
                 ) ?? []).ToArray();
 
                 return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(

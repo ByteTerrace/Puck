@@ -247,7 +247,18 @@ internal static class WorldPostBuildWiring {
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
         var deferredVerbEchoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
 
+        var scheduleRunner = services.GetRequiredService<WorldScheduleRunner>();
+
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
+            // A scheduled command's own mutation verdict arrives here and nowhere else, so a test world that
+            // schedules a command the world must refuse has that refusal recorded in the schedule manifest.
+            if (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) {
+                scheduleRunner.NoteEcho(
+                    message: echo.Message,
+                    rejected: echo.Rejected
+                );
+            }
+
             // The per-verb half of a deferred verdict: a buffered mutation verb registered its minted correlation at
             // submit, so a LOCAL submission's verdict prints an accountable "[<verb>: …]" line beside the
             // verb-agnostic "[world.mutation …]" narration — stderr on rejection (alongside "[world.mutation
@@ -462,6 +473,10 @@ internal static class WorldPostBuildWiring {
         // composed frame has no later tick-complete hook to manifest it, so WorldCaptureScheduler.Drain finalizes it
         // here — otherwise the PNG exists, stderr says it was captured, and manifest.json silently lacks the row.
         // Presentation-only: a headless boot has no render probe and world.screenshot refuses there anyway.
+        // THE SCHEDULE DRAIN, every boot shape: a run that ended before its export tick must leave a manifest
+        // saying where it got to rather than an empty directory a reader cannot tell from a crash.
+        services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: scheduleRunner.Drain);
+
         if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
             var captureScheduler = services.GetRequiredService<WorldCaptureScheduler>();
 

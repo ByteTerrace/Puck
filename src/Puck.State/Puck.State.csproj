@@ -11,6 +11,11 @@
         <RootNamespace>Puck.State</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <!-- The reference schedule's one owning evidence manifest; ReferenceScheduleManifest.cs reads it by this
+             logical name, and its digest identifies the schedule. -->
+        <EmbeddedResource Include="ReferenceSchedule.json" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- Puck.Abstractions is named for Puck.Abstractions.Documents' converter contracts (StrictEnumConverter,
              IJsonSchemaNodeConverter, IJsonSchemaStringConverter); Puck.Assets for the canonical-document boundary the
              table document crosses; Puck.Maths for the Q48.16 carrier every state value rides. Each is declared here

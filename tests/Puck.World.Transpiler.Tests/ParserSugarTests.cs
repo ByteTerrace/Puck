@@ -155,13 +155,13 @@ public class ParserSugarTests {
             grip.Identifier
         );
     }
-    // §3 — rule / decision / option / bind
+    // §3 — rule / decision / option / local
 
     [Fact]
-    public void BindRequiresExplicitKindAndReportsPuck006WhenMissing() {
+    public void LocalRequiresExplicitKindAndReportsPuck006WhenMissing() {
         var (doc, diagnostics) = ParseWithDiagnostics(body: """
             rule "r" {
-                bind dx = 5
+                local dx = 5
                 flag = dx
             }
             """);
@@ -172,26 +172,26 @@ public class ParserSugarTests {
         );
     }
     [Fact]
-    public void BindWithExplicitKindCapturesExpressionVerbatim() {
+    public void LocalWithExplicitKindCapturesExpressionVerbatim() {
         var doc = ParseClean(body: """
             rule "r" {
-                bind dx : Int = hp - 1
+                local dx : Int = hp - 1
                 flag = dx
             }
             """);
-        var bind = Assert.IsType<BindStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
+        var local = Assert.IsType<LocalStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
 
         Assert.Equal(
             "dx",
-            bind.Name
+            local.Name
         );
         Assert.Equal(
             "Int",
-            bind.Kind
+            local.Kind
         );
         Assert.Equal(
             "hp - 1",
-            bind.ExpressionText
+            local.ExpressionText
         );
     }
     [Fact]
@@ -738,15 +738,11 @@ public class ParserSugarTests {
     public void TransformWrapsCallExpression() {
         var doc = ParseClean(body: """
             rule "r" {
-                transform t = boardCombine(row: "board", operation: Shift)
+                transform boardCombine(row: "board", operation: Shift)
             }
             """);
         var transform = Assert.IsType<TransformStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
 
-        Assert.Equal(
-            "t",
-            transform.RowName
-        );
         Assert.Equal(
             "boardCombine",
             transform.Transform.Name
@@ -790,7 +786,7 @@ public class ParserSugarTests {
         var doc = ParseClean(body: """
             rule "solitaireFreecell-move" {
                 transaction {
-                    transform t = transfer(from: $zones[solitaireFreecell[from]], to: $zones[solitaireFreecell[to]], selector: Slice, key: $cell:solitaireFreecell:card)
+                    transform transfer(from: $zones[solitaireFreecell[from]], to: $zones[solitaireFreecell[to]], selector: Slice, key: $cell:solitaireFreecell:card)
                 }
             }
             """);
@@ -849,5 +845,30 @@ public class ParserSugarTests {
             "$cell:solitaireFreecell:card",
             set.Target.Key
         );
+    }
+    [Fact]
+    public void DrawDealShuffleStatements_ParseSuccessfully() {
+        var doc = ParseClean(body: """
+            rule "r" {
+                draw deck to hand
+                deal 5 from deck to hand
+                shuffle deck with rng
+            }
+            """);
+        var rule = FirstRule(doc: doc);
+        Assert.Equal(3, rule.Statements.Count);
+
+        var draw = Assert.IsType<DrawStatementNode>(rule.Statements[0]);
+        Assert.Equal("deck", draw.From);
+        Assert.Equal("hand", draw.To);
+
+        var deal = Assert.IsType<DealStatementNode>(rule.Statements[1]);
+        Assert.Equal(5, deal.Count);
+        Assert.Equal("deck", deal.From);
+        Assert.Equal("hand", deal.To);
+
+        var shuffle = Assert.IsType<ShuffleStatementNode>(rule.Statements[2]);
+        Assert.Equal("deck", shuffle.Row);
+        Assert.Equal("rng", shuffle.Draw);
     }
 }

@@ -159,6 +159,43 @@ effect journal. Accepted gameplay batches are recorded through the existing
 extension ingress. Replay revokes the client, stops new reads, and prevents late
 results from being projected; fresh host composition is required to reconnect.
 
+## Embed text at runtime
+
+Hosts can connect runtime text embedding generation directly to world state tables:
+
+```json
+"embeddings": [
+  {
+    "name": "dialogue-embeddings",
+    "provider": "local-fixture",
+    "client": "addon:dialogue-embedder",
+    "space": "lore",
+    "requests": "said",
+    "results": "saidVectors",
+    "status": "saidStatus",
+    "maximumItems": 32,
+    "batchSize": 32,
+    "retryTicks": 60,
+    "cacheEntries": 256
+  }
+]
+```
+
+- **`provider`**: names an embedding provider instance declared under `providers`.
+- **`space`**: names an active embedding space declared in the world definition. The provider's model, revision, and dimensions must match the world space's identity.
+- **`requests`**: a `Text` state table. Cells added or updated here become candidate embedding requests.
+- **`results`**: a `Vector` state table. On success, generated unit-normalized 8-bit vectors (`sbyte[]`, radius 127) are written here under the same key.
+- **`status`**: an `Int` state table recording status: `0` = absent, `1` = pending, `2` = in flight, `3` = succeeded, `4` = failed.
+- **`maximumItems`**: maximum items processed per scan (`1..128`).
+- **`batchSize`**: chunking batch size passed to the embedding provider (`1..2048`).
+- **`retryTicks`**: simulation ticks to wait before retrying after a provider refusal or error.
+- **`cacheEntries`**: size of the connection's in-memory LRU text-to-vector cache (`0..65536`). Cache hits make zero provider calls.
+
+The host scans embedding requests asynchronously outside simulation ticks. Results are submitted as atomic
+mutation batches protected by `ExpectedCells` text guards: if request text changes while a generation task is
+in flight, the stale vector is safely discarded. During replay, recorded gameplay mutations reproduce all
+vectors deterministically without contacting any embedding provider.
+
 ## Recovery, limits, and read-back
 
 `recovery: "checkpoint"` captures a settled authority checkpoint. Worlds that

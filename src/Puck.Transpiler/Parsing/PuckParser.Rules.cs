@@ -5,7 +5,7 @@ using Puck.Transpiler.Units;
 
 namespace Puck.Transpiler.Parsing;
 
-// `rule "name" { }` and everything inside it (§2, §3): bind/decision/option/interrupt/onNoChoice, and the effect
+// `rule "name" { }` and everything inside it (§2, §3): local/decision/option/interrupt/onNoChoice, and the effect
 // statements (set/add/push/countdown/remove/schedule/transform/transaction). These bodies are parsed by a dedicated
 // dispatcher rather than the shared ParseStatement, because `identifier[...]` already means an inline array
 // property there (§2.2) — the two productions never share a parse context, so no backtracking is needed to
@@ -21,17 +21,33 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
-        if (!TryReadString(
-            context: context,
-            text: out var name
-        )) {
+
+        ExpressionNode? nameExpression = null;
+        var name = string.Empty;
+
+        // `rule $"flip-{i}" { }`: the name is not known until lowering, so it rides the node as an expression
+        // instead of a string, exactly as a block header's interpolated name does.
+        if (
+            (cursor.Current == '$') &&
+            (cursor.PeekNext() == '"')
+        ) {
+            if (!TryReadName(
+                admitted: NameForms.Interpolated | NameForms.String,
+                context: context,
+                spelling: out var ruleName,
+                text: out _
+            ) || (ruleName.Expression is null)) {
+                throw CreateException(context: context, message: "Expected an interpolated name after 'rule'");
+            }
+            nameExpression = ruleName.Expression;
+        } else if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out name)) {
             var (nLine, nCol) = GetLineAndColumn(
                 buffer: context.Scanner.Buffer,
                 offset: cursor.Offset
             );
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RuleNameMissing,
-                message: "Expected a quoted name after 'rule'",
+                message: "Expected an identifier or quoted name after 'rule'",
                 span: new SourceSpan(
                     cursor.Offset,
                     1,
@@ -42,7 +58,26 @@ public static partial class PuckParser {
             name = string.Empty;
         }
 
+        WhenStatementNode? headerWhen = null;
+        var sawWhen = false;
+
         SkipWhiteSpace(context: context);
+
+        if (TryMatchKeyword(context: context, keyword: "when")) {
+            var whenStart = cursor.Offset;
+
+            var (whenLine, whenCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: whenStart);
+            headerWhen = ParseWhenStatement(
+                col: whenCol,
+                context: context,
+                diagnostics: diagnostics,
+                line: whenLine,
+                startOffset: whenStart
+            );
+            sawWhen = true;
+            SkipWhiteSpace(context: context);
+        }
+
         if (!TryConsume(
             c: '{',
             context: context
@@ -54,7 +89,10 @@ public static partial class PuckParser {
         }
 
         var statements = new List<StatementNode>();
-        var sawWhen = false;
+
+        if (headerWhen is not null) {
+            statements.Add(item: headerWhen);
+        }
         var sawEffect = false;
 
         SkipWhiteSpace(context: context);
@@ -123,6 +161,7 @@ public static partial class PuckParser {
             Length: len,
             Line: line,
             Name: name,
+            NameExpression: nameExpression,
             Offset: startOffset,
             Statements: statements
         );
@@ -131,7 +170,7 @@ public static partial class PuckParser {
     // A rule's own wire fields. `mode = Edge` reads exactly like a cell assignment to the effect dispatcher, so
     // these names are routed to the property path first; a state row genuinely called one of them is backquoted.
     private static readonly HashSet<string> RuleBodyPropertyNames = new(comparer: StringComparer.Ordinal) {
-        "name", "gate", "mode", "forEach", "zones", "bindings", "effects", "decision",
+        "name", "gate", "mode", "forEach", "zones", "locals", "effects", "decision",
     };
 
     // Whether the next token is one of `names` used as a property (followed by ':', '=', '{' or '[').
@@ -141,10 +180,7 @@ public static partial class PuckParser {
 
         try {
             if (
-                !TryReadIdentifier(
-                context: context,
-                identifier: out var name
-            ) ||
+                !TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name) ||
                 !names.Contains(item: name)
             ) {
                 return false;
@@ -194,9 +230,9 @@ public static partial class PuckParser {
         }
         if (TryMatchKeyword(
             context: context,
-            keyword: "bind"
+            keyword: "local"
         )) {
-            return ParseBindStatement(
+            return ParseLocalStatement(
                 col: col,
                 context: context,
                 diagnostics: diagnostics,
@@ -240,17 +276,14 @@ public static partial class PuckParser {
             message: $"Unexpected token '{cursor.Current}' inside rule body"
         );
     }
-    private static BindStatementNode ParseBindStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+    private static LocalStatementNode ParseLocalStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
-        if (!TryReadIdentifier(
-            context: context,
-            identifier: out var name
-        )) {
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
             throw CreateException(
                 context: context,
-                message: "Expected a name after 'bind'"
+                message: "Expected a name after 'local'"
             );
         }
 
@@ -276,8 +309,8 @@ public static partial class PuckParser {
                 offset: cursor.Offset
             );
             diagnostics?.ReportError(
-                code: PuckDiagnosticCodes.BindKindMissing,
-                message: $"'bind {name}' is missing its required ': Int' or ': Fixed' kind annotation",
+                code: PuckDiagnosticCodes.LocalKindMissing,
+                message: $"'local {name}' is missing its required ': Int' or ': Fixed' kind annotation",
                 span: new SourceSpan(
                     cursor.Offset,
                     1,
@@ -298,8 +331,8 @@ public static partial class PuckParser {
                 offset: cursor.Offset
             );
             diagnostics?.ReportError(
-                code: PuckDiagnosticCodes.BindInitializerMissing,
-                message: $"'bind {name}' is missing its '=' initializer",
+                code: PuckDiagnosticCodes.LocalInitializerMissing,
+                message: $"'local {name}' is missing its '=' initializer",
                 span: new SourceSpan(
                     cursor.Offset,
                     1,
@@ -309,7 +342,7 @@ public static partial class PuckParser {
             );
             var missingLen = (cursor.Offset - startOffset);
 
-            return new BindStatementNode(
+            return new LocalStatementNode(
                 Column: col,
                 ExpressionText: string.Empty,
                 Kind: kind,
@@ -341,8 +374,8 @@ public static partial class PuckParser {
 
         if (text.Length == 0) {
             diagnostics?.ReportError(
-                code: PuckDiagnosticCodes.BindInitializerMissing,
-                message: $"'bind {name}' initializer is empty",
+                code: PuckDiagnosticCodes.LocalInitializerMissing,
+                message: $"'local {name}' initializer is empty",
                 span: span
             );
         } else {
@@ -355,7 +388,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new BindStatementNode(
+        return new LocalStatementNode(
             Column: col,
             ExpressionText: text,
             Kind: kind,
@@ -546,10 +579,7 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
-        if (!TryReadString(
-            context: context,
-            text: out var name
-        )) {
+        if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var name)) {
             var (nLine, nCol) = GetLineAndColumn(
                 buffer: context.Scanner.Buffer,
                 offset: cursor.Offset
@@ -767,10 +797,7 @@ public static partial class PuckParser {
             keyword: "push"
         )) {
             SkipWhiteSpace(context: context);
-            if (!TryReadIdentifier(
-                context: context,
-                identifier: out var rowName
-            )) {
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var rowName)) {
                 throw CreateException(
                     context: context,
                     message: "Expected a row name after 'push'"
@@ -947,42 +974,31 @@ public static partial class PuckParser {
             keyword: "transform"
         )) {
             SkipWhiteSpace(context: context);
-            if (!TryReadIdentifier(
-                context: context,
-                identifier: out var rowName
-            )) {
-                throw CreateException(
-                    context: context,
-                    message: "Expected a local name after 'transform'"
-                );
-            }
-            SkipWhiteSpace(context: context);
-            if (!TryConsume(
-                c: '=',
-                context: context
-            )) {
-                throw CreateException(
-                    context: context,
-                    message: $"Expected '=' after 'transform {rowName}'"
-                );
-            }
-            SkipWhiteSpace(context: context);
             var callStart = cursor.Offset;
 
             var (callLine, callCol) = GetLineAndColumn(
                 buffer: context.Scanner.Buffer,
                 offset: callStart
             );
-            if (!TryReadIdentifier(
-                context: context,
-                identifier: out var callName
-            )) {
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var callName)) {
                 throw CreateException(
                     context: context,
-                    message: "Expected a transform call after '='"
+                    message: "Expected a transform call after 'transform'"
                 );
             }
             SkipWhiteSpace(context: context);
+
+            if (cursor.Current == '=') {
+                throw new PuckParseException(
+                    $"A transform carries no result label: write 'transform <call>(...)' and name the destination in the call's own arguments, not as 'transform {callName} = ...'",
+                    callStart,
+                    callLine,
+                    callCol
+                ) {
+                    Code = PuckDiagnosticCodes.TransformResultLabel,
+                };
+            }
+
             if (cursor.Current != '(') {
                 throw CreateException(
                     context: context,
@@ -1003,7 +1019,6 @@ public static partial class PuckParser {
                 Length: len,
                 Line: line,
                 Offset: startOffset,
-                RowName: rowName,
                 Transform: call
             );
         }
@@ -1059,6 +1074,70 @@ public static partial class PuckParser {
                 (cursor.Offset - startOffset),
                 line,
                 col
+            );
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "draw")) {
+            if (!TryReadPileOperand(context: context, text: out var from)) {
+                throw CreateException(context: context, message: "Expected a source pile name after 'draw'");
+            }
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "to");
+            if (!TryReadPileOperand(context: context, text: out var to)) {
+                throw CreateException(context: context, message: "Expected a destination pile name after 'draw'");
+            }
+            return new DrawStatementNode(
+                Column: col,
+                From: from,
+                Length: (cursor.Offset - startOffset),
+                Line: line,
+                Offset: startOffset,
+                To: to
+            );
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "deal")) {
+            SkipWhiteSpace(context: context);
+            var numLiteral = ParseNumberWithOptionalUnit(context: context);
+            var count = Convert.ToInt32(value: numLiteral.Value);
+
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "from");
+            if (!TryReadPileOperand(context: context, text: out var from)) {
+                throw CreateException(context: context, message: "Expected a source pile name after 'deal'");
+            }
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "to");
+            if (!TryReadPileOperand(context: context, text: out var to)) {
+                throw CreateException(context: context, message: "Expected a destination pile name after 'deal'");
+            }
+            return new DealStatementNode(
+                Column: col,
+                Count: count,
+                From: from,
+                Length: (cursor.Offset - startOffset),
+                Line: line,
+                Offset: startOffset,
+                To: to
+            );
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "shuffle")) {
+            if (!TryReadPileOperand(context: context, text: out var pile)) {
+                throw CreateException(context: context, message: "Expected a pile name after 'shuffle'");
+            }
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "with");
+            if (!TryReadPileOperand(context: context, text: out var draw)) {
+                throw CreateException(context: context, message: "Expected a draw stream name after 'shuffle'");
+            }
+            return new ShuffleStatementNode(
+                Column: col,
+                Draw: draw,
+                Length: (cursor.Offset - startOffset),
+                Line: line,
+                Offset: startOffset,
+                Row: pile
             );
         }
 
@@ -1156,10 +1235,7 @@ public static partial class PuckParser {
             cursor.ResetPosition(position: savedPosition);
         }
 
-        if (TryReadIdentifierOrString(
-            context: context,
-            value: out var callId
-        )) {
+        if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out var callId)) {
             SkipWhiteSpace(context: context);
             if (cursor.Current == '(') {
                 var call = ParseCallExpression(
@@ -1342,10 +1418,7 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
 
-        if (!TryReadIdentifier(
-            context: context,
-            identifier: out var index
-        )) {
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var index)) {
             throw CreateException(
                 context: context,
                 message: "Expected an index name after 'repeat <count> as'"
@@ -1433,12 +1506,27 @@ public static partial class PuckParser {
         }
 
         IReadOnlyList<StatementNode>? onFailureEffects = null;
+        SourceSpan? onFailureSpan = null;
 
         SkipWhiteSpace(context: context);
+
+        var onFailureOffset = cursor.Offset;
+
         if (TryMatchKeyword(
             context: context,
             keyword: "onFailure"
         )) {
+            var (failureLine, failureCol) = GetLineAndColumn(
+                buffer: context.Scanner.Buffer,
+                offset: onFailureOffset
+            );
+
+            onFailureSpan = new SourceSpan(
+                onFailureOffset,
+                "onFailure".Length,
+                failureLine,
+                failureCol
+            );
             SkipWhiteSpace(context: context);
             if (!TryConsume(
                 c: '{',
@@ -1510,7 +1598,7 @@ public static partial class PuckParser {
             MainEffects: mainEffects,
             Offset: startOffset,
             OnFailureEffects: onFailureEffects
-        );
+        ) { OnFailureSpan = onFailureSpan };
     }
     /// <summary>Parses a <c>setState</c>/<c>addState</c>/<c>push</c> right-hand side (§2.3): a string literal, a
     /// number carrying the <c>s</c> unit and nothing else on the statement, or opaque operand text. Reports PUCK009
@@ -1527,10 +1615,7 @@ public static partial class PuckParser {
         if (cursor.Current == '"') {
             var start = cursor.Offset;
 
-            if (!TryReadString(
-                context: context,
-                text: out var text
-            )) {
+            if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var text)) {
                 throw CreateException(
                     context: context,
                     message: "Malformed string literal"
@@ -1662,10 +1747,7 @@ public static partial class PuckParser {
             )) {
                 return null;
             }
-        } else if (!TryReadIdentifier(
-            context: context,
-            identifier: out name
-        )) {
+        } else if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out name)) {
             return null;
         }
 
@@ -1726,5 +1808,15 @@ public static partial class PuckParser {
 
         cursor.ResetPosition(position: saved);
         return null;
+    }
+    private static bool TryReadPileOperand(ParseContext context, out string text) {
+        SkipWhiteSpace(context: context);
+        if (TryReadRowRefSpanRaw(context: context, span: out _, text: out text)) {
+            return true;
+        }
+        if (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out text)) {
+            return true;
+        }
+        return TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out text);
     }
 }

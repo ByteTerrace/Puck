@@ -141,7 +141,11 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
                             WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)),
                             null,
                             0
-                        )]
+                        )],
+                    // The one seat on the roster holds join ordinal 0, so the next ordinal to hand out is 1 — the
+                    // roster-integrity invariant WorldGroupMembershipValidation enforces (every member's ordinal is
+                    // distinct and below nextJoinOrdinal, which is positive whenever the roster is non-empty).
+                    NextJoinOrdinal: 1
                 ),
             ],
             Ownership: [
@@ -173,7 +177,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         // values (roles, members) are quoted: their ']' is a reserved character, and unquoted it would close the
         // envelope early for a driver scanning for the first bracket.
         Assert.Equal(
-            expected: "[world.groups: kind name=party roles=\"[leader=Drive]\" ownership=LeaderDecides lifetime=Ephemeral eviction=Remove cap=4 | group id=alpha kind=party members=\"[seat1]\" | ownership subject=Group:alpha owner=seat2]",
+            expected: "[world.groups: kind name=party roles=\"[leader=Drive]\" lifetime=Ephemeral eviction=Remove cap=4 | group id=alpha kind=party members=\"[local:seat1#0]\" | ownership subject=Group:alpha owner=seat2]",
             actual: result.Output
         );
 
@@ -181,7 +185,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         var filtered = registry.Submit(line: "world.groups alpha");
 
         Assert.Equal(
-            expected: "[world.groups: group id=alpha kind=party members=\"[seat1]\"]",
+            expected: "[world.groups: group id=alpha kind=party members=\"[local:seat1#0]\"]",
             actual: filtered.Output
         );
     }

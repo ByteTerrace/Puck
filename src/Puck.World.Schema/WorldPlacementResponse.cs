@@ -49,8 +49,8 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldPlacementResponseCondition {
     // A Fixed row's literal keeps its exact fixed-point scale; an Int/Bool row's literal rounds to the nearest whole
-    // number — the raw encoding StateCellWriter.TryParseNumericToken already gives every other author-typed literal
-    // of that kind, so a condition's comparand reads the same way a console cell edit would.
+    // number — the raw encoding CellValue.TryParse already gives every other author-typed literal of that kind, so a
+    // condition's comparand reads the same way a console cell edit would.
     private static long LiteralToRaw(CellKind kind, float literal) => (kind switch {
         CellKind.Fixed => FixedQ4816.FromDouble(value: literal).Value,
         _ => ((long)MathF.Round(

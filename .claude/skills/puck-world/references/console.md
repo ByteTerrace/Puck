@@ -122,7 +122,7 @@ Three echo models — do not conflate them:
    `NarratedMutationVerbs`) still reads the narrated way, so a verb moved to
    registration must also move out of that table. The narrated reading counts
    a mutation KIND, not a caller: anything else in the world that composes the
-   same `WorldMutation` case — a rule frame's own install, an addon guest —
+   same `WorldMutation` case — a rule firing's own export, an addon guest —
    narrates under the same `Describe()` prefix and is counted with the
    script's calls. That direction is a count mismatch (a red the runner
    reports as `accounted <verb>: N response(s) for M authored occurrence(s)`),

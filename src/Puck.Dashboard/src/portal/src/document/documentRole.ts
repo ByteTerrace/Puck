@@ -1,5 +1,5 @@
 /**
- * Classifies a parsed puck.world.def.v1 document's role from its own content — the studio
+ * Classifies a parsed puck.world.definition.v1 document's role from its own content — the studio
  * machine's own source of truth once a document is open, per its own remarks ("the role is read
  * off the document, never chosen by the user").
  *

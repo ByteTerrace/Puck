@@ -1387,10 +1387,20 @@ public static partial class WorldDefinitionValidator {
         // resolves against (a kit naming an undeclared generator or destination row refuses HERE, at load, rather
         // than at first fire) and what a state.<row>/state.<row>.<key> HUD binding resolves against —
         // refuse-unknown-by-name, the same discipline every other HudBindingVocabulary token gets.
+        var stateSpaces = ValidateSpaces(
+            spaces: definition.Spaces,
+            errors: errors
+        );
+        var stateEnums = ValidateEnums(
+            enums: definition.Enums,
+            errors: errors
+        );
         var stateRows = ValidateState(
             rows: definition.State,
             generators: definition.Generators,
             dynamicsNames: dynamicsNames,
+            spaces: stateSpaces,
+            enums: stateEnums,
             errors: errors
         );
         var actionStateSlots = ValidateActionState(
@@ -1517,7 +1527,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Rules validate LAST among the row sets: WorldRuleCompiler resolves every name a rule can spell against the
+        // Rules validate LAST among the row sets: WorldFactsCompiler resolves every name a rule can spell against the
         // whole candidate (state rows, generator rows, placement regions), so it runs once those are known good. The
         // compiler is the ONE authority on what a rule may say — this pass calls it rather than restating its rules,
         // and turns its by-name refusal into an aggregated error line.
@@ -1525,7 +1535,7 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        WorldRuleCompileContext? ruleContext = null;
+        WorldFactsCompileContext? ruleContext = null;
         var compiledRules = ValidateRules(
             rules: definition.Rules,
             definition: definition,
@@ -1533,9 +1543,20 @@ public static partial class WorldDefinitionValidator {
             context: ref ruleContext
         );
 
+        var compiledGroups = ValidateRuleGroups(
+            context: ref ruleContext,
+            definition: definition,
+            errors: errors,
+            rules: compiledRules
+        );
+        ValidateCellSets(
+            definition: definition,
+            errors: errors
+        );
+
         // Properties/Interactions validate right after Rules: the property registry's own shape check (each name
         // backed by a declared keyed int state row) needs only stateRows (already built above), and Interactions
-        // compiles through the SAME WorldRuleCompiler path Rules just did, over the whole candidate.
+        // compiles through the SAME WorldFactsCompiler path Rules just did, over the whole candidate.
         ValidateProperties(
             properties: definition.Properties,
             stateRows: stateRows,
@@ -1549,7 +1570,10 @@ public static partial class WorldDefinitionValidator {
         );
 
         if (errors.Count == 0) {
-            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(rules: compiledRules)) {
+            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(
+                catalog: definition.StateCatalog,
+                rules: compiledRules
+            )) {
                 errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
             }
             var ruleBudget = WorldRuleWorkBudget.Measure(
@@ -1852,6 +1876,14 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
+        ValidateSchedule(
+            definition: definition,
+            errors: errors
+        );
+        ValidateVerdicts(
+            definition: definition,
+            errors: errors
+        );
 
         // The window composition. The engine holds no rig of its own, so views is REQUIRED exactly when the census
         // implies a body to look at (a derived refusal, not a flat floor, mirroring kits): a seatless document
@@ -2138,6 +2170,7 @@ public static partial class WorldDefinitionValidator {
                 ? new WorldRuleCompilation(
                     definition,
                     compiledRules,
+                    compiledGroups,
                     compiledInteractions,
                     WorldRuleCompilation.CompileTables(
                         context: ruleContext,
@@ -2158,6 +2191,7 @@ public static partial class WorldDefinitionValidator {
             ? new WorldRuleCompilation(
                 definition,
                 compiledRules,
+                compiledGroups,
                 compiledInteractions,
                 WorldRuleCompilation.CompileTables(
                     context: ruleContext,

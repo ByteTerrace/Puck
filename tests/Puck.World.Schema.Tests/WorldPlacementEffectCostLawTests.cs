@@ -68,13 +68,24 @@ public sealed class WorldPlacementEffectCostLawTests {
             ))
     );
 
+    // What the compiler charges a `removePlacement` of an id: the declared row's own rebuild, or the document floor
+    // when the id names no declared row (see WorldFactsCompiler's removePlacement arm).
+    private static long RemovalCost(WorldDefinition definition, string id) => ((WorldDefinitionRows.FindPlacement(
+        id: id,
+        placements: definition.Placements
+    ) is { } placement)
+        ? WorldPlacementEffectCost.Of(
+            definition: definition,
+            placement: placement
+        )
+        : WorldPlacementEffectCost.DocumentCost);
+
     [Fact]
     public void ADecorationOrAttachOnlyRowCostsOnlyTheDocumentWrite() {
         var definition = Document(prototype: BoxPrototype(
             id: "prop",
             shapeCount: 3
         ));
-        var context = WorldRuleCompiler.Context(definition: definition);
         var placement = new WorldPlacement(
             Id: "row",
             PrototypeId: "prop",
@@ -82,14 +93,13 @@ public sealed class WorldPlacementEffectCostLawTests {
             YawDegrees: 0f,
             Scale: 1f
         );
-        var effect = new UpsertPlacementEffect(
-            describe: "upsertPlacement row",
-            placement: placement
-        );
 
         Assert.Equal(
             512L,
-            effect.Cost(context: context)
+            WorldPlacementEffectCost.Of(
+                definition: definition,
+                placement: placement
+            )
         );
     }
     [Fact]
@@ -98,7 +108,6 @@ public sealed class WorldPlacementEffectCostLawTests {
             id: "statue",
             shapeCount: 4
         ));
-        var context = WorldRuleCompiler.Context(definition: definition);
         var placement = new WorldPlacement(
             Id: "row",
             PrototypeId: "statue",
@@ -107,14 +116,13 @@ public sealed class WorldPlacementEffectCostLawTests {
             Scale: 1f,
             Solid: new WorldSolid(Margin: 0f)
         );
-        var effect = new UpsertPlacementEffect(
-            describe: "upsertPlacement row",
-            placement: placement
-        );
 
         Assert.Equal(
             1_536L,
-            effect.Cost(context: context)
+            WorldPlacementEffectCost.Of(
+                definition: definition,
+                placement: placement
+            )
         ); // 512 + 4 * 256
     }
     [Fact]
@@ -126,7 +134,6 @@ public sealed class WorldPlacementEffectCostLawTests {
             ),
             populationCapacity: 32
         );
-        var context = WorldRuleCompiler.Context(definition: definition);
         var placement = new WorldPlacement(
             Id: "row",
             PrototypeId: "critter",
@@ -140,14 +147,12 @@ public sealed class WorldPlacementEffectCostLawTests {
                 Count: 5
             )
         );
-        var effect = new UpsertPlacementEffect(
-            describe: "upsertPlacement row",
-            placement: placement
-        );
-
         Assert.Equal(
             3_072L,
-            effect.Cost(context: context)
+            WorldPlacementEffectCost.Of(
+                definition: definition,
+                placement: placement
+            )
         ); // 512 + 5 * 512
 
         // The bound is the tighter of the literal count and the peer capacity, never the population capacity alone.
@@ -157,14 +162,12 @@ public sealed class WorldPlacementEffectCostLawTests {
             Source: IntentSource.Idle,
             Count: 9_000
         );
-        var overEffect = new UpsertPlacementEffect(
-            placement: (placement with { Inhabit = overLiteral }),
-            describe: "upsertPlacement row"
-        );
-
         Assert.Equal(
             16_896L,
-            overEffect.Cost(context: context)
+            WorldPlacementEffectCost.Of(
+                definition: definition,
+                placement: (placement with { Inhabit = overLiteral })
+            )
         ); // 512 + 32 * 512
     }
     [Fact]
@@ -185,21 +188,19 @@ public sealed class WorldPlacementEffectCostLawTests {
             prototype: prototype,
             placements: [placement]
         );
-        var context = WorldRuleCompiler.Context(definition: definition);
-
         Assert.Equal(
             1_024L,
-            new RemovePlacementEffect(
-                describe: "removePlacement row",
+            RemovalCost(
+                definition: definition,
                 id: "row"
-            ).Cost(context: context)
+            )
         ); // 512 + 2 * 256
         Assert.Equal(
             512L,
-            new RemovePlacementEffect(
-                describe: "removePlacement ghost",
+            RemovalCost(
+                definition: definition,
                 id: "ghost"
-            ).Cost(context: context)
+            )
         );
     }
 }

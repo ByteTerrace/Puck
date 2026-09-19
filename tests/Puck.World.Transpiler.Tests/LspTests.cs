@@ -295,4 +295,85 @@ public class LspTests {
             json2!["id"]?.GetValue<int>()
         );
     }
+
+    [Fact]
+    public async Task LspDiagnosticsReportsPuck079ForUnlockedEmbed() {
+        var tempDir = Path.Combine(Path.GetTempPath(), "puck_lsp_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try {
+            var tempFile = Path.Combine(tempDir, "unlocked.world.puck");
+            var sourceText = """
+                schema: "puck.world.definition.v1"
+
+                state {
+                  spaces [
+                    {
+                      name: "lore"
+                      dimensions: 8
+                      model: "puck-fixture-v1"
+                      revision: "1"
+                    }
+                  ]
+                }
+
+                sql {
+                    CREATE TABLE lore_table (
+                        id TEXT PRIMARY KEY,
+                        v  VECTOR(lore)
+                    );
+                    INSERT INTO lore_table (id, v) VALUES ('k1', embed('unlocked text'));
+                }
+                """;
+            await File.WriteAllTextAsync(tempFile, sourceText, TestContext.Current.CancellationToken);
+
+            var uri = new Uri(tempFile).AbsoluteUri;
+            using var input = new MemoryStream();
+            using var output = new MemoryStream();
+
+            WriteRpcMessage(
+                input,
+                System.Text.Json.JsonSerializer.Serialize(new {
+                    jsonrpc = "2.0",
+                    method = "textDocument/didOpen",
+                    @params = new {
+                        textDocument = new {
+                            uri,
+                            languageId = "puck",
+                            version = 1,
+                            text = sourceText
+                        }
+                    }
+                })
+            );
+            WriteRpcMessage(
+                json: "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}",
+                stream: input
+            );
+            input.Position = 0;
+
+            await new PuckLanguageServer(
+                input,
+                output
+            ).RunAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+            output.Position = 0;
+            var notification = JsonNode.Parse(ReadRpcMessage(stream: output)!);
+
+            Assert.Equal(
+                "textDocument/publishDiagnostics",
+                notification?["method"]?.ToString()
+            );
+            var diagnostics = notification?["params"]?["diagnostics"]?.AsArray();
+
+            Assert.NotNull(@object: diagnostics);
+            Assert.Contains(
+                collection: diagnostics,
+                filter: diagnostic => (diagnostic?["code"]?.ToString() == "PUCK079")
+            );
+        } finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
 }

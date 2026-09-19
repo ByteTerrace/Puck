@@ -2,7 +2,7 @@ namespace Puck.State;
 
 /// <summary>
 /// Which value-over-time trait, if any, governs one cell — resolved once here from the cell's own declaration and
-/// its row's default, so every consumer (<see cref="StateReader"/>, <see cref="StateFrame"/>, the document
+/// its row's default, so every consumer (<see cref="StateReader"/>, <see cref="StateArena"/>, the document
 /// validator, rebase/settle, JSON conversion, save capture) agrees on which trait applies to a cell and reads its
 /// timing state off the identical place (<see cref="StateCell.Clock"/>).
 /// </summary>

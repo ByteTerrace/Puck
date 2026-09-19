@@ -245,17 +245,17 @@ public sealed partial class WorldBody {
                 MarkDurableDirty(slot: slot);
                 break;
             case BodyMotionOp.AddState when ((slot >= 0) && (m_actionStateDefinitions[slot].Kind == ActionStateKind.Counter)):
-                var beforeAdd = m_actionStateValues[slot];
+                var beforeAdd = StateCounter(slot: slot);
                 ApplyRawState(
                     slot: slot,
-                    requested: (m_actionStateValues[slot] + instruction.Value).Value,
+                    requested: (beforeAdd + instruction.Value).Value,
                     writer: "foreign-effect",
                     reason: "addState"
                 );
                 MarkDurableDirty(
                     slot: slot,
                     kind: WorldDocumentWriteKind.Add,
-                    operand: (m_actionStateValues[slot] - beforeAdd)
+                    operand: (StateCounter(slot: slot) - beforeAdd)
                 );
                 break;
             case BodyMotionOp.StartTimer when ((slot >= 0) && (m_actionStateDefinitions[slot].Kind == ActionStateKind.Timer)):
@@ -615,17 +615,17 @@ public sealed partial class WorldBody {
                 MarkDurableDirty(slot: instruction.StateSlot);
                 break;
             case BodyMotionOp.AddState:
-                var beforeAdd = m_actionStateValues[instruction.StateSlot];
+                var beforeAdd = StateCounter(slot: instruction.StateSlot);
                 ApplyRawState(
                     slot: instruction.StateSlot,
-                    requested: (m_actionStateValues[instruction.StateSlot] + instruction.Value).Value,
+                    requested: (beforeAdd + instruction.Value).Value,
                     writer: "world-effect",
                     reason: "addState"
                 );
                 MarkDurableDirty(
                     slot: instruction.StateSlot,
                     kind: WorldDocumentWriteKind.Add,
-                    operand: (m_actionStateValues[instruction.StateSlot] - beforeAdd)
+                    operand: (StateCounter(slot: instruction.StateSlot) - beforeAdd)
                 );
                 break;
             case BodyMotionOp.StartTimer:

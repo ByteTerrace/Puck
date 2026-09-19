@@ -1,9 +1,7 @@
 using System.Text;
 using Puck.Abstractions.Machines;
+using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
-using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 
 namespace Puck.World;
 
@@ -62,42 +60,22 @@ internal static class PuckWorldLoader {
             return false;
         }
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source: puckSource);
-
-        if (
-            parseResult.Diagnostics.HasErrors ||
-            (parseResult.Value is null)
-        ) {
-            source = null!;
-            failure = ($"[world] definition refused: syntax errors in '{path}':\n" +
-                      parseResult.Diagnostics.FormatReport(
-                filePath: path,
-                sourceText: puckSource
-            ));
-            return false;
-        }
-
-        var loweringDiags = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            basePath: Path.GetDirectoryName(path: path),
-            diagnostics: loweringDiags,
-            document: parseResult.Value
+        var compilation = WorldCompiler.Compile(
+            source: puckSource,
+            sourcePath: path
         );
 
-        if (
-            loweringDiags.HasErrors ||
-            (loweringResult.Value is null)
-        ) {
+        if (!compilation.Success) {
             source = null!;
-            failure = ($"[world] definition refused: lowering errors in '{path}':\n" +
-                      loweringDiags.FormatReport(
+            failure = ($"[world] definition refused: '{path}' does not compile:\n" +
+                      compilation.Diagnostics.FormatReport(
                 filePath: path,
                 sourceText: puckSource
             ));
             return false;
         }
 
-        var jsonObject = loweringResult.Value;
+        var jsonObject = compilation.RequireJson();
         var rawBytes = Encoding.UTF8.GetBytes(s: jsonObject.ToJsonString());
         var finalBytes = rawBytes;
 

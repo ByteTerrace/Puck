@@ -58,7 +58,7 @@ public sealed class JournalDepthLawTests {
             Kind: CellKind.Int
         );
 
-        for (var index = 0; (index < 4); index++) {
+        for (var index = 0; (index < 30); index++) {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
                 Principal: WorldPrincipal.Console,
                 Row: row
@@ -155,7 +155,7 @@ public sealed class JournalDepthLawTests {
 
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
-        for (var index = 0; (index < 1); index++) {
+        for (var index = 0; (index < 5); index++) {
             var row = new WorldStateRow(
                 Name: CellName.Parse(candidate: $"probe{index}"),
                 Kind: CellKind.Int

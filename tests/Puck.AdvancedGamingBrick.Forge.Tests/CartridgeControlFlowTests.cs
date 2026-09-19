@@ -79,7 +79,7 @@ public sealed class CartridgeControlFlowTests {
         machine.Run(frames: frames);
         return machine;
     }
-    private static CartridgeStatement Set(string target, ExpressionOp? operation, ValueExpression value) =>
+    private static CartridgeStatement Set(string target, ExpressionOp? operation, ExpressionProgram value) =>
         new(
             Kind: "set",
             Target: new CartridgeTarget(State: target),

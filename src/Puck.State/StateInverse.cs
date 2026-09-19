@@ -16,11 +16,10 @@ namespace Puck.State;
 /// nothing, and a cell no token names reads the board's own declared empty value.</para>
 /// <para>The board itself is never written directly: a document project's mutation door refuses an
 /// <c>UpsertStateCell</c>/<c>RemoveStateCell</c>/<c>UpsertStateRow</c> that targets it by name, and its
-/// whole-document validator refuses authored cells that do not match the derivation. The engine recomputes the
-/// board — from <see cref="Tokens"/>/<see cref="Codes"/>'s CURRENT values — at whole-document compose and at every
-/// install, so the journaled document already carries the derived cells and a hand-authored or stale board never
-/// survives past the next tick. See <see cref="DerivedBoards"/> for the shared recompute a host composes rather than
-/// reimplements, and <see cref="StateFrame"/> for the incremental counterpart a hypothetical evaluation keeps.</para>
+/// whole-document validator refuses authored cells that do not match the derivation. <see cref="StateArena"/>
+/// recomputes the board — from <see cref="Tokens"/>/<see cref="Codes"/>'s CURRENT values — on every keyed write to
+/// either row and on every load, so the exported document already carries the derived cells and a hand-authored or
+/// stale board never survives past the next tick.</para>
 /// </remarks>
 /// <param name="Tokens">The keyed <see cref="CellKind.Int"/> row whose cell values name cells of the board's
 /// topology — a value naming no cell means that token is off the board.</param>

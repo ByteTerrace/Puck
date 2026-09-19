@@ -1,0 +1,296 @@
+{
+  "id": "rim-drop",
+  "title": "A pitched adjacency lying flat beneath a deck hands a FALLING body to the world below, velocity and per-body register intact",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 28,
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "corner.world.json"
+  ],
+  "binding": "Two hand-authored documents under real separate authorities, colocated in one process the way seamless-four-corners-circuit is: island.world.json is a 12x12 deck at y=120 whose one adjacency lies FLAT 40 m beneath it (center 0,80,0 outwardYawDegrees 0 outwardPitchDegrees -90, 90x90), and corner.world.json owns everything below that plane through the reciprocal +90 face over its own floor at y=76. The positive leg proves four things the sky island's rim needs. (1) A pitched boundary validates and its reciprocity is proven off disk: world.adjacencies echoes 'pitch=-90 size=90x90' and a derived overlap of 3.0172, so outwardPitch -90 means outward-is-down and the owned half-space is ABOVE the plane, with width spanning the frame's Right (world +X) and height its Up (world +Z). (2) The body walks off the deck and is handed over WHILE AIRBORNE: the engine's own transfer narration carries the arrival read-back inline at pos y=79.09 with facts=airborne|falling and home=(0.00, 76.03, 0.00) — the corner's spawn, so the read is on the corner's authority — proving the hand-off is neither refused for an airborne body nor re-grounded on arrival, and that the carried vertical velocity survives (WorldFrameIsometry.MapArrival). (3) Per-body action state crosses: a Grounded-edge kit trigger adds 3 to the 'stamina' counter on every grounding, so 6 on the corner side is the island's grounding plus the corner's — the register file crossed the seam rather than resetting to its authored initial. (4) The arrival settles on the CORNER's own floor at y=76.03, a fixed point. Every asserted number is either engine-emitted at the crossing tick or a settled fixed point, and every counter is advanced by a kit action on exact simulation ticks; world.wait only has to be long enough, so a loaded host's catch-up burst cannot move any verdict. The seam's two faces point at each other — outward yaw 0/pitch -90 above, outward yaw 180/pitch +90 below — so the arrival map is the identity: the body walks to z=-13.54 on the island and arrives at z=-13.54 still facing yaw 0, directly beneath the point of fall, with the echo's own turn=0 read-back naming the untwisted seam and threshold=0.6867 naming the vertical ownership deadband in force — one authority step of the kit’s own fastest vertical travel (40 u/s at 60 Hz) plus contact skin, which is also how far past the plane the hand-off waits. A flat pair authored at one yaw on both sides instead carries a half turn (WorldFrameIsometry's own invariant: the arrival turn is destinationYaw - sourceYaw - 180), and the arrival keeps its exact x because the neighbour's frozen record still shows the traveler at the slot it departed from, and a seam's contact declines that one entity by its address (the rim-round-trip canary crosses the same seam three times and pins it on every leg). The discriminating leg boots island-solo.world.json, the same document with its references/destinations/adjacencies removed, and runs the SAME script: world.adjacencies reads 'none', no crossing and no arrival is narrated, the body leaves the deck and is still airborne|falling far below the island under its own authority, and stamina stays at 3 because it never touches ground a second time.",
+  "positive": {
+    "world": "tests/Puck.World.Canaries/rim-drop/island.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.adjacencies",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.adjacencies",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the pitched boundary validates and echoes outward-is-down with a 90x90 aperture",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "under[destination=corner counterpart=sky center=0,80,0 yaw=0 pitch=-90 size=90x90",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the reciprocal pair derives an overlap off the neighbour document on disk",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "state=open overlap=3.0172 threshold=0.6867 turn=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the body starts grounded on the island deck",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.00, 120.03, 0.00) yaw=0° pitch=0° roll=0° facts=grounded",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the flat seam fires an automatic hand-off",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.adjacency: 'boot/under' seat 1 crossed -> queued transfer=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the traveller is handed to the corner authority",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "'boot' seat 1 departed -> '6~global6~corner' seat 1 arrived",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the arrival is directly beneath the point of fall, below the seam plane, still airborne and still falling, on the corner's own authority",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.00, 79.09, -13.54) yaw=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the arriving body is neither re-grounded nor velocity-zeroed",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "facts=airborne|falling home=(0.00, 76.03, 0.00)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the traveller settles on the corner's own floor",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.00, 76.03, -13.54) yaw=0° pitch=0° roll=0° facts=grounded",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the read-back follows the seat onto the named corner instance",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "instance:6~global6~corner anchor=body:0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the per-body stamina register crossed the seam intact (3 island + 3 corner)",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "stamina:counter/ephemeral writable=false envelope=none requested=6 effective=6",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the seam reports the arrived entity at a generation-addressed remote slot",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "entities=6~global6~corner/0:1",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no mutation was rejected",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "world.mutation rejected",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no unhandled exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/rim-drop/island-solo.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.adjacencies",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.adjacencies",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the control document declares no seam at all",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.adjacencies: none]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the control body starts on the same deck",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.00, 120.03, 0.00) yaw=0° pitch=0° roll=0° facts=grounded",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no crossing can fire without a seam",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.adjacency:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "nothing arrives anywhere",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "seat 1 arrived",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "the control body is still falling under the island's own authority",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "facts=airborne|falling home=(0.00, 120.03, 0.00)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no instance but boot was ever raised",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "instance:6~global6~corner",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "stamina is never advanced a second time, because the body never grounds again",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "stamina:counter/ephemeral writable=false envelope=none requested=3 effective=3",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no unhandled exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}

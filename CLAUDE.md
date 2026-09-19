@@ -44,8 +44,9 @@ Use the topic relevant to the task; game plans are not prerequisite reading for 
 | [docs/development/contributing.md](docs/development/contributing.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
 | [docs/overview.md](docs/overview.md) and [docs/architecture/README.md](docs/architecture/README.md) | What the engine does and how its runtime boundaries fit together. |
 | [docs/plans/README.md](docs/plans/README.md) and [docs/game/README.md](docs/game/README.md) | Proposed engineering work and the reference game, when the task concerns them. |
-| [docs/plans/world-runtime-consolidation.md](docs/plans/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation approach and remaining implementation work, and what is deliberately excluded. Use the linked development milestones for recorded verification. |
-| [docs/plans/retail-scale-cartridges.md](docs/plans/retail-scale-cartridges.md) | What `puck.cartridge.v1` needs before a retail-scale game is authorable as data: the program model it lacks, the `Puck.State` vocabulary it should adopt rather than restate, which ceilings get re-derived, and the authoring gaps. Its status review names the commit it was checked against. |
+| [docs/architecture/worlds.md](docs/architecture/worlds.md) and [src/Puck.World.Server/README.md](src/Puck.World.Server/README.md) | How Puck represents and runs worlds today: documents, authoritative simulation, and the server's current structure. |
+| [docs/plans/runtime-and-delivery.md](docs/plans/runtime-and-delivery.md) | The product tree, compiled worlds, the ROM ledger, release pairs, and the `WorldServer` facade split that rides the state rebuild — proposed work, not where architecture questions belong. |
+| [docs/plans/machines-and-cartridges.md](docs/plans/machines-and-cartridges.md) | Hosted machines with named identity, the cabinet module, and what `puck.cartridge.v1` needs before a retail-scale game is authorable as data. |
 
 Use [Writing documentation](docs/development/documentation.md) for human prose,
 titles, filenames, and navigation. Skills retain agent execution procedures.
@@ -276,7 +277,7 @@ Release without executing its operational body. See
 ## Reference-game work
 
 Read [the game design](docs/game/design.md) for the authored experience and
-[the game development plan](docs/plans/game-development.md) for proposed work.
+[the play programme](docs/plans/play.md) for proposed work.
 These are not prerequisites for unrelated library tasks. The configuration and
 session design choices live in [engine design decisions](docs/decisions/engine-design.md#configuration-and-operations-remain-discoverable).
 Use [the World guide](src/Puck.World/README.md) for current commands and verify

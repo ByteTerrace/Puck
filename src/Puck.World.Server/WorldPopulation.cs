@@ -290,6 +290,7 @@ public sealed partial class WorldPopulation {
     private readonly List<WorldDesignation> m_designationOutputs = [];
     private readonly List<WorldGeneratorInvocation> m_generatorInvocations = [];
     private readonly List<DurableStateOutput> m_durableStateOutputs = [];
+    private readonly WorldActionStateLane m_actionStateLane = new();
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 LocalForward = new(
         X: FixedQ4816.Zero,
@@ -344,6 +345,8 @@ public sealed partial class WorldPopulation {
 
         for (var index = 0; (index < Capacity); index++) {
             m_entries[index] = new Entry {
+                Index = index,
+                Lane = m_actionStateLane,
                 KitIndex = SelectRow(
                 index: index,
                 assignment: definition.Assignment,
@@ -378,7 +381,29 @@ public sealed partial class WorldPopulation {
     // index-seeded heading a fresh activation faces the new body toward. Body is the entry's own sim — null while
     // inactive, minted on activation (a session join for a seat, the census or an inhabitant join for a peer).
     private sealed class Entry {
-        public bool Active { get; set; }
+        // The arena slot lanes' roster is this flag, by construction rather than by convention at every caller:
+        // occupying a slot admits its lane ordinal and births every register at its authored initial, and releasing
+        // one clears what it answered, so the next occupant can never inherit what the last one left. Both halves
+        // are idempotent, so a caller that also binds a body's lane (WorldPopulation.BuildBodyForKit, which must,
+        // because a body restored from a capture writes its registers before it is marked active) costs nothing.
+        public bool Active {
+            get;
+            set {
+                if (field == value) {
+                    return;
+                }
+
+                field = value;
+
+                if (value) {
+                    Lane.Join(ordinal: Index);
+                } else {
+                    Lane.Leave(ordinal: Index);
+                }
+            }
+        }
+        public required int Index { get; init; }
+        public required WorldActionStateLane Lane { get; init; }
         public WorldBody? Body { get; set; }
         public Vector3 BodyColor { get; set; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
@@ -436,7 +461,7 @@ public sealed partial class WorldPopulation {
         // Admission templates that ACTUALLY reached the live table for THIS connection (empty for a plain census/
         // inhabitant activation, which never carries a verified remote identity). Updated after initial admission
         // and every rebuild re-authorization from successful grant-door outcomes only; an authored-but-rejected row
-        // is not a revocation candidate. Read back only by WorldServer.RemintPeerAdmissionGrants before the rebuild
+        // is not a revocation candidate. Read back only by WorldGrants.RemintPeerAdmissionGrants before the rebuild
         // wipes the live table. Cleared alongside IsRemoteHuman on every teardown path.
         public IReadOnlyList<WorldAdmissionGrant> AdmissionInstalledGrantTemplates { get; set; } = [];
         // Explicit runtime revocations inferred at each rebuild from baseline templates absent in the live table.

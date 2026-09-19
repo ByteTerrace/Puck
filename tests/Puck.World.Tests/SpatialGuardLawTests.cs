@@ -235,7 +235,7 @@ public sealed class SpatialGuardLawTests {
                     CellKind.Text,
                     Cells: [new StateCell(
                             WorldStateRow.SlotKey,
-                            Text: extent
+                            CellValue.Text(value: extent)
                         )]
                 )]),
             };

@@ -7,12 +7,12 @@ using Puck.Transpiler;
 
 namespace Puck.World.Transpiler.Decompiler;
 
-// `rule "name" { }` inverse (§1-§3): gate/bind/decision/option/interrupt/onNoChoice, and every effect statement.
-// Every `ValueExpression`-typed field (`compareValue.left`/`right`, `setState`/`addState`/`push.expression`,
-// `bindings[].expression`, `options[].score`) is printed VERBATIM — never reprinted through `ExpressionSpelling`,
-// since `ValueExpressionJsonConverter.Write` stored the author's own source text on the way in. Anything the
-// dedicated sugar below does not cover (every `Puck.World.Schema` extension arm, every `StateTransform` sub-arm)
-// falls through to `FormatCallForm` — the same escape hatch `FormatValue` uses everywhere else in the document.
+// `rule "name" { }` inverse (§1-§3): gate/local/decision/option/interrupt/onNoChoice, and every effect statement.
+// Every `ExpressionProgram`-typed field (`compareValue.left`/`right`, `setState`/`addState`/`push.expression`,
+// `locals[].expression`, `options[].score`) holds the IR and prints back through
+// `WorldExpressionJson`/`ExpressionSpelling`, so print-then-parse is the identity. Anything the dedicated sugar
+// below does not cover (every `Puck.World.Schema` extension arm, every `StateTransform` sub-arm) falls through to
+// `FormatCallForm` — the same escape hatch `FormatValue` uses everywhere else in the document.
 public static partial class WorldDecompiler {
     // Whether every row in a `rules` array is a rule the `rule "name" { }` grammar can carry. A row with no `name`
     // is a WorldDocumentBasis merge directive, not a rule: it has no name to quote and no effects to author, and
@@ -50,7 +50,7 @@ public static partial class WorldDecompiler {
     }
 
     private static readonly HashSet<string> RuleKnownKeys = new(comparer: StringComparer.Ordinal) {
-        "name", "gate", "bindings", "mode", "forEach", "zones", "decision", "effects",
+        "name", "gate", "locals", "mode", "forEach", "zones", "decision", "effects",
     };
 
     private static void AppendRuleBlock(StringBuilder sb, JsonObject rule, int indentLevel) {
@@ -58,31 +58,44 @@ public static partial class WorldDecompiler {
             c: ' ',
             count: (indentLevel * 4)
         );
-        var inner = new string(
-            c: ' ',
-            count: ((indentLevel + 1) * 4)
-        );
         var name = (rule["name"]?.ToString() ?? "");
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
             $"{indent}rule \"{EscapeString(s: name)}\" {{"
         );
+        AppendRuleBody(
+            indentLevel: (indentLevel + 1),
+            rule: rule,
+            sb: sb
+        );
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
+    }
+    // A rule's body without its `rule "name" { }` wrapper, so a workflow step -- whose body IS one rule's body --
+    // prints through the same writer the standalone spelling uses.
+    private static void AppendRuleBody(StringBuilder sb, JsonObject rule, int indentLevel) {
+        var inner = new string(
+            c: ' ',
+            count: (indentLevel * 4)
+        );
 
         if (rule["gate"] is JsonObject gate) {
             AppendGateProperty(
                 gate: gate,
-                indentLevel: (indentLevel + 1),
+                indentLevel: indentLevel,
                 sb: sb
             );
         }
-        if (rule["bindings"] is JsonArray bindings) {
-            if (CanSugarBindings(bindings: bindings)) {
-                foreach (var b in bindings) {
-                    if (b is JsonObject bindObj) {
-                        AppendBindStatement(
-                            bind: bindObj,
-                            indentLevel: (indentLevel + 1),
+        if (rule["locals"] is JsonArray locals) {
+            if (CanSugarLocals(locals: locals)) {
+                foreach (var l in locals) {
+                    if (l is JsonObject localObj) {
+                        AppendLocalStatement(
+                            local: localObj,
+                            indentLevel: indentLevel,
                             sb: sb
                         );
                     }
@@ -90,9 +103,9 @@ public static partial class WorldDecompiler {
             } else {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"{inner}bindings{FieldSeparator(value: bindings)}{FormatValue(
-                        indentLevel: (indentLevel + 1),
-                        node: bindings
+                    $"{inner}locals{FieldSeparator(value: locals)}{FormatValue(
+                        indentLevel: indentLevel,
+                        node: locals
                     )}"
                 );
             }
@@ -101,7 +114,7 @@ public static partial class WorldDecompiler {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"{inner}mode: {FormatValue(
-                    indentLevel: (indentLevel + 1),
+                    indentLevel: indentLevel,
                     node: mode
                 )}"
             );
@@ -110,7 +123,7 @@ public static partial class WorldDecompiler {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"{inner}forEach: {FormatValue(
-                    indentLevel: (indentLevel + 1),
+                    indentLevel: indentLevel,
                     node: forEach
                 )}"
             );
@@ -119,7 +132,7 @@ public static partial class WorldDecompiler {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"{inner}zones{FieldSeparator(value: zones)}{FormatValue(
-                    indentLevel: (indentLevel + 1),
+                    indentLevel: indentLevel,
                     node: zones
                 )}"
             );
@@ -127,7 +140,7 @@ public static partial class WorldDecompiler {
         if (rule["decision"] is JsonObject decision) {
             AppendDecisionBlock(
                 decision: decision,
-                indentLevel: (indentLevel + 1),
+                indentLevel: indentLevel,
                 sb: sb
             );
         }
@@ -135,7 +148,7 @@ public static partial class WorldDecompiler {
             foreach (var e in effects) {
                 AppendEffectStatement(
                     effectNode: e,
-                    indentLevel: (indentLevel + 1),
+                    indentLevel: indentLevel,
                     sb: sb
                 );
             }
@@ -151,48 +164,43 @@ public static partial class WorldDecompiler {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"{inner}`{k}`{FieldSeparator(value: v)}{FormatValue(
-                    indentLevel: (indentLevel + 1),
+                    indentLevel: indentLevel,
                     node: v
                 )}"
             );
         }
-
-        sb.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"{indent}}}"
-        );
     }
-    // `RuleBinding.Kind` is a required positional parameter with no default, so a row omitting it — or spelling it
-    // as a kind the `bind` grammar does not admit — is off-contract; inventing one here would author a binding the
-    // source never asked for, so the whole array falls back to a plain `bindings:` property instead.
-    private static bool CanSugarBindings(JsonArray bindings) {
-        foreach (var item in bindings) {
+    // `RuleLocal.Kind` is a required positional parameter with no default, so a row omitting it — or spelling it
+    // as a kind the `local` grammar does not admit — is off-contract; inventing one here would author a local the
+    // source never asked for, so the whole array falls back to a plain `locals:` property instead.
+    private static bool CanSugarLocals(JsonArray locals) {
+        foreach (var item in locals) {
             if (
-                (item is not JsonObject bind) ||
+                (item is not JsonObject local) ||
                 !PuckDslVocabulary.TryParseComparisonKind(
-                bind["kind"]?.ToString(),
+                local["kind"]?.ToString(),
                 out _
             ) ||
-                (bind["name"] is null) ||
-                (bind["expression"] is null)
+                (local["name"] is null) ||
+                (local["expression"] is null)
             ) {
                 return false;
             }
         }
         return true;
     }
-    private static void AppendBindStatement(StringBuilder sb, JsonObject bind, int indentLevel) {
+    private static void AppendLocalStatement(StringBuilder sb, JsonObject local, int indentLevel) {
         var inner = new string(
             c: ' ',
             count: (indentLevel * 4)
         );
-        var name = (bind["name"]?.ToString() ?? "");
-        var kind = (bind["kind"]?.ToString() ?? "");
-        var expression = (bind["expression"]?.ToString() ?? "");
+        var name = (local["name"]?.ToString() ?? "");
+        var kind = (local["kind"]?.ToString() ?? "");
+        var expression = WorldExpressionJson.Text(node: local["expression"]);
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{inner}bind {name} : {kind} = {expression}"
+            $"{inner}local {name} : {kind} = {expression}"
         );
     }
     // ---- Decision block inverse (§3.1/§3.2) -----------------------------------------------------------------
@@ -342,7 +350,7 @@ public static partial class WorldDecompiler {
         if (option["score"] is { } score) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"{inner}score: {score}"
+                $"{inner}score: {WorldExpressionJson.Text(node: score)}"
             );
         }
         if (option["effects"] is JsonArray effects) {
@@ -433,8 +441,7 @@ public static partial class WorldDecompiler {
         node["kind"]!.ToString(),
         out _
     ))
-            && ((node["kind"] is not null) || !CompareValueNeedsKindAnnotation(node: node))
-            && !(node["left"]?.ToString() ?? "").TrimStart().StartsWith(value: '(')),
+            && ((node["kind"] is not null) || !CompareValueNeedsKindAnnotation(node: node))),
         // A single-child (or empty) `all`/`any` has no bare-sugar spelling at all: `AndGate`/`OrGate` only ever
         // build the `All`/`Any` wrapper when MORE than one operand was matched at the same keyword — one operand
         // (or zero) collapses to that operand directly (or nothing), so the wrapper itself is unrecoverable from
@@ -460,11 +467,11 @@ public static partial class WorldDecompiler {
         return (
             ExpressionSpelling.TryParse(
             error: out _,
-            text: printed,
-            tokens: out var tokens
+            program: out var parsed,
+            text: printed
         ) &&
-            (tokens.Count == 1) &&
-            (tokens[0] is ValueToken.State state) &&
+            (parsed.Instructions.Count == 1) &&
+            (parsed.Instructions[0] is { Payload: InstructionPayload.State state }) &&
             string.Equals(
             a: state.Name,
             b: name,
@@ -562,8 +569,8 @@ public static partial class WorldDecompiler {
     // what keeps the node a `compareValue` on recompile.
     private static bool CompareValueNeedsKindAnnotation(JsonObject node) =>
         (WorldDocumentEmitter.ClassifyBareComparison(
-            (node["left"]?.ToString() ?? ""),
-            (node["right"]?.ToString() ?? ""),
+            WorldExpressionJson.Text(node: node["left"]),
+            WorldExpressionJson.Text(node: node["right"]),
             out _,
             out _
         )
@@ -576,8 +583,11 @@ public static partial class WorldDecompiler {
     // nothing in `Parsing/` changes. `Fixed` is the default and stays elided wherever the bare text re-lowers to a
     // `compareValue` on its own.
     private static string FormatCompareValue(JsonObject node) {
-        var left = (node["left"]?.ToString() ?? "");
-        var right = (node["right"]?.ToString() ?? "");
+        // A composed operand is parenthesized: the comparison joins the two printed operands with its own symbol,
+        // and an operand whose own top-level operator binds looser than a comparison would otherwise re-parse as a
+        // chain. A bare read or constant stays bare, which is what keeps `ClassifyBareComparison` reading it back.
+        var left = WorldExpressionJson.ComparisonOperand(node: node["left"]);
+        var right = WorldExpressionJson.ComparisonOperand(node: node["right"]);
         var symbol = ComparisonToSymbol(comparison: node["comparison"]?.ToString());
         var comparison = $"{left} {symbol} {right}";
 
@@ -715,9 +725,8 @@ public static partial class WorldDecompiler {
     // stripped and the underlying expression reprinted, parenthesized when it is a bare name) that a literal
     // `state[key]` splice would get wrong.
     private static string FormatRowRef(string name, string? key) =>
-        ExpressionSpelling.Print(tokens: [new ValueToken.State(
-                Key: key,
-                Name: name
+        ExpressionSpelling.Print(instructions: [Instruction.Operand(key: key,
+                name: name
             )]);
     // Whether an effect's own `state`/`key` target is safe to spell as `RowRef` sugar (§2.2) at all — see
     // `RowRefRoundTrips`.
@@ -748,7 +757,7 @@ public static partial class WorldDecompiler {
             )}s", "valueSeconds");
         }
         if (obj["expression"] is { } exprVal) {
-            var text = (exprVal.ToString() ?? "");
+            var text = WorldExpressionJson.Text(node: exprVal);
 
             return (ExpressionRoundTripsThroughOperandRhs(text: text)
                 ? (text, "expression")
@@ -789,17 +798,17 @@ public static partial class WorldDecompiler {
     private static bool ExpressionRoundTripsThroughOperandRhs(string text) {
         if (!ExpressionSpelling.TryParse(
             error: out _,
-            text: text,
-            tokens: out var tokens
+            program: out var parsed,
+            text: text
         )) {
             return false;
         }
-        if (tokens.Count != 1) {
+        if (parsed.Instructions.Count != 1) {
             return true;
         }
-        return tokens[0] switch {
-            ValueToken.Constant => false,
-            ValueToken.State { Key: null } => false,
+        return parsed.Instructions[0] switch {
+            { Payload: InstructionPayload.Constant } => false,
+            { Payload: InstructionPayload.State { Key: null } } => false,
             _ => true,
         };
     }
@@ -901,9 +910,31 @@ public static partial class WorldDecompiler {
                 obj: obj
             );
         }
-        // The local name carries no wire representation (ActionEffect.TransformState has no `state`/name field at
-        // all) — any placeholder round-trips identically, since the emitter discards it.
-        return $"transform t = {FormatCallForm(
+        var type = inner["$type"]?.ToString();
+
+        if (string.Equals(a: type, b: "transfer", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            var from = inner["from"]?.ToString();
+            var to = inner["to"]?.ToString();
+            var selector = inner["selector"]?.ToString();
+            var count = (((inner["count"] is JsonNode c) && int.TryParse(c.ToString(), out var cv)) ? cv : 1);
+            var key = inner["key"]?.ToString();
+            var insertFirst = ((inner["insertFirst"] is JsonNode inf) && bool.TryParse(inf.ToString(), out var ib) && ib);
+
+            if (string.Equals(a: selector, b: "First", comparisonType: StringComparison.OrdinalIgnoreCase) && (key is null) && !insertFirst) {
+                if (inner.ContainsKey(propertyName: "count")) {
+                    return $"deal {count} from {from} to {to}";
+                }
+                return $"draw {from} to {to}";
+            }
+        } else if (string.Equals(a: type, b: "shuffle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            var row = inner["row"]?.ToString();
+            var draw = inner["draw"]?.ToString();
+
+            if (!string.IsNullOrEmpty(value: row) && !string.IsNullOrEmpty(value: draw)) {
+                return $"shuffle {row} with {draw}";
+            }
+        }
+        return $"transform {FormatCallForm(
             indentLevel: 0,
             obj: inner
         )}";

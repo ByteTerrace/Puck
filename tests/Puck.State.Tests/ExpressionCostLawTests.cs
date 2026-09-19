@@ -9,27 +9,27 @@ namespace Puck.State.Tests;
 /// iterative prime testing scale according to their static instruction and iteration complexity.
 /// </summary>
 public sealed class ExpressionCostLawTests {
-    private static readonly RuleCompileContext Context = new(
+    private static readonly Rules.RuleCompileContext Context = new(
         section: null,
         catalog: StateCatalog.Compile(section: null),
         tables: null,
         patterns: null,
         generators: null,
         simulationRateHz: 240,
-        vocabulary: RuleVocabulary.Core
+        vocabulary: Rules.RuleVocabulary.Core
     );
 
-    private static CompiledExpressionToken[] Compile(string text, CellKind kind = CellKind.Int) {
+    private static Rules.CompiledExpressionToken[] Compile(string text, CellKind kind = CellKind.Int) {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
                 text: text,
-                tokens: out var tokens
+                program: out var parsed
             ),
             userMessage: error
         );
-        return RuleCompiler.CompileExpression(
-            expression: new ValueExpression(Tokens: tokens),
+        return Rules.RuleCompiler.CompileExpression(
+            expression: parsed,
             kind: kind,
             ruleName: "law",
             verb: "law",
@@ -40,7 +40,7 @@ public sealed class ExpressionCostLawTests {
     [Fact]
     public void EveryExpressionOpcodeHasAStrictlyPositiveCost() {
         foreach (var op in Enum.GetValues<ExpressionOp>()) {
-            var cost = RuleWorkBudget.OperationCost(operation: op);
+            var cost = Rules.RuleWorkBudget.OperationCost(operation: op);
 
             Assert.True(
                 condition: (cost >= 1L),
@@ -50,18 +50,18 @@ public sealed class ExpressionCostLawTests {
     }
     [Fact]
     public void HeuristicOperationsRetainTheirExistingTierOrdering() {
-        var alu = RuleWorkBudget.OperationCost(operation: ExpressionOp.Add);
-        var select = RuleWorkBudget.OperationCost(operation: ExpressionOp.Select);
-        var popcnt = RuleWorkBudget.OperationCost(operation: ExpressionOp.PopCount);
-        var pext = RuleWorkBudget.OperationCost(operation: ExpressionOp.ParallelBitExtract);
-        var mul = RuleWorkBudget.OperationCost(operation: ExpressionOp.Multiply);
-        var div = RuleWorkBudget.OperationCost(operation: ExpressionOp.Divide);
-        var mod = RuleWorkBudget.OperationCost(operation: ExpressionOp.Modulo);
-        var sqrt = RuleWorkBudget.OperationCost(operation: ExpressionOp.SquareRoot);
-        var trig = RuleWorkBudget.OperationCost(operation: ExpressionOp.Sine);
-        var gcd = RuleWorkBudget.OperationCost(operation: ExpressionOp.GreatestCommonDivisor);
-        var hilbert = RuleWorkBudget.OperationCost(operation: ExpressionOp.Hilbert);
-        var isPrime = RuleWorkBudget.OperationCost(operation: ExpressionOp.IsPrime);
+        var alu = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Add);
+        var select = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Select);
+        var popcnt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.PopCount);
+        var pext = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.ParallelBitExtract);
+        var mul = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Multiply);
+        var div = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Divide);
+        var mod = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Modulo);
+        var sqrt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.SquareRoot);
+        var trig = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Sine);
+        var gcd = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.GreatestCommonDivisor);
+        var hilbert = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Hilbert);
+        var isPrime = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.IsPrime);
 
         Assert.Equal(
             actual: alu,
@@ -105,35 +105,54 @@ public sealed class ExpressionCostLawTests {
     }
     [Fact]
     public void HeuristicWeightsCannotMasqueradeAsCalibratedCycles() {
+        var registered = ReferenceScheduleManifest.Coefficients.ToDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: coefficient => coefficient.Bound,
+            keySelector: coefficient => coefficient.Operation
+        );
+
         foreach (var operation in Enum.GetValues<ExpressionOp>()) {
-            Assert.True(condition: ReferenceSchedule.OperationCostBound(
+            // A price is answerable only where the manifest records evidence for it; the heuristic weight beside it
+            // is never that answer.
+            var bound = ReferenceSchedule.OperationCostBound(
                 operation,
                 CellKind.Int
-            ).IsUnmodeled);
-            Assert.True(condition: ReferenceSchedule.OperationCostBound(
-                operation,
-                CellKind.Fixed
-            ).IsUnmodeled);
+            );
+
+            Assert.Equal(
+                registered[operation.ToString()],
+                bound
+            );
+            Assert.Equal(
+                bound,
+                ReferenceSchedule.OperationCostBound(
+                    operation,
+                    CellKind.Fixed
+                )
+            );
             Assert.InRange(
-                RuleWorkBudget.OperationCost(operation),
+                Rules.RuleWorkBudget.OperationCost(operation),
                 1L,
                 (long.MaxValue - 1L)
             );
         }
-        Assert.Null(@object: CostModel.Default.EvidenceDigest);
-        Assert.True(condition: new RuleCost(
+        Assert.Equal(
+            ReferenceScheduleManifest.Digest,
+            CostModel.Default.EvidenceDigest
+        );
+        Assert.True(condition: new Rules.RuleCost(
             Check: 1,
             Effects: 3,
             Setup: 0
         ).ToBound().IsUnmodeled);
         Assert.Equal(
             long.MaxValue,
-            RuleWorkBudget.OperationCost(((ExpressionOp)byte.MaxValue))
+            Rules.RuleWorkBudget.OperationCost(((ExpressionOp)byte.MaxValue))
         );
     }
     [Fact]
     public void RuntimeProgramsStillAccountForEveryOperation() {
-        CompiledExpressionToken[] program = [
+        Rules.CompiledExpressionToken[] program = [
             new(
                 ExpressionOp.Constant,
                 Constant: 3
@@ -149,7 +168,7 @@ public sealed class ExpressionCostLawTests {
 
         Assert.Equal(
             22L,
-            RuleWorkBudget.ExpressionCost(
+            Rules.RuleWorkBudget.ExpressionCost(
                 context: Context,
                 tokens: program
             )
@@ -165,7 +184,7 @@ public sealed class ExpressionCostLawTests {
     public void SuccessfulConstantExpressionsCostOneConstant(string text) {
         Assert.Equal(
             1L,
-            RuleWorkBudget.ExpressionCost(
+            Rules.RuleWorkBudget.ExpressionCost(
                 tokens: Compile(text),
                 context: Context
             )

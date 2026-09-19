@@ -33,7 +33,7 @@ public sealed class StateCycleWordLawTests {
         Kind: kind,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value,
+                Value: ((kind == CellKind.Fixed) ? CellValue.Fixed(rawBits: value) : CellValue.Int(value: value)),
                 Clock: clock
             )],
         Cycle: cycle

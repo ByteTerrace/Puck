@@ -1,7 +1,8 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using Puck.Abstractions.Documents;
 using Puck.World.Transpiler.Addons;
+using Puck.World.Transpiler.Embeddings;
+using Puck.World.Transpiler.Vocabulary;
 using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
@@ -11,19 +12,107 @@ namespace Puck.World.Transpiler.Lowering;
 
 /// <summary>Lowers a Puck authoring AST into a canonical JSON document according to puck.world.definition.v1.</summary>
 public static partial class WorldDocumentEmitter {
+    // The described vocabulary this pass admits from. Read off the pass's own vocabulary rather than the shipped
+    // table, so a law can hand the lowering a description it invented and watch the refusal appear.
+    private static WorldConstructTable Constructs(DocumentScope scope) => ((scope.Vocabulary is WorldDocumentVocabulary world)
+        ? world.Constructs
+        : WorldConstructs.Table
+    );
+    // The cell kinds a described member is admitted on, and whether one kind is among them. An undescribed member,
+    // or one whose admission does not turn on the kind, throws rather than folding to an empty set: an empty set
+    // would silently refuse every kind.
+    private static IReadOnlyList<string> AdmittedKindsOf(string? enclosing, string keyword, string member, WorldMemberPosition position, DocumentScope scope) {
+        var described = (Constructs(scope: scope).TryGet(
+            construct: out var construct,
+            enclosing: enclosing,
+            keyword: keyword
+        )
+            ? construct!.Members.FirstOrDefault(predicate: candidate => (
+                (candidate.Position == position) &&
+                string.Equals(
+                a: candidate.Name,
+                b: member,
+                comparisonType: StringComparison.Ordinal
+            )
+            ))
+            : null
+        );
+
+        return (((described is not null) && (described.AdmittedKinds.Count > 0))
+            ? described.AdmittedKinds
+            : throw new InvalidOperationException(message: $"'{keyword}' describes no {position.ToString().ToLowerInvariant()} '{member}' whose admission turns on the row's kind.")
+        );
+    }
+    private static bool AdmitsKind(string? enclosing, string keyword, string member, WorldMemberPosition position, string kind, DocumentScope scope) => AdmittedKindsOf(
+        enclosing: enclosing,
+        keyword: keyword,
+        member: member,
+        position: position,
+        scope: scope
+    ).Contains(
+        comparer: StringComparer.Ordinal,
+        value: kind
+    );
+    // The kinds a refusal names, in the order the description lists them.
+    private static string KindList(IReadOnlyList<string> kinds) => string.Join(
+        separator: " or ",
+        values: kinds
+    );
+    // An undescribed construct throws rather than folding to an empty set, which would silently admit nothing.
+    private static HashSet<string> ModifiersOf(string? enclosing, string keyword, DocumentScope scope) => (Constructs(scope: scope).TryGet(
+        construct: out var construct,
+        enclosing: enclosing,
+        keyword: keyword
+    )
+        ? new HashSet<string>(collection: construct!.ModifierNames, comparer: StringComparer.Ordinal)
+        : throw new InvalidOperationException(message: $"'{keyword}' is not a construct described inside {(enclosing is null
+            ? "the document"
+            : $"'{enclosing}'")}.")
+    );
+
     /// <summary>Lowers the AST <see cref="DocumentNode"/> into a mutable <see cref="JsonObject"/> with diagnostic reporting.</summary>
     /// <param name="document">The document AST to lower.</param>
     /// <param name="basePath">The optional base directory for resolving relative assets such as WASM addons.</param>
     /// <param name="sourceMap">Optional SourceMap to populate with JSON pointer mappings.</param>
     /// <param name="diagnostics">Optional DiagnosticBag to collect lowering diagnostics.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
+    /// <param name="embeddings">Optional embedding lock resolving embed literals to vectors.</param>
+    /// <param name="vocabulary">The described vocabulary to lower against; the shipped one when omitted.</param>
     /// <returns>A CompilationResult carrying the structured JsonObject and diagnostics.</returns>
-    public static CompilationResult<JsonObject> LowerWithDiagnostics(
+    /// <remarks>One stage of a compile, not a compile: it neither walks the import graph nor finds the embedding
+    /// lock beside the source. <see cref="WorldCompiler"/> is what callers outside this assembly reach for.</remarks>
+    internal static CompilationResult<JsonObject> LowerWithDiagnostics(
         DocumentNode document,
         string? basePath = null,
         SourceMap? sourceMap = null,
         DiagnosticBag? diagnostics = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        EmbeddingLock? embeddings = null,
+        WorldDocumentVocabulary? vocabulary = null
+    ) =>
+        LowerWithDiagnostics(
+            basePath: basePath,
+            cancellationToken: cancellationToken,
+            diagnostics: diagnostics,
+            discoveredEmbeddings: out _,
+            document: document,
+            embeddings: embeddings,
+            sourceMap: sourceMap,
+            testWorlds: out _,
+            vocabulary: vocabulary
+        );
+    /// <summary>Lowers a DocumentNode with diagnostics and reports all discovered embedded texts per space.</summary>
+    internal static CompilationResult<JsonObject> LowerWithDiagnostics(
+        DocumentNode document,
+        string? basePath,
+        SourceMap? sourceMap,
+        DiagnosticBag? diagnostics,
+        CancellationToken cancellationToken,
+        EmbeddingLock? embeddings,
+        out IReadOnlyDictionary<string, HashSet<string>> discoveredEmbeddings,
+        out IReadOnlyList<WorldTestWorld> testWorlds,
+        string? testStem = null,
+        WorldDocumentVocabulary? vocabulary = null
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -49,7 +138,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         var scope = new DocumentScope(
-            WorldDocumentVocabulary.Instance,
+            (vocabulary ?? WorldDocumentVocabulary.Instance),
             basePath,
             sourceMap: sourceMap,
             diagnostics: diagnostics,
@@ -58,7 +147,19 @@ public static partial class WorldDocumentEmitter {
             Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken },
         };
 
+        var textsMap = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
+
+        scope.Annotations["DiscoveredEmbeddings"] = textsMap;
+
+        if (embeddings is not null) {
+            scope.Annotations["EmbeddingLock"] = embeddings;
+        }
+
+        scope.Annotations["WorldDocumentRoot"] = root;
+
         scope.IndexDeclarations(statements: document.Statements);
+        IndexStateFamilies(statements: document.Statements, scope: scope);
+        IndexTypesAndDerivedState(statements: document.Statements, scope: scope);
         try {
             foreach (var statement in document.Statements) {
                 ProcessStatement(
@@ -75,54 +176,48 @@ public static partial class WorldDocumentEmitter {
             );
         }
 
+        discoveredEmbeddings = textsMap;
+        EmitStateFamilies(
+            root: root,
+            scope: scope
+        );
+        WorldExpressionJson.Lower(
+            diagnostics: diagnostics,
+            node: root
+        );
+
         var canonicalRoot = ((JsonObject)Canonicalize(node: root)!);
+
+        testWorlds = LowerTests(
+            document: canonicalRoot,
+            scope: scope,
+            stem: (testStem ?? "world")
+        );
 
         return new CompilationResult<JsonObject>(
             Diagnostics: diagnostics,
             Value: canonicalRoot
         );
     }
+    /// <summary>Records an embedded text discovered during lowering for a space.</summary>
+    public static void RecordDiscoveredEmbeddingText(DocumentScope scope, string spaceName, string text) {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(spaceName);
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (scope.Annotations.TryGetValue(key: "DiscoveredEmbeddings", value: out var obj) &&
+            (obj is Dictionary<string, HashSet<string>> map)) {
+            if (!map.TryGetValue(key: spaceName, value: out var set)) {
+                set = new HashSet<string>(comparer: StringComparer.Ordinal);
+                map[spaceName] = set;
+            }
+            set.Add(item: text);
+        }
+    }
     /// <summary>Recursively canonicalizes a JSON node by sorting every object's properties ordinally.</summary>
     /// <param name="node">The node to canonicalize.</param>
     /// <returns>A new canonicalized node, or <see langword="null"/> when the input was null.</returns>
     public static JsonNode? Canonicalize(JsonNode? node) => DocumentLowering.Canonicalize(node: node);
-    /// <summary>Lowers the AST <see cref="DocumentNode"/> into a mutable <see cref="JsonObject"/>.</summary>
-    /// <param name="document">The document AST to lower.</param>
-    /// <param name="basePath">The optional base directory for resolving relative assets such as WASM addons.</param>
-    /// <returns>A structured <see cref="JsonObject"/> representation of the world definition.</returns>
-    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
-    public static JsonObject Lower(DocumentNode document, string? basePath = null) =>
-        LowerWithDiagnostics(
-            document,
-            basePath
-        ).RequireValue();
-    /// <summary>Compiles the document AST into canonical UTF-8 JSON bytes.</summary>
-    /// <param name="document">The document AST.</param>
-    /// <param name="basePath">The optional base directory for relative assets.</param>
-    /// <returns>Deterministic canonical UTF-8 bytes.</returns>
-    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
-    public static byte[] CompileToUtf8Bytes(DocumentNode document, string? basePath = null) {
-        var node = Lower(
-            basePath: basePath,
-            document: document
-        );
-
-        return CanonicalJsonDocument.Serialize(node: node);
-    }
-    /// <summary>Compiles the document AST into canonical JSON string.</summary>
-    /// <param name="document">The document AST.</param>
-    /// <param name="basePath">The optional base directory for relative assets.</param>
-    /// <returns>Deterministic canonical JSON string.</returns>
-    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
-    public static string CompileToJson(DocumentNode document, string? basePath = null) {
-        var bytes = CompileToUtf8Bytes(
-            basePath: basePath,
-            document: document
-        );
-
-        return Encoding.UTF8.GetString(bytes: bytes);
-    }
-
     private static void ProcessStatement(StatementNode statement, JsonObject target, DocumentScope scope) {
         using var evaluation = scope.Budget.Enter(span: statement.Span);
 
@@ -223,6 +318,51 @@ public static partial class WorldDocumentEmitter {
                     break;
                 }
 
+            case CellSetDeclarationNode setNode: {
+                    LowerCellSetDeclaration(
+                        parent: target,
+                        scope: scope,
+                        setNode: setNode
+                    );
+                    break;
+                }
+
+            case PatternDeclarationNode patternNode: {
+                    LowerPatternDeclaration(
+                        parent: target,
+                        pattern: patternNode,
+                        scope: scope
+                    );
+                    break;
+                }
+
+            case RuleScopeNode scopeNode: {
+                    LowerRuleScope(
+                        parent: target,
+                        scope: scope,
+                        scopeNode: scopeNode
+                    );
+                    break;
+                }
+
+            case StabilizeGroupNode stabilizeNode: {
+                    LowerStabilizeGroup(
+                        parent: target,
+                        scope: scope,
+                        stabilizeNode: stabilizeNode
+                    );
+                    break;
+                }
+
+            case WorkflowNode workflowNode: {
+                    LowerWorkflow(
+                        parent: target,
+                        scope: scope,
+                        workflowNode: workflowNode
+                    );
+                    break;
+                }
+
             case AddonRequestNode reqNode: {
                     if (target["requests"] is not JsonArray reqArr) {
                         reqArr = [];
@@ -270,6 +410,31 @@ public static partial class WorldDocumentEmitter {
                 // Parser error recovery placeholder; already recorded in DiagnosticBag
                 break;
 
+            case TestDeclarationNode test: {
+                    // A test reaches no member of the document it is written in. It is collected against the
+                    // scope and lowered once the document is finished, since a generated test world is that
+                    // finished document plus what the test asked for.
+                    if (!ReferenceEquals(
+                        objA: target,
+                        objB: (scope.Annotations.TryGetValue(
+                        key: "WorldDocumentRoot",
+                        value: out var documentRoot
+                    )
+                            ? documentRoot
+                            : null)
+                    )) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.TestShapeInadmissible,
+                            message: $"test '{test.Name}' is written inside another construct — a test states a whole world's behaviour, so it stands at the document's own root",
+                            span: test.Span
+                        );
+
+                        break;
+                    }
+                    GetOrCreateTests(scope: scope).Add(item: test);
+                    break;
+                }
+
             case StateTableDeclarationNode or StateSlotDeclarationNode or StatePileDeclarationNode or StateGridDeclarationNode: {
                     var keyword = (statement switch {
                         StateTableDeclarationNode => "table",
@@ -286,6 +451,23 @@ public static partial class WorldDocumentEmitter {
                     break;
                 }
 
+            case EmbeddedBlockNode embeddedBlock: {
+                    if (string.Equals(a: embeddedBlock.Language, b: "sql", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        LowerStateSqlBlock(
+                            block: embeddedBlock,
+                            parent: target,
+                            scope: scope
+                        );
+                    } else {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.UnrecognizedSectionStatement,
+                            message: $"Unrecognized embedded language '{embeddedBlock.Language}'",
+                            span: embeddedBlock.Span
+                        );
+                    }
+                    break;
+                }
+
             case BlockNode blockNode: {
                     LowerBlock(
                         block: blockNode,
@@ -296,6 +478,8 @@ public static partial class WorldDocumentEmitter {
                 }
         }
     }
+    // The table names which arm a root construct's block takes; a block whose identifier names no root construct
+    // — every block nested inside another construct — takes the generic path.
     private static void LowerBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         var id = block.Identifier;
 
@@ -306,220 +490,169 @@ public static partial class WorldDocumentEmitter {
             span: block.Span
         );
 
-        // Views block has specialized semantic mappings
-        if (string.Equals(
-            a: id,
-            b: "views",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            var viewsObj = ((parent["views"] as JsonObject) ?? []);
+        var lowered = (WorldConstructs.Table.RootArmOf(keyword: id) ?? WorldRootArm.Field) switch {
+            WorldRootArm.Addons => LowerRowCollectionBlock(
+                block: block,
+                hashed: true,
+                member: "addons",
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.Cartridge => LowerCartridgeBlock(
+                block: block,
+                blockPointer: blockPointer,
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.Materials => LowerRowCollectionBlock(
+                block: block,
+                hashed: false,
+                member: "materials",
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.Placements => LowerPlacementsBlock(
+                block: block,
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.Prototypes => LowerPrototypesBlock(
+                block: block,
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.Shapes => LowerShapeBlock(
+                block: block,
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.State => LowerStateSectionBlock(
+                block: block,
+                parent: parent,
+                scope: scope
+            ),
+            WorldRootArm.Views => LowerViewsSectionBlock(
+                block: block,
+                blockPointer: blockPointer,
+                parent: parent,
+                scope: scope
+            ),
+            // Written as a statement of its own kind rather than as a block, so no block reaches these; the
+            // compile-time layer reaches no document member at all, and `Field` IS the generic path.
+            WorldRootArm.CompileTime or WorldRootArm.Field or WorldRootArm.Patterns or WorldRootArm.RuleGroups or WorldRootArm.Rules or WorldRootArm.Sets => false,
+            // An arm added to the description with no lowering here throws by name at the first document that
+            // takes it, which is what `ConstructRootArmLawTests` drives one probe per root construct to reach.
+            _ => throw new NotSupportedException(message: $"'{id}' takes a root arm this lowering has no case for."),
+        };
 
-            parent["views"] = viewsObj;
-
-            var oldPointer = scope.CurrentPointer;
-
-            scope.CurrentPointer = blockPointer;
-            foreach (var stmt in block.Statements) {
-                ProcessViewsStatement(
-                    scope: scope,
-                    stmt: stmt,
-                    viewsObj: viewsObj
-                );
-            }
-            scope.CurrentPointer = oldPointer;
+        if (lowered) {
             return;
         }
 
-        // Addon collection block
-        if (string.Equals(
-            a: id,
-            b: "addon",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            if (parent["addons"] is not JsonArray addonsArr) {
-                addonsArr = [];
-                parent["addons"] = addonsArr;
-            }
-            var addonIdx = addonsArr.Count;
-            var addonPointer = $"{scope.CurrentPointer}/addons/{addonIdx}";
+        var oldPointer = scope.CurrentPointer;
 
-            scope.SourceMap?.Register(
-                jsonPointer: addonPointer,
-                span: block.Span
+        scope.CurrentPointer = blockPointer;
+        var blockObj = LowerBlockToObject(
+            block: block,
+            scope: scope
+        );
+
+        scope.CurrentPointer = oldPointer;
+
+        if (DocumentLowering.ResolveBlockName(
+            block: block,
+            scope: scope
+        ) is { } resolvedblockObj) {
+            blockObj["name"] = resolvedblockObj;
+        }
+        if (block.Target is not null) {
+            blockObj["target"] = block.Target;
+        }
+
+        parent[id] = blockObj;
+    }
+    // `views { layout … pipeline … seatRig … seatControl { … } }` — each child has its own semantic mapping, so
+    // the section's body is walked rather than lowered key by key.
+    private static bool LowerViewsSectionBlock(BlockNode block, JsonObject parent, DocumentScope scope, string blockPointer) {
+        var viewsObj = ((parent["views"] as JsonObject) ?? []);
+
+        parent["views"] = viewsObj;
+
+        var oldPointer = scope.CurrentPointer;
+
+        scope.CurrentPointer = blockPointer;
+        foreach (var stmt in block.Statements) {
+            ProcessViewsStatement(
+                scope: scope,
+                stmt: stmt,
+                viewsObj: viewsObj
             );
+        }
+        scope.CurrentPointer = oldPointer;
 
-            var oldPointer = scope.CurrentPointer;
+        return true;
+    }
+    // One `addon { }`/`material { }` block, appended to the named root array under its own pointer. An addon
+    // additionally resolves its content hash.
+    private static bool LowerRowCollectionBlock(BlockNode block, JsonObject parent, DocumentScope scope, string member, bool hashed) {
+        if (parent[member] is not JsonArray rows) {
+            rows = [];
+            parent[member] = rows;
+        }
 
-            scope.CurrentPointer = addonPointer;
-            var addonObj = LowerBlockToObject(
-                block: block,
-                scope: scope
-            );
+        var rowPointer = $"{scope.CurrentPointer}/{member}/{rows.Count}";
 
-            scope.CurrentPointer = oldPointer;
+        scope.SourceMap?.Register(
+            jsonPointer: rowPointer,
+            span: block.Span
+        );
 
-            if (DocumentLowering.ResolveBlockName(
-                block: block,
-                scope: scope
-            ) is { } resolvedaddonObj) {
-                addonObj["name"] = resolvedaddonObj;
-            }
+        var oldPointer = scope.CurrentPointer;
+
+        scope.CurrentPointer = rowPointer;
+        var rowObj = LowerBlockToObject(
+            block: block,
+            scope: scope
+        );
+
+        scope.CurrentPointer = oldPointer;
+
+        if (DocumentLowering.ResolveBlockName(
+            block: block,
+            scope: scope
+        ) is { } resolved) {
+            rowObj["name"] = resolved;
+        }
+        if (hashed) {
             ResolveAddonHash(
-                addon: addonObj,
+                addon: rowObj,
                 scope: scope,
                 span: block.Span
             );
-            addonsArr.AppendNode(item: addonObj);
-            return;
         }
+        rows.AppendNode(item: rowObj);
 
-        // Shape collection block (puck.creation.v1) — CreationDocument.Shapes.
-        if (string.Equals(
-            a: id,
-            b: "shape",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            LowerShapeBlock(
-                block: block,
-                parent: parent,
-                scope: scope
-            );
-            return;
-        }
+        return true;
+    }
+    private static bool LowerCartridgeBlock(BlockNode block, JsonObject parent, DocumentScope scope, string blockPointer) {
+        var oldPointer = scope.CurrentPointer;
 
-        // State section — `state { world { table/slot/row declarations } body [...] identity [...] }`. Only
-        // `world` gets the declaration-block treatment; `body`/`identity`/`lattices` fall through to the general
-        // per-child handling below exactly as before (an array, or an ordinary nested block).
-        if (string.Equals(
-            a: id,
-            b: "state",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            LowerStateSectionBlock(
-                block: block,
-                parent: parent,
-                scope: scope
-            );
-            return;
-        }
+        scope.CurrentPointer = blockPointer;
+        var cartObj = LowerBlockToObject(
+            block: block,
+            scope: scope
+        );
 
-        // Placements section — WorldPlacementsSection { policy, rows }, with `placement "id" { }` sub-blocks.
-        if (string.Equals(
-            a: id,
-            b: "placements",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            LowerPlacementsBlock(
-                block: block,
-                parent: parent,
-                scope: scope
-            );
-            return;
-        }
+        scope.CurrentPointer = oldPointer;
 
-        // Prototypes section — an array of WorldPrototype { id, document } rows, with `prototype "id" { document { } }`
-        // sub-blocks. `document` is an ordinary nested block (falls through to the general-block case below), so a
-        // `shape` statement inside it reaches the same LowerShapeBlock path a root-level creation document uses.
-        if (string.Equals(
-            a: id,
-            b: "prototypes",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            LowerPrototypesBlock(
-                block: block,
-                parent: parent,
-                scope: scope
-            );
-            return;
-        }
+        ResolveAddonHash(
+            addon: cartObj,
+            scope: scope,
+            span: block.Span
+        );
+        parent["cartridge"] = cartObj;
 
-        // Material collection block (puck.creation.v1)
-        if (string.Equals(
-            a: id,
-            b: "material",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            if (parent["materials"] is not JsonArray materialsArr) {
-                materialsArr = [];
-                parent["materials"] = materialsArr;
-            }
-            var matIdx = materialsArr.Count;
-            var matPointer = $"{scope.CurrentPointer}/materials/{matIdx}";
-
-            scope.SourceMap?.Register(
-                jsonPointer: matPointer,
-                span: block.Span
-            );
-
-            var oldPointer = scope.CurrentPointer;
-
-            scope.CurrentPointer = matPointer;
-            var matObj = LowerBlockToObject(
-                block: block,
-                scope: scope
-            );
-
-            scope.CurrentPointer = oldPointer;
-
-            if (DocumentLowering.ResolveBlockName(
-                block: block,
-                scope: scope
-            ) is { } resolvedmatObj) {
-                matObj["name"] = resolvedmatObj;
-            }
-            materialsArr.AppendNode(item: matObj);
-            return;
-        }
-
-        // Cartridge block (puck.cartridge.v1)
-        if (string.Equals(
-            a: id,
-            b: "cartridge",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            var oldPointer = scope.CurrentPointer;
-
-            scope.CurrentPointer = blockPointer;
-            var cartObj = LowerBlockToObject(
-                block: block,
-                scope: scope
-            );
-
-            scope.CurrentPointer = oldPointer;
-
-            ResolveAddonHash(
-                addon: cartObj,
-                scope: scope,
-                span: block.Span
-            );
-            parent["cartridge"] = cartObj;
-            return;
-        }
-
-        // General block
-        {
-            var oldPointer = scope.CurrentPointer;
-
-            scope.CurrentPointer = blockPointer;
-            var blockObj = LowerBlockToObject(
-                block: block,
-                scope: scope
-            );
-
-            scope.CurrentPointer = oldPointer;
-
-            if (DocumentLowering.ResolveBlockName(
-                block: block,
-                scope: scope
-            ) is { } resolvedblockObj) {
-                blockObj["name"] = resolvedblockObj;
-            }
-            if (block.Target is not null) {
-                blockObj["target"] = block.Target;
-            }
-
-            parent[id] = blockObj;
-        }
+        return true;
     }
     private static JsonObject LowerBlockToObject(BlockNode block, DocumentScope scope) {
         var obj = new JsonObject();
@@ -569,6 +702,10 @@ public static partial class WorldDocumentEmitter {
                     layoutsArr = [];
                     viewsObj["layouts"] = layoutsArr;
                 }
+                scope.SourceMap?.Register(
+                    jsonPointer: $"{scope.CurrentPointer}/layouts/{layoutsArr.Count}",
+                    span: subBlock.Span
+                );
                 var layoutObj = LowerBlockToObject(
                     block: subBlock,
                     scope: scope
@@ -583,6 +720,10 @@ public static partial class WorldDocumentEmitter {
                     pipelinesArr = [];
                     viewsObj["pipelines"] = pipelinesArr;
                 }
+                scope.SourceMap?.Register(
+                    jsonPointer: $"{scope.CurrentPointer}/pipelines/{pipelinesArr.Count}",
+                    span: subBlock.Span
+                );
                 var pipelineObj = LowerBlockToObject(
                     block: subBlock,
                     scope: scope
@@ -593,6 +734,10 @@ public static partial class WorldDocumentEmitter {
                 }
                 pipelinesArr.AppendNode(item: pipelineObj);
             } else if (subId is "seatrig") {
+                scope.SourceMap?.Register(
+                    jsonPointer: $"{scope.CurrentPointer}/seatRig",
+                    span: subBlock.Span
+                );
                 var seatRigObj = LowerBlockToObject(
                     block: subBlock,
                     scope: scope
@@ -603,6 +748,10 @@ public static partial class WorldDocumentEmitter {
                 }
                 viewsObj["seatRig"] = seatRigObj;
             } else if (subId is "seatcontrol") {
+                scope.SourceMap?.Register(
+                    jsonPointer: $"{scope.CurrentPointer}/seatControl",
+                    span: subBlock.Span
+                );
                 viewsObj["seatControl"] = LowerBlockToObject(
                     block: subBlock,
                     scope: scope

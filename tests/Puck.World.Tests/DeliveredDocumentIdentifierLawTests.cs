@@ -79,7 +79,7 @@ public sealed class DeliveredDocumentIdentifierLawTests {
                 Kind: CellKind.Text,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: GroupKey),
-                        Text: groupName
+                        Value: CellValue.Text(value: groupName)
                     )]
             ),
             ]),
@@ -139,7 +139,7 @@ public sealed class DeliveredDocumentIdentifierLawTests {
     /// document that faults at the first read of the value.</summary>
     [Fact]
     public void PeerProjectionNamingAStateCell_Refuses_ControlLiteralClean() {
-        var projection = WorldProjection.Compose(
+        var projection = Fixtures.Project(
             definition: Live(groupName: "actionGroup"),
             tier: WorldDisclosureTier.Presentation,
             authority: "127.0.0.1:5000",
@@ -185,7 +185,7 @@ public sealed class DeliveredDocumentIdentifierLawTests {
     /// for.</summary>
     [Fact]
     public void PresentationEgressCarriesNoStateReference() {
-        var projection = WorldProjection.Compose(
+        var projection = Fixtures.Project(
             definition: Live(groupName: "actionGroup"),
             tier: WorldDisclosureTier.Presentation,
             authority: "127.0.0.1:5000",

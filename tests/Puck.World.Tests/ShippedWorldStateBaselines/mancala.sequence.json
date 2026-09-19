@@ -1,0 +1,64 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/mancala.world.json",
+  "host": {
+    "kind": "spliced"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "mancalaSelectedPit",
+        "key": "$value",
+        "value": 2
+      }
+    },
+    {
+      "add": {
+        "row": "mancalaMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 90
+    },
+    {
+      "set": {
+        "row": "mancalaSelectedPit",
+        "key": "$value",
+        "value": 8
+      }
+    },
+    {
+      "add": {
+        "row": "mancalaMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 90
+    },
+    {
+      "set": {
+        "row": "mancalaSelectedPit",
+        "key": "$value",
+        "value": 3
+      }
+    },
+    {
+      "add": {
+        "row": "mancalaMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 400
+    }
+  ]
+}

@@ -362,7 +362,7 @@ public sealed class SolitaireLawTests {
             Row(
                 f: f,
                 name: "solitaireKlondikeFace"
-            ).Cells!.Single(predicate: c => (c.Key.Value == "40")).Value
+            ).Cells!.Single(predicate: c => (c.Key.Value == "40")).Value.Raw
         );
     }
     [InlineData(12, true)]
@@ -633,7 +633,7 @@ public sealed class SolitaireLawTests {
 
         definition = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(selector: r => ((r.Name.Value == "solitaireKlondike")
             ? r with { Cells = [.. r.Cells!.Select(selector: c => ((c.Key.Value == "activeOption")
-                ? c with { Value = amount }
+                ? c with { Value = CellValue.Int(value: amount) }
                 : c))] }
             : r))] } };
         using var f = Fixtures.FreshServer(definition);

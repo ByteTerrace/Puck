@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/mancala.world.json",
+  "simulationRateHz": 30,
+  "ticks": 590,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 10,
+      "interactionRows": 0,
+      "evaluationSlots": 23,
+      "workUnitsPerTick": 25530,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 10,
+      "interactionRows": 0,
+      "evaluationSlots": 23,
+      "workUnitsPerTick": 25530,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

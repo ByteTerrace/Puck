@@ -46,13 +46,15 @@ public sealed class DiscreteStateLawTests {
                     direction: direction
                 );
 
-                if (neighbour >= 0) { Assert.Equal(
+                if (neighbour >= 0) {
+                    Assert.Equal(
                     cell,
                     topology.Neighbour(
                         cell: neighbour,
                         direction: ((direction + 3) % 6)
                     )
-                ); }
+                );
+                }
             }
         }
         var cycle = TopologyCompilation.Find(
@@ -162,7 +164,7 @@ public sealed class DiscreteStateLawTests {
             new(
                 Name(value: "deck"),
                 CellKind.Bool,
-                Cells: [Cell("a")],
+                Cells: [Cell("a", kind: CellKind.Bool)],
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -180,28 +182,40 @@ public sealed class DiscreteStateLawTests {
             )
         );
 
-        Assert.True(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
-                "turn",
-                0
-            ),
-            WorldPrincipal.Console
-        ));
-        Assert.False(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
-                "turn",
-                1
-            ),
-            WorldPrincipal.Console
-        ));
-        using var fixture = Fixtures.FreshServer(definition: definition);
         var operation = new StateTransform.Transfer(
             "deck",
             "hand",
             ZoneSelector.First
         );
+
+        Assert.True(condition: WorldArenaTransforms.TryApply(
+            actor: WorldPrincipal.Console,
+            candidate: out _,
+            definition: definition,
+            guard: new(
+                "turn",
+                0
+            ),
+            instance: "test",
+            reason: out _,
+            tick: 1,
+            transform: operation
+        ));
+        Assert.False(condition: WorldArenaTransforms.TryApply(
+            actor: WorldPrincipal.Console,
+            candidate: out _,
+            definition: definition,
+            guard: new(
+                "turn",
+                1
+            ),
+            instance: "test",
+            reason: out _,
+            tick: 1,
+            transform: operation
+        ));
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
 
         fixture.Server.Submit(
             new(
@@ -213,7 +227,8 @@ public sealed class DiscreteStateLawTests {
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
                     WorldPrincipal.Console,
                     operation
-                ))
+                )),
+                Guid.NewGuid()
             ),
             _ => { }
         );
@@ -243,7 +258,8 @@ public sealed class DiscreteStateLawTests {
                         "turn",
                         0
                     )
-                ))
+                )),
+                Guid.NewGuid()
             ),
             _ => { }
         );
@@ -262,9 +278,9 @@ public sealed class DiscreteStateLawTests {
     }
 
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static StateCell Cell(string key, long value = 1) => new(
+    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
         Name(value: key),
-        value
+        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0)) : CellValue.Int(value: value))
     );
     private static WorldStateRow Row(string name, params StateCell[] cells) => new(
         Name(value: name),
@@ -283,10 +299,13 @@ public sealed class DiscreteStateLawTests {
         depth,
         Wrap: wrap
     );
-    private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with { StateRaw = new(
+    private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with {
+        StateRaw = new(
         World: rows,
         Lattices: [Grid()]
-    ), Rules = [] };
+    ),
+        Rules = [],
+    };
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(
         document.State,
         row
@@ -361,7 +380,7 @@ public sealed class DiscreteStateLawTests {
                     CellKind.Int,
                     Cells: [new StateCell(
                             WorldStateRow.SlotKey,
-                            0L
+                            CellValue.Int(value: 0L)
                         )]
                 )],
             Lattices: [Grid(wrap: TopologyWrap.Both)]
@@ -387,7 +406,7 @@ public sealed class DiscreteStateLawTests {
                     row: "blocker"
                 ).Cells,
                 key: WorldStateRow.SlotKey
-            )!.Value
+            )!.Value.Raw
         );
     }
 
@@ -429,11 +448,6 @@ public sealed class DiscreteStateLawTests {
             PatternsRaw = [CapturePattern()],
         };
 
-        Assert.True(condition: CompiledPatterns.TryCompileAll(
-            definition.Patterns,
-            out var patterns,
-            []
-        ));
         var operation = new StateTransform.SetRay(
             Direction: "E",
             From: "0",
@@ -443,15 +457,14 @@ public sealed class DiscreteStateLawTests {
         );
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 operation,
                 WorldPrincipal.World,
                 1,
                 "test",
                 out var changed,
-                out var reason,
-                patterns
+                out var reason
             ),
             userMessage: reason
         );
@@ -462,7 +475,7 @@ public sealed class DiscreteStateLawTests {
             ).Cells!,
             c => Assert.Equal(
                 1,
-                c.Value
+                c.Value.Raw
             )
         );
         Assert.Equal(
@@ -470,7 +483,7 @@ public sealed class DiscreteStateLawTests {
             Find(
                 document: definition,
                 row: "board"
-            ).Cells![1].Value
+            ).Cells![1].Value.Raw
         );
         // Control: a board holding only "through" values never reaches the required "until" terminator, so the
         // longest accepted prefix is empty and the whole write is refused.
@@ -495,20 +508,14 @@ public sealed class DiscreteStateLawTests {
             PatternsRaw = [CapturePattern()],
         };
 
-        Assert.True(condition: CompiledPatterns.TryCompileAll(
-            open.Patterns,
-            out var openPatterns,
-            []
-        ));
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             open,
             operation,
             WorldPrincipal.World,
             1,
             "test",
             out var refused,
-            out _,
-            openPatterns
+            out _
         ));
         Assert.Same(
             actual: refused,
@@ -541,7 +548,7 @@ public sealed class DiscreteStateLawTests {
             new(
                 Name(value: "column"),
                 CellKind.Bool,
-                Cells: [Cell("a"), Cell("b"), Cell("c"), Cell("d")],
+                Cells: [Cell("a", kind: CellKind.Bool), Cell("b", kind: CellKind.Bool), Cell("c", kind: CellKind.Bool), Cell("d", kind: CellKind.Bool)],
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -550,7 +557,7 @@ public sealed class DiscreteStateLawTests {
             new(
                 Name(value: "other"),
                 CellKind.Bool,
-                Cells: [Cell("e")],
+                Cells: [Cell("e", kind: CellKind.Bool)],
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -575,7 +582,7 @@ public sealed class DiscreteStateLawTests {
         );
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 slice,
                 WorldPrincipal.Console,
@@ -601,7 +608,7 @@ public sealed class DiscreteStateLawTests {
             ).Cells!.Select(selector: c => c.Key.Value)
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 slice with { InsertFirst = true },
                 WorldPrincipal.Console,
@@ -619,7 +626,7 @@ public sealed class DiscreteStateLawTests {
                 row: "other"
             ).Cells!.Select(selector: c => c.Key.Value)
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             slice with { To = "small" },
             WorldPrincipal.Console,
@@ -632,7 +639,7 @@ public sealed class DiscreteStateLawTests {
             actualString: full,
             expectedSubstring: "full"
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             slice with { Key = "zz" },
             WorldPrincipal.Console,
@@ -645,7 +652,7 @@ public sealed class DiscreteStateLawTests {
             actualString: missing,
             expectedSubstring: "does not contain"
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             slice with { Count = 2 },
             WorldPrincipal.Console,
@@ -655,7 +662,7 @@ public sealed class DiscreteStateLawTests {
             out _
         ));
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.Transfer(
                     "column",
@@ -740,10 +747,10 @@ public sealed class DiscreteStateLawTests {
         static long[] Members(WorldDefinition document, string row) => [.. Find(
                 document: document,
                 row: row
-            ).Cells!.Where(predicate: c => (c.Value != 0)).Select(selector: c => long.Parse(s: c.Key.Value)).Order()];
+            ).Cells!.Where(predicate: c => (c.Value.Raw != 0)).Select(selector: c => long.Parse(s: c.Key.Value)).Order()];
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.BoardCombine(
                     "out",
@@ -767,7 +774,7 @@ public sealed class DiscreteStateLawTests {
             )
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.BoardCombine(
                     "out",
@@ -791,7 +798,7 @@ public sealed class DiscreteStateLawTests {
             )
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.BoardCombine(
                     "out",
@@ -815,18 +822,20 @@ public sealed class DiscreteStateLawTests {
                 row: "out"
             )
         );
+        // A board is stored dense: every cell of the topology is present, and the ones the set algebra did not
+        // admit carry the row's empty value rather than being absent.
         Assert.All(
             Find(
                 document: only,
                 row: "out"
-            ).Cells!,
+            ).Cells!.Where(predicate: c => (c.Value.Raw != 0)),
             c => Assert.Equal(
                 7,
-                c.Value
+                c.Value.Raw
             )
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.BoardCombine(
                     "out",
@@ -849,7 +858,7 @@ public sealed class DiscreteStateLawTests {
             ).Length
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.BoardCombine(
                     "out",
@@ -873,7 +882,7 @@ public sealed class DiscreteStateLawTests {
             )
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.BoardCombine(
                     "out",
@@ -896,7 +905,7 @@ public sealed class DiscreteStateLawTests {
             ).Length
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 filled,
                 new StateTransform.BoardCombine(
                     "out",
@@ -914,7 +923,7 @@ public sealed class DiscreteStateLawTests {
             document: cleared,
             row: "out"
         ));
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.BoardCombine(
                 "out",
@@ -932,7 +941,7 @@ public sealed class DiscreteStateLawTests {
             actualString: badDirection,
             expectedSubstring: "does not declare"
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.BoardCombine(
                 "out",
@@ -945,7 +954,7 @@ public sealed class DiscreteStateLawTests {
             out _,
             out _
         ));
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.BoardCombine(
                 "out",
@@ -984,7 +993,7 @@ public sealed class DiscreteStateLawTests {
             new(
                 Name(value: "pile"),
                 CellKind.Bool,
-                Cells: [Cell("c"), Cell("a"), Cell("b")],
+                Cells: [Cell("c", kind: CellKind.Bool), Cell("a", kind: CellKind.Bool), Cell("b", kind: CellKind.Bool)],
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -1028,7 +1037,7 @@ public sealed class DiscreteStateLawTests {
         );
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 arrange,
                 WorldPrincipal.Console,
@@ -1056,7 +1065,8 @@ public sealed class DiscreteStateLawTests {
                 )
             )
         );
-        var atFour = definition with { StateRaw = new(
+        var atFour = definition with {
+            StateRaw = new(
             World: [.. definition.State.Select(selector: r => ((r.Name.Value == "rank")
             ? r with { Cells = [Cell(
                             key: WorldStateRow.SlotKey,
@@ -1064,10 +1074,11 @@ public sealed class DiscreteStateLawTests {
                         )] }
             : r))],
             Lattices: definition.StateRaw!.Lattices
-        ) };
+        ),
+        };
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 sorted with { StateRaw = atFour.StateRaw },
                 arrange,
                 WorldPrincipal.Console,
@@ -1085,7 +1096,8 @@ public sealed class DiscreteStateLawTests {
                 row: "pile"
             ).Cells!.Select(selector: c => c.Key.Value)
         );
-        var atSix = definition with { StateRaw = new(
+        var atSix = definition with {
+            StateRaw = new(
             World: [.. definition.State.Select(selector: r => ((r.Name.Value == "rank")
             ? r with { Cells = [Cell(
                             key: WorldStateRow.SlotKey,
@@ -1093,9 +1105,10 @@ public sealed class DiscreteStateLawTests {
                         )] }
             : r))],
             Lattices: definition.StateRaw!.Lattices
-        ) };
+        ),
+        };
 
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             atSix,
             arrange,
             WorldPrincipal.Console,
@@ -1126,7 +1139,7 @@ public sealed class DiscreteStateLawTests {
             new(
                 Name(value: "deck"),
                 CellKind.Bool,
-                Cells: [Cell("a"), Cell("b")],
+                Cells: [Cell("a", kind: CellKind.Bool), Cell("b", kind: CellKind.Bool)],
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -1150,7 +1163,7 @@ public sealed class DiscreteStateLawTests {
         );
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 operation,
                 WorldPrincipal.Console,
@@ -1175,7 +1188,7 @@ public sealed class DiscreteStateLawTests {
                 row: "deck"
             ).Cells!).Key.Value
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             changed,
             operation,
             WorldPrincipal.Console,
@@ -1189,7 +1202,7 @@ public sealed class DiscreteStateLawTests {
             expected: changed
         );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.Transfer(
                     "deck",
@@ -1278,12 +1291,12 @@ public sealed class DiscreteStateLawTests {
                 new ActionEffect.AddState(
                             "allowance",
                             Key: "0",
-                            Expression: new(Tokens: [
-                    new ValueToken.State(
-                                    "$board:pathCost:terrain:cell:destination:0:100:16",
-                                    Key: "$cell:position:0"
+                            Expression: new(Instructions: [
+                    Instruction.Operand(key: "$cell:position:0",
+                                    name:
+                                    "$board:pathCost:terrain:cell:destination:0:100:16"
                                 ),
-                    new ValueToken.Negate(),
+                    Instruction.Of(operation: ExpressionOp.Negate),
                 ])
                         ),
                 new ActionEffect.SetState(
@@ -1342,21 +1355,21 @@ public sealed class DiscreteStateLawTests {
                 Find(
                     document: fixture.Server.Definition,
                     row: "position"
-                ).Cells![0].Value
+                ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 1,
                 Find(
                     document: fixture.Server.Definition,
                     row: "allowance"
-                ).Cells![0].Value
+                ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 1,
                 Find(
                     document: fixture.Server.Definition,
                     row: "occupancy"
-                ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value
+                ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
             );
         }
 
@@ -1369,28 +1382,28 @@ public sealed class DiscreteStateLawTests {
                 Find(
                     document: fixture.Server.Definition,
                     row: "position"
-                ).Cells![0].Value
+                ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 0,
                 Find(
                     document: fixture.Server.Definition,
                     row: "allowance"
-                ).Cells![0].Value
+                ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 0,
                 Find(
                     document: fixture.Server.Definition,
                     row: "occupancy"
-                ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value
+                ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
             );
             Assert.Equal(
                 1,
                 Find(
                     document: fixture.Server.Definition,
                     row: "occupancy"
-                ).Cells!.Single(predicate: c => (c.Key.Value == "2")).Value
+                ).Cells!.Single(predicate: c => (c.Key.Value == "2")).Value.Raw
             );
         }
     }
@@ -1408,7 +1421,7 @@ public sealed class DiscreteStateLawTests {
             new(
                 Name(value: "deck"),
                 CellKind.Bool,
-                Cells: [Cell("a")],
+                Cells: [Cell("a", kind: CellKind.Bool)],
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -1427,7 +1440,7 @@ public sealed class DiscreteStateLawTests {
                 "failed",
                 new StateCell(
                     WorldStateRow.SlotKey,
-                    0
+                    CellValue.Int(value: 0)
                 )
             )
         ) with {
@@ -1459,16 +1472,17 @@ public sealed class DiscreteStateLawTests {
             document: fixture.Server.Definition,
             row: "deck"
         ).Cells!);
-        Assert.Empty(collection: Find(
+        // A row holding no cell exports none, not an empty list.
+        Assert.Null(@object: Find(
             document: fixture.Server.Definition,
             row: "hand"
-        ).Cells!);
+        ).Cells);
         Assert.Equal(
             1,
             Find(
                 document: fixture.Server.Definition,
                 row: "failed"
-            ).Cells![0].Value
+            ).Cells![0].Value.Raw
         );
     }
     [Fact]
@@ -1641,23 +1655,31 @@ public sealed class DiscreteStateLawTests {
             StateRows.FindCell(
                 cells: painted,
                 key: Name(value: "0")
-            )!.Value
+            )!.Value.Raw
         );
         Assert.Equal(
             9L,
             StateRows.FindCell(
                 cells: painted,
                 key: Name(value: "1")
-            )!.Value
+            )!.Value.Raw
         );
-        Assert.Null(@object: StateRows.FindCell(
-            cells: painted,
-            key: Name(value: "2")
-        ));
-        Assert.Null(@object: StateRows.FindCell(
-            cells: painted,
-            key: Name(value: "3")
-        ));
+        // A board is stored dense, so a cell the paint did not reach carries the row's empty value rather than
+        // being absent.
+        Assert.Equal(
+            0L,
+            StateRows.FindCell(
+                cells: painted,
+                key: Name(value: "2")
+            )!.Value.Raw
+        );
+        Assert.Equal(
+            0L,
+            StateRows.FindCell(
+                cells: painted,
+                key: Name(value: "3")
+            )!.Value.Raw
+        );
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
             Principal: WorldPrincipal.Console,
@@ -1677,22 +1699,28 @@ public sealed class DiscreteStateLawTests {
             StateRows.FindCell(
                 cells: repainted,
                 key: Name(value: "2")
-            )!.Value
+            )!.Value.Raw
         );
         Assert.Equal(
             9L,
             StateRows.FindCell(
                 cells: repainted,
                 key: Name(value: "3")
-            )!.Value
+            )!.Value.Raw
         );
-        Assert.Null(@object: StateRows.FindCell(
-            cells: repainted,
-            key: Name(value: "0")
-        ));
-        Assert.Null(@object: StateRows.FindCell(
-            cells: repainted,
-            key: Name(value: "1")
-        ));
+        Assert.Equal(
+            0L,
+            StateRows.FindCell(
+                cells: repainted,
+                key: Name(value: "0")
+            )!.Value.Raw
+        );
+        Assert.Equal(
+            0L,
+            StateRows.FindCell(
+                cells: repainted,
+                key: Name(value: "1")
+            )!.Value.Raw
+        );
     }
 }

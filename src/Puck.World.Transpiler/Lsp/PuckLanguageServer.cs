@@ -3,9 +3,12 @@ using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
+using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Validation;
+using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lsp;
 
@@ -23,12 +26,12 @@ public sealed class PuckLanguageServer {
         AddNode(
             array: items,
             node: new JsonObject {
-            ["label"] = label,
-            ["kind"] = kind,
-            ["detail"] = detail,
-            ["insertText"] = insertText,
-            ["insertTextFormat"] = 2, // Snippet
-        }
+                ["label"] = label,
+                ["kind"] = kind,
+                ["detail"] = detail,
+                ["insertText"] = insertText,
+                ["insertTextFormat"] = 2, // Snippet
+            }
         );
     }
     private static void AddNode(JsonArray array, JsonNode? node) {
@@ -58,15 +61,15 @@ public sealed class PuckLanguageServer {
                         )
                     );
                     break;
-                case BindStatementNode bindStmt:
+                case LocalStatementNode localStmt:
                     AddNode(
                         array: children,
                         node: CreateSymbol(
-                            $"bind {bindStmt.Name}",
+                            $"local {localStmt.Name}",
                             13,
-                            (bindStmt.Line - 1),
-                            (bindStmt.Column - 1),
-                            bindStmt.Length
+                            (localStmt.Line - 1),
+                            (localStmt.Column - 1),
+                            localStmt.Length
                         )
                     );
                     break;
@@ -223,21 +226,33 @@ public sealed class PuckLanguageServer {
             ["kind"] = kind,
             ["range"] = new JsonObject {
                 ["start"] = new JsonObject { ["line"] = line, ["character"] = character },
-                ["end"] = new JsonObject { ["line"] = line, ["character"] = (character + Math.Max(
+                ["end"] = new JsonObject {
+                    ["line"] = line,
+                    ["character"] = (character + Math.Max(
             val1: 1,
             val2: length
-        )) },
+        )),
+                },
             },
             ["selectionRange"] = new JsonObject {
                 ["start"] = new JsonObject { ["line"] = line, ["character"] = character },
-                ["end"] = new JsonObject { ["line"] = line, ["character"] = (character + Math.Max(
+                ["end"] = new JsonObject {
+                    ["line"] = line,
+                    ["character"] = (character + Math.Max(
             val1: 1,
             val2: length
-        )) },
+        )),
+                },
             },
         };
     }
-    private static string? GetDocumentationForWord(string word) => word switch {
+    // The words this vocabulary's own construct table does not describe: the document headers, the compile-time
+    // layer the core owns, the unit suffixes, and the two cell kinds no described member enumerates on its own.
+    private static string? GetDocumentationForWord(string word, string? enclosing) => (WorldConstructLanguageServices.Hover(
+        enclosing: enclosing,
+        table: WorldConstructs.Table,
+        word: word
+    ) ?? (word switch {
         "schema" => "**`schema` Directive**\n\nDeclares the document schema family tag (e.g. `puck.world.definition.v1`, `puck.creation.v1`). Enables semantic validation and schema conformance checks.",
         "basis" => "**`basis` Directive**\n\nSpecifies the base world document path inherited by this world definition. Properties in this document override or compose over the basis.",
         "documentId" => "**`documentId` Directive**\n\nUnique string identifier for this world definition document.",
@@ -245,34 +260,10 @@ public sealed class PuckLanguageServer {
         "template" => "**`template` Definition**\n\nDeclares a reusable parametric template block expanded at compile time with default and named arguments.",
         "import" => "**`import` Declaration**\n\nImports symbols or components from another `.puck` or `.world.json` document.",
         "export" => "**`export` Declaration**\n\nDeclares exported world facets (`action`, `binding`, `read`) exposed across the network and to client sessions.",
-        "host" => "**`host` Section**\n\nConfigures the application host window, display dimensions, presentation mode (`offscreen`, `windowed`), and simulation tick rate.",
-        "views" => "**`views` Section**\n\nConfigures camera layouts, viewports, and seat rigs.",
-        "seatRig" => "**`seatRig` Section**\n\nDeclares a camera seat rig containing scheduled camera operations such as `orbit` and `fov`.",
         "orbit" => "**`orbit(pitch:, yaw:, distance:)`**\n\nConfigures spherical orbit camera positioning relative to the focus target.",
         "fieldOfView" => "**`fieldOfView(degrees:)`**\n\nSets the camera vertical field-of-view in degrees.",
-        "solids" => "**`solids` Section**\n\nCollection of Signed Distance Field (SDF) Constructive Solid Geometry (CSG) primitives evaluated by the raymarching engine.",
-        "materials" => "**`materials` Section**\n\nSurface material properties including albedo color, roughness, metallic, and reflectance.",
-        "state" => "**`state` Section**\n\nWorld state definitions including discrete values, lattices, and cell arrays.",
-        "table" => "**`table name : Kind [capacity(n)] [bounds(...)] [advance(perSecond:)] { key = value ... }`**\n\nDeclares a keyed `state.world` row — sugar for the explicit `cells` array. Legal only directly inside `state.world`.",
-        "slot" => "**`slot name : Kind [= value] [bounds(...)] [advance(perSecond:)]`**\n\nDeclares a scalar `state.world` row — sugar for the explicit `value` field. Legal only directly inside `state.world`.",
-        "bounds" => "**`bounds(minimum:, maximum:, overflow:)`**\n\nDeclares a table/slot row's range and overflow policy (`Refuse`, the default, or `Saturate`). Every argument is optional; only legal on an `Int`/`Fixed` row.",
-        "capacity" => "**`capacity(n)`**\n\nDeclares a `table` row's cell-count ceiling. Refused smaller than the table's own authored cells.",
-        "behavior" => "**`behavior(none)`**\n\nOpts a table cell out of its row's default `advance` behavior. The only admitted argument is `none`.",
-        "advance" => "**`advance(perSecond:)`**\n\nDeclares a table/slot row's (or table cell's) per-second continuous accumulation rate, evaluated on engine ticks. Only legal on an `Int`/`Fixed` row.",
-        "pile" => "**`pile name of tokenRow [capacity(n)] { token ... }`**\n\nDeclares an ordered-membership `state.world` row over `tokenRow`'s keys — sugar for a `keysOf` domain with `ordered` set. Legal only directly inside `state.world`.",
-        "grid" => "**`grid name : Kind dimensions(width:, depth:) [wrap(...)] [cellSize(...)] [origin(...)] [band(...)] [empty(...)] [positions(...)] [inverse(tokens:, codes:)] [bounds(...)] [{ key = value ... }]`**\n\nDeclares a physical-lattice occupancy row — mints a `state.lattices` Grid topology of the same name and a `cellsOf` row over it. Legal only directly inside `state.world`.",
-        "dimensions" => "**`dimensions(width:, depth:)`**\n\nA `grid`'s cell counts along +X and +Z. Required.",
-        "wrap" => "**`wrap(None|X|Y|Both)`**\n\nA `grid`'s wrapped axes. Defaults to `None`.",
-        "cellSize" => "**`cellSize(n)`**\n\nA `grid`'s cubic cell edge, in world units. Defaults to `1`.",
-        "origin" => "**`origin(x, y, z)`**\n\nA `grid`'s minimum corner, in world units. Defaults to `(0, 0, 0)`.",
-        "band" => "**`band(n)`**\n\nA `grid`'s vertical half-extent a position must lie within to resolve to a cell. Defaults to `0` (any height).",
-        "empty" => "**`empty(value)`**\n\nThe value an unwritten `grid` cell reads. Defaults to `0`/`false`.",
-        "positions" => "**`positions(tokenRow)`**\n\nMarks another row's integer values as cell ordinals of this `grid`'s own topology — sets that row's `valuesFrom`.",
-        "inverse" => "**`inverse(tokens:, codes:)`**\n\nDeclares this `grid` a board derived from a token row's current cells and a codes row, rather than authored directly. Refused together with an authored cell body.",
         "Bool" => "**CellKind: `Bool`**\n\nA 0/1 boolean cell.",
         "Text" => "**CellKind: `Text`**\n\nA UTF-16 string cell.",
-        "rules" => "**`rules` Section**\n\nDeclarative reactive rules evaluated on each engine tick (`effects`, `gate`, `mode`).",
-        "addons" => "**`addons` Section**\n\nConfigures WebAssembly (WASM) game extensions with capability requests and memory watches.",
         "boardShift" => "**`boardShift(mask, lattice, direction)`**\n\nPerforms a directional bitwise shift across a multi-dimensional state lattice.",
         "deg" => "**`deg` Unit**\n\nAngular unit in degrees (automatically converted to radians: `value * PI / 180`).",
         "rad" => "**`rad` Unit**\n\nAngular unit in radians.",
@@ -281,18 +272,24 @@ public sealed class PuckLanguageServer {
         "hz" => "**`hz` Unit**\n\nFrequency unit in Hertz (e.g. `60hz`, `120hz`).",
         "m" => "**`m` Unit**\n\nSpatial metric unit in meters.",
         _ => null
-    };
+    }));
     // Best-effort: lowers the open document and looks `word` up as a declared `state` row's name, reporting its
     // kind. Swallows parse/lowering failures — a document mid-edit need not lower cleanly for hover to still work
     // on the parts that do.
-    private static string? GetStateRowHoverCard(string text, string word) {
+    private string? GetStateRowHoverCard(string text, string word, string? sourcePath = null) {
         try {
-            var parseResult = PuckParser.ParseDocumentWithDiagnostics(text);
+            var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+                source: text,
+                vocabulary: m_vocabularyResolver.Resolve(source: text)
+            );
 
             if (parseResult.Value is not { } document) {
                 return null;
             }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(document).Value?["state"] is not JsonObject stateSection) {
+            if (WorldDocumentEmitter.LowerWithDiagnostics(
+                document: document,
+                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
+            ).Value?["state"] is not JsonObject stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -331,6 +328,9 @@ public sealed class PuckLanguageServer {
         }
         return null;
     }
+    // A 0-based offset into `text` for an LSP line/character pair.
+    private static int CursorOffset(string text, int line, int character) =>
+        (text.Split('\n').Take(count: line).Sum(selector: static part => (part.Length + 1)) + character);
     private static string? GetWordAtPosition(string text, int targetLine, int targetCol) {
         var lines = text.Split('\n');
 
@@ -475,9 +475,9 @@ public sealed class PuckLanguageServer {
     // dotted read sits inside an already-closed rule), and the fallback truncates at the cursor and synthesizes
     // the closing braces/brackets/parens the truncated prefix is still owed, so an unclosed rule or block being
     // typed for the first time still parses far enough to see its declared rows.
-    private static DocumentNode? TryParseDocumentBestEffort(string text, int cursorOffset) {
+    private DocumentNode? TryParseDocumentBestEffort(string text, int cursorOffset) {
         try {
-            if (PuckParser.ParseDocumentWithDiagnostics(text).Value is { } direct) {
+            if (PuckParser.ParseDocumentWithDiagnostics(source: text, vocabulary: m_vocabularyResolver.Resolve(source: text)).Value is { } direct) {
                 return direct;
             }
         } catch {
@@ -492,7 +492,7 @@ public sealed class PuckLanguageServer {
             )];
             var recovered = (prefix + ComputeClosingSuffix(source: prefix));
 
-            return PuckParser.ParseDocumentWithDiagnostics(recovered).Value;
+            return PuckParser.ParseDocumentWithDiagnostics(source: recovered, vocabulary: m_vocabularyResolver.Resolve(source: recovered)).Value;
         } catch {
             return null;
         }
@@ -585,7 +585,7 @@ public sealed class PuckLanguageServer {
     // completion items — the dot-access counterpart to `GetStateRowHoverCard`'s row lookup. Returns null rather
     // than an empty array when the row can't be found or carries no cells, so the caller falls back to the
     // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
-    private static JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset) {
+    private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset, string? sourcePath = null) {
         try {
             if (TryParseDocumentBestEffort(
                 cursorOffset: cursorOffset,
@@ -593,7 +593,10 @@ public sealed class PuckLanguageServer {
             ) is not { } document) {
                 return null;
             }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(document).Value?["state"] is not JsonObject stateSection) {
+            if (WorldDocumentEmitter.LowerWithDiagnostics(
+                document: document,
+                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
+            ).Value?["state"] is not JsonObject stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -642,7 +645,7 @@ public sealed class PuckLanguageServer {
             key: uri,
             value: out var source
         ) &&
-            (PuckParser.ParseDocumentWithDiagnostics(source).Value is { } document) &&
+            (PuckParser.ParseDocumentWithDiagnostics(source: source, vocabulary: m_vocabularyResolver.Resolve(source: source)).Value is { } document) &&
             (m_completeDocument(document) is { } specialized)
         ) {
             await SendResponseAsync(
@@ -657,8 +660,8 @@ public sealed class PuckLanguageServer {
         // line/column, not its dotted-access AST, decides the row name: the surrounding statement is very often
         // still incomplete while this fires (trailing dot, unclosed rule), so `TryGetDotAccessRowName` reads raw
         // text and `GetStateRowKeyCompletions` reparses with recovery rather than trusting a clean parse.
-        var line = ((int?)@params?["position"]?["line"] ?? 0);
-        var col = ((int?)@params?["position"]?["character"] ?? 0);
+        var line = (((int?)@params?["position"]?["line"]) ?? 0);
+        var col = (((int?)@params?["position"]?["character"]) ?? 0);
 
         if (
             m_documents.TryGetValue(
@@ -666,18 +669,29 @@ public sealed class PuckLanguageServer {
             value: out var text
         ) &&
             TryGetDotAccessRowName(
+            rowName: out var dotRowName,
             targetCol: col,
             targetLine: line,
-            text: text,
-            rowName: out var dotRowName
+            text: text
         )
         ) {
             var cursorOffset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
-            var keyItems = GetStateRowKeyCompletions(
+            string? completionSourcePath = null;
+
+            if (TryGetLocalPath(path: out var localCompPath, uri: uri)) {
+                completionSourcePath = localCompPath;
+            }
+
+            var keyItems = (GetStateRowKeyCompletions(
                 cursorOffset: cursorOffset,
                 rowName: dotRowName,
+                sourcePath: completionSourcePath,
                 text: text
-            );
+            ) ?? PuckSqlLsp.GetSqlTableColumnCompletions(
+                resolver: m_vocabularyResolver,
+                tableName: dotRowName,
+                text: text
+            ));
 
             if (keyItems is { Count: > 0 }) {
                 await SendResponseAsync(
@@ -687,9 +701,58 @@ public sealed class PuckLanguageServer {
                 return;
             }
         }
+
+        if (
+            m_documents.TryGetValue(
+            key: uri,
+            value: out var docText
+        )
+        ) {
+            var offset = (docText.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+
+            if (PuckSqlLsp.IsCursorInsideSqlBlock(
+                cursorOffset: offset,
+                resolver: m_vocabularyResolver,
+                text: docText
+            )) {
+                var sqlItems = PuckSqlLsp.GetSqlCompletions(resolver: m_vocabularyResolver, text: docText);
+
+                await SendResponseAsync(
+                    id: id,
+                    result: new JsonObject { ["isIncomplete"] = false, ["items"] = sqlItems }
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                return;
+            }
+        }
+
         var items = new JsonArray();
 
-        // 1. Directives & Keywords
+        var completionText = (m_documents.TryGetValue(
+            key: uri,
+            value: out var openText
+        )
+            ? openText
+            : ""
+        );
+
+        PuckEmbeddingLsp.AddCompletions(items: items);
+        WorldConstructLanguageServices.AddCompletions(
+            enclosing: WorldConstructLanguageServices.ConstructAt(
+                offset: CursorOffset(
+                    character: col,
+                    line: line,
+                    text: completionText
+                ),
+                table: WorldConstructs.Table,
+                text: completionText
+            ),
+            items: items,
+            table: WorldConstructs.Table
+        );
+
+        // What follows is everything the construct table does not describe: the document headers, the
+        // compile-time layer the core owns, the camera and scalar function forms, the unit suffixes, the
+        // plural array properties, and the `$type` call-form escape hatches.
         AddCompletion(
             detail: "Directive: Schema declaration",
             insertText: "schema: \"puck.world.definition.v1\"",
@@ -739,124 +802,32 @@ public sealed class PuckLanguageServer {
             kind: 14,
             label: "export"
         );
-        AddCompletion(
-            detail: "Keyword: Addon capability request",
-            insertText: "request ${1|Mutate,Observe,Emit|} \"${2:subject}\"",
-            items: items,
-            kind: 14,
-            label: "request"
-        );
-        AddCompletion(
-            detail: "Keyword: Machine memory watch",
-            insertText: "watchMemory screen: ${1:0}, address: ${2:0x02000000}, length: ${3:4}",
-            items: items,
-            kind: 14,
-            label: "watchMemory"
-        );
 
-        // 2. Sections
-        AddCompletion(
-            detail: "Section: Host window & presentation",
-            insertText: "host {\n    width: ${1:1280}\n    height: ${2:720}\n    fullscreen: ${3:false}\n    targetHertz: ${4:60}\n}",
-            items: items,
-            kind: 7,
-            label: "host"
-        );
-        AddCompletion(
-            detail: "Section: Camera layouts & seat rigs",
-            insertText: "views {\n    $0\n}",
-            items: items,
-            kind: 7,
-            label: "views"
-        );
-        AddCompletion(
-            detail: "Section: Camera seat rig",
-            insertText: "seatRig \"${1:main}\" {\n    version: \"puck.camera.program.v1\"\n    operations: [\n        orbit(pitch: 0deg, yaw: 0deg, distance: 2.5m)\n    ]\n}",
-            items: items,
-            kind: 7,
-            label: "seatRig"
-        );
-        AddCompletion(
-            detail: "Section: View layout",
-            insertText: "layout \"${1:main}\" {\n    $0\n}",
-            items: items,
-            kind: 7,
-            label: "layout"
-        );
-        AddCompletion(
-            detail: "Section: SDF CSG Solids",
-            insertText: "solids: [\n    $0\n]",
-            items: items,
-            kind: 7,
-            label: "solids"
-        );
+        // The array spelling of a row construct. A container takes no `:` — `materials: [` is PUCK040 — so the
+        // inserted text is what the language accepts, which `ConstructCompletionSnippetLawTests` parses.
         AddCompletion(
             detail: "Section: Surface materials",
-            insertText: "materials: [\n    $0\n]",
+            insertText: "materials [\n    $0\n]",
             items: items,
             kind: 7,
             label: "materials"
         );
         AddCompletion(
-            detail: "Section: Game state definition",
-            insertText: "state {\n    $0\n}",
-            items: items,
-            kind: 7,
-            label: "state"
-        );
-        AddCompletion(
             detail: "Section: Reactive state rules",
-            insertText: "rules: [\n    $0\n]",
+            insertText: "rules [\n    $0\n]",
             items: items,
             kind: 7,
             label: "rules"
         );
         AddCompletion(
             detail: "Section: WASM Addons",
-            insertText: "addons: [\n    $0\n]",
+            insertText: "addons [\n    $0\n]",
             items: items,
             kind: 7,
             label: "addons"
         );
 
-        // 3. Solid Types
-        AddCompletion(
-            detail: "Solid: Prism CSG primitive",
-            insertText: "solid Prism \"${1:name}\" {\n    size: [1, 1, 1]\n}",
-            items: items,
-            kind: 7,
-            label: "solid Prism"
-        );
-        AddCompletion(
-            detail: "Solid: Superellipsoid CSG primitive",
-            insertText: "solid Superellipsoid \"${1:name}\" {\n    radius: 1\n    roundness: [0.2, 0.2]\n}",
-            items: items,
-            kind: 7,
-            label: "solid Superellipsoid"
-        );
-        AddCompletion(
-            detail: "Solid: Sphere CSG primitive",
-            insertText: "solid Sphere \"${1:name}\" {\n    radius: 1\n}",
-            items: items,
-            kind: 7,
-            label: "solid Sphere"
-        );
-        AddCompletion(
-            detail: "Solid: Box CSG primitive",
-            insertText: "solid Box \"${1:name}\" {\n    size: [1, 1, 1]\n}",
-            items: items,
-            kind: 7,
-            label: "solid Box"
-        );
-        AddCompletion(
-            detail: "Solid: Cylinder CSG primitive",
-            insertText: "solid Cylinder \"${1:name}\" {\n    radius: 1\n    height: 2\n}",
-            items: items,
-            kind: 7,
-            label: "solid Cylinder"
-        );
 
-        // 4. Built-in Functions
         AddCompletion(
             detail: "Camera orbit operation",
             insertText: "orbit(pitch: ${1:0deg}, yaw: ${2:0deg}, distance: ${3:2.5m})",
@@ -886,7 +857,6 @@ public sealed class PuckLanguageServer {
             label: "clamp"
         );
 
-        // 5. Units
         AddCompletion(
             detail: "Unit: Seconds",
             insertText: "s",
@@ -944,7 +914,6 @@ public sealed class PuckLanguageServer {
             label: "mm"
         );
 
-        // 6. Gate/effect/rule sugar keywords
         AddCompletion(
             detail: "Keyword: Rule/option gate",
             insertText: "when ${1:condition}",
@@ -981,252 +950,13 @@ public sealed class PuckLanguageServer {
             label: "as"
         );
         AddCompletion(
-            detail: "Keyword: Reactive rule block",
-            insertText: "rule \"${1:name}\" {\n    when $0\n}",
-            items: items,
-            kind: 14,
-            label: "rule"
-        );
-        AddCompletion(
-            detail: "Keyword: Rule-scoped binding",
-            insertText: "bind ${1:name}: ${2|Int,Fixed|} = ${3:expression}",
-            items: items,
-            kind: 14,
-            label: "bind"
-        );
-        AddCompletion(
-            detail: "Keyword: pushState effect",
-            insertText: "push ${1:row} = ${2:value}",
-            items: items,
-            kind: 14,
-            label: "push"
-        );
-        AddCompletion(
-            detail: "Keyword: countdownState effect",
-            insertText: "countdown ${1:row}",
-            items: items,
-            kind: 14,
-            label: "countdown"
-        );
-        AddCompletion(
-            detail: "Keyword: removeStateCell effect",
-            insertText: "remove ${1:row}",
-            items: items,
-            kind: 14,
-            label: "remove"
-        );
-        AddCompletion(
-            detail: "Keyword: scheduleState effect",
-            insertText: "schedule ${1:row} in ${2:1s}",
-            items: items,
-            kind: 14,
-            label: "schedule"
-        );
-        AddCompletion(
-            detail: "Keyword: transformState effect",
-            insertText: "transform ${1:row} = ${2:boardCombine}(${3:args})",
-            items: items,
-            kind: 14,
-            label: "transform"
-        );
-        AddCompletion(
-            detail: "Keyword: Atomic effect batch",
-            insertText: "transaction {\n    $0\n} onFailure {\n}",
-            items: items,
-            kind: 14,
-            label: "transaction"
-        );
-        AddCompletion(
-            detail: "Keyword: transaction failure branch",
-            insertText: "onFailure {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "onFailure"
-        );
-        AddCompletion(
-            detail: "Keyword: Conditional effect — lowers to the 'if' effect",
-            insertText: "if ${1:condition} {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "if"
-        );
-        AddCompletion(
             detail: "Keyword: 'if' alternate branch",
             insertText: "else {\n    $0\n}",
             items: items,
             kind: 14,
             label: "else"
         );
-        AddCompletion(
-            detail: "Keyword: Reconsidered decision",
-            insertText: "decision {\n    periodSeconds: ${1:1s}\n    option \"${2:name}\" {\n        score: $0\n    }\n}",
-            items: items,
-            kind: 14,
-            label: "decision"
-        );
-        AddCompletion(
-            detail: "Keyword: Decision candidate",
-            insertText: "option \"${1:name}\" {\n    score: $0\n}",
-            items: items,
-            kind: 14,
-            label: "option"
-        );
-        AddCompletion(
-            detail: "Keyword: Decision early-reconsider gate",
-            insertText: "interrupt ${1:condition}",
-            items: items,
-            kind: 14,
-            label: "interrupt"
-        );
-        AddCompletion(
-            detail: "Keyword: Decision fallback effects",
-            insertText: "onNoChoice {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "onNoChoice"
-        );
-        AddCompletion(
-            detail: "Keyword: Creation-document shape row",
-            insertText: "shape ${1:Box} \"${2:name}\" {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "shape"
-        );
-        AddCompletion(
-            detail: "Section: Placement rows",
-            insertText: "placements {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "placements"
-        );
-        AddCompletion(
-            detail: "Keyword: One placement row",
-            insertText: "placement \"${1:id}\" {\n    prototype: $0\n}",
-            items: items,
-            kind: 14,
-            label: "placement"
-        );
-        AddCompletion(
-            detail: "Declaration: keyed state.world row",
-            insertText: "table ${1:name} : ${2|Int,Fixed,Bool,Text|} {\n    ${3:key} = $0\n}",
-            items: items,
-            kind: 14,
-            label: "table"
-        );
-        AddCompletion(
-            detail: "Declaration: scalar state.world row",
-            insertText: "slot ${1:name} : ${2|Int,Fixed,Bool,Text|} = $0",
-            items: items,
-            kind: 14,
-            label: "slot"
-        );
-        AddCompletion(
-            detail: "Escape hatch: the explicit state.world row form",
-            insertText: "row {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "row"
-        );
-        AddCompletion(
-            detail: "Declaration: ordered-membership state.world row",
-            insertText: "pile ${1:name} of ${2:tokenRow} {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "pile"
-        );
-        AddCompletion(
-            detail: "Declaration: physical-lattice occupancy state.world row",
-            insertText: "grid ${1:name} : ${2|Int,Bool|} dimensions(width: ${3:8}, depth: ${4:8})",
-            items: items,
-            kind: 14,
-            label: "grid"
-        );
-        AddCompletion(
-            detail: "Modifier: a grid's cell counts",
-            insertText: "dimensions(width: ${1:8}, depth: ${2:8})",
-            items: items,
-            kind: 3,
-            label: "dimensions"
-        );
-        AddCompletion(
-            detail: "Modifier: a grid's wrapped axes",
-            insertText: "wrap(${1|None,X,Y,Both|})",
-            items: items,
-            kind: 3,
-            label: "wrap"
-        );
-        AddCompletion(
-            detail: "Modifier: a grid's cubic cell edge",
-            insertText: "cellSize(${1:1})",
-            items: items,
-            kind: 3,
-            label: "cellSize"
-        );
-        AddCompletion(
-            detail: "Modifier: a grid's minimum corner",
-            insertText: "origin(${1:0}, ${2:0}, ${3:0})",
-            items: items,
-            kind: 3,
-            label: "origin"
-        );
-        AddCompletion(
-            detail: "Modifier: a grid's vertical resolve band",
-            insertText: "band(${1:0})",
-            items: items,
-            kind: 3,
-            label: "band"
-        );
-        AddCompletion(
-            detail: "Modifier: a grid's unwritten-cell value",
-            insertText: "empty(${1:0})",
-            items: items,
-            kind: 3,
-            label: "empty"
-        );
-        AddCompletion(
-            detail: "Modifier: names a row whose values are this grid's cell ordinals",
-            insertText: "positions(${1:tokenRow})",
-            items: items,
-            kind: 3,
-            label: "positions"
-        );
-        AddCompletion(
-            detail: "Modifier: derives this grid from a tokens/codes row pair",
-            insertText: "inverse(tokens: ${1:tokens}, codes: ${2:codes})",
-            items: items,
-            kind: 3,
-            label: "inverse"
-        );
-        AddCompletion(
-            detail: "Modifier: range and overflow policy",
-            insertText: "bounds(minimum: ${1:0}, maximum: ${2:100})",
-            items: items,
-            kind: 3,
-            label: "bounds"
-        );
-        AddCompletion(
-            detail: "Modifier: per-second accumulation",
-            insertText: "advance(perSecond: ${1:1})",
-            items: items,
-            kind: 3,
-            label: "advance"
-        );
-        AddCompletion(
-            detail: "Modifier: table cell-count ceiling",
-            insertText: "capacity(${1:1})",
-            items: items,
-            kind: 3,
-            label: "capacity"
-        );
-        AddCompletion(
-            detail: "Modifier: opt a cell out of its row's behavior",
-            insertText: "behavior(none)",
-            items: items,
-            kind: 3,
-            label: "behavior"
-        );
 
-        // 7. Effect/predicate/kind discriminators (the `name(k: v, ...)` call-form escape hatch)
         AddCompletion(
             detail: "Predicate: compareState",
             insertText: "compareState(state: \"${1:row}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, value: ${3:0})",
@@ -1315,9 +1045,9 @@ public sealed class PuckLanguageServer {
         await SendResponseAsync(
             id: id,
             result: new JsonObject {
-            ["isIncomplete"] = false,
-            ["items"] = items,
-        }
+                ["isIncomplete"] = false,
+                ["items"] = items,
+            }
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     private async Task HandleDocumentSymbolAsync(JsonNode? id, JsonObject? @params) {
@@ -1334,7 +1064,10 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(text);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source: text,
+            vocabulary: m_vocabularyResolver.Resolve(source: text)
+        );
         var docNode = parseResult.Value;
 
         if (docNode is null) {
@@ -1374,6 +1107,18 @@ public sealed class PuckLanguageServer {
                         AddNode(
                             array: children,
                             node: CreateStateWorldSymbol(world: worldBlock)
+                        );
+                    } else if (
+                        (child is BlockNode { Identifier: "spaces", Name: null, Target: null } spacesBlock) &&
+                        string.Equals(
+                        a: block.Identifier,
+                        b: "state",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
+                    ) {
+                        AddNode(
+                            array: children,
+                            node: PuckEmbeddingLsp.CreateSpacesSymbol(spaces: spacesBlock)
                         );
                     } else if (child is BlockNode childBlock) {
                         var cName = ((childBlock.Name is not null)
@@ -1472,13 +1217,27 @@ public sealed class PuckLanguageServer {
         var options = @params?["options"];
         var tabSize = (options?["tabSize"]?.GetValue<int>() ?? 2);
         var insertSpaces = (options?["insertSpaces"]?.GetValue<bool>() ?? true);
-        var formatted = PuckFormatter.Format(
-            insertSpaces: insertSpaces,
+        var printed = PuckPrinter.Format(
+            options: new PuckPrintOptions {
+                InsertSpaces = insertSpaces,
+                TabSize = ((tabSize > 0)
+                    ? tabSize
+                    : 2),
+            },
             source: text,
-            tabSize: ((tabSize > 0)
-            ? tabSize
-            : 2)
+            vocabulary: m_vocabularyResolver.Resolve(source: text)
         );
+
+        // A document that does not parse has no tree to print, so the editor keeps what the author is typing.
+        if (printed.Value is not { } formatted) {
+            await SendResponseAsync(
+                id: id,
+                result: new JsonArray()
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return;
+        }
+
         var lines = text.Split('\n');
         var lastLine = Math.Max(
             val1: 0,
@@ -1494,12 +1253,12 @@ public sealed class PuckLanguageServer {
         AddNode(
             array: edits,
             node: new JsonObject {
-            ["range"] = new JsonObject {
-                ["start"] = new JsonObject { ["line"] = 0, ["character"] = 0 },
-                ["end"] = new JsonObject { ["line"] = lastLine, ["character"] = lastChar },
-            },
-            ["newText"] = formatted,
-        }
+                ["range"] = new JsonObject {
+                    ["start"] = new JsonObject { ["line"] = 0, ["character"] = 0 },
+                    ["end"] = new JsonObject { ["line"] = lastLine, ["character"] = lastChar },
+                },
+                ["newText"] = formatted,
+            }
         );
 
         await SendResponseAsync(
@@ -1529,6 +1288,42 @@ public sealed class PuckLanguageServer {
             text: text
         );
 
+        var offset = CursorOffset(
+            character: col,
+            line: line,
+            text: text
+        );
+        var enclosing = WorldConstructLanguageServices.ConstructAt(
+            offset: offset,
+            table: WorldConstructs.Table,
+            text: text
+        );
+        string? hoverSourcePath = null;
+
+        if (TryGetLocalPath(path: out var localHoverPath, uri: uri)) {
+            hoverSourcePath = localHoverPath;
+        }
+
+        var embeddingCard = PuckEmbeddingLsp.GetEmbeddingHoverCard(
+            offset: offset,
+            sourcePath: hoverSourcePath,
+            text: text,
+            word: word
+        );
+
+        if (embeddingCard is not null) {
+            await SendResponseAsync(
+                id: id,
+                result: new JsonObject {
+                    ["contents"] = new JsonObject {
+                        ["kind"] = "markdown",
+                        ["value"] = embeddingCard,
+                    },
+                }
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            return;
+        }
+
         if (string.IsNullOrEmpty(value: word)) {
             await SendResponseAsync(
                 id: id,
@@ -1537,15 +1332,21 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var offset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
-        var docCard = (PuckHoverInfo.Declaration(
+        var docCard = (PuckSqlLsp.GetSqlHoverCard(
             offset: offset,
-            source: text,
-            word: word
-        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(word: word) ?? GetStateRowHoverCard(
+            resolver: m_vocabularyResolver,
             text: text,
             word: word
-        ))));
+        ) ?? (PuckHoverInfo.Declaration(
+            offset: offset,
+            resolver: m_vocabularyResolver,
+            source: text,
+            word: word
+        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(enclosing: enclosing, word: word) ?? GetStateRowHoverCard(
+            sourcePath: hoverSourcePath,
+            text: text,
+            word: word
+        )))));
 
         if (docCard is null) {
             await SendResponseAsync(
@@ -1558,11 +1359,11 @@ public sealed class PuckLanguageServer {
         await SendResponseAsync(
             id: id,
             result: new JsonObject {
-            ["contents"] = new JsonObject {
-                ["kind"] = "markdown",
-                ["value"] = docCard,
-            },
-        }
+                ["contents"] = new JsonObject {
+                    ["kind"] = "markdown",
+                    ["value"] = docCard,
+                },
+            }
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     private async Task HandleInitializeAsync(JsonNode? id) {
@@ -1657,9 +1458,9 @@ public sealed class PuckLanguageServer {
                     await SendNotificationAsync(
                         method: "textDocument/publishDiagnostics",
                         @params: new JsonObject {
-                        ["uri"] = uri,
-                        ["diagnostics"] = new JsonArray(),
-                    }
+                            ["uri"] = uri,
+                            ["diagnostics"] = new JsonArray(),
+                        }
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 }
                 break;
@@ -1719,16 +1520,17 @@ public sealed class PuckLanguageServer {
         await SendNotificationAsync(
             method: "window/logMessage",
             @params: new JsonObject {
-            ["type"] = 4, // Info
-            ["message"] = message,
-        }
+                ["type"] = 4, // Info
+                ["message"] = message,
+            }
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     private async Task PublishDiagnosticsAsync(string uri, string text) {
         var diagnosticsBag = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             text,
-            diagnostics: diagnosticsBag
+            diagnostics: diagnosticsBag,
+            vocabulary: m_vocabularyResolver.Resolve(source: text)
         );
 
         if (
@@ -1761,7 +1563,8 @@ public sealed class PuckLanguageServer {
                     document: parseResult.Value,
                     basePath: Path.GetDirectoryName(path: sourcePath),
                     sourceMap: sourceMap,
-                    diagnostics: loweringDiags
+                    diagnostics: loweringDiags,
+                    embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
                 );
 
                 diagnosticsBag.AddRange(diagnostics: loweringDiags);
@@ -1805,24 +1608,24 @@ public sealed class PuckLanguageServer {
             AddNode(
                 array: lspDiags,
                 node: new JsonObject {
-                ["range"] = new JsonObject {
-                    ["start"] = new JsonObject { ["line"] = startLine, ["character"] = startCol },
-                    ["end"] = new JsonObject { ["line"] = startLine, ["character"] = endCol },
-                },
-                ["severity"] = severity,
-                ["code"] = diag.Code,
-                ["source"] = "puck",
-                ["message"] = diag.Message,
-            }
+                    ["range"] = new JsonObject {
+                        ["start"] = new JsonObject { ["line"] = startLine, ["character"] = startCol },
+                        ["end"] = new JsonObject { ["line"] = startLine, ["character"] = endCol },
+                    },
+                    ["severity"] = severity,
+                    ["code"] = diag.Code,
+                    ["source"] = "puck",
+                    ["message"] = diag.Message,
+                }
             );
         }
 
         await SendNotificationAsync(
             method: "textDocument/publishDiagnostics",
             @params: new JsonObject {
-            ["uri"] = uri,
-            ["diagnostics"] = lspDiags,
-        }
+                ["uri"] = uri,
+                ["diagnostics"] = lspDiags,
+            }
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     private static async Task<string?> ReadMessageAsync(Stream stream, CancellationToken cancellationToken) {
@@ -1981,16 +1784,24 @@ public sealed class PuckLanguageServer {
         }
     }
 
+    private readonly DocumentVocabularyResolver m_vocabularyResolver;
+
     /// <summary>Creates a new instance of the Puck Language Server over the given input and output streams.</summary>
     /// <param name="input">The stream to read LSP JSON-RPC messages from (e.g. Console.OpenStandardInput()).</param>
     /// <param name="output">The stream to write LSP JSON-RPC messages to (e.g. Console.OpenStandardOutput()).</param>
     /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
     /// <param name="completeDocument">An optional schema completion provider; null retains World completions.</param>
+    /// <param name="vocabularyResolver">An optional vocabulary resolver; null uses default World resolver.</param>
     public PuckLanguageServer(Stream input, Stream output, Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
-        Func<DocumentNode, JsonArray?>? completeDocument = null) {
+        Func<DocumentNode, JsonArray?>? completeDocument = null,
+        DocumentVocabularyResolver? vocabularyResolver = null) {
         m_input = input;
         m_output = output;
         m_diagnoseDocument = diagnoseDocument;
         m_completeDocument = completeDocument;
+        m_vocabularyResolver = (vocabularyResolver ?? new DocumentVocabularyResolver(
+            vocabularies: new Dictionary<string, IDocumentVocabulary>(),
+            fallback: WorldDocumentVocabulary.Instance
+        ));
     }
 }

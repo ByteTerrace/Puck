@@ -990,10 +990,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         m_documentShared[name] = documentShared;
 
+        // The document's own path: a cabinet's content is authored relative to the document that declares it, so a
+        // neighbour started here reads its cartridges from beside its document, as the booted world does.
         var machines = m_machineHostFactory(
             [],
             [],
-            null,
+            resolvedPath,
             m_narration
         );
         WorldInstance started;

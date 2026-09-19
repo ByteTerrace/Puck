@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 /// <summary>Proves the market's replacement primitive — an escrowed conditional transfer over ordinary keyed rows,
 /// authored entirely as <see cref="WorldRule"/>s over the pre-existing generic vocabulary
 /// (<see cref="ActionEffect.AddState"/>/<see cref="ActionEffect.SetState"/> with a live copy or an
-/// <see cref="ValueExpression"/>, <see cref="ActionEffect.ScheduleState"/> for a deadline,
+/// <see cref="ExpressionProgram"/>, <see cref="ActionEffect.ScheduleState"/> for a deadline,
 /// <see cref="ActionEffect.PushState"/> for an ordered history ring), with no engine-side market mechanism at all.
 /// A seller's own <c>list</c> cell escrows a quantity out of their inventory into a scratch row (the "handle");
 /// settle moves the escrowed quantity to the winner's cell and a fee slice into a shared reserve row; return moves
@@ -37,16 +37,16 @@ public sealed class EscrowedTransferRuleLawTests {
     private static ActionEffect.AddState AddNegated(string state, string key, string fromState) => new(
         State: state,
         Key: key,
-        Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: fromState), new ValueToken.Negate()])
+        Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: fromState), Instruction.Of(operation: ExpressionOp.Negate)])
     );
     // The fee/net-of-fee split every settle arm needs. Both sides derive from the SAME single division so
     // fee + net always equals amount exactly: net is amount minus the one computed fee, never a second,
     // independently truncated division (amount*bps/10000 and amount*(10000-bps)/10000 can each round down, so their
     // sum can fall short of amount). "fromState" reads a live row's slot cell; "fromValue" splits a compile-time
     // authored constant instead (the buyout's fixed price).
-    private static ValueToken AmountToken(string? fromState, long? fromValue) => (fromState, fromValue) switch {
-        ( { } state, null) => new ValueToken.State(Name: state),
-        (null, { } value) => new ValueToken.Constant(Value: value),
+    private static Instruction AmountToken(string? fromState, long? fromValue) => (fromState, fromValue) switch {
+        ( { } state, null) => Instruction.Operand(name: state),
+        (null, { } value) => Instruction.Constant(value: value),
         _ => throw new System.ArgumentException(message: "exactly one of fromState/fromValue"),
     };
     private static WorldDefinition BuildDocument() {
@@ -207,7 +207,9 @@ public sealed class EscrowedTransferRuleLawTests {
             ]
         );
 
-        var document = Fixtures.BuildDocument().WithWorldState(rows: rows) with {
+        // Every listing arms a 0.05 s deadline, so the rate decides how many of these laws' steps fit inside one
+        // listing's life. They are written against the rate that gives twelve.
+        var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz).WithWorldState(rows: rows) with {
             Rules = [
                 new WorldRule(
                 Name: CellName.Parse(candidate: "auction-list"),
@@ -511,12 +513,12 @@ public sealed class EscrowedTransferRuleLawTests {
         FromState: fromState,
         Key: key
     );
-    private static ValueExpression Fee(int bps, string? fromState = null, long? fromValue = null) => new(Tokens: [
+    private static ExpressionProgram Fee(int bps, string? fromState = null, long? fromValue = null) => new(Instructions: [
         AmountToken(
             fromState: fromState,
             fromValue: fromValue
-        ), new ValueToken.Constant(Value: bps), new ValueToken.Multiply(),
-        new ValueToken.Constant(Value: 10_000m), new ValueToken.Divide(),
+        ), Instruction.Constant(value: bps), Instruction.Of(operation: ExpressionOp.Multiply),
+        Instruction.Constant(value: 10_000m), Instruction.Of(operation: ExpressionOp.Divide),
     ]);
     private static WorldStateRow HolderRow(string name, bool nonNegative, params long[] balances) => new(
         Name: CellName.Parse(candidate: name),
@@ -525,10 +527,10 @@ public sealed class EscrowedTransferRuleLawTests {
         Min: (nonNegative ? 0L : null),
         Cells: [.. balances.Select(selector: static (value, index) => new StateCell(
                 Key: CellName.Parse(candidate: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
-                Value: value
+                Value: CellValue.Int(value: value)
             ))]
     );
-    private static ValueExpression NetOfFee(int bps, string? fromState = null, long? fromValue = null) => new(Tokens: [
+    private static ExpressionProgram NetOfFee(int bps, string? fromState = null, long? fromValue = null) => new(Instructions: [
         AmountToken(
             fromState: fromState,
             fromValue: fromValue
@@ -536,9 +538,9 @@ public sealed class EscrowedTransferRuleLawTests {
         AmountToken(
             fromState: fromState,
             fromValue: fromValue
-        ), new ValueToken.Constant(Value: bps), new ValueToken.Multiply(),
-        new ValueToken.Constant(Value: 10_000m), new ValueToken.Divide(),
-        new ValueToken.Subtract(),
+        ), Instruction.Constant(value: bps), Instruction.Of(operation: ExpressionOp.Multiply),
+        Instruction.Constant(value: 10_000m), Instruction.Of(operation: ExpressionOp.Divide),
+        Instruction.Of(operation: ExpressionOp.Subtract),
     ]);
     private static long Read(WorldDefinition definition, string row, string key) {
         var found = WorldDefinitionRows.FindStateRow(
@@ -550,7 +552,7 @@ public sealed class EscrowedTransferRuleLawTests {
         return StateRows.FindCell(
             cells: found.Cells,
             key: cellKey
-        )!.Value;
+        )!.Value.Raw;
     }
     // The value pushed most recently (age 0): slot = (cursor - 1) mod capacity, the same walk WorldServer.Patterns'
     // own ReadHistorySlot performs for a $history: read.
@@ -562,7 +564,7 @@ public sealed class EscrowedTransferRuleLawTests {
         var capacity = ((StateDomain.Ring)found.EffectiveDomain).Capacity;
         var slot = ((int)((found.HistoryCursor - 1L) % capacity));
 
-        return found.Cells![slot].Value;
+        return found.Cells![slot].Value.Raw;
     }
     private static long ReadSlot(WorldDefinition definition, string row) => Read(
         definition: definition,
@@ -580,7 +582,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Min: (nonNegative ? 0L : null),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: initial
+                Value: CellValue.Int(value: initial)
             )]
     );
     private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
@@ -681,7 +683,7 @@ public sealed class EscrowedTransferRuleLawTests {
         );
         fixture.Step();
 
-        for (var index = 0; (index < 2); index++) {
+        for (var index = 0; (index < 20); index++) {
             fixture.Step();
         }
 
@@ -734,7 +736,7 @@ public sealed class EscrowedTransferRuleLawTests {
             )
         );
 
-        for (var index = 0; (index < 2); index++) {
+        for (var index = 0; (index < 20); index++) {
             fixture.Step();
         }
 
@@ -812,7 +814,7 @@ public sealed class EscrowedTransferRuleLawTests {
         );
         fixture.Step();
 
-        for (var index = 0; (index < 3); index++) {
+        for (var index = 0; (index < 25); index++) {
             fixture.Step();
         }
 
@@ -1001,7 +1003,7 @@ public sealed class EscrowedTransferRuleLawTests {
         );
 
         // Control: the listing is still active well before its deadline.
-        for (var index = 0; (index < 1); index++) {
+        for (var index = 0; (index < 5); index++) {
             fixture.Step();
         }
         Assert.Equal(
@@ -1014,7 +1016,7 @@ public sealed class EscrowedTransferRuleLawTests {
 
         // Advance past the deadline — the standing bid settles: item to the winner, coin net of fee to the seller,
         // fee to the shared reserve.
-        for (var index = 0; (index < 2); index++) {
+        for (var index = 0; (index < 20); index++) {
             fixture.Step();
         }
 

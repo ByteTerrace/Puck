@@ -6,6 +6,10 @@ or the distribution check. The manifest records the byte hash and intended
 variant for every maintained asset; the rasters are retained from the existing
 site, dashboard, and editor consumers without pixel edits.
 
+This is the Puck project's own brand — the docs site, NuGet, and the editor
+extension. A product's own branding, when it defines one, lives under that
+product's own content root rather than here.
+
 ## Canonical assets
 
 The stable source names live under [`assets/`](assets). `puck-logo-200.png` is
@@ -28,7 +32,10 @@ license and provenance treatment is unchanged.
 
 The shared `--font-body` and `--font-code` stacks live beside the palette. Site
 and DocFX consume them directly; the dashboard keeps its longer code fallback
-where its local component rules require it.
+where its local component rules require it. Consolidate a duplicated web
+palette value into a shared token only where every consuming adapter can read
+it without changing its layout or behavior; keep a local value where an
+adapter's layout depends on it.
 
 | Variant | Preview | Use |
 | --- | --- | --- |
@@ -44,6 +51,14 @@ The NuGet pack target consumes the canonical 200px mark directly as `icon.png`.
 The dashboard host serves the shared favicon, touch icon, and app-icon sizes;
 its portal keeps the 256px header variant. The VS Code extension's `icon.png`
 is a synchronized copy of the 128px variant.
+
+Prefer a direct reference to the canonical source where a package's build
+permits one, the way the NuGet pack target does. Where a package instead needs
+an in-package copy, derive or synchronize it from the canonical asset and cover
+it with the deterministic drift check below rather than let the copy diverge
+silently. Inspect a package's own license selection before summarizing its
+terms here: a Gaming Brick package can carry different license terms from the
+engine.
 
 ## Updating an asset
 

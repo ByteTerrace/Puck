@@ -2,8 +2,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 
 namespace Puck.World.Transpiler.Composition;
 
@@ -90,26 +88,10 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 comparisonType: StringComparison.OrdinalIgnoreCase,
                 value: ".puck"
             )) {
-                var puckText = File.ReadAllText(path: resolvedName);
-                var diagnostics = new DiagnosticBag();
-                var parsed = PuckParser.ParseDocumentWithDiagnostics(
-                    source: puckText,
-                    diagnostics: diagnostics
-                );
-                var lowered = ((parsed.Value is { } document)
-                    ? WorldDocumentEmitter.LowerWithDiagnostics(
-                        basePath: Path.GetDirectoryName(path: resolvedName),
-                        diagnostics: diagnostics,
-                        document: document
-                    ).Value
-                    : null
-                );
+                var compilation = WorldCompiler.CompileFile(path: resolvedName);
 
-                if (
-                    diagnostics.HasErrors ||
-                    (lowered is null)
-                ) {
-                    var error = diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+                if (!compilation.Success) {
+                    var error = compilation.Diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
                     reason = ((error is null)
                         ? $"{resolvedName} does not compile."
@@ -119,7 +101,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                     return false;
                 }
 
-                content = Encoding.UTF8.GetBytes(s: lowered.ToJsonString());
+                content = Encoding.UTF8.GetBytes(s: compilation.RequireJson().ToJsonString());
             } else {
                 content = File.ReadAllBytes(path: resolvedName);
             }

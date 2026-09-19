@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -12,25 +10,14 @@ namespace Puck.World.Transpiler.Tests;
 /// visible rather than letting the suffix trail the whole chain.</summary>
 public class CompareValueKindBindingTests {
     private static void AssertRoundTripsExactly(string json) {
-        var puck = WorldDecompiler.Decompile(jsonText: json);
-
-        var parseDiagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            puck,
-            diagnostics: parseDiagnostics
-        );
-
-        Assert.False(
-            condition: parseDiagnostics.HasErrors,
-            userMessage: parseDiagnostics.FormatReport(puck)
-        );
+        var puck = WorldDecompiler.Decompile(jsonText: Document(json: json));
 
         var loweringDiagnostics = new DiagnosticBag();
-        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
+        var recompiled = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        ).Value!;
+            source: puck
+        ).RequireJson();
 
         Assert.False(
             condition: loweringDiagnostics.HasErrors,
@@ -38,32 +25,31 @@ public class CompareValueKindBindingTests {
         );
 
         Assert.Null(@object: JsonMismatch.Find(
-            JsonNode.Parse(json),
+            JsonNode.Parse(Document(json: json)),
             recompiled,
             ""
         ));
     }
+    // The fixture spells its expressions as infix text, exactly as an author does; the document holds the IR, so
+    // the fixture is lowered the same way a compile lowers it before either side reads it.
+    private static string Document(string json) {
+        var node = JsonNode.Parse(json);
+
+        WorldExpressionJson.Lower(node: node);
+        return node!.ToJsonString();
+    }
     private static JsonObject Lower(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(source)
-        );
-
-        var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
         );
 
         Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport(source)
+            condition: compilation.Diagnostics.HasErrors,
+            userMessage: compilation.Diagnostics.FormatReport(source)
         );
-        return loweringResult.Value!;
+        return compilation.RequireJson();
     }
 
     // With no `kind` at all there is no annotation to print, so the node has no sugar spelling and must fall to
@@ -77,7 +63,7 @@ public class CompareValueKindBindingTests {
             ]}
             """;
 
-        var puck = WorldDecompiler.Decompile(jsonText: Json);
+        var puck = WorldDecompiler.Decompile(jsonText: Document(json: Json));
 
         Assert.Contains(
             actualString: puck,
@@ -97,7 +83,7 @@ public class CompareValueKindBindingTests {
             ]}
             """;
 
-        var puck = WorldDecompiler.Decompile(jsonText: Json);
+        var puck = WorldDecompiler.Decompile(jsonText: Document(json: Json));
 
         Assert.Contains(
             actualString: puck,
@@ -124,7 +110,7 @@ public class CompareValueKindBindingTests {
             ]}
             """;
 
-        var puck = WorldDecompiler.Decompile(jsonText: Json);
+        var puck = WorldDecompiler.Decompile(jsonText: Document(json: Json));
 
         Assert.Contains(
             actualString: puck,
@@ -145,7 +131,7 @@ public class CompareValueKindBindingTests {
             ]}
             """;
 
-        var puck = WorldDecompiler.Decompile(jsonText: Json);
+        var puck = WorldDecompiler.Decompile(jsonText: Document(json: Json));
 
         Assert.Contains(
             actualString: puck,
@@ -154,22 +140,12 @@ public class CompareValueKindBindingTests {
         );
 
         // The annotation must survive the round trip attached to exactly the compareValue predicate, not the chain.
-        var parseDiagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            puck,
-            diagnostics: parseDiagnostics
-        );
-
-        Assert.False(
-            condition: parseDiagnostics.HasErrors,
-            userMessage: parseDiagnostics.FormatReport(puck)
-        );
         var loweringDiagnostics = new DiagnosticBag();
-        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
+        var recompiled = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        ).Value!;
+            source: puck
+        ).RequireJson();
 
         Assert.False(
             condition: loweringDiagnostics.HasErrors,
@@ -177,7 +153,7 @@ public class CompareValueKindBindingTests {
         );
 
         var mismatch = JsonMismatch.Find(
-            JsonNode.Parse(Json),
+            JsonNode.Parse(Document(json: Json)),
             recompiled,
             ""
         );
@@ -258,11 +234,11 @@ public class CompareValueKindBindingTests {
         );
         Assert.Equal(
             "b",
-            right["left"]?.ToString()
+            WorldExpressionJson.Text(node: right["left"])
         );
         Assert.Equal(
             "c",
-            right["right"]?.ToString()
+            WorldExpressionJson.Text(node: right["right"])
         );
     }
 }

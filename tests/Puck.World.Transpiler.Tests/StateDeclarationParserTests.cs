@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>Parser coverage for the concise state-row declarations (state-authoring stages 2, 7, 8): the
+/// <summary>Parser coverage for the concise state-row declarations: the
 /// <c>table</c>/<c>slot</c>/<c>pile</c>/<c>grid</c> keywords' disambiguation from an ordinary property of the same
 /// name, and the shape of every declaration node the parser produces.</summary>
 public class StateDeclarationParserTests {

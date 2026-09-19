@@ -1,0 +1,250 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/codenames.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-codenames-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "join": {
+        "seat": 2
+      }
+    },
+    {
+      "join": {
+        "seat": 3
+      }
+    },
+    {
+      "join": {
+        "seat": 4
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 1
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 2
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 2
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 12
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 12
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "codenamesAct",
+        "key": "word",
+        "value": 3
+      }
+    },
+    {
+      "add": {
+        "row": "codenamesAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 12
+    }
+  ]
+}

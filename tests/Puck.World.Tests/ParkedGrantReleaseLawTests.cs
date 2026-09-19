@@ -102,7 +102,7 @@ public sealed class ParkedGrantReleaseLawTests {
         CatalogRig: 0
     );
     private static WorldDefinition WithGrace(float seconds, int rateHz = 240) {
-        var definition = Fixtures.BuildDocument();
+        var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
 
         return (definition with {
             PopulationRaw = (definition.Population with {

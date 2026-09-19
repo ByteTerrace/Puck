@@ -1,0 +1,41 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/billiards.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-billiards-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "advance": 60
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.5
+      }
+    },
+    {
+      "advance": 440
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 1.0
+      }
+    },
+    {
+      "advance": 10
+    }
+  ]
+}

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Runtime.CompilerServices;
 using Puck.Text;
 using Puck.World.Protocol;
+using RuleGroupDeclaration = Puck.State.Rules.RuleGroupDeclaration;
 
 namespace Puck.World;
 
@@ -79,12 +80,15 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
     [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScheduleSection? Schedule = null,
     [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
     [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
     [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PatternRow>? PatternsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TableRow>? Tables = null,
     [property: JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSearchSection? SearchRaw = null,
-    [property: JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachine>? MachinesRaw = null
+    [property: JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachine>? MachinesRaw = null,
+    [property: JsonPropertyName("ruleGroups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleGroupDeclaration>? RuleGroupsRaw = null,
+    [property: JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CellSetRow>? SetsRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.definition.v1";
@@ -281,6 +285,14 @@ public sealed record WorldDefinition(
     /// <summary>The pattern-language table, or empty when the document declares none.</summary>
     [JsonIgnore]
     public IReadOnlyList<PatternRow> Patterns => (PatternsRaw ?? []);
+    /// <summary>Gets the declared rule groups — the fixpoint and staged groups that claim rules out of
+    /// <see cref="Rules"/> and run them as one — ABSENT resolves to none, which is every rule running on its
+    /// own.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<RuleGroupDeclaration> RuleGroups => (RuleGroupsRaw ?? []);
+    /// <summary>Gets the declared cell sets a rule addresses by name — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<CellSetRow> Sets => (SetsRaw ?? []);
     /// <summary>Gets every placement's resolved WORLD-space transform, keyed by <see cref="WorldPlacement.Id"/> — a
     /// row naming no <see cref="WorldPlacement.Parent"/> resolves to its own authored Position/YawDegrees unchanged;
     /// a row naming one composes over that parent's own resolved frame (see <see cref="WorldPlacementFrameCompilation"/>).
@@ -372,6 +384,12 @@ public sealed record WorldDefinition(
     /// <summary>Gets the <c>state</c> section — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldStateRow> State => (StateRaw?.World ?? []);
+    /// <summary>Gets the declared symbolic value domains a row may name — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<StateEnum> Enums => (StateRaw?.Enums ?? []);
+    /// <summary>Gets the declared vector embedding spaces — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<StateSpace> Spaces => (StateRaw?.Spaces ?? []);
     /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
     /// resolve names against this catalog once, retain <see cref="StateHandle"/> values, and then use ordinal
     /// descriptor access without repeated string lookup.</summary>
@@ -651,6 +669,16 @@ public sealed record WorldDefinition(
     public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows) {
         var updated = this with {
             StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows }),
+        };
+
+        PreserveCompatibleCompilation(target: updated);
+
+        return updated;
+    }
+    /// <summary>Returns a copy with its declared state spaces replaced.</summary>
+    public WorldDefinition WithWorldSpaces(IReadOnlyList<StateSpace>? spaces) {
+        var updated = this with {
+            StateRaw = ((StateRaw ?? new WorldStateSection()) with { Spaces = spaces }),
         };
 
         PreserveCompatibleCompilation(target: updated);

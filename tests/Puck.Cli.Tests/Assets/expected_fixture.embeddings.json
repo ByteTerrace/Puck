@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "spaces": {
+    "lore": {
+      "dimensions": 8,
+      "entries": {
+        "418437ef1acfe630916f69971a122f6e1871db9d3207d0e6c4da859a61cfff8b": {
+          "text": "farewell",
+          "vector": "COtEvzMp2yE"
+        },
+        "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9": {
+          "text": "hello world",
+          "vector": "LPzKKtwmNMA"
+        }
+      },
+      "model": "puck-fixture",
+      "revision": "1"
+    }
+  }
+}

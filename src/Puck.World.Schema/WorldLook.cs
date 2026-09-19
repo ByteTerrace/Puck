@@ -83,7 +83,7 @@ public readonly record struct WorldLookMotion(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? PartDynamics = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? Poses = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    [property: JsonConverter(typeof(WorldRenderLanesConverter))] IReadOnlyList<ValueExpression?>? Lanes = null
+    [property: JsonConverter(typeof(WorldRenderLanesConverter))] IReadOnlyList<ExpressionProgram?>? Lanes = null
 ) {
     /// <summary>Gets the implicit look motion — full gait, no timeline replay — every body wore before this arc.</summary>
     public static WorldLookMotion Default { get; } = new WorldLookMotion(

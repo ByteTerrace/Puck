@@ -1,0 +1,503 @@
+// Codenames — a 5x5 word grid, a key card only the two spymasters see, and two
+// teams racing to contact their own agents.
+//
+// Rule set: the published rules of Codenames (Vlaada Chvatil, Czech Games
+// Edition, 2015) as stated at https://czechgames.com/en/codenames/rules/ —
+// twenty-five word cards; a key card assigning nine cards to the starting team,
+// eight to the other, seven bystanders and one assassin; the spymaster gives a
+// one-word clue and a number; the team touches cards one at a time and may make
+// the number plus one guesses; touching one of its own agents lets it guess
+// again, anything else ends the turn, and the assassin loses the game outright;
+// the first team to contact all its own agents wins. The reductions this module
+// makes deliberately are listed in the games README.
+//
+// Seats are the four roles: 1 red spymaster, 2 red operative, 3 blue spymaster,
+// 4 blue operative. `codenamesKey` and the four hidden live masks derived from
+// it admit seats 1 and 3 as readers and nobody else; every other row is public.
+//
+// A cell is its own key: grid ordinal "0".."24", row-major over the 5x5 board.
+// `codenamesWords` carries the word at each ordinal and `embeds` mints the
+// companion vector row beside it, so a board ordinal addresses the word, its
+// vector, its key-card identity and its reveal state under one key.
+//
+// This is a module fragment, not a bootable world: a host supplies the four
+// seats. tests/Puck.World.Tests/Fixtures/minimal-codenames-host.world.json is
+// that host.
+//
+// The array order is the schedule. Every pending flag is consumed by a rule
+// declared ABOVE the rule that raises it, so each stage of the clue pipeline
+// reads a frame the previous tick already folded — which is what the vector
+// transforms need, since `mean`, `mix`, `nearest` and `remember` all take the
+// cross-row path and land at the tick boundary rather than in the rule frame.
+
+// One line: `puck fmt` unindents a wrapped export continuation and the parser then
+// reads the facet as empty, so a wrapped list silently loses every name.
+export action codenamesAct
+export binding codenamesClueNumber, codenamesStage, codenamesTurn, codenamesWinner
+export read codenamesAct, codenamesAim, codenamesBlueLeft, codenamesBoardLive, codenamesBoardShown, codenamesClue, codenamesClueLog, codenamesClueNumber, codenamesClueWord, codenamesHint, codenamesKey, codenamesLexicon, codenamesRedLeft, codenamesStage, codenamesTable, codenamesTurn, codenamesWinner, codenamesWords
+
+// The key card. 1 red agent, 2 blue agent, 3 bystander, 4 assassin.
+// Nine red, eight blue, seven bystanders, one assassin — red leads.
+let keyCard = [
+  1, 3, 2, 1, 2,
+  2, 1, 3, 1, 3,
+  2, 1, 4, 3, 1,
+  3, 2, 1, 2, 1,
+  2, 3, 1, 2, 3
+]
+
+// The public board: one row per grid cell, its reveal state and whether it is
+// still on the table. `shown` is 0 face down, else the key-card identity the
+// touch turned up; `live` is the keyed Bool mask `nearest` and `mean` filter on.
+sql {
+  CREATE TABLE codenamesBoard (
+    id    TEXT PRIMARY KEY,
+    shown INT  NOT NULL DEFAULT 0 CHECK (shown BETWEEN 0 AND 4),
+    live  BOOL NOT NULL DEFAULT TRUE
+  ) CAPACITY 25;
+
+  INSERT INTO codenamesBoard (id, shown, live) VALUES
+  ('0',  0, TRUE),
+  ('1',  0, TRUE),
+  ('2',  0, TRUE),
+  ('3',  0, TRUE),
+  ('4',  0, TRUE),
+  ('5',  0, TRUE),
+  ('6',  0, TRUE),
+  ('7',  0, TRUE),
+  ('8',  0, TRUE),
+  ('9',  0, TRUE),
+  ('10', 0, TRUE),
+  ('11', 0, TRUE),
+  ('12', 0, TRUE),
+  ('13', 0, TRUE),
+  ('14', 0, TRUE),
+  ('15', 0, TRUE),
+  ('16', 0, TRUE),
+  ('17', 0, TRUE),
+  ('18', 0, TRUE),
+  ('19', 0, TRUE),
+  ('20', 0, TRUE),
+  ('21', 0, TRUE),
+  ('22', 0, TRUE),
+  ('23', 0, TRUE),
+  ('24', 0, TRUE);
+
+  DECLARE codenamesStage INT DEFAULT 0 CHECK (codenamesStage BETWEEN 0 AND 3);
+
+  DECLARE codenamesTurn INT DEFAULT 1 CHECK (codenamesTurn BETWEEN 1 AND 2);
+
+  DECLARE codenamesRedLeft INT DEFAULT 9 CHECK (codenamesRedLeft >= 0);
+
+  DECLARE codenamesBlueLeft INT DEFAULT 8 CHECK (codenamesBlueLeft >= 0);
+
+  DECLARE codenamesWinner INT DEFAULT 0 CHECK (codenamesWinner BETWEEN 0 AND 2);
+
+  DECLARE codenamesClueNumber INT DEFAULT 0 CHECK (codenamesClueNumber >= 0);
+}
+
+// The clue number is read off the shortlist: how many of the three board words
+// the clue pulled are the clueing team's own live agents. That is exactly what a
+// Codenames number says, and it is public while the shortlist itself is not.
+rule "codenames-number-red" {
+  when codenamesTable[numberPending] == 1 and codenamesTurn == 1
+  local n: Int = $reduce:count:codenamesHint:where:codenamesRedLive
+  mode: "Level"
+  codenamesClueNumber = $local:n
+  codenamesTable[guessesLeft] = $local:n + 1
+  codenamesTable[clueNo] += 1
+  codenamesStage = 2
+  codenamesTable[numberPending] = 0
+}
+
+rule "codenames-number-blue" {
+  when codenamesTable[numberPending] == 1 and codenamesTurn == 2
+  local n: Int = $reduce:count:codenamesHint:where:codenamesBlueLive
+  mode: "Level"
+  codenamesClueNumber = $local:n
+  codenamesTable[guessesLeft] = $local:n + 1
+  codenamesTable[clueNo] += 1
+  codenamesStage = 2
+  codenamesTable[numberPending] = 0
+}
+
+// The spymaster speaks. `nearest` over the lexicon picks the one clue word its
+// aim is closest to; `nearest` over the board words, filtered to the cells still
+// on the table, is the private shortlist the number is counted from; `remember`
+// files the aim under the clue's own number and refuses a near-duplicate of a
+// clue this game already carries.
+rule "codenames-pick" {
+  when codenamesTable[pickPending] == 1
+  mode: "Level"
+  transform nearest(from: codenamesLexiconVectors, query: "codenamesClue", into: codenamesClueWord, k: 1)
+  transform nearest(from: codenamesWordVectors, query: "codenamesClue", into: codenamesHint, k: 3, where: codenamesBoardLive)
+  transform remember(into: codenamesClueLog, key: "$cell:codenamesTable:clueNo", from: "codenamesClue", unlessWithin: 0.9)
+  codenamesTable[pickPending] = 0
+  codenamesTable[numberPending] = 1
+}
+
+// Aim at our own agents and away from the cards that would cost us the turn or
+// the game: three parts toward the team's live agents, one part away from the
+// mean of the opposing agents and the assassin. Negative weights are what `mix`
+// is for.
+rule "codenames-mix" {
+  when codenamesTable[mixPending] == 1
+  mode: "Level"
+  transform mix(into: "codenamesClue", terms: [
+    {
+      from: "codenamesAim[own]"
+      weight: 3
+    }
+    {
+      from: "codenamesAim[avoid]"
+      weight: -1
+    }
+  ]
+  )
+  codenamesTable[mixPending] = 0
+  codenamesTable[pickPending] = 1
+}
+
+rule "codenames-aim-red" {
+  when codenamesTable[aimPending] == 1 and codenamesTurn == 1
+  mode: "Level"
+  transform mean(from: codenamesWordVectors, into: "codenamesAim[own]", where: codenamesRedLive)
+  transform mean(from: codenamesWordVectors, into: "codenamesAim[avoid]", where: codenamesRedAvoid)
+  codenamesTable[aimPending] = 0
+  codenamesTable[mixPending] = 1
+}
+
+rule "codenames-aim-blue" {
+  when codenamesTable[aimPending] == 1 and codenamesTurn == 2
+  mode: "Level"
+  transform mean(from: codenamesWordVectors, into: "codenamesAim[own]", where: codenamesBlueLive)
+  transform mean(from: codenamesWordVectors, into: "codenamesAim[avoid]", where: codenamesBlueAvoid)
+  codenamesTable[aimPending] = 0
+  codenamesTable[mixPending] = 1
+}
+
+// The four hidden masks the spymasters aim with, rebuilt from the key card and
+// the public reveal state whenever a card turns over. A `mean`/`nearest` filter
+// must be a keyed Bool row, and a Bool cell refuses a numeric expression as its
+// source, so each branch of the classification writes literals.
+rule "codenames-live-refresh" {
+  when codenamesTable[livePending] == 1
+  mode: "Level"
+  forEach: "codenamesKey"
+  if codenamesBoardLive[$each] == 1 and codenamesKey[$each] == 1 {
+    codenamesRedLive[$each] = 1
+    codenamesBlueLive[$each] = 0
+    codenamesRedAvoid[$each] = 0
+    codenamesBlueAvoid[$each] = 1
+  } else if codenamesBoardLive[$each] == 1 and codenamesKey[$each] == 2 {
+    codenamesRedLive[$each] = 0
+    codenamesBlueLive[$each] = 1
+    codenamesRedAvoid[$each] = 1
+    codenamesBlueAvoid[$each] = 0
+  } else if codenamesBoardLive[$each] == 1 and codenamesKey[$each] == 4 {
+    codenamesRedLive[$each] = 0
+    codenamesBlueLive[$each] = 0
+    codenamesRedAvoid[$each] = 1
+    codenamesBlueAvoid[$each] = 1
+  } else {
+    codenamesRedLive[$each] = 0
+    codenamesBlueLive[$each] = 0
+    codenamesRedAvoid[$each] = 0
+    codenamesBlueAvoid[$each] = 0
+  }
+}
+
+// A clue is only asked for when a team is on turn with none pending; the mask
+// refresh itself runs after every reveal.
+rule "codenames-live-done" {
+  when codenamesTable[livePending] == 1
+  mode: "Level"
+  codenamesTable[livePending] = 0
+  codenamesTable[aimPending] = codenamesStage == 1 ? 1 : 0
+}
+
+// What the card turned out to be decides the rest: an own agent lets the team
+// guess again while it has guesses left, anything else passes the turn, the
+// assassin hands the game to the other team, and a team out of agents wins.
+rule "codenames-settle" {
+  when codenamesTable[settlePending] == 1
+  local agent: Int = codenamesTable[revealAgent]
+  local mine: Int = $local:agent == codenamesTurn ? 1 : 0
+  local winner: Int = $local:agent == 4 ? (codenamesTurn == 1 ? 2 : 1) : (codenamesRedLeft == 0 ? 1 : (codenamesBlueLeft == 0 ? 2 : 0))
+  local more: Int = ($local:mine == 1) & (codenamesTable[guessesLeft] > 0)
+  mode: "Level"
+  transaction {
+    codenamesWinner = $local:winner
+    codenamesStage = $local:winner != 0 ? 3 : ($local:more == 1 ? 2 : 1)
+    codenamesTurn = ($local:winner == 0) & ($local:more == 0) ? (codenamesTurn == 1 ? 2 : 1) : codenamesTurn
+    codenamesTable[guessesLeft] = $local:more == 1 ? codenamesTable[guessesLeft] : 0
+    codenamesTable[livePending] = $local:winner == 0 ? 1 : 0
+    codenamesTable[settlePending] = 0
+  }
+}
+
+// The touch itself, one tick after the judgement, so the two computed keys the
+// board write needs are the only ones any rule in this document spells.
+rule "codenames-reveal" {
+  when codenamesTable[revealPending] == 1
+  mode: "Level"
+  codenamesBoardShown[codenamesTable[revealWord]] = codenamesTable[revealAgent]
+  codenamesBoardLive[codenamesTable[revealWord]] = 0
+  codenamesTable[revealPending] = 0
+  codenamesTable[settlePending] = 1
+}
+
+// An accepted guess: the operative of the team on turn, a cell in range that is
+// still on the table, and a guess still owed on the current clue.
+rule "codenames-guess" {
+  when codenamesStage == 2 and codenamesAct[ready] == 1 and $local:legal == 1
+  local legal: Int = codenamesAct[wordOk] & codenamesAct[seatOk] & codenamesAct[isLive] & (codenamesTable[guessesLeft] > 0 ? 1 : 0)
+  mode: "Level"
+  transaction {
+    codenamesTable[revealWord] = codenamesAct[safeWord]
+    codenamesTable[revealAgent] = codenamesAct[agent]
+    codenamesTable[revealPending] = 1
+    codenamesRedLeft += codenamesAct[agent] == 1 ? -1 : 0
+    codenamesBlueLeft += codenamesAct[agent] == 2 ? -1 : 0
+    codenamesTable[guessesLeft] += -1
+    codenamesTable[accepted] += 1
+    codenamesAct[applied] = codenamesAct[request]
+    codenamesAct[result] = 1
+    codenamesAct[ready] = 0
+  }
+}
+
+// Everything the rule above did not accept is refused by name: the request is
+// acknowledged, no card turns over, and the refusal is counted. A spymaster
+// guessing, a card already face up, a cell off the board, a guess before the
+// clue lands, and a guess after the game is over all land here.
+rule "codenames-refuse" {
+  when codenamesAct[ready] == 1
+  mode: "Level"
+  codenamesAct[applied] = codenamesAct[request]
+  codenamesAct[result] = -1
+  codenamesAct[ready] = 0
+  codenamesTable[refused] += 1
+}
+
+// The request resolved into plain literal-keyed numbers one tick before any rule
+// judges it, so the judging rules spell no computed cell key at all.
+rule "codenames-resolve" {
+  when codenamesAct[request] != codenamesAct[applied] and codenamesAct[ready] == 0 and codenamesTable[revealPending] == 0 and codenamesTable[settlePending] == 0
+  local wordOk: Int = (codenamesAct[word] >= 0) & (codenamesAct[word] <= 24)
+  local safeWord: Int = $local:wordOk == 1 ? codenamesAct[word] : 0
+  local operative: Int = codenamesTurn == 1 ? 2 : 4
+  mode: "Level"
+  codenamesAct[wordOk] = $local:wordOk
+  codenamesAct[safeWord] = $local:safeWord
+  codenamesAct[seatOk] = codenamesAct[seat] == $local:operative
+  // An expression may not carry a Bool cell into an Int one, so the reveal
+  // state reaches the judgement through a branch rather than a conjunction.
+  if codenamesBoardLive[($local:safeWord)] == 1 {
+    codenamesAct[isLive] = $local:wordOk
+  } else {
+    codenamesAct[isLive] = 0
+  }
+  codenamesAct[agent] = codenamesKey[($local:safeWord)]
+  codenamesAct[ready] = 1
+}
+
+rule "codenames-begin" {
+  when codenamesStage == 0
+  mode: "Level"
+  codenamesStage = 1
+  codenamesTable[livePending] = 1
+}
+
+state {
+  spaces {
+    space codenamesSpace {
+      model: "puck-fixture"
+      revision: "1"
+      dimensions: 64
+    }
+  }
+
+  world {
+    // The twenty-five board words, keyed by grid ordinal. `embeds` mints
+    // `codenamesWordVectors` beside this row, one vector per key, locked in
+    // codenames.embeddings.json by `puck embed`.
+    table codenamesWords: Text capacity(25) embeds(codenamesWordVectors) {
+      "0" = "africa"
+      "1" = "agent"
+      "2" = "alps"
+      "3" = "amazon"
+      "4" = "ambulance"
+      "5" = "angel"
+      "6" = "antarctica"
+      "7" = "apple"
+      "8" = "arm"
+      "9" = "atlantis"
+      "10" = "australia"
+      "11" = "aztec"
+      "12" = "back"
+      "13" = "ball"
+      "14" = "band"
+      "15" = "bank"
+      "16" = "bar"
+      "17" = "bark"
+      "18" = "bat"
+      "19" = "battery"
+      "20" = "beach"
+      "21" = "bear"
+      "22" = "beat"
+      "23" = "bed"
+      "24" = "beijing"
+    }
+
+    // The clue vocabulary: twelve words that are NOT on the board, which is what
+    // makes a clue a clue. `nearest` writes the winning key into a Text slot and
+    // this row reads the word back.
+    table codenamesLexicon: Text capacity(12) embeds(codenamesLexiconVectors) {
+      cold = "cold"
+      heat = "heat"
+      water = "water"
+      flight = "flight"
+      music = "music"
+      metal = "metal"
+      money = "money"
+      hunting = "hunting"
+      sport = "sport"
+      journey = "journey"
+      night = "night"
+      medicine = "medicine"
+    }
+
+    // The key card. Only the two spymasters may read it.
+    row {
+      capacity: 25
+      cells: map(range(0, 25), i => {
+        key: $"{i}",
+        value: keyCard[i]
+      }
+      )
+      kind: "Int"
+      name: "codenamesKey"
+      visibility {
+        readers [
+          "seat1"
+          "seat3"
+        ]
+      }
+    }
+
+    // The four masks derived from the key card, each the candidate filter one
+    // `mean` reads. Derived from the key, so they carry the key's audience.
+    row {
+      capacity: 25
+      cells []
+      kind: "Bool"
+      name: "codenamesRedLive"
+      visibility {
+        readers [
+          "seat1"
+          "seat3"
+        ]
+      }
+    }
+
+    row {
+      capacity: 25
+      cells []
+      kind: "Bool"
+      name: "codenamesBlueLive"
+      visibility {
+        readers [
+          "seat1"
+          "seat3"
+        ]
+      }
+    }
+
+    row {
+      capacity: 25
+      cells []
+      kind: "Bool"
+      name: "codenamesRedAvoid"
+      visibility {
+        readers [
+          "seat1"
+          "seat3"
+        ]
+      }
+    }
+
+    row {
+      capacity: 25
+      cells []
+      kind: "Bool"
+      name: "codenamesBlueAvoid"
+      visibility {
+        readers [
+          "seat1"
+          "seat3"
+        ]
+      }
+    }
+
+    // The spymaster's two poles: the mean of the team's live agents and the mean
+    // of everything it must steer away from.
+    table codenamesAim: Vector capacity(2)
+
+    // The live clue, aimed at `own` and away from `avoid`.
+    slot codenamesClue: Vector = "codenames"
+
+    // Every clue this game has carried, newest evicting oldest.
+    table codenamesClueLog: Vector capacity(4) evicts
+
+    // The clue word `nearest` chose, as a key of `codenamesLexicon`.
+    slot codenamesClueWord: Text = ""
+
+    // The spymaster's private shortlist: the three cells still on the table
+    // closest to the clue, keyed by grid ordinal, valued by their dot product.
+    row {
+      capacity: 3
+      cells []
+      kind: "Int"
+      name: "codenamesHint"
+      visibility {
+        readers [
+          "seat1"
+          "seat3"
+        ]
+      }
+    }
+
+    // The one door a player acts through: name a seat and a cell, then bump the
+    // request counter. `result` answers 1 accepted or -1 refused.
+    table codenamesAct: Int capacity(16) {
+      agent = 0
+      applied = 0
+      isLive = 0
+      ready = 0
+      request = 0
+      result = 0
+      safeWord = 0
+      seat = 0
+      seatOk = 0
+      word = 0
+      wordOk = 0
+    }
+
+    table codenamesTable: Int capacity(24) {
+      accepted = 0
+      aimPending = 0
+      clueNo = 0
+      guessesLeft = 0
+      livePending = 0
+      mixPending = 0
+      numberPending = 0
+      pickPending = 0
+      refused = 0
+      revealAgent = 0
+      revealPending = 0
+      revealWord = 0
+      settlePending = 0
+    }
+  }
+}

@@ -70,7 +70,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         );
         Assert.Equal(
             expected: 1L,
-            actual: Assert.Single(collection: persisted.Cells!).Value
+            actual: Assert.Single(collection: persisted.Cells!).Value.AsInt
         );
         Assert.Equal(
             expected: 1L,
@@ -202,7 +202,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
                 expectedSubstring: WorldIdentityFactLane.RowName
             );
 
-            var refused = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: definition));
+            var refused = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: definition));
 
             Assert.Equal(
                 expected: WorldRuleRefusal.IdentityLaneUndeclared,
@@ -350,7 +350,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
 
         for (var tick = 0; (tick < hashes.Length); tick++) {
             fixture.Step();
-            hashes[tick] = WorldRuntimeStateHash.HashAuthoritative(
+            hashes[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: (fixture.Server.NextInputTick - 1UL)
             );
@@ -433,7 +433,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0L
+                Value: CellValue.Int(value: 0L)
             )]
     );
     // The seat's body is body 0; the gate holds once a body is seated at all.
@@ -468,7 +468,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         Effects: [new WorldEffect.SetIdentityFact(
                 Key: "0",
                 Fact: "ticks",
-                Expression: ValueExpression.Parse(text: RuleFacts.Tick)
+                Expression: ExpressionProgram.Parse(text: RuleFacts.Tick)
             )],
         Gate: new ActionPredicate.CompareState(
             State: WorldRuleFacts.Population,
@@ -480,7 +480,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         Name: CellName.Parse(candidate: "control"),
         Effects: [new ActionEffect.SetState(
                 State: "seen",
-                Expression: ValueExpression.Parse(text: RuleFacts.Tick)
+                Expression: ExpressionProgram.Parse(text: RuleFacts.Tick)
             )],
         Gate: new ActionPredicate.CompareState(
             State: WorldRuleFacts.Population,
@@ -513,7 +513,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             ))
         );
 
-        return Assert.IsType<StateCell>(@object: cell).Value;
+        return Assert.IsType<StateCell>(@object: cell).Value.AsInt;
     }
     private static long Slot(WorldFixture fixture, string row) => StateRows.FindCell(
         cells: WorldDefinitionRows.FindStateRow(
@@ -521,7 +521,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             name: row
         )!.Cells,
         key: WorldStateRow.SlotKey
-    )!.Value;
+    )!.Value.AsInt;
     private static long PersistedFact(string directory, string identity, string fact) {
         var document = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: Path.Combine(
             path1: directory,
@@ -536,6 +536,6 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         return Assert.IsType<StateCell>(@object: StateRows.FindCell(
             cells: row.Cells,
             key: CellName.Parse(candidate: fact)
-        )).Value;
+        )).Value.AsInt;
     }
 }

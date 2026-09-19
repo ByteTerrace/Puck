@@ -6,7 +6,8 @@ not bypass the document's rules.
 
 | Task | Guide and example |
 |---|---|
-| Author a world in the Puck DSL | [World vocabulary](../../src/Puck.World.Transpiler/README.md), with [language syntax](../../src/Puck.Transpiler/README.md) for expressions, templates and collections. |
+| Author a world in the Puck DSL | [World vocabulary](../../src/Puck.World.Transpiler/README.md) and its [generated construct table](../reference/world-vocabulary.md), with [language syntax](../../src/Puck.Transpiler/README.md) for expressions, templates and collections. |
+| Test a world's behaviour in its own language | [Testing a world](testing-a-world.md) — `test { given when expect }` and `puck test`. |
 | Inspect or edit a running world | [World console](../../src/Puck.World/README.md), including document mutations, reload and saved state. |
 | Understand document fields | [World schema](../../src/Puck.World.Schema/README.md). |
 | Write one shader or a multi-pass effect | [Live shader workflow](../../src/Puck.World/README.md#shader-pipelines), then the [pipeline contract](../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development). |

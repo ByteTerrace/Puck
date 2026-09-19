@@ -648,7 +648,7 @@ addon ghost: OutOfFuel — disabled; re-instantiate ghost to retry
 **Hot reload** is a consumer-level act: re-`Prepare` the same descriptor (a changed content hash
 misses the module cache; an unchanged one reuses it) and publish the fresh instance through `Adopt`
 —Puck.World drives this as an addon-row revision change through
-`WorldAddonRuntime.TryPrepare`/`Commit` (see [Puck.World.Addons](../Puck.World.Addons/README.md)).
+`WorldAddonRuntime.TryPrepare`/`Commit` (see [Puck.World.Addons](../../src/Puck.World.Addons/README.md)).
 A declared `moduleHash` pin is enforced at every load: a content mismatch loads the instance
 straight into a sticky `HashMismatch` fault naming the reason, at boot and re-prepare alike.
 

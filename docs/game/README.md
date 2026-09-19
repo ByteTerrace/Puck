@@ -8,7 +8,7 @@ and dated evidence. Engine concepts and current contracts remain in the
 
 - [Reference game design](design.md)—gameplay requirements and project decisions.
 
-- [Game development plan](../plans/game-development.md)—sequencing, detailed game topic plans, future waves, and federation work.
+- [Play](../plans/play.md)—the programme that sequences the game's remaining engineering, its waves, the federation remainder, the group finder, and MCP.
 
 - [Art and visual design](art/README.md)—character briefs, concept packages, and visual references.
 

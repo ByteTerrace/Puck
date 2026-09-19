@@ -340,7 +340,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
     }
     // A literal wider than the slot it is paired with is a defect rather than an always-false comparison or a silently
     // truncated write, so it is refused where the pairing is known.
-    private void ConstantFits(ValueExpression? value, int width, string path) {
+    private void ConstantFits(ExpressionProgram? value, int width, string path) {
         if (
             (Literal(value: value) is not { } constant) ||
             (width != 1) ||
@@ -379,7 +379,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             );
         }
 
-        ValueExpression? index;
+        ExpressionProgram? index;
 
         try {
             index = CartridgeExpressions.Index(key: key);
@@ -424,20 +424,20 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
     // A wide slot is two bytes and the evaluator works a byte at a time, so one is admitted only as a whole operand in
     // the three places that read a pair — a set step's target and value, and a comparison's operands. Inside a
     // composed expression, and in every byte-wide field, it is refused by name rather than truncated to its low half.
-    private void Expression(ValueExpression? value, string path, bool wide) {
+    private void Expression(ExpressionProgram? value, string path, bool wide) {
         if (
-            (value?.Tokens is null) ||
-            (value.Tokens.Count == 0)
+            (value?.Instructions is null) ||
+            (value.Instructions.Count == 0)
         ) {
             Error(
             message: "Supply an expression.",
             path: path
         ); return;
         }
-        if (value.Tokens.Count > CartridgeExpressions.MaxTokens) {
+        if (value.Instructions.Count > CartridgeExpressions.MaxTokens) {
             Error(
                 path: path,
-                message: $"An expression carries at most {CartridgeExpressions.MaxTokens} tokens; this one carries {value.Tokens.Count}."
+                message: $"An expression carries at most {CartridgeExpressions.MaxTokens} tokens; this one carries {value.Instructions.Count}."
             );
             return;
         }
@@ -461,11 +461,11 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             );
         }
 
-        var bare = (value.Tokens.Count == 1);
+        var bare = (value.Instructions.Count == 1);
 
-        foreach (var token in value.Tokens) {
+        foreach (var token in value.Instructions) {
             switch (token) {
-                case ValueToken.Constant constant:
+                case { Payload: InstructionPayload.Constant constant }:
                     if (
                         (!wide || !bare) &&
                         (constant.Value > CartridgeLimits.NarrowMaximum)
@@ -488,7 +488,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                     }
 
                     break;
-                case ValueToken.State state:
+                case { Payload: InstructionPayload.State state }:
                     Read(
                         path: path,
                         state: state,
@@ -496,7 +496,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                     );
                     break;
                 default:
-                    if (ExpressionVocabulary.Operation(token: token) is not { } operation) {
+                    if (ExpressionVocabulary.Operation(instruction: token) is not { } operation) {
                         Error(
                             path: path,
                             message: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates."
@@ -655,8 +655,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             );
         }
     }
-    private static int? Literal(ValueExpression? value) =>
-        (((value?.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value))
+    private static int? Literal(ExpressionProgram? value) =>
+        (((value?.Instructions is [{ Payload: InstructionPayload.Constant constant }]) && (decimal.Truncate(d: constant.Value) == constant.Value))
             ? (int)constant.Value
             : null
         );
@@ -800,7 +800,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         ActionPredicate.Not not => Reached(gate: not.Predicate),
         _ => 1,
     });
-    private void Read(ValueToken.State state, string path, bool wide) {
+    private void Read(InstructionPayload.State state, string path, bool wide) {
         if (state.Key is not null) {
             Element(
                 array: state.Name,
@@ -1113,8 +1113,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
     }
     // The single-token forms: a bare slot read, and a bare literal. Both are what a pairing rule is stated against.
-    private static string? Slot(ValueExpression? value) =>
-        ((value?.Tokens is [ValueToken.State { Key: null } state])
+    private static string? Slot(ExpressionProgram? value) =>
+        ((value?.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])
             ? state.Name
             : null
         );
@@ -1760,19 +1760,19 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             path: path
         );
     }
-    private void Value(ValueExpression? value, string path) => Expression(
+    private void Value(ExpressionProgram? value, string path) => Expression(
         path: path,
         value: value,
         wide: false
     );
-    private void WideValue(ValueExpression? value, string path) => Expression(
+    private void WideValue(ExpressionProgram? value, string path) => Expression(
         path: path,
         value: value,
         wide: true
     );
     // How many bytes an operand occupies: a bare slot read carries the slot's own width, and everything else is a
     // byte (an array element, a literal, a computed result). An undeclared name is reported elsewhere and reads narrow.
-    private int WidthOf(ValueExpression? value) =>
+    private int WidthOf(ExpressionProgram? value) =>
         (((Slot(value: value) is { } name) && m_widths.TryGetValue(
             key: name,
             value: out var width

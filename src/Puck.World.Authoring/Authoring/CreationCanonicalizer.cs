@@ -2207,6 +2207,24 @@ public static partial class CreationCanonicalizer {
         for (var i = 0; (i < (document.Shapes?.Count ?? 0)); i++) {
             var shape = document.Shapes![i];
 
+            // A document that omits one of these deserializes with the member null, and every check below reads
+            // its value, so the omission is named here rather than left to throw inside the first read.
+            var absent = new[] { ("position", ((object?)shape.Position)), ("rotation", shape.Rotation), ("scale", shape.Scale) }
+                .Where(predicate: static member => (member.Item2 is null))
+                .Select(selector: static member => member.Item1)
+                .ToArray();
+
+            if (absent.Length != 0) {
+                foreach (var member in absent) {
+                    errors.Add(item: new(
+                        Message: $"shape '{shape.Id}' omits {member}, which every shape must author.",
+                        Path: $"shapes[{i}].{member}"
+                    ));
+                }
+
+                continue;
+            }
+
             if (!shapeIds.Add(item: shape.Id)) {
                 errors.Add(item: new(
                     Path: $"shapes[{i}].id",

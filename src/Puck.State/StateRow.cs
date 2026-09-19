@@ -70,12 +70,10 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// <see cref="StateRow.SlotKey"/> is a slot; a row with author-chosen keys is a table.
 /// </summary>
 /// <param name="Key">The cell's stable string key, unique within its carrying row.</param>
-/// <param name="Value">The cell's numeric value for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/> (raw
-/// <c>FixedQ4816</c> bits for <see cref="CellKind.Fixed"/>), or its 0/1 encoding for <see cref="CellKind.Bool"/>;
-/// ignored for <see cref="CellKind.Text"/>. Always raw-encoded at this layer, never decimal — a human-facing
-/// ingress converts before writing here.</param>
-/// <param name="Text">The cell's text for <see cref="CellKind.Text"/>; <see langword="null"/> for every other
-/// kind.</param>
+/// <param name="Value">The cell's carried value, one case for every <see cref="CellKind"/> — see
+/// <see cref="CellValue"/>. Its own <see cref="CellValue.Kind"/> must agree with the carrying row's
+/// <see cref="StateRow.Kind"/> (see <see cref="StateRow.TryAdmitKind"/>); there is no implicit conversion between
+/// cases, since a raw number means <see cref="CellKind.Int"/> in one row and Q48.16 bits in another.</param>
 /// <param name="Advance">This cell's own continuous accumulation trait, replacing its row's <see cref="StateRow.Advance"/>
 /// default wholesale, or <see langword="null"/> to inherit that default (see <see cref="EffectiveBehavior.Resolve"/>).
 /// <see cref="Value"/> is this cell's stored base when the effective behavior is advancing; see
@@ -103,7 +101,7 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// settled anywhere but tick zero. See <see cref="StateCellClock"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record StateCell(CellName Key, long Value = 0, string? Text = null, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
+public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -206,6 +204,14 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// <param name="HistoryCursor">How many values have ever been pushed into a <see cref="StateDomain.Ring"/> row —
 /// engine bookkeeping that names the next slot (<c>cursor mod capacity</c>) and how much of the ring is filled. Zero
 /// without the trait; refused negative.</param>
+/// <param name="Space">The vector space this row belongs to; required for <see cref="CellKind.Vector"/>, refused for every other kind.</param>
+/// <param name="Enum">The <see cref="StateEnum"/> this row's integer values name, or <see langword="null"/> for a
+/// row whose values carry no symbolic domain. Legitimate only for <see cref="CellKind.Int"/> cells, and only
+/// naming an enum the section declares.</param>
+/// <param name="HostOwned">Whether a host facet serves this row instead of the store. A host-owned row has a
+/// descriptor and no storage: rules read it through the facet, no rule writes it, and its owner — not the store's
+/// hash — covers it. Legitimate only for <see cref="RowShape.Slot"/> and <see cref="RowShape.Lattice"/> rows, which
+/// a host can serve without an ordering contract. It has no wire form: the document project derives it.</param>
 public record StateRow(
     CellName Name,
     CellKind Kind,
@@ -225,11 +231,19 @@ public record StateRow(
     string? ValuesFrom = null,
     StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
-    long HistoryCursor = 0
+    long HistoryCursor = 0,
+    string? Space = null,
+    CellName? Enum = null,
+    bool HostOwned = false
 ) {
+    /// <summary>Gets a value indicating whether the runtime or a lowering synthesized this row rather than an
+    /// author declaring it. A console listing, a HUD binding, the decompiler, and the schema treat a generated row
+    /// as implementation detail; the hash and the checkpoint still cover it.</summary>
+    public bool Generated { get; init; }
+
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
-    /// unless it is exactly the engine-minted key legitimate for that row's shape — <see cref="SlotKey"/> on a slot.
+    /// unless the row's own shape mints one by that key (<see cref="MintsReservedCell"/>).
     /// Enforced by the document project's validator at boot, at every live mutation, and on undo-replay.</summary>
     public const string ReservedNamePrefix = "$";
 
@@ -291,6 +305,10 @@ public record StateRow(
     /// slot: its one cell holds the drawn value, and its own bookkeeping (<see cref="DrawCursor"/>/
     /// <see cref="DrawnMasks"/>) lives in row fields rather than in cells.</summary>
     public bool IsSlot => (EffectiveDomain is StateDomain.Slot);
+    /// <summary>Gets the storage shape this row's <see cref="EffectiveDomain"/> derives — the one shape axis every
+    /// store and compiler switches over.</summary>
+    [JsonIgnore]
+    public RowShape Shape => RowShapes.FromDomain(domain: EffectiveDomain);
 
     /// <summary>Clamps <paramref name="value"/> into this row's declared <see cref="Min"/>/<see cref="Max"/>
     /// envelope, each bound applied independently when present.</summary>
@@ -327,7 +345,10 @@ public record StateRow(
     /// is detected rather than silently wrapping. A row declaring no envelope at all still refuses such an
     /// overflow under <see cref="StateOverflow.Refuse"/> (the default); it never reaches
     /// <see cref="StateOverflow.Saturate"/>'s per-side <see cref="long.MinValue"/>/<see cref="long.MaxValue"/>
-    /// clamp unless authored to.</remarks>
+    /// clamp unless authored to.
+    /// <para>The envelope decides first: a saturating row clamps and the clamped value is then admitted against
+    /// <paramref name="symbols"/>, so a clamp landing outside the enum refuses rather than storing a value the
+    /// enum does not name.</para></remarks>
     /// <param name="current">The cell's stored value before this write.</param>
     /// <param name="operand">The write's operand: the replacement for <see cref="StateWriteKind.Set"/>, or the
     /// addend for <see cref="StateWriteKind.Add"/>.</param>
@@ -335,8 +356,10 @@ public record StateRow(
     /// <param name="stored">The value to store: the exact result when admitted, or the clamped bound under
     /// <see cref="StateOverflow.Saturate"/>; zero when refused.</param>
     /// <param name="reason">Why the write was refused, in the author's own vocabulary, or empty on success.</param>
+    /// <param name="symbols">The enum this row names (see <see cref="Enum"/>), or <see langword="null"/> when it
+    /// names none.</param>
     /// <returns><see langword="true"/> when the write is admitted, whether stored exactly or saturated.</returns>
-    public bool TryAdmitWrite(long current, long operand, StateWriteKind write, out long stored, out string reason) {
+    public bool TryAdmitWrite(long current, long operand, StateWriteKind write, out long stored, out string reason, StateEnum? symbols = null) {
         var exact = ((write == StateWriteKind.Add)
             ? (((Int128)current) + operand)
             : ((Int128)operand)
@@ -349,10 +372,24 @@ public record StateRow(
             (exact > upperBound)
         ) {
             if (Overflow == StateOverflow.Saturate) {
-                stored = ((long)((exact < lowerBound)
+                var saturated = ((long)((exact < lowerBound)
                     ? lowerBound
                     : upperBound
                 ));
+
+                if (
+                    (symbols is not null) &&
+                    !symbols.TryAdmit(
+                    reason: out reason,
+                    value: saturated
+                )
+                ) {
+                    stored = 0L;
+
+                    return false;
+                }
+
+                stored = saturated;
                 reason = string.Empty;
 
                 return true;
@@ -372,7 +409,45 @@ public record StateRow(
             return false;
         }
 
-        stored = ((long)exact);
+        var candidate = ((long)exact);
+
+        if (
+            (symbols is not null) &&
+            !symbols.TryAdmit(
+            reason: out reason,
+            value: candidate
+        )
+        ) {
+            stored = 0L;
+
+            return false;
+        }
+
+        stored = candidate;
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Decides whether <paramref name="value"/>'s own case is this row's declared <see cref="Kind"/> — the
+    /// door every cell-admitting caller (the arena's cell import, a live mint, insert, or write) decides a carried
+    /// <see cref="CellValue"/> through before ever touching what it stores, beside <see cref="TryAdmitWrite"/>'s
+    /// numeric envelope. A carrier that holds no case at all is refused exactly like one holding the wrong case:
+    /// neither is this row's <see cref="Kind"/>.</summary>
+    /// <param name="value">The candidate value.</param>
+    /// <param name="reason">Why the value was refused, in the author's own vocabulary, or empty on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> holds this row's own <see cref="Kind"/>.</returns>
+    public bool TryAdmitKind(CellValue value, out string reason) {
+        if (!value.HasValue) {
+            reason = $"row '{Name.Value}' declares kind {Kind}, which a value carrying no case does not satisfy";
+
+            return false;
+        }
+        if (value.Kind != Kind) {
+            reason = $"row '{Name.Value}' declares kind {Kind}, which a {value.Kind} value does not satisfy";
+
+            return false;
+        }
+
         reason = string.Empty;
 
         return true;
@@ -392,6 +467,15 @@ public record StateRow(
         cells: Cells,
         key: cellKey
     ) is not null));
+    /// <summary>Determines whether this row's own shape mints a cell under a
+    /// <see cref="ReservedNamePrefix"/>-prefixed key — the one question <see cref="StateReservedCells"/> asks before
+    /// refusing such a cell.</summary>
+    /// <param name="key">The reserved-prefix cell key.</param>
+    /// <returns><see langword="true"/> when the engine mints a cell by that key on a row of this shape.</returns>
+    /// <remarks>The engine row mints exactly one: <see cref="SlotKey"/>. A document project's row adds the reserved
+    /// keys its own traits mint, so the reserved-cell rule stays one rule asked at one door rather than a list the
+    /// validator and the store each keep.</remarks>
+    public virtual bool MintsReservedCell(CellName key) => (key == SlotKey);
     /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
     /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
     /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
@@ -431,7 +515,7 @@ public static class StateReservedCells {
             comparisonType: StringComparison.Ordinal,
             value: StateRow.ReservedNamePrefix
         ) ||
-            (key == StateRow.SlotKey)
+            row.MintsReservedCell(key: key)
         ) {
             return true;
         }
@@ -464,6 +548,18 @@ public static class StateCapacity {
     /// construction, never by author diligence). An authored <see cref="StateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
     public const int MaxCellsPerRow = TopologyCompilation.MaxCells;
+    /// <summary>The catalog-wide ceiling on distinct interned <see cref="CellKey"/> names. Interning collapses one
+    /// name used by many rows to one entry, so this admits sixteen fully disjoint
+    /// <see cref="MaxCellsPerRow"/>-wide key sets before a mint refuses by name.</summary>
+    public const int MaxCellKeys = (16 * MaxCellsPerRow);
+    /// <summary>A <see cref="StateEnum"/>'s member-count ceiling — the widest symbolic domain a row's integer
+    /// cells may name.</summary>
+    public const int MaxEnumMembers = 256;
+    /// <summary>The section's enum-count ceiling.</summary>
+    public const int MaxEnums = 64;
+    /// <summary>The section's family-count ceiling; a family's own size is bounded by <see cref="MaxRows"/>, since
+    /// its members are rows.</summary>
+    public const int MaxFamilies = 64;
     /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
@@ -476,4 +572,20 @@ public static class StateCapacity {
     public const int MaxSortKeys = MaxRows;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
+    /// <summary>The minimum allowed dimensions for a vector embedding space.</summary>
+    public const int MinVectorDimensions = 8;
+    /// <summary>The maximum allowed dimensions for a vector embedding space.</summary>
+    public const int MaxVectorDimensions = 1024;
+    /// <summary>The maximum number of vector embedding spaces a world may declare.</summary>
+    public const int MaxVectorSpaces = 16;
+    /// <summary>The maximum byte capacity of a single vector row (capacity * dimensions).</summary>
+    public const int MaxVectorRowBytes = 65536;
+    /// <summary>The maximum total byte capacity of all vector rows across a state section (4 MiB).</summary>
+    public const int MaxVectorSectionBytes = 4194304;
+    /// <summary>The maximum number of results returned by a nearest vector transform.</summary>
+    public const int MaxNearestResults = 64;
+    /// <summary>The maximum number of terms in a mix vector transform.</summary>
+    public const int MaxMixTerms = 8;
+    /// <summary>The maximum absolute weight magnitude of a term in a mix vector transform.</summary>
+    public const int MaxMixWeight = 1000;
 }

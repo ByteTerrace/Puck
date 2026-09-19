@@ -16,7 +16,7 @@ public sealed class ChannelWorldRuleFactLawTests {
     private const int PortalOrdinal = 3;
 
     private static long BeaconCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == BeaconRow)).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == BeaconRow)).Cells!.Single().Value.AsInt;
     // A document carrying the base fixture's three role channels plus one composition channel ("portal", ordinal 3)
     // and a rule that writes the "beacon" row once the authored gate holds — the discriminating write under test is
     // always which STRING names the gate.
@@ -37,7 +37,7 @@ public sealed class ChannelWorldRuleFactLawTests {
                 Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             )
             ]),

@@ -27,9 +27,8 @@ public static class BrowserParser {
     // deferred), schema check, migrate, resolve draw sites, then validate — the same order
     // WorldDefinitionFileSource.TryParseComposed runs for a file load, minus the file-load boundary's own basis/
     // imports composition (the caller already composed a fragment, or is parsing a flat standalone document).
-    internal static bool TryParseAndValidate(byte[] utf8Json, ICollection<string> errors, ICollection<string> deferred, out WorldDefinition? definition, out WorldRuleCompilation? compilation, IMachineValidationCatalog? machines = null) {
+    internal static bool TryParseAndValidate(byte[] utf8Json, ICollection<string> errors, ICollection<string> deferred, out WorldDefinition? definition, IMachineValidationCatalog? machines = null) {
         definition = null;
-        compilation = null;
 
         string json;
 
@@ -91,7 +90,7 @@ public static class BrowserParser {
         }
 
         var ok = WorldDefinitionValidator.TryValidateLocally(
-            compilation: out compilation,
+            compilation: out _,
             deferred: deferred,
             definition: drawn,
             errors: errors,
@@ -122,7 +121,6 @@ public static class BrowserParser {
         var deferred = new List<string>();
 
         if (!TryParseAndValidate(
-            compilation: out _,
             definition: out var definition,
             deferred: deferred,
             errors: errors,
@@ -175,7 +173,6 @@ public static class BrowserParser {
         var composedBytes = Encoding.UTF8.GetBytes(s: composed!.ToJsonString());
 
         if (!TryParseAndValidate(
-            compilation: out _,
             deferred: deferred,
             definition: out var definition,
             errors: errors,

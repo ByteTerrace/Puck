@@ -24,8 +24,14 @@ public sealed class ContributionTenureLawTests {
     private const string SlotCreation = "plinth";
     private const string SlotId = "plaza-slot";
 
+    // Both graces are authored in seconds, and one fixture step is one simulation tick, so every step count below
+    // is derived from the document's own rate rather than written out.
+    private static readonly ulong ContributionGraceTicks = WorldSimulationTickConversion.DurationTicks(
+        ratePerSecond: ((uint)Fixtures.DefaultRateHz),
+        seconds: ContributionGraceSeconds
+    );
     private static readonly ulong LivenessGraceTicks = WorldSimulationTickConversion.DurationTicks(
-        ratePerSecond: 240U,
+        ratePerSecond: ((uint)Fixtures.DefaultRateHz),
         seconds: LivenessGraceSeconds
     );
 
@@ -227,7 +233,7 @@ public sealed class ContributionTenureLawTests {
             grant: possession
         );
 
-        for (var index = 0; (index < 50); index++) {
+        for (var index = 0UL; (index <= (ContributionGraceTicks + 2UL)); index++) {
             fixture.Step();
         }
 
@@ -316,7 +322,7 @@ public sealed class ContributionTenureLawTests {
 
         DropLink(fixture: fixture);
 
-        for (var index = 0; (index < 50); index++) {
+        for (var index = 0UL; (index <= (ContributionGraceTicks + 2UL)); index++) {
             fixture.Step();
         }
 
@@ -386,6 +392,41 @@ public sealed class ContributionTenureLawTests {
         );
         Assert.NotNull(@object: Facet(fixture: endowed).Contributor);
         Assert.Null(@object: Facet(fixture: endowed).RetractDeadlineTick);
+    }
+    /// <summary>DENIAL: a quiet tick — an unchanged document, a watched link reading as it did at the last index
+    /// rebuild, and nothing due — reads no placement row at all, so the sweep costs one liveness verdict per watched
+    /// link and four deadline-table front comparisons. CONTROL: one fact changes — the watched link drops — and the
+    /// same sweep reads the slot to arm it.</summary>
+    [Fact]
+    public void AQuietTickReadsNoPlacement() {
+        using var fixture = Fixtures.FreshServer(definition: Document());
+
+        Fill(
+            actor: WorldPrincipal.Console,
+            fixture: fixture
+        );
+        // The fill swapped the document, so the next sweep rebuilds the index; measure from after it.
+        fixture.Step();
+        fixture.Step();
+
+        var quietFrom = fixture.Server.Tick.TenurePlacementReads;
+
+        // DENIAL: well inside the authored liveness grace, so the link still reads live, the document has settled,
+        // and nothing is due.
+        for (var index = 0; (index < 4); index++) {
+            fixture.Step();
+        }
+
+        Assert.Equal(
+            actual: fixture.Server.Tick.TenurePlacementReads,
+            expected: quietFrom
+        );
+        Assert.Null(@object: Facet(fixture: fixture).RetractDeadlineTick);
+
+        // CONTROL: the link drops, which is the one thing that makes the sweep reach a placement again.
+        DropLink(fixture: fixture);
+
+        Assert.True(condition: (fixture.Server.Tick.TenurePlacementReads > quietFrom));
     }
     /// <summary>DENIAL: a submission that names <c>contributor</c> is refused and changes nothing. CONTROL: the same
     /// submission without it applies and stamps the ACTING principal — which is a different identity from the one

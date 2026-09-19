@@ -114,10 +114,10 @@ string ComposeTree(string rootName, string documentsJson, string editedName, str
 string Canonicalize(string json);                                          // same shape as Parse
 string Compile(string json);                                               // {ok, handle} | {ok:false, errors[]}
 string Release(string handle);                                             // {ok}
-string Rows(string handle);                                                // {ok, rows:[{name, kind, keyed, cells:[{key,value,text}]}]}
+string Rows(string handle);                                                // {ok, rows:[{name, kind, keyed, cells:[{key,value}]}]}
 string Rebind(string handle, string json);                                 // {ok, error?}
 string Judge(string handle, string tick);                                  // {ok, trace:{rules[{name,mode,evaluations[]}], writes[{row,key,old,new}], refusals[]}}
-string ReadRow(string handle, string row, string key);                     // {found, value, text}
+string ReadRow(string handle, string row, string key);                     // {found, kind, value} — see "One cell value on the wire"
 string WriteRow(string handle, string row, string key, string value, string write); // write: "set"|"add" -> {ok, error?}
 string Evaluate(string handle, string expression, string kind, string tick); // kind: a CellKind member name ("Int"/"Fixed") -> {ok, value, error?}
 string BoardMask(string handle, string row);                               // {ok, mask, error?} — only for a board of <= 64 cells
@@ -130,6 +130,24 @@ board's un-authored cells are readable individually through `ReadRow` or in
 bulk through `Cells`/`BoardMask`, never enumerated in `Rows`—a large lattice
 would otherwise dwarf the rest of the read-back for a board no studio user
 paints sparsely.
+
+### One cell value on the wire
+
+A cell crosses as the tag-and-payload pair `Puck.State.CellValue` is, never as
+sibling members a reader has to pick between: `kind` names the case and `value`
+is that case's own spelling. `Rows` carries the tag once per row, so its
+`cells[]` entries spell the payload alone.
+
+| `kind` | `value` |
+|---|---|
+| `Int` | the 64-bit value as a decimal string |
+| `Fixed` | the raw `FixedQ4816` bits as a decimal string—the same raw channel `WriteRow` takes, never a decimal reading of the number |
+| `Bool` | `"true"` or `"false"` |
+| `Text` | the text itself |
+| `Vector` | the base64url components |
+
+`value` is `null` where the arena holds no such cell; `kind` is `null` only when
+no row of the session addresses the read at all (`found: false`).
 
 ## The runtime's Node/resource-loader hooks (`dotnet.d.ts`)
 
@@ -153,9 +171,11 @@ both boot the engine with no special flags or globals).
 
 ## Determinism canary
 
-`Puck.State.StateFrameHash.Compute(StateFrame)` folds a frame's `Values` span
-through one FNV-1a accumulator—the shared comparator between a native run
-and a wasm run of the identical document, ticks, and writes.
+`Puck.State.StateArena.ComputeHash()` folds every stored column of the session's
+arena through one FNV-1a accumulator—the shared comparator between a native run
+and a wasm run of the identical document, ticks, and writes. The two scripted
+sequences below currently fold to the same hash: the row they write already
+holds the value they write, and neither judged tick moves the arena.
 `tests/Puck.World.Browser.Tests/BrowserParityRecordingTests.cs` runs two fixed
 scripted sequences (write a scalar row then judge tick 1; judge tick 1 then
 tick 2 with no write) over `games/tictactoe.world.json` composed under
@@ -206,25 +226,24 @@ cannot change another host's machine catalog.
 island (`puck.world.json` over `standard.basis.json`) succeeds, its `deferred[]`
 naming every one of the three real GamingBrick console screens
 `modules/arcade.world.json` (one of the island's sixteen imports) authors—
-`screens[0].source.machine.engine: screen-machine engine 'gaming-brick'
-registration deferred—this host carries no screen-machine engine catalog.`
-(and two more, for `advanced-gaming-brick` and a second `gaming-brick` screen).
-This is confirmed, expected behavior, not a defect:
-`BrowserEngineTests.Parse_composed_puck_world_defers_its_unregistered_machine_engines`
-pins it. A district or game fragment that authors no `screens[].source.machine`
+`machines[0] (arcade_cgb-screen).configuration: validation is deferred because
+no machine catalog was supplied for 'gaming-brick'.` (and two more, for
+`advanced-gaming-brick` and a second `gaming-brick` screen), beside three
+`screens[n].source.machine.output` deferrals. This is expected behavior, not a
+defect: `engine-wasm.test.cjs`'s `ComposeTree()` case pins it. A district or game fragment that authors no `screens[].source.machine`
 row (most of the catalog) parses and compiles cleanly with no deferral at all.
 
 **`Judge()` on the composed flagship island judges hostlessly, honestly.**
-`BrowserSession`'s rule reader (`Engine/BrowserRuleReader.cs`) wraps a
-`Puck.State.FrameHost` for every state read and write, and itself widens to
-`IWorldRuleReader` (`Puck.World.Schema/IWorldRuleReader.cs`)—the world's
-sixteen operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
-`ArgBodyOperand`, …) plus the two body-reference resolutions
-`Puck.World.Server.WorldServer` answers from real bodies, machines, a clock,
-and adjacencies. This engine ships none of those, so `BrowserRuleReader`
+`BrowserSession`'s effect host (`Engine/BrowserRuleReader.cs`) is a
+`Puck.State.Rules.ArenaEffectHost` over the session's `StateArena`, widened to
+`IWorldFacts` (`Puck.World.Schema/IWorldFacts.cs`)—the world's
+seventeen operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
+`ArgBodyOperand`, …) plus the two body-reference resolutions and the two
+host-owned row reads `Puck.World.Server.WorldServer` answers from real bodies,
+machines, a clock, and adjacencies. This engine ships none of those, so `BrowserRuleReader`
 answers each one the honest vacuous fact a world with no bodies, no machines,
 no clock, and no adjacencies gives—the same convention each
-`WorldRuleFacts` prefix's own remarks and `WorldServer.RuleHost.cs`'s "no such
+`WorldRuleFacts` prefix's own remarks and `WorldRuleHost.cs`'s "no such
 body"/"no such machine" reads already commit to for an absent host, applied
 here for "there is no host at all": population `0`, physics vacuously
 quiescent, no region occupants, no machine byte, no argmax/argmin/nearest
@@ -233,14 +252,19 @@ that do not exist, no line of sight, never parked, perfectly upright, a link
 never established, a zero channel, and no navigation state.
 `PlacementInfluenceOperand` alone reads `RuleFact.Absent`—an unrepresented
 influence provider is unknowable, never a falsely safe zero, exactly as
-`WorldServer.Influence.cs` already answers it for the one real case that
+`WorldRuleHost.Influence.cs` already answers it for the one real case that
 reads `Absent` today. `puck.world.json`'s own `dive`/`kart`/`jump` modules
 author rules reading these facts, so every such hostless read is recorded
 onto the judged tick's own trace as `hostFacts[]`
 (`{rule, operand, answer}`)—how an author sees which rules lean on a fact
-this engine cannot supply from a real host, without the
-`Arg_InvalidCastException` a bare `FrameHost` used to throw the moment such a
-rule evaluated. `BrowserHostlessIslandTests` judges the composed island over
+this engine cannot supply from a real host. A rule whose facet this host does
+not advertise is refused admission at load (`RuleNeeds.Admit`) and never
+evaluated; its refusal rides every judged tick's `refusals[]` under the category
+`RuleNotAdmitted`.
+
+A state row lying over a dense lattice (a physics field) is installed
+`HostOwned`: the arena stores no columns for it, and this engine serves no
+host-owned row, so its cells read as absent. `BrowserHostlessIslandTests` judges the composed island over
 ticks 1-3 and pins both that no such throw occurs and that `hostFacts[]`
 names a physics/body operand; `engine-timing.test.cjs` and
 `engine-wasm.test.cjs` judge the composed island itself now, not a tictactoe
@@ -308,7 +332,7 @@ and `Compile` do **not** drop the same way (2,605 ms → 1,996 ms; 1,683 ms →
 `JsonNode` tree merge `BrowserComposer.ComposeTree` calls into, and the
 parse/migrate/validate/rule-compile pipeline `BrowserParser.TryParseAndValidate`
 runs three times over the same ~428 KB document across one `ComposeTree` +
-one `Compile` call) and `Puck.State` (`RuleEvaluator`'s own rule compilation)—
+one `Compile` call) and `Puck.State.Rules` (the rule compiler `WorldFactsCompiler` runs)—
 outside this project's own `Engine`/`Exports` boundary. The wasm interpreter
 is roughly 5-6x slower than native-warm on both (`ComposeTree` 12,733 ms vs
 1,996 ms; `Compile` 9,911 ms vs 1,710 ms), consistent with Mono's

@@ -1,0 +1,37 @@
+// A world whose whole behaviour is one cell a seat writes, stated as a test. `puck test` over this source
+// compiles it, generates the world its `test` block asks for, boots that world twice, and reads the verdict.
+
+schema: "puck.world.definition.v1"
+documentId: "seat-writes-a-cell"
+
+grants [
+  {
+    capability: "Mutate"
+    principal: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: "Edit"
+    principal: "seat1"
+    subject: "state:armour"
+  }
+]
+
+state {
+  world {
+    slot armour: Int = 0
+  }
+}
+
+test "a seat's write reaches the row" {
+  given {
+    armour = 1
+  }
+  when {
+    seat1: world.state.cell.set armour $value 7
+    ticks 1
+  }
+  expect {
+    armour == 7
+  }
+}

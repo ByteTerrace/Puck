@@ -1,8 +1,6 @@
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -10,17 +8,11 @@ namespace Puck.World.Transpiler.Tests;
 // puck.world.definition.v1 rule bodies are straight-line and its gates are comparisons, so the world side of these
 // features is a named refusal rather than a lowering.
 public class ControlFlowTests {
-    private static DiagnosticBag LowerForDiagnostics(string source) {
-        var diagnostics = new DiagnosticBag();
-
-        WorldDocumentEmitter.LowerWithDiagnostics(
-            PuckParser.ParseDocument(source),
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        return diagnostics;
-    }
+    private static DiagnosticBag LowerForDiagnostics(string source) =>
+        WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
+        ).Diagnostics;
     private static RuleBlockNode ParseOneRule(string body) {
         var document = PuckParser.ParseDocument($$"""
             schema: "puck.world.definition.v1"
@@ -143,7 +135,7 @@ public class ControlFlowTests {
             }
             """;
 
-        var formatted = PuckFormatter.Format(Source);
+        var formatted = PuckFormat.Format(Source);
         var rule = Assert.IsType<RuleBlockNode>(@object: PuckParser.ParseDocument(formatted).Statements[0]);
         var branch = Assert.IsType<IfStatementNode>(@object: rule.Statements[0]);
         var loop = Assert.IsType<RepeatStatementNode>(@object: Assert.Single(collection: branch.Then));

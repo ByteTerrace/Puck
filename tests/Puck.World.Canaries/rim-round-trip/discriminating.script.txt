@@ -1,0 +1,10 @@
+world.wait 20
+body.where 0
+body.fly 1 0 0 0 0 0 2
+world.wait 200
+body.where 0
+body.fly 0 0 1 0 0 0 5
+world.wait 120
+body.where 0
+world.wait 60
+body.where 0

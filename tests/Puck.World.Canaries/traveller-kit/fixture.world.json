@@ -1,0 +1,801 @@
+{
+  "schema": "puck.world.definition.v1",
+  "documentId": "traveller-kit-canary",
+  "simulation": {
+    "rateHz": 60
+  },
+  "bodies": {
+    "capacity": 4,
+    "localSeats": 1,
+    "networkPlayers": 0,
+    "seatSpawns": [
+      "ledge"
+    ],
+    "defaultPeerSource": "Idle"
+  },
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance",
+      "frame": "Heading"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe",
+      "frame": "Heading"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "rise",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    },
+    {
+      "name": "jump",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "dash",
+      "shape": "Binary",
+      "composition": true
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "ledge",
+      "position": [
+        0,
+        0.03,
+        0
+      ]
+    }
+  ],
+  "prototypes": [
+    {
+      "id": "kitDeck",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "kitDeck",
+        "palette": [
+          {
+            "color": "#8C8780"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "plate",
+            "type": "Box",
+            "position": [
+              0,
+              -0.25,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              10,
+              0.25,
+              8
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "kitFloor",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "kitFloor",
+        "palette": [
+          {
+            "color": "#6FA383"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "slab",
+            "type": "Box",
+            "position": [
+              0,
+              -0.25,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              40,
+              0.25,
+              40
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "kitWall",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "kitWall",
+        "palette": [
+          {
+            "color": "#4E5C55"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "panel",
+            "type": "Box",
+            "position": [
+              0,
+              3,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.25,
+              3,
+              8
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "deck",
+        "prototypeId": "kitDeck",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "floor",
+        "prototypeId": "kitFloor",
+        "position": [
+          0,
+          -20,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall",
+        "prototypeId": "kitWall",
+        "position": [
+          -10.4,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      }
+    ]
+  },
+  "bodyMotionPrograms": [
+    {
+      "name": "travel",
+      "version": "puck.body.program.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "state": {
+    "body": [
+      {
+        "name": "airTicks",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      },
+      {
+        "name": "coyoteTicks",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      },
+      {
+        "name": "riseTicks",
+        "kind": "Counter",
+        "initial": 0
+      },
+      {
+        "name": "airJumps",
+        "kind": "Counter",
+        "initial": 1,
+        "resetFact": "Grounded"
+      },
+      {
+        "name": "airDashes",
+        "kind": "Counter",
+        "initial": 1,
+        "resetFact": "Grounded"
+      },
+      {
+        "name": "dashSpentTicks",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      },
+      {
+        "name": "groundDashes",
+        "kind": "Counter",
+        "initial": 0
+      },
+      {
+        "name": "airDashFires",
+        "kind": "Counter",
+        "initial": 0
+      },
+      {
+        "name": "jumpFires",
+        "kind": "Counter",
+        "initial": 0
+      },
+      {
+        "name": "cutFires",
+        "kind": "Counter",
+        "initial": 0
+      },
+      {
+        "name": "fuel",
+        "kind": "Counter",
+        "initial": 0
+      },
+      {
+        "name": "dashCooldown",
+        "kind": "Timer",
+        "initial": 0
+      }
+    ]
+  },
+  "kits": {
+    "rows": [
+      {
+        "name": "traveller",
+        "bodyMotionProgram": "travel",
+        "bodyContact": "Solid",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "speed": {
+            "value": 6.5
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "facingSnap": false,
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "holds": [
+            {
+              "name": "wall",
+              "bond": "Surface",
+              "hold": "Pull",
+              "cone": [
+                65,
+                110
+              ],
+              "pull": 1.0,
+              "reach": 0.8,
+              "upLean": 0.0,
+              "speed": 2.0,
+              "forward": "Heading",
+              "onDrive": true,
+              "driveAlignment": 0.5,
+              "release": "jump"
+            },
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "hold": "Gravity",
+              "cone": [
+                0,
+                60
+              ],
+              "reach": 1.2,
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "envelope": {
+                "sinkSpeed": 40
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "envelope": {
+                "sinkSpeed": 40
+              }
+            }
+          ]
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "any",
+                "predicates": [
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.1
+                  },
+                  {
+                    "$type": "compareState",
+                    "state": "airJumps",
+                    "comparison": "Greater",
+                    "value": 0
+                  }
+                ]
+              },
+              "latchSeconds": 0.12,
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 11.5
+                },
+                {
+                  "$type": "addState",
+                  "state": "airJumps",
+                  "value": -1
+                },
+                {
+                  "$type": "addState",
+                  "state": "jumpFires",
+                  "value": 1
+                }
+              ]
+            },
+            "onRelease": {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
+              },
+              "latchSeconds": 0,
+              "effects": [
+                {
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.4
+                },
+                {
+                  "$type": "addState",
+                  "state": "cutFires",
+                  "value": 1
+                }
+              ]
+            },
+            "onFact": [
+              {
+                "fact": "Airborne",
+                "mode": "Level",
+                "effects": [
+                  {
+                    "$type": "addState",
+                    "state": "airTicks",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "fact": "Airborne",
+                "mode": "Level",
+                "gate": {
+                  "$type": "recently",
+                  "fact": "Grounded",
+                  "windowSeconds": 0.1
+                },
+                "effects": [
+                  {
+                    "$type": "addState",
+                    "state": "coyoteTicks",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "fact": "Rising",
+                "mode": "Level",
+                "effects": [
+                  {
+                    "$type": "addState",
+                    "state": "riseTicks",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "fact": "Airborne",
+                "mode": "Level",
+                "gate": {
+                  "$type": "compareState",
+                  "state": "airDashes",
+                  "comparison": "Equal",
+                  "value": 0
+                },
+                "effects": [
+                  {
+                    "$type": "addState",
+                    "state": "dashSpentTicks",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "fact": "Airborne",
+                "mode": "Edge",
+                "gate": {
+                  "$type": "all",
+                  "predicates": [
+                    {
+                      "$type": "recently",
+                      "fact": "Grounded",
+                      "windowSeconds": 0.1
+                    },
+                    {
+                      "$type": "compareState",
+                      "state": "jumpFires",
+                      "comparison": "Equal",
+                      "value": 0
+                    }
+                  ]
+                },
+                "effects": [
+                  {
+                    "$type": "setVerticalVelocity",
+                    "velocity": 11.5
+                  },
+                  {
+                    "$type": "addState",
+                    "state": "jumpFires",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "fact": "Rising",
+                "mode": "Level",
+                "gate": {
+                  "$type": "all",
+                  "predicates": [
+                    {
+                      "$type": "compareState",
+                      "state": "riseTicks",
+                      "comparison": "Equal",
+                      "value": 3
+                    },
+                    {
+                      "$type": "compareState",
+                      "state": "cutFires",
+                      "comparison": "Equal",
+                      "value": 0
+                    }
+                  ]
+                },
+                "effects": [
+                  {
+                    "$type": "scaleVerticalVelocity",
+                    "factor": 0.4
+                  },
+                  {
+                    "$type": "addState",
+                    "state": "cutFires",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "dash": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "now",
+                    "fact": "Grounded"
+                  },
+                  {
+                    "$type": "timerElapsed",
+                    "state": "dashCooldown"
+                  }
+                ]
+              },
+              "latchSeconds": 0.05,
+              "effects": [
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "speed": 25,
+                  "durationSeconds": 0.2
+                },
+                {
+                  "$type": "startTimer",
+                  "state": "dashCooldown",
+                  "seconds": 0.5
+                }
+              ]
+            },
+            "onFact": [
+              {
+                "fact": "Grounded",
+                "mode": "Edge",
+                "gate": {
+                  "$type": "compareState",
+                  "state": "groundDashes",
+                  "comparison": "Equal",
+                  "value": 0
+                },
+                "effects": [
+                  {
+                    "$type": "planarImpulse",
+                    "bodyDirection": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "speed": 25,
+                    "durationSeconds": 0.2
+                  },
+                  {
+                    "$type": "startTimer",
+                    "state": "dashCooldown",
+                    "seconds": 0.5
+                  },
+                  {
+                    "$type": "addState",
+                    "state": "groundDashes",
+                    "value": 1
+                  }
+                ]
+              },
+              {
+                "fact": "Airborne",
+                "mode": "Edge",
+                "gate": {
+                  "$type": "compareState",
+                  "state": "airDashes",
+                  "comparison": "Greater",
+                  "value": 0
+                },
+                "effects": [
+                  {
+                    "$type": "planarImpulse",
+                    "bodyDirection": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "speed": 25,
+                    "durationSeconds": 0.2
+                  },
+                  {
+                    "$type": "addState",
+                    "state": "airDashes",
+                    "value": -1
+                  },
+                  {
+                    "$type": "addState",
+                    "state": "airDashFires",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "jetpack",
+        "bodyMotionProgram": "travel",
+        "bodyContact": "Solid",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "speed": {
+            "value": 6.5
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "facingSnap": false,
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "hold": "Gravity",
+              "cone": [
+                0,
+                60
+              ],
+              "reach": 1.2,
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "envelope": {
+                "sinkSpeed": 40
+              }
+            },
+            {
+              "name": "jet",
+              "bond": "Free",
+              "hold": "Lift",
+              "lift": 1.0,
+              "thrust": 1.0,
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "spend": {
+                "state": "fuel",
+                "ratePerSecond": 1.0
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "envelope": {
+                "sinkSpeed": 40
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "defaultSeatKit": "traveller",
+  "views": {
+    "layouts": [],
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.program.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "yaw": 0,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.9599311
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/tictactoe.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "a_tttMoveCell",
+        "key": "$value",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "a_tttMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "a_tttMoveCell",
+        "key": "$value",
+        "value": 0
+      }
+    },
+    {
+      "set": {
+        "row": "a_tttMoveRequest",
+        "key": "$value",
+        "value": 2
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "b_tttMoveCell",
+        "key": "$value",
+        "value": 8
+      }
+    },
+    {
+      "set": {
+        "row": "b_tttMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 550
+    }
+  ]
+}

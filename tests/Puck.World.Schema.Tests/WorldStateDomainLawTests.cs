@@ -63,7 +63,7 @@ public sealed class WorldStateDomainLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     CellName.Parse(candidate: "a"),
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
         var oversized = new WorldStateRow(
@@ -100,7 +100,7 @@ public sealed class WorldStateDomainLawTests {
             ),
             Cells: [new(
                     CellName.Parse(candidate: "0"),
-                    3
+                    CellValue.Int(value: 3L)
                 )]
         );
         var domain = Assert.IsType<StateDomain.CellsOf>(@object: board.EffectiveDomain);
@@ -136,7 +136,7 @@ public sealed class WorldStateDomainLawTests {
             Domain: new StateDomain.Slot(),
             Cells: [new(
                     WorldStateRow.SlotKey,
-                    1
+                    CellValue.Int(value: 1L)
                 )]
         );
         var keys = new WorldStateRow(
@@ -146,7 +146,7 @@ public sealed class WorldStateDomainLawTests {
             Capacity: 2,
             Cells: [new(
                     CellName.Parse(candidate: "a"),
-                    1
+                    CellValue.Int(value: 1L)
                 )]
         );
         var keysOf = new WorldStateRow(
@@ -158,7 +158,7 @@ public sealed class WorldStateDomainLawTests {
             ),
             Cells: [new(
                     CellName.Parse(candidate: "a"),
-                    1
+                    CellValue.Int(value: 1L)
                 )]
         );
         var cellsOf = new WorldStateRow(
@@ -233,7 +233,7 @@ public sealed class WorldStateDomainLawTests {
             Capacity: 1,
             Cells: [new(
                     CellName.Parse(candidate: "t1"),
-                    1
+                    CellValue.Bool(value: true)
                 )]
         );
         var attribute = new WorldStateRow(
@@ -242,7 +242,7 @@ public sealed class WorldStateDomainLawTests {
             Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
             Cells: [new(
                     CellName.Parse(candidate: "t1"),
-                    7
+                    CellValue.Int(value: 7L)
                 )]
         );
 
@@ -274,7 +274,7 @@ public sealed class WorldStateDomainLawTests {
             Capacity: 1,
             Cells: [new(
                     CellName.Parse(candidate: "t1"),
-                    0
+                    CellValue.Int(value: 0L)
                 )]
         );
         var deck = Document(
@@ -310,7 +310,7 @@ public sealed class WorldStateDomainLawTests {
             Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
             Cells: [new(
                     CellName.Parse(candidate: "t1"),
-                    7
+                    CellValue.Int(value: 7L)
                 )]
         );
 
@@ -325,7 +325,7 @@ public sealed class WorldStateDomainLawTests {
         // Control: the same attribute row against a domain row that already carries its keys validates clean.
         var populatedDomain = emptyDomain with { Cells = [new(
                 CellName.Parse(candidate: "t1"),
-                0
+                CellValue.Int(value: 0L)
             )] };
 
         Assert.Equal(
@@ -367,7 +367,7 @@ public sealed class WorldStateDomainLawTests {
             HistoryCursor: 1,
             Cells: [new(
                     CellName.Parse(candidate: "0"),
-                    9
+                    CellValue.Int(value: 9L)
                 )]
         );
         var domain = Assert.IsType<StateDomain.Ring>(@object: ring.EffectiveDomain);
@@ -435,7 +435,7 @@ public sealed class WorldStateDomainLawTests {
             CellKind.Int,
             Cells: [new(
                     WorldStateRow.SlotKey,
-                    5
+                    CellValue.Int(value: 5L)
                 )]
         );
 
@@ -453,10 +453,10 @@ public sealed class WorldStateDomainLawTests {
             CellKind.Int,
             Cells: [new(
                     CellName.Parse(candidate: "a"),
-                    1
+                    CellValue.Int(value: 1L)
                 ), new(
                     CellName.Parse(candidate: "b"),
-                    2
+                    CellValue.Int(value: 2L)
                 )]
         );
         var byKeyedSingle = new WorldStateRow(
@@ -464,7 +464,7 @@ public sealed class WorldStateDomainLawTests {
             CellKind.Int,
             Cells: [new(
                     CellName.Parse(candidate: "a"),
-                    1
+                    CellValue.Int(value: 1L)
                 )]
         );
 

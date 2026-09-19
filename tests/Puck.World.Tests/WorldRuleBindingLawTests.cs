@@ -10,11 +10,11 @@ public sealed class WorldRuleBindingLawTests {
     // min(damage, hp) against the already-reduced hp.
     private static WorldDefinition Document(bool bound) {
         var dealt = (bound
-            ? Expr(State(row: "$bind:dealt"))
+            ? Expr(State(row: "$local:dealt"))
             : Expr(
                 State(row: "damage"),
                 State(row: "hp"),
-                new ValueToken.Min()
+                Instruction.Of(operation: ExpressionOp.Minimum)
             )
         );
 
@@ -34,38 +34,38 @@ public sealed class WorldRuleBindingLawTests {
                 [
                     new ActionEffect.AddState(
                         State: "hp",
-                        Expression: Expr([.. dealt.Tokens, new ValueToken.Negate()])
+                        Expression: Expr([.. dealt.Instructions, Instruction.Of(operation: ExpressionOp.Negate)])
                     ),
                     new ActionEffect.AddState(
                         State: "attacker",
-                        Expression: Expr([.. dealt.Tokens, new ValueToken.Constant(Value: 4m), new ValueToken.Divide(), new ValueToken.Negate()])
+                        Expression: Expr([.. dealt.Instructions, Instruction.Constant(value: 4m), Instruction.Of(operation: ExpressionOp.Divide), Instruction.Of(operation: ExpressionOp.Negate)])
                     ),
                 ],
-                Bindings: (bound
-            ? [new RuleBinding(
+                Locals: (bound
+            ? [new RuleLocal(
                             CellName.Parse(candidate: "dealt"),
                             CellKind.Int,
                             Expr(
                                 State(row: "damage"),
                                 State(row: "hp"),
-                                new ValueToken.Min()
+                                Instruction.Of(operation: ExpressionOp.Minimum)
                             )
                         )]
             : null)
             )],
         };
     }
-    private static ValueExpression Expr(params ValueToken[] tokens) => new(Tokens: tokens);
+    private static ExpressionProgram Expr(params Instruction[] tokens) => new(Instructions: tokens);
     private static WorldStateRow Slot(string name, long value) =>
         new(
             CellName.Parse(candidate: name),
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    value
+                    CellValue.Int(value: value)
                 )]
         );
-    private static ValueToken State(string row) => new ValueToken.State(row);
+    private static Instruction State(string row) => Instruction.Operand(name: row);
     private static long Value(WorldFixture fixture, string row) =>
         StateRows.FindCell(
             cells: WorldDefinitionRows.FindStateRow(
@@ -73,7 +73,7 @@ public sealed class WorldRuleBindingLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [Fact]
     public void ABindingReadsOnlyEarlierBindingsAndAppearsInTheReadBack() {
@@ -86,15 +86,15 @@ public sealed class WorldRuleBindingLawTests {
                 CellName.Parse(candidate: "r"),
                 [new ActionEffect.SetState(
                         State: "a",
-                        Expression: Expr(State(row: "$bind:x"))
+                        Expression: Expr(State(row: "$local:x"))
                     )],
-                Bindings: [
-                new RuleBinding(
+                Locals: [
+                new RuleLocal(
                         CellName.Parse(candidate: "x"),
                         CellKind.Int,
-                        Expr(State(row: "$bind:y"))
+                        Expr(State(row: "$local:y"))
                     ),
-                new RuleBinding(
+                new RuleLocal(
                         CellName.Parse(candidate: "y"),
                         CellKind.Int,
                         Expr(State(row: "a"))
@@ -102,10 +102,10 @@ public sealed class WorldRuleBindingLawTests {
             ]
             )],
         };
-        var refusal = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: later));
+        var refusal = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: later));
 
         Assert.Contains(
-            "$bind:y",
+            "$local:y",
             refusal.Message,
             StringComparison.Ordinal
         );
@@ -115,31 +115,31 @@ public sealed class WorldRuleBindingLawTests {
                 CellName.Parse(candidate: "r"),
                 [new ActionEffect.SetState(
                         State: "a",
-                        Expression: Expr(State(row: "$bind:x"))
+                        Expression: Expr(State(row: "$local:x"))
                     )],
-                Bindings: [
-                new RuleBinding(
+                Locals: [
+                new RuleLocal(
                         CellName.Parse(candidate: "y"),
                         CellKind.Int,
                         Expr(State(row: "a"))
                     ),
-                new RuleBinding(
+                new RuleLocal(
                         CellName.Parse(candidate: "x"),
                         CellKind.Int,
                         Expr(
-                            State(row: "$bind:y"),
-                            new ValueToken.Constant(Value: 2m),
-                            new ValueToken.Multiply()
+                            State(row: "$local:y"),
+                            Instruction.Constant(value: 2m),
+                            Instruction.Of(operation: ExpressionOp.Multiply)
                         )
                     ),
             ]
             )],
         };
-        var compiled = Assert.Single(collection: WorldRuleCompiler.CompileAll(definition: ordered));
+        var compiled = Assert.Single(collection: WorldFactsCompiler.CompileAll(definition: ordered));
 
         Assert.Equal(
             ["y", "x"],
-            compiled.Bindings!.Select(selector: b => b.Name)
+            compiled.Locals!.Select(selector: b => b.Name)
         );
     }
     [Fact]
@@ -158,13 +158,13 @@ public sealed class WorldRuleBindingLawTests {
                         State: "hit",
                         Value: 1m
                     )],
-                Bindings: [new RuleBinding(
+                Locals: [new RuleLocal(
                         CellName.Parse(candidate: "q"),
                         CellKind.Int,
                         Expr(
-                            new ValueToken.Constant(Value: 1m),
+                            Instruction.Constant(value: 1m),
                             State(row: "zero"),
-                            new ValueToken.Divide()
+                            Instruction.Of(operation: ExpressionOp.Divide)
                         )
                     )]
             )],
@@ -182,7 +182,7 @@ public sealed class WorldRuleBindingLawTests {
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            RuleEffectRefusal.Arithmetic,
+            Puck.State.Rules.RuleEffectRefusal.Arithmetic,
             diagnostic.Refusal
         );
         Assert.Contains(

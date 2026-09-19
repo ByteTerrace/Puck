@@ -1,0 +1,943 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/pong.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-pong-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 60
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 180
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 16.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 6
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleWest",
+        "x": 10.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongPaddleEast",
+        "x": 14.0,
+        "y": 0.0,
+        "z": 1.4
+      }
+    },
+    {
+      "pose": {
+        "placement": "pongBall",
+        "x": 12.0,
+        "y": 0.02,
+        "z": 0
+      }
+    },
+    {
+      "advance": 45
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "advance": 40
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 20
+    }
+  ]
+}

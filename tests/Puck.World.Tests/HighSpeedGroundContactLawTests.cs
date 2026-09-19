@@ -223,7 +223,7 @@ public sealed class HighSpeedGroundContactLawTests {
             yawRadians: 0f,
             z: 0f
         );
-        for (var tick = 0; (tick < 8); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             fixture.Step(stepTicks: EngineTicks.PerRate(ratePerSecond: 60));
         }
         Assert.True(condition: standing.Grounded);
@@ -242,7 +242,7 @@ public sealed class HighSpeedGroundContactLawTests {
             );
         }
 
-        for (var tick = 0; (tick < 4); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             fixture.Step(stepTicks: EngineTicks.PerRate(ratePerSecond: 60));
         }
 

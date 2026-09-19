@@ -1,0 +1,2993 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 610,
+  "engineTick": 1024800,
+  "hashes": {
+    "authoritative": "8d13bd15f3d71993",
+    "capture": "0f42dec0160590f2",
+    "pose": "cbf29ce484222325",
+    "world": "f87185470e392e34"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "solitaireFreecellCards",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          },
+          {
+            "key": "14",
+            "value": 14
+          },
+          {
+            "key": "15",
+            "value": 15
+          },
+          {
+            "key": "16",
+            "value": 16
+          },
+          {
+            "key": "17",
+            "value": 17
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": 19
+          },
+          {
+            "key": "20",
+            "value": 20
+          },
+          {
+            "key": "21",
+            "value": 21
+          },
+          {
+            "key": "22",
+            "value": 22
+          },
+          {
+            "key": "23",
+            "value": 23
+          },
+          {
+            "key": "24",
+            "value": 24
+          },
+          {
+            "key": "25",
+            "value": 25
+          },
+          {
+            "key": "26",
+            "value": 26
+          },
+          {
+            "key": "27",
+            "value": 27
+          },
+          {
+            "key": "28",
+            "value": 28
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "30",
+            "value": 30
+          },
+          {
+            "key": "31",
+            "value": 31
+          },
+          {
+            "key": "32",
+            "value": 32
+          },
+          {
+            "key": "33",
+            "value": 33
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "35",
+            "value": 35
+          },
+          {
+            "key": "36",
+            "value": 36
+          },
+          {
+            "key": "37",
+            "value": 37
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "39",
+            "value": 39
+          },
+          {
+            "key": "40",
+            "value": 40
+          },
+          {
+            "key": "41",
+            "value": 41
+          },
+          {
+            "key": "42",
+            "value": 42
+          },
+          {
+            "key": "43",
+            "value": 43
+          },
+          {
+            "key": "44",
+            "value": 44
+          },
+          {
+            "key": "45",
+            "value": 45
+          },
+          {
+            "key": "46",
+            "value": 46
+          },
+          {
+            "key": "47",
+            "value": 47
+          },
+          {
+            "key": "48",
+            "value": 48
+          },
+          {
+            "key": "49",
+            "value": 49
+          },
+          {
+            "key": "50",
+            "value": 50
+          },
+          {
+            "key": "51",
+            "value": 51
+          }
+        ]
+      },
+      {
+        "name": "solitaireFreecellRank",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 4
+          },
+          {
+            "key": "4",
+            "value": 5
+          },
+          {
+            "key": "5",
+            "value": 6
+          },
+          {
+            "key": "6",
+            "value": 7
+          },
+          {
+            "key": "7",
+            "value": 8
+          },
+          {
+            "key": "8",
+            "value": 9
+          },
+          {
+            "key": "9",
+            "value": 10
+          },
+          {
+            "key": "10",
+            "value": 11
+          },
+          {
+            "key": "11",
+            "value": 12
+          },
+          {
+            "key": "12",
+            "value": 13
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 2
+          },
+          {
+            "key": "15",
+            "value": 3
+          },
+          {
+            "key": "16",
+            "value": 4
+          },
+          {
+            "key": "17",
+            "value": 5
+          },
+          {
+            "key": "18",
+            "value": 6
+          },
+          {
+            "key": "19",
+            "value": 7
+          },
+          {
+            "key": "20",
+            "value": 8
+          },
+          {
+            "key": "21",
+            "value": 9
+          },
+          {
+            "key": "22",
+            "value": 10
+          },
+          {
+            "key": "23",
+            "value": 11
+          },
+          {
+            "key": "24",
+            "value": 12
+          },
+          {
+            "key": "25",
+            "value": 13
+          },
+          {
+            "key": "26",
+            "value": 1
+          },
+          {
+            "key": "27",
+            "value": 2
+          },
+          {
+            "key": "28",
+            "value": 3
+          },
+          {
+            "key": "29",
+            "value": 4
+          },
+          {
+            "key": "30",
+            "value": 5
+          },
+          {
+            "key": "31",
+            "value": 6
+          },
+          {
+            "key": "32",
+            "value": 7
+          },
+          {
+            "key": "33",
+            "value": 8
+          },
+          {
+            "key": "34",
+            "value": 9
+          },
+          {
+            "key": "35",
+            "value": 10
+          },
+          {
+            "key": "36",
+            "value": 11
+          },
+          {
+            "key": "37",
+            "value": 12
+          },
+          {
+            "key": "38",
+            "value": 13
+          },
+          {
+            "key": "39",
+            "value": 1
+          },
+          {
+            "key": "40",
+            "value": 2
+          },
+          {
+            "key": "41",
+            "value": 3
+          },
+          {
+            "key": "42",
+            "value": 4
+          },
+          {
+            "key": "43",
+            "value": 5
+          },
+          {
+            "key": "44",
+            "value": 6
+          },
+          {
+            "key": "45",
+            "value": 7
+          },
+          {
+            "key": "46",
+            "value": 8
+          },
+          {
+            "key": "47",
+            "value": 9
+          },
+          {
+            "key": "48",
+            "value": 10
+          },
+          {
+            "key": "49",
+            "value": 11
+          },
+          {
+            "key": "50",
+            "value": 12
+          },
+          {
+            "key": "51",
+            "value": 13
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "solitaireFreecellSuit",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 1
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 1
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 1
+          },
+          {
+            "key": "21",
+            "value": 1
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 1
+          },
+          {
+            "key": "24",
+            "value": 1
+          },
+          {
+            "key": "25",
+            "value": 1
+          },
+          {
+            "key": "26",
+            "value": 2
+          },
+          {
+            "key": "27",
+            "value": 2
+          },
+          {
+            "key": "28",
+            "value": 2
+          },
+          {
+            "key": "29",
+            "value": 2
+          },
+          {
+            "key": "30",
+            "value": 2
+          },
+          {
+            "key": "31",
+            "value": 2
+          },
+          {
+            "key": "32",
+            "value": 2
+          },
+          {
+            "key": "33",
+            "value": 2
+          },
+          {
+            "key": "34",
+            "value": 2
+          },
+          {
+            "key": "35",
+            "value": 2
+          },
+          {
+            "key": "36",
+            "value": 2
+          },
+          {
+            "key": "37",
+            "value": 2
+          },
+          {
+            "key": "38",
+            "value": 2
+          },
+          {
+            "key": "39",
+            "value": 3
+          },
+          {
+            "key": "40",
+            "value": 3
+          },
+          {
+            "key": "41",
+            "value": 3
+          },
+          {
+            "key": "42",
+            "value": 3
+          },
+          {
+            "key": "43",
+            "value": 3
+          },
+          {
+            "key": "44",
+            "value": 3
+          },
+          {
+            "key": "45",
+            "value": 3
+          },
+          {
+            "key": "46",
+            "value": 3
+          },
+          {
+            "key": "47",
+            "value": 3
+          },
+          {
+            "key": "48",
+            "value": 3
+          },
+          {
+            "key": "49",
+            "value": 3
+          },
+          {
+            "key": "50",
+            "value": 3
+          },
+          {
+            "key": "51",
+            "value": 3
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "solitaireFreecellFace",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 1
+          },
+          {
+            "key": "5",
+            "value": 1
+          },
+          {
+            "key": "6",
+            "value": 1
+          },
+          {
+            "key": "7",
+            "value": 1
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 1
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 1
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 1
+          },
+          {
+            "key": "21",
+            "value": 1
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 1
+          },
+          {
+            "key": "24",
+            "value": 1
+          },
+          {
+            "key": "25",
+            "value": 1
+          },
+          {
+            "key": "26",
+            "value": 1
+          },
+          {
+            "key": "27",
+            "value": 1
+          },
+          {
+            "key": "28",
+            "value": 1
+          },
+          {
+            "key": "29",
+            "value": 1
+          },
+          {
+            "key": "30",
+            "value": 1
+          },
+          {
+            "key": "31",
+            "value": 1
+          },
+          {
+            "key": "32",
+            "value": 1
+          },
+          {
+            "key": "33",
+            "value": 1
+          },
+          {
+            "key": "34",
+            "value": 1
+          },
+          {
+            "key": "35",
+            "value": 1
+          },
+          {
+            "key": "36",
+            "value": 1
+          },
+          {
+            "key": "37",
+            "value": 1
+          },
+          {
+            "key": "38",
+            "value": 1
+          },
+          {
+            "key": "39",
+            "value": 1
+          },
+          {
+            "key": "40",
+            "value": 1
+          },
+          {
+            "key": "41",
+            "value": 1
+          },
+          {
+            "key": "42",
+            "value": 1
+          },
+          {
+            "key": "43",
+            "value": 1
+          },
+          {
+            "key": "44",
+            "value": 1
+          },
+          {
+            "key": "45",
+            "value": 1
+          },
+          {
+            "key": "46",
+            "value": 1
+          },
+          {
+            "key": "47",
+            "value": 1
+          },
+          {
+            "key": "48",
+            "value": 1
+          },
+          {
+            "key": "49",
+            "value": 1
+          },
+          {
+            "key": "50",
+            "value": 1
+          },
+          {
+            "key": "51",
+            "value": 1
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "solitaireFreecellPile0",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile2",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "15",
+            "value": true
+          },
+          {
+            "key": "45",
+            "value": true
+          },
+          {
+            "key": "51",
+            "value": true
+          },
+          {
+            "key": "33",
+            "value": true
+          },
+          {
+            "key": "34",
+            "value": true
+          },
+          {
+            "key": "28",
+            "value": true
+          },
+          {
+            "key": "22",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile3",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "37",
+            "value": true
+          },
+          {
+            "key": "1",
+            "value": true
+          },
+          {
+            "key": "39",
+            "value": true
+          },
+          {
+            "key": "6",
+            "value": true
+          },
+          {
+            "key": "43",
+            "value": true
+          },
+          {
+            "key": "46",
+            "value": true
+          },
+          {
+            "key": "41",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile4",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "31",
+            "value": true
+          },
+          {
+            "key": "14",
+            "value": true
+          },
+          {
+            "key": "40",
+            "value": true
+          },
+          {
+            "key": "50",
+            "value": true
+          },
+          {
+            "key": "27",
+            "value": true
+          },
+          {
+            "key": "8",
+            "value": true
+          },
+          {
+            "key": "23",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile5",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "30",
+            "value": true
+          },
+          {
+            "key": "19",
+            "value": true
+          },
+          {
+            "key": "12",
+            "value": true
+          },
+          {
+            "key": "18",
+            "value": true
+          },
+          {
+            "key": "16",
+            "value": true
+          },
+          {
+            "key": "42",
+            "value": true
+          },
+          {
+            "key": "17",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile6",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "10",
+            "value": true
+          },
+          {
+            "key": "24",
+            "value": true
+          },
+          {
+            "key": "13",
+            "value": true
+          },
+          {
+            "key": "49",
+            "value": true
+          },
+          {
+            "key": "4",
+            "value": true
+          },
+          {
+            "key": "32",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile7",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "5",
+            "value": true
+          },
+          {
+            "key": "2",
+            "value": true
+          },
+          {
+            "key": "11",
+            "value": true
+          },
+          {
+            "key": "0",
+            "value": true
+          },
+          {
+            "key": "29",
+            "value": true
+          },
+          {
+            "key": "38",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile8",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "47",
+            "value": true
+          },
+          {
+            "key": "36",
+            "value": true
+          },
+          {
+            "key": "35",
+            "value": true
+          },
+          {
+            "key": "48",
+            "value": true
+          },
+          {
+            "key": "44",
+            "value": true
+          },
+          {
+            "key": "25",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile9",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "9",
+            "value": true
+          },
+          {
+            "key": "26",
+            "value": true
+          },
+          {
+            "key": "7",
+            "value": true
+          },
+          {
+            "key": "21",
+            "value": true
+          },
+          {
+            "key": "3",
+            "value": true
+          },
+          {
+            "key": "20",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile10",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile11",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile12",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile13",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile14",
+        "kind": "Bool",
+        "capacity": 1,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile15",
+        "kind": "Bool",
+        "capacity": 1,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile16",
+        "kind": "Bool",
+        "capacity": 1,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecellPile17",
+        "kind": "Bool",
+        "capacity": 1,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireFreecellCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireFreecell",
+        "kind": "Int",
+        "capacity": 27,
+        "cells": [
+          {
+            "key": "request",
+            "value": 1
+          },
+          {
+            "key": "applied",
+            "value": 1
+          },
+          {
+            "key": "action",
+            "value": 1
+          },
+          {
+            "key": "from",
+            "value": -1
+          },
+          {
+            "key": "to",
+            "value": -1
+          },
+          {
+            "key": "card",
+            "value": -1
+          },
+          {
+            "key": "option",
+            "value": 1
+          },
+          {
+            "key": "activeOption",
+            "value": 1
+          },
+          {
+            "key": "stage",
+            "value": 0
+          },
+          {
+            "key": "busy",
+            "value": 0
+          },
+          {
+            "key": "status",
+            "value": 1
+          },
+          {
+            "key": "result",
+            "value": 1
+          },
+          {
+            "key": "moves",
+            "value": 0
+          },
+          {
+            "key": "score",
+            "value": 0
+          },
+          {
+            "key": "passes",
+            "value": 0
+          },
+          {
+            "key": "sourceOk",
+            "value": 0
+          },
+          {
+            "key": "targetOk",
+            "value": 0
+          },
+          {
+            "key": "runLength",
+            "value": 0
+          },
+          {
+            "key": "emptyCells",
+            "value": 0
+          },
+          {
+            "key": "emptyColumns",
+            "value": 0
+          },
+          {
+            "key": "deals",
+            "value": 1
+          },
+          {
+            "key": "dealStep",
+            "value": 0
+          },
+          {
+            "key": "gatherStep",
+            "value": 0
+          },
+          {
+            "key": "scan",
+            "value": 0
+          },
+          {
+            "key": "changed",
+            "value": 0
+          },
+          {
+            "key": "attributeStep",
+            "value": 0
+          },
+          {
+            "key": "drawLeft",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "solitaireFreecellStream",
+        "kind": "Int",
+        "value": 594285628,
+        "draw": {
+          "generator": {
+            "source": "StreamDraw",
+            "bound": 1,
+            "mode": "WithReplacement"
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 51
+      },
+      {
+        "name": "solitaire",
+        "kind": "Int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 3
+          }
+        ]
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "solitaireFreecellCards",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 17,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 21,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 25,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 27,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 28,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 29,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 31,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 32,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 33,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 35,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 37,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 38,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 39,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 40,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 41,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 42,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 43,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 44,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 45,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 46,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 47,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 48,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 49,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 50,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 51,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellRank",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 13,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellSuit",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellFace",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile0",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile2",
+      "cells": [
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile3",
+      "cells": [
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile4",
+      "cells": [
+        {
+          "key": "31",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile5",
+      "cells": [
+        {
+          "key": "30",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile6",
+      "cells": [
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile7",
+      "cells": [
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile8",
+      "cells": [
+        {
+          "key": "47",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile9",
+      "cells": [
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellPile10",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile11",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile12",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile13",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile14",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile15",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile16",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecellPile17",
+      "cells": []
+    },
+    {
+      "row": "solitaireFreecell",
+      "cells": [
+        {
+          "key": "request",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "applied",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "action",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "from",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "to",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "card",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "option",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "activeOption",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "stage",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "busy",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "status",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "result",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "moves",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "score",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "passes",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "sourceOk",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "targetOk",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "runLength",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "emptyCells",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "emptyColumns",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "deals",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "dealStep",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "gatherStep",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "scan",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "changed",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "attributeStep",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "drawLeft",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaireFreecellStream",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 594285628,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "solitaire",
+      "cells": [
+        {
+          "key": "table",
+          "value": 3,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

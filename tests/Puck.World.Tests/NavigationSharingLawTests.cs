@@ -16,10 +16,12 @@ public sealed partial class NavigationLawTests {
             medium: (medium
             ? "water"
             : null)
-        ) with { Shared = new(
+        ) with {
+            Shared = new(
             ExpandedNodesPerTick: budget,
             GoalCapacity: goals
-        ) };
+        ),
+        };
 
         return NavigationDocument(
             domain,
@@ -136,13 +138,15 @@ public sealed partial class NavigationLawTests {
                 );
             }
             fixture.Step();
-            for (var slot = 0; (slot < count); slot++) { Assert.Equal(
+            for (var slot = 0; (slot < count); slot++) {
+                Assert.Equal(
                 1,
                 fixture.Server.Population.NavigationFact(
                     facet: "pending",
                     index: slot
                 )
-            ); }
+            );
+            }
             var expansions = 0L;
 
             for (var tick = 0; (tick < 120); tick++) {
@@ -159,10 +163,12 @@ public sealed partial class NavigationLawTests {
                     low: 0
                 );
                 expansions += work.LastExpanded;
-                for (var slot = 1; (slot < count); slot++) { Assert.Equal(
+                for (var slot = 1; (slot < count); slot++) {
+                    Assert.Equal(
                     bodies[0].FixedPosition,
                     bodies[slot].FixedPosition
-                ); }
+                );
+                }
             }
             Assert.InRange(
                 actual: expansions,
@@ -265,10 +271,12 @@ public sealed partial class NavigationLawTests {
 
             for (var tick = 0; (tick < 250); tick++) {
                 fixture.Step();
-                for (var body = 0; (body < served.Length); body++) { served[body] |= (fixture.Server.Population.NavigationFact(
+                for (var body = 0; (body < served.Length); body++) {
+                    served[body] |= (fixture.Server.Population.NavigationFact(
                     facet: "hasPath",
                     index: body
-                ) == 1); }
+                ) == 1);
+                }
             }
             Assert.All(
                 served,
@@ -451,7 +459,7 @@ public sealed partial class NavigationLawTests {
             ),
             userMessage: reason
         );
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 7
         );
@@ -459,7 +467,7 @@ public sealed partial class NavigationLawTests {
 
         for (var tick = 0; (tick < expected.Length); tick++) {
             fixture.Step();
-            expected[tick] = WorldRuntimeStateHash.HashAuthoritative(
+            expected[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: ((ulong)tick)
             );
@@ -467,7 +475,7 @@ public sealed partial class NavigationLawTests {
         fixture.Server.RestoreCheckpoint(checkpoint: decoded!);
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 7
             )
@@ -476,7 +484,7 @@ public sealed partial class NavigationLawTests {
             fixture.Step();
             Assert.Equal(
                 expected[tick],
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: ((ulong)tick)
                 )
@@ -576,14 +584,18 @@ public sealed partial class NavigationLawTests {
             match: tree => (tree.Goal >= 0)
         );
         var tree = shared[0].Trees[treeSlot];
-        var malformedTree = tree with { Nodes = tree.Nodes.Select(selector: node => ((node.Node == tree.Goal)
+        var malformedTree = tree with {
+            Nodes = tree.Nodes.Select(selector: node => ((node.Node == tree.Goal)
             ? node
-            : node with { Next = node.Node })).ToArray() };
-        var malformedDomain = shared[0] with { Trees = shared[0].Trees.Select(selector: (row, index) => ((index == treeSlot)
+            : node with { Next = node.Node })).ToArray(),
+        };
+        var malformedDomain = shared[0] with {
+            Trees = shared[0].Trees.Select(selector: (row, index) => ((index == treeSlot)
             ? malformedTree
-            : row)).ToArray() };
+            : row)).ToArray(),
+        };
         var malformed = captured with { Population = captured.Population with { SharedNavigation = [malformedDomain] } };
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 2
         );
@@ -594,7 +606,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 2
             )
@@ -630,13 +642,13 @@ public sealed partial class NavigationLawTests {
             ),
             userMessage: reason
         );
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 2
         );
 
         fixture.Step();
-        var after = WorldRuntimeStateHash.HashAuthoritative(
+        var after = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 3
         );
@@ -644,7 +656,7 @@ public sealed partial class NavigationLawTests {
         fixture.Server.RestoreCheckpoint(checkpoint: captured!);
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 2
             )
@@ -652,7 +664,7 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
         Assert.Equal(
             after,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 3
             )
@@ -688,10 +700,15 @@ public sealed partial class NavigationLawTests {
                 reason: out _
             ));
         }
-        var large = domain with { Width = 256, Depth = 256, Layers = 1, Shared = new(
+        var large = domain with {
+            Width = 256,
+            Depth = 256,
+            Layers = 1,
+            Shared = new(
             ExpandedNodesPerTick: 40_000,
             GoalCapacity: 16
-        ) };
+        ),
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: document with { NavigationRaw = new(Domains: [large, large with { Name = "other" }]) },
@@ -789,10 +806,12 @@ public sealed partial class NavigationLawTests {
     [Fact]
     public void SharedSurfaceNavigationUsesTheSweptClearanceDetour() {
         using var fixture = Fixtures.FreshServer(WithFloor(
-            NavigationDocument(SurfaceDomain() with { Shared = new(
+            NavigationDocument(SurfaceDomain() with {
+                Shared = new(
                 ExpandedNodesPerTick: 16,
                 GoalCapacity: 1
-            ) }),
+            ),
+            }),
             withBarrier: true
         ));
 

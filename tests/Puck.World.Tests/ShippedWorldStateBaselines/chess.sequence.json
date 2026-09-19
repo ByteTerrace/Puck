@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/chess.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-chess-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 50
+    },
+    {
+      "pose": {
+        "placement": "piece12",
+        "x": 20.1,
+        "y": 1.3,
+        "z": -12.1
+      }
+    },
+    {
+      "advance": 50
+    },
+    {
+      "advance": 500
+    }
+  ]
+}

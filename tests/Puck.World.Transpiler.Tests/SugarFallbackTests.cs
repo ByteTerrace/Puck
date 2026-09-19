@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -13,10 +11,16 @@ namespace Puck.World.Transpiler.Tests;
 /// dropped.</summary>
 public class SugarFallbackTests {
     private static string AssertRoundTripsExactly(string json) {
-        var puck = WorldDecompiler.Decompile(jsonText: json);
+        // The fixture spells its expressions as infix text, exactly as an author does; the document holds the IR,
+        // so the expected side is lowered the same way a compile lowers it.
+        var original = JsonNode.Parse(json);
+
+        WorldExpressionJson.Lower(node: original);
+
+        var puck = WorldDecompiler.Decompile(jsonText: original!.ToJsonString());
 
         Assert.Null(@object: JsonMismatch.Find(
-            JsonNode.Parse(json),
+            original,
             Recompile(puck: puck),
             ""
         ));
@@ -24,22 +28,11 @@ public class SugarFallbackTests {
         return puck;
     }
     private static JsonObject Recompile(string puck) {
-        var parseDiagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            puck,
-            diagnostics: parseDiagnostics
-        );
-
-        Assert.False(
-            condition: parseDiagnostics.HasErrors,
-            userMessage: parseDiagnostics.FormatReport(puck)
-        );
-
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: puck
         );
 
         Assert.False(
@@ -47,7 +40,7 @@ public class SugarFallbackTests {
             userMessage: loweringDiagnostics.FormatReport(puck)
         );
 
-        return lowered.Value!;
+        return lowered.RequireJson();
     }
 
     // The empty-facet spelling the decompiler emits for an empty exported array: nothing follows the facet word on
@@ -63,6 +56,24 @@ public class SugarFallbackTests {
         Assert.Equal(
             "t",
             lowered["name"]?.ToString()
+        );
+    }
+    // The other side of the same indentation rule: `export`'s names are read only while a line stays indented deeper
+    // than the keyword, so a formatter that re-indents from delimiter depth alone empties the facet silently.
+    [Fact]
+    public void FormattingAWrappedExportFacetKeepsItsNamesIndentedDeeperThanTheKeyword() {
+        const string Source = "schema: \"puck.world.definition.v1\"\n\nexport read\n    a, b, c\n\nname: \"t\"\n";
+
+        var formatted = PuckFormat.Format(source: Source);
+        var exports = Assert.IsType<JsonObject>(@object: Recompile(puck: formatted)["exports"]);
+
+        Assert.Equal(
+            ["a", "b", "c"],
+            Assert.IsType<JsonArray>(@object: exports["reads"]).Select(selector: name => name!.ToString()).ToArray()
+        );
+        Assert.Equal(
+            formatted,
+            PuckFormat.Format(source: formatted)
         );
     }
     [Fact]
@@ -87,20 +98,10 @@ public class SugarFallbackTests {
     public void AStatementASectionCannotCarryIsReportedRatherThanDropped(string section, string statement, string spelling) {
         var source = $"schema: \"puck.world.definition.v1\"\n{section} {{\n    {statement}\n}}\n";
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(source)
-        );
-
-        var diagnostics = new DiagnosticBag();
-
-        WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        var diagnostics = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
+        ).Diagnostics;
 
         var finding = Assert.Single(
             collection: diagnostics,
@@ -122,9 +123,9 @@ public class SugarFallbackTests {
         );
     }
     [InlineData("    when hp > 0 // a trailing comment on the gate line\n    hp = 1")]
-    [InlineData("    when hp > 0\n    bind tmp : Int = hp + 1 // after a bind\n    hp = 1")]
+    [InlineData("    when hp > 0\n    local tmp : Int = hp + 1 // after a local\n    hp = 1")]
     [Theory]
-    public void ATrailingCommentEndsAGateOrBindOperandRatherThanJoiningIt(string body) {
+    public void ATrailingCommentEndsAGateOrLocalOperandRatherThanJoiningIt(string body) {
         var lowered = Recompile(puck: $"schema: \"puck.world.definition.v1\"\nrule \"r\" {{\n{body}\n}}\n");
 
         var gate = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: lowered["rules"])[0]!["gate"]);

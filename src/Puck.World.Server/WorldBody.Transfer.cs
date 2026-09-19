@@ -73,8 +73,7 @@ public sealed partial class WorldBody {
             LaneLatch: laneLatch,
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
-            ActionStateValues: [.. m_actionStateValues],
-            ActionStateTimers: [.. m_actionStateTimers],
+            ActionState: CaptureActionState(),
             ActionStateDirty: [.. m_actionStateDirty],
             ActionStateDirtyKind: [.. m_actionStateDirtyKind],
             ActionStateDirtyOperand: [.. m_actionStateDirtyOperand],
@@ -150,8 +149,13 @@ public sealed partial class WorldBody {
     }
     /// <summary>Restores the named action-edge/register subset that must remain continuous when exactly one writer
     /// hands this body to another authority. Destination names and kinds are authoritative; unknown rows are ignored
-    /// and admitted values are clamped through the destination's own envelope.</summary>
-    public void ApplyTransferActionContinuity(WorldTransferActionContinuity continuity, WorldChannelTable channels) {
+    /// and a carried value the destination's own envelope refuses settles through it — a range clamps, a closed set
+    /// settles to the authored initial.</summary>
+    /// <param name="continuity">The carried edge and register subset.</param>
+    /// <param name="channels">The destination's compiled channel table.</param>
+    /// <param name="settledToInitial">Collects the name of every register a closed-set refusal settled to its
+    /// authored initial, so the caller can narrate it; <see langword="null"/> collects nothing.</param>
+    public void ApplyTransferActionContinuity(WorldTransferActionContinuity continuity, WorldChannelTable channels, ICollection<string>? settledToInitial = null) {
         ArgumentNullException.ThrowIfNull(continuity);
         ArgumentNullException.ThrowIfNull(channels);
 
@@ -176,6 +180,10 @@ public sealed partial class WorldBody {
         m_transferHeldChannels = held;
         m_hasTransferHeldChannels = (held != default);
 
+        // An arrival loads the carried register file into this body's slot lanes. A carried value the destination's
+        // own envelope does not admit settles by the envelope's shape: a range has a nearest admitted value and
+        // clamps to it, a closed set has none and settles to the authored initial. Neither keeps what the
+        // destination happened to hold, which would let an arriving body inherit a stranger's register.
         foreach (var register in continuity.Registers) {
             for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
                 var definition = m_actionStateDefinitions[slot];
@@ -191,29 +199,75 @@ public sealed partial class WorldBody {
                     continue;
                 }
 
-                if (definition.Kind == ActionStateKind.Counter) {
-                    var raw = register.Value.Value;
-                    var initial = definition.InitialValue.Value;
+                var carried = ((definition.Kind == ActionStateKind.Counter)
+                    ? register.Value.Value
+                    : unchecked((long)register.TimerTicks)
+                );
 
-                    m_actionStateValues[slot] = new FixedQ4816(Value: (definition.Envelope?.Clamp(
-                        initial: initial,
-                        value: raw
-                    ) ?? raw));
-                } else {
-                    var raw = unchecked((long)register.TimerTicks);
-                    var initial = unchecked((long)definition.InitialTicks);
-                    var admitted = (definition.Envelope?.Clamp(
-                        initial: initial,
-                        value: raw
-                    ) ?? raw);
+                if (
+                    (definition.Envelope is { } envelope) &&
+                    !envelope.Contains(value: carried)
+                ) {
+                    if (envelope.Values is null) {
+                        carried = Math.Clamp(
+                            max: envelope.Maximum,
+                            min: envelope.Minimum,
+                            value: carried
+                        );
+                    } else {
+                        carried = WorldActionStateLane.InitialRaw(definition: in definition);
 
-                    m_actionStateTimers[slot] = unchecked((ulong)Math.Max(
-                        val1: admitted,
-                        val2: 0L
-                    ));
+                        settledToInitial?.Add(item: definition.Name);
+                    }
                 }
+                if (definition.Kind == ActionStateKind.Timer) {
+                    carried = Math.Max(
+                        val1: 0L,
+                        val2: carried
+                    );
+                }
+
+                WriteStateRaw(
+                    raw: carried,
+                    slot: slot
+                );
+
                 break;
             }
+        }
+    }
+    /// <summary>Reads this body's whole register file out of the arena slot lanes, one raw value per slot.</summary>
+    /// <returns>The lane image, parallel to the kit's compiled definitions.</returns>
+    public long[] CaptureActionState() {
+        var image = new long[m_actionStateDefinitions.Length];
+
+        for (var slot = 0; (slot < image.Length); slot++) {
+            image[slot] = ((m_stateLane is { } lane)
+                ? lane.Read(
+                    ordinal: m_stateOrdinal,
+                    slot: slot
+                )
+                : 0L
+            );
+        }
+
+        return image;
+    }
+    /// <summary>Writes a previously captured lane image back into this body's slot lanes.</summary>
+    /// <param name="image">The lane image, parallel to the kit's compiled definitions.</param>
+    public void RestoreActionState(IReadOnlyList<long> image) {
+        ArgumentNullException.ThrowIfNull(argument: image);
+
+        var count = Math.Min(
+            val1: image.Count,
+            val2: m_actionStateDefinitions.Length
+        );
+
+        for (var slot = 0; (slot < count); slot++) {
+            WriteStateRaw(
+                raw: image[slot],
+                slot: slot
+            );
         }
     }
     /// <summary>Reapplies a captured <see cref="TransferState"/> — the abort/refire invariant's own ordering: call
@@ -365,18 +419,7 @@ public sealed partial class WorldBody {
             }
         }
 
-        var actionStateCount = Math.Min(
-            val1: Math.Min(
-                val1: state.ActionStateValues.Length,
-                val2: state.ActionStateTimers.Length
-            ),
-            val2: m_actionStateDefinitions.Length
-        );
-
-        for (var slot = 0; (slot < actionStateCount); slot++) {
-            m_actionStateValues[slot] = state.ActionStateValues[slot];
-            m_actionStateTimers[slot] = state.ActionStateTimers[slot];
-        }
+        RestoreActionState(image: state.ActionState);
 
         var dirtyCount = Math.Min(
             val1: Math.Min(
@@ -512,9 +555,9 @@ public sealed partial class WorldBody {
     /// own OnPress pending-latch bit, OnFact previous-evaluation edge bit, and Recently-gate clocks
     /// (<see cref="LaneActionRuntime"/>) — a buffered press awaiting its gate, an OnFact trigger's own edge memory,
     /// and a double-tap window all live here.
-    /// <see cref="ActionStateValues"/>/<see cref="ActionStateTimers"/> — the kit's own named action-state register
-    /// file's live values/timers (ammo counters, cooldown timers) — read by <see cref="GateOpen"/>'s CompareState/Timer
-    /// predicates, so this is genuinely gameplay-affecting, not diagnostic.
+    /// <see cref="ActionState"/> — the arena slot lanes' image of the named register file (ammo counters, cooldown
+    /// timers) — read by <see cref="GateOpen"/>'s CompareState/Timer predicates, so this is genuinely
+    /// gameplay-affecting, not diagnostic.
     /// <see cref="ActionStateDirty"/>/<see cref="ActionStateDirtyKind"/>/<see cref="ActionStateDirtyOperand"/> — a
     /// durable (profile-persisted) write-back staged for <see cref="TakeDurableStateOutputs"/>.
     /// <see cref="Puck.World.Server.WorldPopulation.CompleteStep"/> drains every body's dirty flags unconditionally at
@@ -639,9 +682,8 @@ public sealed partial class WorldBody {
     /// <param name="LaneFactHeld">Per-lane action-runtime previous-evaluation fact-held bits, copied defensively.</param>
     /// <param name="LaneRecency">Per-lane action-runtime Recently-gate clocks (<see langword="null"/> for a lane with
     /// no Recently predicates), copied defensively.</param>
-    /// <param name="ActionStateValues">The kit's named action-state register file's live counter values, copied
-    /// defensively, parallel to the kit's compiled definitions.</param>
-    /// <param name="ActionStateTimers">The register file's live timer values, copied defensively.</param>
+    /// <param name="ActionState">The arena slot lanes' image of this body's register file: one raw value per slot,
+    /// counter bits or timer ticks by the slot's own kind, parallel to the kit's compiled definitions.</param>
     /// <param name="ActionStateDirty">Per-slot: whether a durable write is staged but not yet drained, copied
     /// defensively.</param>
     /// <param name="ActionStateDirtyKind">The staged write's kind, parallel to <paramref name="ActionStateDirty"/>.</param>
@@ -694,8 +736,7 @@ public sealed partial class WorldBody {
         ulong[] LaneLatch,
         ulong[] LaneFactHeld,
         ulong[]?[] LaneRecency,
-        FixedQ4816[] ActionStateValues,
-        ulong[] ActionStateTimers,
+        long[] ActionState,
         bool[] ActionStateDirty,
         WorldDocumentWriteKind[] ActionStateDirtyKind,
         FixedQ4816[] ActionStateDirtyOperand,

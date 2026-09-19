@@ -11,7 +11,7 @@ public sealed class StateCompletionReviewTests {
             Name: CellName.Parse(candidate: "reviewCycle"),
             Kind: CellKind.Fixed,
             Cycle: new StateCycle(Output: CycleOutput.Cos),
-            Cells: [new StateCell(Key: StateRow.SlotKey, Value: 0)]
+            Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Fixed(rawBits: 0L))]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
 
@@ -22,7 +22,7 @@ public sealed class StateCompletionReviewTests {
         fixture.Step();
 
         // At simulation tick zero cosine is exactly 1.0, regardless of the stored phase of zero.
-        Assert.Equal(65536L, fixture.Server.Definition.State.Single().Cells!.Single().Value);
+        Assert.Equal(65536L, fixture.Server.Definition.State.Single().Cells!.Single().Value.Raw);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class StateCompletionReviewTests {
             Advance: new StateAdvance(PerSecondNumerator: 50400, PerSecondDenominator: 1),
             Cells: [new StateCell(
                 Key: CellName.Parse(candidate: "a"),
-                Value: 10,
+                Value: CellValue.Int(value: 10L),
                 Advance: new StateAdvance(PerSecondNumerator: 100800, PerSecondDenominator: 1)
             )]
         );

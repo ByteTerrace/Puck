@@ -67,17 +67,23 @@ Screens and speakers reference an instance and a provider output name. Removing 
 consumer does not remove or restart its machine. Engaged display inputs fold into
 the instance's single normalized input port; machines with multiple input ports
 can run headlessly, while display routing requires the later explicit port model.
-Screen-index cable commands resolve named members and step a linked device once.
-A linked device must be unlinked before an operation, replacement, pause, or removal;
-preparation refuses those changes while its cable is live.
+Named screen inspection, output selection, symbol lookup, and memory access
+resolve directly against the named runtime instance. An aliased screen or speaker
+source rewrites its producer name under import aliasing, and provider asset paths
+resolve relative to the document that declares them. Screen-index cable commands
+resolve named members and step a linked device once. A linked device must be
+unlinked before an operation, replacement, pause, or removal; link membership is
+checked at both preparation and commit, so an unsafe replacement is refused at
+either stage.
 
 `machine.operation <instance> <generation> <operationId> <json>` submits a typed
 provider operation through the ordered authority domain. It requires Control over
-`machine:<instance>` and returns Applied, Unsupported, Refused, or Faulted. The JSON
-includes the provider operation's schema identifier. Preparation and complete world
-validation precede runtime commit; a successful configuration change becomes the
-canonical machine declaration. `screen.insert` and `forge.play` resolve their named
-producer and use this same operation path. `screen.eject` detaches the display.
+`machine:<instance>` and returns Applied, Unsupported, Refused, or Faulted. The
+submitted JSON retains its original string quoting through descriptor validation
+and includes the provider operation's schema identifier. Preparation and complete
+world validation precede runtime commit; a successful configuration change becomes
+the canonical machine declaration. `screen.insert` and `forge.play` resolve their
+named producer and use this same operation path. `screen.eject` detaches the display.
 
 The host checks its selected content-admission policy against the exact source and
 executable bytes during preparation. The local default permits content and assets;
@@ -88,7 +94,7 @@ commit barrier also closes boot-only replay/checkpoint capture, since existing
 formats cannot reconstruct prior hardware execution. Full machine receipts,
 snapshots, authored screen names, explicit control/link routes, and removal of the
 remaining screen-owned compatibility paths are still tracked in
-[the machine extension plan](../../docs/plans/machine-extensions.md).
+[the machines and cartridges programme](../../docs/plans/machines-and-cartridges.md).
 
 ## Documentation
 

@@ -317,6 +317,7 @@ surface, including parameters, return values, and exceptions.
 | `Fnv1aHash` | Accumulate an explicit, stable 64-bit digest for replay and determinism checks. |
 | `IMeetSemilattice<TSelf>` / `MeetMask64` / `MeetQuantity64` / `MeetProduct<TFirst, TSecond>` | Combine restrictions so the result never grants more than either input, whether the restriction is a bit mask, a quantity, or a pair of both. |
 | `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, and exact 32-bit primality and factorization. |
+| `SignedByteVectorFunctions` | Quantized signed 8-bit vector arithmetic normalized on radius 127: unit sphere admission, dot product, Q48.16 cosine similarity, unit normalization, and weighted combination. |
 
 The chooser above is the quickest way into these types. The API reference is
 the place to check a particular overload or failure condition.

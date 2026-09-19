@@ -349,7 +349,7 @@ public sealed partial class WorldReplayTape {
         // state-system trace drives the verdict; the pose trace lets inspection localize visible motion divergence.
         // Both stay one entry per tick, in lockstep with `ticks` above.
         m_liveHashes.Add(item: WorldReplaySnapshot.HashState(population: m_liveServer.Population));
-        m_liveAuthoritativeHashes.Add(item: WorldRuntimeStateHash.HashAuthoritative(
+        m_liveAuthoritativeHashes.Add(item: WorldStateHashComposition.HashAuthoritative(
             server: m_liveServer,
             tick: (m_liveServer.NextInputTick - 1UL)
         ));

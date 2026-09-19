@@ -53,7 +53,7 @@ public sealed class WorldGeneratorOrbitLawTests {
             : 0L),
                     Cells: [new StateCell(
                             Key: WorldStateRow.SlotKey,
-                            Value: 0
+                            Value: CellValue.Int(value: 0L)
                         )],
                     Draw: new Draw(
                         Generator: generator,

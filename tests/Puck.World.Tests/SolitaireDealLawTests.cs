@@ -100,7 +100,7 @@ internal static class SolitaireDealChecks {
             Row(
                 f: f,
                 name: (game + "Face")
-            ).Cells!.Count(predicate: c => (c.Value == 1))
+            ).Cells!.Count(predicate: c => (c.Value.AsInt == 1))
         );
         var tokens = f.Server.Definition.State.Where(predicate: r => r.Name.Value.StartsWith(
             comparisonType: StringComparison.Ordinal,

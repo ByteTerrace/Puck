@@ -111,6 +111,20 @@ baseline. It requires both GPU backends but does not take over a display. Use it
 for render-path, shader, presenter, or capture changes. Its authored stations
 exercise specific contracts; passing them does not establish correctness for
 every possible scene. See `puck parity --help` for the current command surface.
+
+A verification check proves its own behavior independently: derive the
+expected outcome another way than the code being checked, and prove that
+behavior the check doesn't touch stays unchanged. Running the same replay
+twice is an additional determinism check, never the proof of correctness,
+because a replay hash covers only the explicitly hashed state trajectory, not
+the journal or the whole document — undo and checkpoint restore need their
+own assertions. A change that alters a persisted format (a world document,
+an owned-identity document, an authority checkpoint or its journal, a replay
+tape, or a release fixture) states which format it touches and whether old
+data can still load: old data must never load under a new interpretation, so
+a renamed or reshaped field makes the strict parser refuse the old form
+rather than silently reinterpreting it.
+
 For changes under `src/Puck.Maths`, also run the maths law suite. The default
 tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:
 
@@ -327,6 +341,23 @@ framed as unverified when no device run exists.
 These practices keep each result tied to the behavior and configuration it is
 meant to establish.
 
+- Every durable artifact declares its own falsifier. A canary names what in
+  the observation is bound to the variable under test — a pixel diff where
+  nothing in frame tracks the variable proves nothing. A design document
+  states the premises that would kill it, as re-runnable checks.
+- Never write a status column. A status claim duplicates what the code
+  answers better; a decision records what the code cannot answer — why, what
+  was rejected, where a boundary sits — and stays irreplaceable even when
+  stale. Keep decisions, delete status, and generate inventories or do
+  without them.
+- Security claims default the other way from feature claims. For a feature,
+  unverified means not-done. For an escalation, unverified means still open —
+  the cost of the other default is shipping a hole because its citation
+  rotted.
+- Verify by running, and by content. Exit code 0 is not success; audit the
+  streams. A commit hash absent from a branch does not mean its content is
+  absent, and a search hit is not a repository fact until the file is
+  tracked.
 - Choose verification inputs that differ from worked documentation examples.
   A nearby value can expose a boundary defect that the example does not.
 - Run a control in the same configuration as the test and change exactly one

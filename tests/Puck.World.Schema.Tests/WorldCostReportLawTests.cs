@@ -14,7 +14,7 @@ public sealed class WorldCostReportLawTests {
                 CellKind.Int,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        0L
+                        CellValue.Int(value: 0L)
                     )]
             )]),
         Rules: [new WorldRule(

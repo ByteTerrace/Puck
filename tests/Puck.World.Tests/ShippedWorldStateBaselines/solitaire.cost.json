@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/solitaire.world.json",
+  "simulationRateHz": 30,
+  "ticks": 600,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 0,
+      "interactionRows": 0,
+      "evaluationSlots": 0,
+      "workUnitsPerTick": 0,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 0,
+      "interactionRows": 0,
+      "evaluationSlots": 0,
+      "workUnitsPerTick": 0,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

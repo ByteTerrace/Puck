@@ -122,7 +122,7 @@ public sealed class BindingIconReferentialIntegrityLawTests {
             Capacity: 8,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "jump"),
-                    Text: KnownIcon
+                    Value: CellValue.Text(value: KnownIcon)
                 )]
         ),
             new WorldStateRow(

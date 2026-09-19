@@ -430,14 +430,14 @@ public sealed class DocumentBasisLawTests {
             actual: WorldDefinitionRows.FindStateRow(
                 rows: fixture.Server.Definition.State,
                 name: "flagA"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
         Assert.Equal(
             expected: 1L,
             actual: WorldDefinitionRows.FindStateRow(
                 rows: fixture.Server.Definition.State,
                 name: "flagB"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [Fact]
@@ -663,14 +663,14 @@ public sealed class DocumentBasisLawTests {
             actual: StateRows.FindCell(
                 cells: refinedRow.Cells,
                 key: CellName.Parse(candidate: "a")
-            )!.Value
+            )!.Value.Raw
         );
         Assert.Equal(
             expected: 2L,
             actual: StateRows.FindCell(
                 cells: refinedRow.Cells,
                 key: CellName.Parse(candidate: "b")
-            )!.Value
+            )!.Value.Raw
         );
 
         // Control: a leading `$replace` marker still opts into the old wholesale-replace behavior.
@@ -702,7 +702,7 @@ public sealed class DocumentBasisLawTests {
             actual: StateRows.FindCell(
                 cells: replacedRow.Cells,
                 key: CellName.Parse(candidate: "a")
-            )!.Value
+            )!.Value.Raw
         );
     }
     [Fact]

@@ -1,3 +1,7 @@
+using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledRule = Puck.State.Rules.CompiledRule;
+using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
+using RuleWorkContributor = Puck.State.Rules.RuleWorkContributor;
 namespace Puck.World;
 
 /// <summary>The world's work sheet over <see cref="RuleWorkBudget"/>: rules multiplied by their <c>forEach</c> row's
@@ -13,7 +17,7 @@ namespace Puck.World;
 /// <param name="DecisionGridPointsPerTick">The points those grids group.</param>
 public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionRows, long EvaluationSlots, long WorkUnitsPerTick,
     long FlockAffinityWorkUnitsPerTick = 0, int DecisionImagePointsPerTick = 0, int DecisionGridBuildsPerTick = 0, long DecisionGridPointsPerTick = 0) {
-    internal static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(CompiledWorldRule[] rules) {
+    internal static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(CompiledRule[] rules, StateCatalog catalog) {
         var result = new List<(string, string)>();
 
         foreach (var rule in rules) {
@@ -22,15 +26,15 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 contradictory: out _
             )) {
                 if (pinned.IsEmpty) {
-                    result.Add(item: (rule.Name, pinned.Cell));
+                    result.Add(item: (rule.Name, pinned.Name(catalog: catalog)));
                 }
             }
         }
 
         return result;
     }
-    internal static IReadOnlyList<RuleWorkContributor> Contributors(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
-        var context = WorldRuleCompiler.Context(definition: definition);
+    internal static IReadOnlyList<RuleWorkContributor> Contributors(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions) {
+        var context = WorldFactsCompiler.Context(definition: definition);
         var contributors = Lines(
             context: context,
             definition: definition,
@@ -52,12 +56,12 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return contributors;
     }
-    internal static WorldRuleWorkBudget Measure(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
-        var context = WorldRuleCompiler.Context(definition: definition);
+    internal static WorldRuleWorkBudget Measure(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions) {
+        var context = WorldFactsCompiler.Context(definition: definition);
         var decisionScales = new HashSet<long>();
 
         foreach (var rule in rules) {
-            if (rule.Decision is { } decision) {
+            if ((rule as CompiledWorldFactsRule)?.Decision is { } decision) {
                 foreach (var option in decision.Options) {
                     if (option.Neighbors is { } neighbors) { decisionScales.Add(item: neighbors.CellWidth.Value); }
                 }
@@ -124,7 +128,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return $"region '{placementId}' {terms} = {bound}";
     }
-    private static long FlockAffinityCost(WorldDefinition definition, WorldRuleCompileContext context) {
+    private static long FlockAffinityCost(WorldDefinition definition, WorldFactsCompileContext context) {
         var maximum = 0L;
 
         foreach (var kit in definition.Kits) {
@@ -162,7 +166,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     ),
         _ => null,
     };
-    private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
+    private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
         var contributors = new List<RuleWorkContributor>(capacity: (rules.Length + interactions.Length));
 
         foreach (var rule in rules) {
@@ -192,27 +196,31 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return contributors;
     }
-    private static List<(CompiledRule Rule, long Multiplier)> Multiplied(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
+    private static List<(CompiledRule Rule, long Multiplier)> Multiplied(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
         var result = new List<(CompiledRule, long)>(capacity: (rules.Length + interactions.Length));
 
-        foreach (var rule in rules) { result.Add(item: (rule, Multiplier(
+        foreach (var rule in rules) {
+            result.Add(item: (rule, Multiplier(
             context: context,
             definition: definition,
             rule: rule
-        ))); }
-        foreach (var interaction in interactions) { result.Add(item: (interaction, Multiplier(
+        )));
+        }
+        foreach (var interaction in interactions) {
+            result.Add(item: (interaction, Multiplier(
             context: context,
             definition: definition,
             rule: interaction
-        ))); }
+        )));
+        }
 
         return result;
     }
     // A rule carries no forEach at all when it reads only fixed cells — a literal seat's own channel
     // ($channel:<seat>:*) included — so ForEachCount's default of 1 already prices a per-seat rule once, not once
     // per body; nothing here needs to special-case that shape.
-    private static long Multiplier(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule rule) {
-        if (rule.Interaction is { } interaction) {
+    private static long Multiplier(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule rule) {
+        if ((rule as CompiledWorldFactsRule)?.Interaction is { } interaction) {
             var others = Math.Max(
                 val1: 0,
                 val2: (definition.Population.Capacity - 1)
@@ -302,7 +310,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     public static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return ContradictoryGates(rules: WorldRuleCompiler.CompileAll(definition: definition));
+        return ContradictoryGates(
+            catalog: definition.StateCatalog,
+            rules: WorldFactsCompiler.CompileAll(definition: definition)
+        );
     }
     /// <summary>Lists every contributor line, costliest first, then by name.</summary>
     /// <param name="definition">The world.</param>
@@ -311,8 +322,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return Contributors(
             definition,
-            WorldRuleCompiler.CompileAll(definition: definition),
-            WorldRuleCompiler.CompileAllInteractions(definition: definition)
+            WorldFactsCompiler.CompileAll(definition: definition),
+            WorldFactsCompiler.CompileAllInteractions(definition: definition)
         );
     }
     /// <summary>Describes why one contributor's multiplier is what it is — the forEach row's capacity, the
@@ -320,13 +331,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     /// <c>world.budget.rules --why</c>.</summary>
     /// <param name="definition">The world.</param>
     /// <param name="rule">The compiled rule or interaction.</param>
-    public static string DescribeMultiplier(WorldDefinition definition, CompiledWorldRule rule) {
+    public static string DescribeMultiplier(WorldDefinition definition, CompiledRule rule) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         var capacity = definition.Population.Capacity;
 
-        if (rule.Interaction is { } interaction) {
+        if ((rule as CompiledWorldFactsRule)?.Interaction is { } interaction) {
             var others = Math.Max(
                 val1: 0,
                 val2: (capacity - 1)
@@ -344,10 +355,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             });
         }
 
-        return ((rule.ForEach is { } forEach)
-            ? $"forEach '{forEach}' row capacity={RuleWorkBudget.ForEachCount(
+        return ((rule.ForEachOrdinal >= 0)
+            ? $"forEach '{definition.StateCatalog.Descriptors[rule.ForEachOrdinal].Name}' row capacity={RuleWorkBudget.ForEachCount(
                 rule: rule,
-                context: WorldRuleCompiler.Context(definition: definition)
+                context: WorldFactsCompiler.Context(definition: definition)
             )}"
             : "no forEach — priced once"
         );
@@ -355,7 +366,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     /// <summary>Returns the work units an expression costs against a document.</summary>
     public static long ExpressionCost(CompiledExpressionToken[] tokens, WorldDefinition definition) => RuleWorkBudget.ExpressionCost(
         tokens: tokens,
-        context: WorldRuleCompiler.Context(definition: definition)
+        context: WorldFactsCompiler.Context(definition: definition)
     );
     /// <summary>Measures a document's worst-case per-tick rule work.</summary>
     /// <param name="definition">The world.</param>
@@ -364,8 +375,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return Measure(
             definition,
-            WorldRuleCompiler.CompileAll(definition: definition),
-            WorldRuleCompiler.CompileAllInteractions(definition: definition)
+            WorldFactsCompiler.CompileAll(definition: definition),
+            WorldFactsCompiler.CompileAllInteractions(definition: definition)
         );
     }
 }

@@ -2,6 +2,15 @@ using Puck.Hosting;
 using Puck.World.Server;
 using Xunit;
 
+using BoardOperand = Puck.State.Rules.BoardOperand;
+using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
+using GateToken = Puck.State.Rules.GateToken;
+using IRuleOperand = Puck.State.Rules.IRuleOperand;
+using PatternOperand = Puck.State.Rules.PatternOperand;
+using StateCellOperand = Puck.State.Rules.StateCellOperand;
+using SymmetryOperand = Puck.State.Rules.SymmetryOperand;
+
 namespace Puck.World.Tests;
 
 public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
@@ -9,7 +18,7 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
     public void ShippedWorldStateHashesAndOperandDistribution() {
         const string WorldPath = "src/Puck.World/Assets/worlds/puck.world.json";
         var catalog = TestHookInstaller.CreateMachineCatalog();
-        var definition = AuthoredGameFixtures.Load(relativePath: WorldPath, catalog: catalog);
+        var definition = AuthoredGameFixtures.Load(catalog: catalog, relativePath: WorldPath);
         var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
 
         using var fixture = Fixtures.FreshServer(
@@ -24,13 +33,13 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
         for (var tick = 1; (tick <= 151); tick++) {
             fixture.Step(stepTicks: width);
             if (tick == 31) {
-                hash31 = WorldRuntimeStateHash.Hash(
+                hash31 = WorldStateHashComposition.Hash(
                     scope: WorldStateHashScope.Capture,
                     server: fixture.Server,
                     tick: 31
                 );
             } else if (tick == 151) {
-                hash151 = WorldRuntimeStateHash.Hash(
+                hash151 = WorldStateHashComposition.Hash(
                     scope: WorldStateHashScope.Capture,
                     server: fixture.Server,
                     tick: 151
@@ -41,10 +50,9 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
         output.WriteLine(message: $"puck.world.json state hash at tick 31:  {hash31:x16}");
         output.WriteLine(message: $"puck.world.json state hash at tick 151: {hash151:x16}");
 
-        var compilation = WorldRuleCompilation.Compile(definition: definition);
-        var allRules = compilation.Rules.Concat(second: compilation.Interactions).ToArray();
+        var allRules = WorldFactsCompiler.CompileAll(definition: definition).Concat(second: WorldFactsCompiler.CompileAllInteractions(definition: definition)).ToArray();
 
-        var operands = new List<OperandFact>();
+        var operands = new List<IRuleOperand>();
 
         void CollectTokens(CompiledExpressionToken[]? tokens) {
             if (tokens is null) {
@@ -56,31 +64,31 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
                 }
             }
         }
+        void CollectSource(CompiledValueSource source) {
+            if (source.Operand is not null) {
+                operands.Add(item: source.Operand);
+            }
+            CollectTokens(tokens: source.Expression);
+        }
         void CollectGate(GateToken[] gate) {
             foreach (var token in gate) {
-                if (token.Left is not null) {
-                    operands.Add(item: token.Left);
-                }
-                if (token.Comparand is not null) {
-                    operands.Add(item: token.Comparand);
-                }
-                CollectTokens(tokens: token.LeftExpression);
-                CollectTokens(tokens: token.RightExpression);
+                CollectSource(source: token.LeftSource);
+                CollectSource(source: token.RightSource);
             }
         }
 
         foreach (var rule in allRules) {
             CollectGate(gate: rule.Gate);
-            if (rule.Bindings is not null) {
-                foreach (var binding in rule.Bindings) {
+            if (rule.Locals is not null) {
+                foreach (var binding in rule.Locals) {
                     CollectTokens(tokens: binding.Expression);
                 }
             }
-            if (rule.Decision is not null) {
-                if (rule.Decision.Interrupt is not null) {
-                    CollectGate(gate: rule.Decision.Interrupt);
+            if ((rule as CompiledWorldFactsRule)?.Decision is { } decision) {
+                if (decision.Interrupt is not null) {
+                    CollectGate(gate: decision.Interrupt);
                 }
-                foreach (var opt in rule.Decision.Options) {
+                foreach (var opt in decision.Options) {
                     CollectGate(gate: opt.Gate);
                     CollectTokens(tokens: opt.Score);
                 }
@@ -126,11 +134,11 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
 
         Assert.Equal(
             actual: hash31,
-            expected: 0x05ed666c0438fb08UL
+            expected: 0x867dd6f9dea21e87UL
         );
         Assert.Equal(
             actual: hash151,
-            expected: 0x92dd209305359d13UL
+            expected: 0xaf51fbbf4ba1d024UL
         );
         Assert.True(condition: (fixedLiteralCellOps > 0));
     }

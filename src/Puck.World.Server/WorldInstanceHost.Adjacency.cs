@@ -62,28 +62,38 @@ public sealed partial class WorldInstanceHost {
             );
         }
     }
-    // The authored `unavailable: closed` treatment, applied wherever a crossing fails for good: clamp the body one
-    // raw fixed-point unit inside the boundary it tried to leave through, drop outward velocity, press the authored
-    // channel once, and name the refusal. Clamping is what makes the refusal terminal — a body left standing beyond
-    // the ownership threshold re-satisfies the same edge on the very next scan (WorldAdjacencyRegion.Sweep answers
-    // Crossed for a body already outside), so a refusal that does not move it is a refusal per tick.
+    // The authored `unavailable: closed` treatment, applied wherever a crossing fails for good: press the authored
+    // channel once and name the refusal, and on a wall clamp the body one raw fixed-point unit inside the boundary it
+    // tried to leave through and drop its velocity. Clamping is what makes a wall's refusal terminal — a body left
+    // standing beyond the ownership threshold re-satisfies the same edge on the very next scan
+    // (WorldAdjacencyRegion.Sweep answers Crossed for a body already outside), so a refusal that does not move it is
+    // a refusal per tick.
+    //
+    // A boundary the body leaves through vertically gets no clamp, because closed terrain has no meaning under a
+    // falling body: holding it level at the plane with its velocity dropped leaves it standing on nothing, in mid
+    // air, with no way back to the terrain it left. It stays the source authority's problem and keeps falling, which
+    // its own floor or kill plane answers for. The clamp would not make the refusal terminal there either — gravity
+    // re-crosses the vertical deadband within a few ticks.
     private static void CloseAdjacencyEdge(WorldInstance instance, string adjacencyName, string? onUnavailable, int seat, in WorldFaceFrame frame, FixedVector3 boundaryPoint, string reason) {
         if (instance.Server.Population.EntryBody(index: seat) is not { } body) {
             return;
         }
 
-        var inward = FixedQ4816.FromRawBits(value: 1L);
+        if (frame.IsYawOnly) {
+            var inward = FixedQ4816.FromRawBits(value: 1L);
 
-        body.Pose(
-            position: (boundaryPoint - (frame.Normal * inward)),
-            yawRadians: body.FixedYaw,
-            pitchRadians: FixedQ4816.Zero,
-            rollRadians: FixedQ4816.Zero
-        );
-        body.SetArrivalVelocity(
-            planarVelocity: FixedVector3.Zero,
-            verticalVelocity: FixedQ4816.Zero
-        );
+            body.Pose(
+                position: (boundaryPoint - (frame.Normal * inward)),
+                yawRadians: body.FixedYaw,
+                pitchRadians: FixedQ4816.Zero,
+                rollRadians: FixedQ4816.Zero
+            );
+            body.SetArrivalVelocity(
+                planarVelocity: FixedVector3.Zero,
+                verticalVelocity: FixedQ4816.Zero
+            );
+        }
+
         body.ClearPendingContinuum();
         var binding = "engine-only";
 
@@ -178,9 +188,9 @@ public sealed partial class WorldInstanceHost {
             depth: out var reciprocalHysteresis,
             reason: out _
         );
-        _ = WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+        _ = WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
             definition: instance.Server.Definition,
-            depth: out var verticalSettleDeadband,
+            depth: out var verticalOwnershipDeadband,
             reason: out _
         );
 
@@ -224,7 +234,7 @@ public sealed partial class WorldInstanceHost {
             var ownershipThreshold = WorldAdjacencyPolicy.OwnershipThreshold(
                 frame: in frame,
                 reciprocalHysteresis: reciprocalHysteresis,
-                verticalSettleDeadband: verticalSettleDeadband
+                verticalOwnershipDeadband: verticalOwnershipDeadband
             );
 
             for (var seat = 0; (seat < population.Capacity); seat++) {
@@ -250,8 +260,8 @@ public sealed partial class WorldInstanceHost {
                 // A remotely committed arrival bypasses this host's PublishCommittedTransfer path, but escrow
                 // retains the authenticated source border on the destination authority. Handoff occurs at the far
                 // side of the boundary's own ownership threshold, so a mapped arrival starts at least that far
-                // inside the new owner: a wall carries the reciprocal contact hysteresis, a floor/ceiling the much
-                // smaller vertical settle deadband. Test both ends of this step: a genuine reversal may cross the
+                // inside the new owner: a wall carries the reciprocal contact hysteresis, a floor/ceiling the
+                // vertical ownership deadband. Test both ends of this step: a genuine reversal may cross the
                 // whole deadband in one tick and must not be stranded outside its owner merely because its settled
                 // endpoint is outward again.
                 if (

@@ -24,12 +24,43 @@ export interface EngineCell {
   z: number;
 }
 
-/** One state row's whole current content, authored cells only (`BrowserRowSnapshot`). */
+/** The closed set of cell kinds a state row declares (`Puck.State.CellKind`). */
+export type CellKindName = "Int" | "Fixed" | "Bool" | "Text" | "Vector";
+
+/** One cell's value as the single carrier its kind declares (`Puck.State.CellValue`), decoded from the wire's
+ * tag-and-payload pair. `Int` and `Fixed` carry raw 64-bit bits — a `Fixed` carrier is the raw `FixedQ4816`
+ * pattern, the same channel `writeRow` takes, never a decimal reading of it. A `Vector` carries its base64url
+ * components. */
+export type CellValue =
+  | { kind: "Int" | "Fixed"; value: bigint }
+  | { kind: "Bool"; value: boolean }
+  | { kind: "Text"; value: string }
+  | { kind: "Vector"; value: string };
+
+/** Returns the raw 64-bit word a numeric carrier holds, or `null` for an absent cell or a carrier holding text, a
+ * bool, or a vector — the read a numeric surface (a register input, a board colouring) needs. */
+export function cellNumber(value: CellValue | null | undefined): bigint | null {
+  return ((value && ((value.kind === "Int") || (value.kind === "Fixed"))) ? value.value : null);
+}
+
+/** Returns one carrier as the text a read-back surface displays, or `null` for an absent cell. */
+export function cellText(value: CellValue | null | undefined): string | null {
+  return (value ? String(value.value) : null);
+}
+
+/** Returns whether two carriers hold the same case with the same payload. */
+export function sameCellValue(left: CellValue | null | undefined, right: CellValue | null | undefined): boolean {
+  if (!left || !right) return (!left && !right);
+  return (left.kind === right.kind && left.value === right.value);
+}
+
+/** One state row's whole current content, authored cells only (`BrowserRowSnapshot`). A cell's `value` is `null`
+ * where the arena holds no such cell. */
 export interface RowInfo {
   name: string;
-  kind: "Int" | "Fixed" | "Bool" | "Text";
+  kind: CellKindName;
   keyed: boolean;
-  cells: { key: string; value: bigint; text: string }[];
+  cells: { key: string; value: CellValue | null }[];
 }
 
 /** One `Judge` call's whole trace (`BrowserJudgeResult`). Each rule's own captured evaluations stay opaque
@@ -66,7 +97,7 @@ export interface WorldEngine {
   rows(handle: string): Promise<RowInfo[]>;
   rebind(handle: string, json: string): Promise<{ ok: boolean; error?: string }>;
   judge(handle: string, tick: bigint): Promise<{ ok: true; trace: JudgeTrace } | { ok: false; error: string }>;
-  readRow(handle: string, row: string, key?: string): Promise<{ found: boolean; value: bigint; text: string }>;
+  readRow(handle: string, row: string, key?: string): Promise<{ found: boolean; value: CellValue | null }>;
   writeRow(handle: string, row: string, key: string | undefined, value: bigint, write: "set" | "add"): Promise<{ ok: boolean; error?: string }>;
   evaluate(handle: string, expression: string, kind: "Int" | "Fixed", tick: bigint): Promise<{ ok: boolean; value?: bigint; error?: string }>;
   boardMask(handle: string, row: string): Promise<{ ok: boolean; mask?: bigint; error?: string }>;

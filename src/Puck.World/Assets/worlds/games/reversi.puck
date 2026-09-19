@@ -1,0 +1,2009 @@
+// Reversi (Othello), the 8x8 disc-flipping game, authored against the World Othello Federation's
+// official rules (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english).
+// Black moves first; a move must bracket at least one unbroken run of the opponent's discs between the
+// placed disc and another disc of the mover's own colour along one of the eight compass rays; every
+// bracketed disc flips. A side with no legal move passes; two consecutive passes end the game, as does a
+// full board. The side holding more discs wins.
+//
+// The '.puck' source is canonical: edit it and compile, never the '.world.json' beside it.
+
+schema: "puck.world.definition.v1"
+documentId: "reversi"
+
+host {
+  presentation: "None"
+  width: 64
+  height: 64
+  surfaceFormat: "r8g8b8a8"
+  fullscreen: false
+  presentMode: "Immediate"
+  targetHertz: 60
+  exitAfterSeconds: 0
+  rayQuery: false
+  timing: false
+}
+
+simulation {
+  rateHz: 30
+}
+
+// Cell ordinal = row * 8 + file, the Grid topology's own (y * width + x) order. The four opening discs
+// sit on the middle square: 27 and 36 white, 28 and 35 black.
+let opening = [
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 2, 1, 0, 0, 0,
+  0, 0, 0, 1, 2, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0
+]
+
+// One alphabet over the board's own raw values, shared by every pattern below: 0 empty, 1 black, 2 white.
+let discs = [
+  {
+    name: "empty"
+    min: 0
+    max: 0
+  }
+  {
+    name: "black"
+    min: 1
+    max: 1
+  }
+  {
+    name: "white"
+    min: 2
+    max: 2
+  }
+]
+
+patterns [
+  // The probes: how far an unbroken run of the opponent's discs reaches. Read through the 'distance'
+  // facet, whose answer is the step count to the first cell the run does NOT cover — one past the last
+  // opponent disc — or -1 when the run reaches the board's edge.
+  {
+    name: "reversiWhiteRun"
+    kind: "Int"
+    symbols: discs
+    pattern: star(item: symbol(name: "white"))
+  }
+  {
+    name: "reversiBlackRun"
+    kind: "Int"
+    symbols: discs
+    pattern: star(item: symbol(name: "black"))
+  }
+  // The brackets: the run 'setRay' rewrites. The trailing own-colour symbol is what closes the run, so a
+  // ray of opponent discs running off the board accepts no prefix at all and the write refuses itself.
+  {
+    name: "reversiWhiteBracket"
+    kind: "Int"
+    symbols: discs
+    pattern: sequence(items: [
+      plus(item: symbol(name: "white"))
+      symbol(name: "black")
+    ]
+    )
+  }
+  {
+    name: "reversiBlackBracket"
+    kind: "Int"
+    symbols: discs
+    pattern: sequence(items: [
+      plus(item: symbol(name: "black"))
+      symbol(name: "white")
+    ]
+    )
+  }
+  // The legality lines: the same bracket, extended to cover the whole ray, so the acceptance the 'any'
+  // direction counts is "this ray brackets" rather than "this ray is exactly a bracket".
+  {
+    name: "reversiBlackLine"
+    kind: "Int"
+    symbols: discs
+    pattern: sequence(items: [
+      plus(item: symbol(name: "white"))
+      symbol(name: "black")
+      star(item: any())
+    ]
+    )
+  }
+  {
+    name: "reversiWhiteLine"
+    kind: "Int"
+    symbols: discs
+    pattern: sequence(items: [
+      plus(item: symbol(name: "black"))
+      symbol(name: "white")
+      star(item: any())
+    ]
+    )
+  }
+]
+
+state {
+  lattices [
+    grid(name: "reversiGrid", origin: [0, 0, 0], cellSize: 1, width: 8, depth: 8, wrap: "None")
+  ]
+
+  world {
+    // The play board: written directly, by the placement write and by the eight 'setRay' flips.
+    row {
+      name: "reversiBoard"
+      kind: "Int"
+      capacity: 64
+      min: 0
+      max: 2
+      domain: cellsOf(topology: "reversiGrid")
+      cells: map(range(0, 64), i => {
+        key: $"{i}",
+        value: opening[i]
+      }
+      )
+    }
+
+    // The mobility board: an INVERSE board, derived from the candidate tokens below rather than written.
+    // A candidate holding a cell ordinal puts its code on that cell; a candidate holding -1 is off the
+    // board and contributes nothing, so the board's members are exactly the side to move's legal moves.
+    // Its empty value is -1 because its codes are cell ordinals, and cell 0 is one of them.
+    row {
+      name: "reversiMobility"
+      kind: "Int"
+      capacity: 64
+      min: -1
+      max: 63
+      domain: cellsOf(topology: "reversiGrid", empty: -1)
+      inverse {
+        tokens: "reversiCandidate"
+        codes: "reversiCellIndex"
+      }
+    }
+
+    // The side to move's legal moves, one token per board cell: the cell's own ordinal when a disc
+    // there would bracket, and -1 — off the board — when it would not.
+    table reversiCandidate: Int capacity(64) bounds(minimum: -1, maximum: 63) {
+      "0" = -1
+      "1" = -1
+      "2" = -1
+      "3" = -1
+      "4" = -1
+      "5" = -1
+      "6" = -1
+      "7" = -1
+      "8" = -1
+      "9" = -1
+      "10" = -1
+      "11" = -1
+      "12" = -1
+      "13" = -1
+      "14" = -1
+      "15" = -1
+      "16" = -1
+      "17" = -1
+      "18" = -1
+      "19" = -1
+      "20" = -1
+      "21" = -1
+      "22" = -1
+      "23" = -1
+      "24" = -1
+      "25" = -1
+      "26" = -1
+      "27" = -1
+      "28" = -1
+      "29" = -1
+      "30" = -1
+      "31" = -1
+      "32" = -1
+      "33" = -1
+      "34" = -1
+      "35" = -1
+      "36" = -1
+      "37" = -1
+      "38" = -1
+      "39" = -1
+      "40" = -1
+      "41" = -1
+      "42" = -1
+      "43" = -1
+      "44" = -1
+      "45" = -1
+      "46" = -1
+      "47" = -1
+      "48" = -1
+      "49" = -1
+      "50" = -1
+      "51" = -1
+      "52" = -1
+      "53" = -1
+      "54" = -1
+      "55" = -1
+      "56" = -1
+      "57" = -1
+      "58" = -1
+      "59" = -1
+      "60" = -1
+      "61" = -1
+      "62" = -1
+      "63" = -1
+    }
+
+    // The ordinal each key names, which is both the candidate row's codes and the value a sweep writes
+    // into it: a cell key is text, and no expression turns the bound key into the number it spells.
+    table reversiCellIndex: Int capacity(64) bounds(minimum: 0, maximum: 63) {
+      "0" = 0
+      "1" = 1
+      "2" = 2
+      "3" = 3
+      "4" = 4
+      "5" = 5
+      "6" = 6
+      "7" = 7
+      "8" = 8
+      "9" = 9
+      "10" = 10
+      "11" = 11
+      "12" = 12
+      "13" = 13
+      "14" = 14
+      "15" = 15
+      "16" = 16
+      "17" = 17
+      "18" = 18
+      "19" = 19
+      "20" = 20
+      "21" = 21
+      "22" = 22
+      "23" = 23
+      "24" = 24
+      "25" = 25
+      "26" = 26
+      "27" = 27
+      "28" = 28
+      "29" = 29
+      "30" = 30
+      "31" = 31
+      "32" = 32
+      "33" = 33
+      "34" = 34
+      "35" = 35
+      "36" = 36
+      "37" = 37
+      "38" = 38
+      "39" = 39
+      "40" = 40
+      "41" = 41
+      "42" = 42
+      "43" = 43
+      "44" = 44
+      "45" = 45
+      "46" = 46
+      "47" = 47
+      "48" = 48
+      "49" = 49
+      "50" = 50
+      "51" = 51
+      "52" = 52
+      "53" = 53
+      "54" = 54
+      "55" = 55
+      "56" = 56
+      "57" = 57
+      "58" = 58
+      "59" = 59
+      "60" = 60
+      "61" = 61
+      "62" = 62
+      "63" = 63
+    }
+
+    // The bracket reach the last accepted move measured in each of the eight directions: the step
+    // distance to the first cell the opponent run does not cover, or -1 when that run reaches the edge.
+    table reversiRay: Int capacity(8) bounds(minimum: -1, maximum: 8) {
+      N = -1
+      NE = -1
+      E = -1
+      SE = -1
+      S = -1
+      SW = -1
+      W = -1
+      NW = -1
+    }
+
+    slot reversiTurn: Int = 1 bounds(minimum: 1, maximum: 2)
+
+    slot reversiMoveCell: Int = -1 bounds(minimum: -1, maximum: 63)
+
+    slot reversiMoveRequest: Int = 0 bounds(minimum: 0)
+
+    slot reversiMoveApplied: Int = 0 bounds(minimum: 0)
+
+    slot reversiFlipping: Int = 0 bounds(minimum: 0, maximum: 1)
+
+    slot reversiMoveCount: Int = 0 bounds(minimum: 0, maximum: 60)
+
+    slot reversiRejected: Int = 0 bounds(minimum: 0, maximum: 50400)
+
+    slot reversiPasses: Int = 0 bounds(minimum: 0, maximum: 2)
+
+    slot reversiPrevOwn: Int = 2 bounds(minimum: 0, maximum: 64)
+
+    slot reversiFlips: Int = 0 bounds(minimum: 0, maximum: 63)
+
+    slot reversiBlack: Int = 2 bounds(minimum: 0, maximum: 64)
+
+    slot reversiWhite: Int = 2 bounds(minimum: 0, maximum: 64)
+
+    slot reversiMobilityCount: Int = 0 bounds(minimum: 0, maximum: 64)
+
+    slot reversiWinner: Int = 0 bounds(minimum: 0, maximum: 3)
+  }
+}
+
+// Mobility, recomputed every tick for the side to move: an empty cell whose rays bracket in at least one
+// of the eight directions is a legal move, and its candidate token carries its own cell ordinal. The
+// inverse board above is that token row read as a board.
+rule "reversi-mobility-black" {
+  when reversiTurn == 1 and reversiWinner == 0
+  mode: "Level"
+  forEach: "reversiCellIndex"
+  reversiCandidate[$each] = (reversiBoard[$each] == 0) & ($match:reversiBlackLine:reversiBoard:any:count[$each] >= 1) ? reversiCellIndex[$each] : -1
+}
+
+rule "reversi-mobility-white" {
+  when reversiTurn == 2 and reversiWinner == 0
+  mode: "Level"
+  forEach: "reversiCellIndex"
+  reversiCandidate[$each] = (reversiBoard[$each] == 0) & ($match:reversiWhiteLine:reversiBoard:any:count[$each] >= 1) ? reversiCellIndex[$each] : -1
+}
+
+rule "reversi-mobility-count" {
+  mode: "Level"
+  reversiMobilityCount = setBitCount($board:mask:reversiMobility:0:63)
+}
+
+// A side with no legal move passes. Two consecutive passes end the game; an accepted move clears the
+// count, so only consecutive ones accumulate.
+rule "reversi-pass" {
+  when reversiWinner == 0 and reversiFlipping == 0 and reversiMobilityCount == 0 and reversiPasses < 2
+  mode: "Level"
+  reversiTurn = 3 - reversiTurn
+  reversiPasses += 1
+}
+
+// The move door. The gate IS the rule set: the cell must be on the board, empty, and bracket at least one
+// ray. Everything it admits is legal Othello; everything it closes on falls through to the refusal below.
+rule "reversi-place-black" {
+  when reversiWinner == 0 and reversiFlipping == 0 and reversiMoveRequest != reversiMoveApplied and reversiTurn == 1 and reversiMoveCell >= 0 and reversiMoveCell <= 63 and reversiBoard[reversiMoveCell[$value]] == 0 and $match:reversiBlackLine:reversiBoard:any:count[reversiMoveCell[$value]] >= 1
+  mode: "Edge"
+  reversiPrevOwn = setBitCount($board:mask:reversiBoard:1:1)
+  reversiRay[N] = $match:reversiWhiteRun:reversiBoard:N:distance[reversiMoveCell[$value]]
+  reversiRay[NE] = $match:reversiWhiteRun:reversiBoard:NE:distance[reversiMoveCell[$value]]
+  reversiRay[E] = $match:reversiWhiteRun:reversiBoard:E:distance[reversiMoveCell[$value]]
+  reversiRay[SE] = $match:reversiWhiteRun:reversiBoard:SE:distance[reversiMoveCell[$value]]
+  reversiRay[S] = $match:reversiWhiteRun:reversiBoard:S:distance[reversiMoveCell[$value]]
+  reversiRay[SW] = $match:reversiWhiteRun:reversiBoard:SW:distance[reversiMoveCell[$value]]
+  reversiRay[W] = $match:reversiWhiteRun:reversiBoard:W:distance[reversiMoveCell[$value]]
+  reversiRay[NW] = $match:reversiWhiteRun:reversiBoard:NW:distance[reversiMoveCell[$value]]
+  reversiBoard[reversiMoveCell[$value]] = 1
+  reversiFlipping = 1
+}
+
+rule "reversi-place-white" {
+  when reversiWinner == 0 and reversiFlipping == 0 and reversiMoveRequest != reversiMoveApplied and reversiTurn == 2 and reversiMoveCell >= 0 and reversiMoveCell <= 63 and reversiBoard[reversiMoveCell[$value]] == 0 and $match:reversiWhiteLine:reversiBoard:any:count[reversiMoveCell[$value]] >= 1
+  mode: "Edge"
+  reversiPrevOwn = setBitCount($board:mask:reversiBoard:2:2)
+  reversiRay[N] = $match:reversiBlackRun:reversiBoard:N:distance[reversiMoveCell[$value]]
+  reversiRay[NE] = $match:reversiBlackRun:reversiBoard:NE:distance[reversiMoveCell[$value]]
+  reversiRay[E] = $match:reversiBlackRun:reversiBoard:E:distance[reversiMoveCell[$value]]
+  reversiRay[SE] = $match:reversiBlackRun:reversiBoard:SE:distance[reversiMoveCell[$value]]
+  reversiRay[S] = $match:reversiBlackRun:reversiBoard:S:distance[reversiMoveCell[$value]]
+  reversiRay[SW] = $match:reversiBlackRun:reversiBoard:SW:distance[reversiMoveCell[$value]]
+  reversiRay[W] = $match:reversiBlackRun:reversiBoard:W:distance[reversiMoveCell[$value]]
+  reversiRay[NW] = $match:reversiBlackRun:reversiBoard:NW:distance[reversiMoveCell[$value]]
+  reversiBoard[reversiMoveCell[$value]] = 2
+  reversiFlipping = 1
+}
+
+// The flips. 'setRay' rewrites the longest run its pattern accepts, walked outward from the origin and
+// excluding it — exactly a Reversi bracket. Its origin is a LITERAL cell of the board's topology (unlike
+// 'clearEnclosed' and 'writeSet', it resolves no dynamic key), so the door above hands the played cell to
+// one rule per cell per colour, each firing the eight rays of that cell. A direction that brackets
+// nothing accepts no prefix and refuses its own write, leaving the other seven untouched.
+//
+// The table below is written out rather than generated: a rule's name is a literal token, so neither a
+// 'template' parameter nor a 'for' variable can mint one, and a compile-time loop over the board cannot
+// name the rules it would produce. The four opening cells (27, 28, 35, 36) carry no rules — Reversi never
+// empties a cell, so the move door's "the cell is empty" conjunct can never open for them.
+
+rule "reversi-flip-1-0" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 0
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "0", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "0", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-0" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 0
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "0", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "0", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-1" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 1
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "1", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "1", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-1" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 1
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "1", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "1", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-2" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 2
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "2", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "2", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-2" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 2
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "2", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "2", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-3" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 3
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "3", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "3", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-3" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 3
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "3", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "3", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-4" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 4
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "4", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "4", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-4" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 4
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "4", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "4", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-5" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 5
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "5", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "5", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-5" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 5
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "5", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "5", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-6" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 6
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "6", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "6", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-6" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 6
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "6", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "6", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-7" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 7
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "7", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "7", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-7" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 7
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "7", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "7", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-8" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 8
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "8", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "8", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-8" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 8
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "8", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "8", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-9" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 9
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "9", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "9", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-9" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 9
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "9", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "9", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-10" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 10
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "10", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "10", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-10" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 10
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "10", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "10", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-11" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 11
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "11", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "11", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-11" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 11
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "11", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "11", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-12" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 12
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "12", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "12", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-12" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 12
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "12", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "12", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-13" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 13
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "13", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "13", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-13" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 13
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "13", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "13", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-14" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 14
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "14", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "14", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-14" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 14
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "14", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "14", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-15" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 15
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "15", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "15", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-15" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 15
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "15", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "15", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-16" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 16
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "16", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "16", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-16" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 16
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "16", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "16", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-17" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 17
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "17", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "17", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-17" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 17
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "17", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "17", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-18" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 18
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "18", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "18", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-18" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 18
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "18", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "18", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-19" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 19
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "19", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "19", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-19" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 19
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "19", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "19", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-20" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 20
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "20", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "20", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-20" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 20
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "20", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "20", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-21" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 21
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "21", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "21", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-21" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 21
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "21", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "21", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-22" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 22
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "22", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "22", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-22" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 22
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "22", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "22", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-23" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 23
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "23", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "23", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-23" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 23
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "23", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "23", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-24" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 24
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "24", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "24", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-24" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 24
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "24", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "24", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-25" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 25
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "25", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "25", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-25" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 25
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "25", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "25", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-26" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 26
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "26", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "26", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-26" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 26
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "26", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "26", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-29" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 29
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "29", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "29", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-29" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 29
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "29", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "29", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-30" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 30
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "30", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "30", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-30" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 30
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "30", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "30", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-31" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 31
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "31", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "31", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-31" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 31
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "31", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "31", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-32" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 32
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "32", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "32", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-32" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 32
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "32", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "32", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-33" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 33
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "33", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "33", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-33" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 33
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "33", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "33", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-34" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 34
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "34", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "34", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-34" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 34
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "34", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "34", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-37" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 37
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "37", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "37", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-37" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 37
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "37", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "37", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-38" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 38
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "38", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "38", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-38" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 38
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "38", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "38", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-39" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 39
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "39", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "39", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-39" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 39
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "39", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "39", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-40" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 40
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "40", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "40", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-40" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 40
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "40", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "40", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-41" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 41
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "41", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "41", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-41" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 41
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "41", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "41", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-42" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 42
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "42", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "42", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-42" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 42
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "42", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "42", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-43" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 43
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "43", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "43", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-43" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 43
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "43", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "43", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-44" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 44
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "44", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "44", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-44" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 44
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "44", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "44", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-45" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 45
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "45", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "45", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-45" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 45
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "45", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "45", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-46" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 46
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "46", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "46", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-46" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 46
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "46", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "46", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-47" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 47
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "47", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "47", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-47" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 47
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "47", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "47", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-48" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 48
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "48", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "48", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-48" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 48
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "48", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "48", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-49" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 49
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "49", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "49", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-49" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 49
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "49", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "49", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-50" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 50
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "50", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "50", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-50" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 50
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "50", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "50", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-51" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 51
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "51", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "51", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-51" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 51
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "51", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "51", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-52" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 52
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "52", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "52", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-52" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 52
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "52", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "52", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-53" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 53
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "53", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "53", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-53" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 53
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "53", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "53", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-54" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 54
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "54", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "54", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-54" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 54
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "54", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "54", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-55" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 55
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "55", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "55", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-55" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 55
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "55", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "55", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-56" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 56
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "56", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "56", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-56" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 56
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "56", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "56", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-57" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 57
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "57", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "57", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-57" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 57
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "57", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "57", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-58" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 58
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "58", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "58", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-58" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 58
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "58", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "58", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-59" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 59
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "59", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "59", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-59" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 59
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "59", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "59", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-60" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 60
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "60", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "60", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-60" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 60
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "60", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "60", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-61" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 61
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "61", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "61", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-61" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 61
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "61", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "61", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-62" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 62
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "62", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "62", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-62" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 62
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "62", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "62", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+rule "reversi-flip-1-63" {
+  when reversiFlipping == 1 and reversiTurn == 1 and reversiMoveCell == 63
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "63", direction: "N", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "NE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "E", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "SE", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "S", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "SW", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "W", pattern: "reversiWhiteBracket", value: 1)
+  transform setRay(row: "reversiBoard", from: "63", direction: "NW", pattern: "reversiWhiteBracket", value: 1)
+}
+
+rule "reversi-flip-2-63" {
+  when reversiFlipping == 1 and reversiTurn == 2 and reversiMoveCell == 63
+  mode: "Level"
+  transform setRay(row: "reversiBoard", from: "63", direction: "N", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "NE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "E", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "SE", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "S", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "SW", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "W", pattern: "reversiBlackBracket", value: 2)
+  transform setRay(row: "reversiBoard", from: "63", direction: "NW", pattern: "reversiBlackBracket", value: 2)
+}
+
+// A pending request the door did not admit is answered, not applied: the board stays where it was and the
+// refusal is counted. This is the rules refusing an illegal move, not the engine refusing a write.
+rule "reversi-reject" {
+  when reversiWinner == 0 and reversiFlipping == 0 and reversiMoveRequest != reversiMoveApplied
+  mode: "Edge"
+  reversiRejected += 1
+  reversiMoveApplied = reversiMoveRequest
+}
+
+rule "reversi-finish" {
+  when reversiFlipping == 1
+  mode: "Level"
+  reversiFlips = (reversiTurn == 1 ? setBitCount($board:mask:reversiBoard:1:1) : setBitCount($board:mask:reversiBoard:2:2)) - reversiPrevOwn - 1
+  reversiMoveCount += 1
+  reversiMoveApplied = reversiMoveRequest
+  reversiPasses = 0
+  reversiTurn = 3 - reversiTurn
+  reversiFlipping = 0
+}
+
+rule "reversi-score" {
+  mode: "Level"
+  reversiBlack = setBitCount($board:mask:reversiBoard:1:1)
+  reversiWhite = setBitCount($board:mask:reversiBoard:2:2)
+  reversiWinner = ((reversiBlack + reversiWhite) >= 64) | (reversiPasses >= 2) ? (reversiBlack > reversiWhite ? 1 : (reversiWhite > reversiBlack ? 2 : 3)) : 0
+}
+// There is no 'search' job here, and the games README records why: this document's own flip rules price a
+// judge run past what the work sheet leaves, so a job over them cannot be planned. The CPU opponent G2
+// asks for waits on that.

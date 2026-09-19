@@ -20,7 +20,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
 
     /// <summary>Gets whether this runtime is still live. This is diagnostic only; the operation dispatcher holds
     /// an authority lifetime lease across actual external calls.</summary>
-    public bool IsActive => m_server.ExecuteAuthorityOperation(operation: () => (!m_disposed && m_server.IsRecordedExtensionActive(epoch: m_epoch)));
+    public bool IsActive => m_server.ExecuteAuthorityOperation(operation: () => (!m_disposed && m_server.Extensions.IsActive(epoch: m_epoch)));
     /// <summary>Gets how many copied contributions are awaiting the simulation pump.</summary>
     public int PendingCount => m_server.ExecuteAuthorityOperation(operation: () => m_pendingContributions);
     /// <summary>Gets the provider's acting identity, fixed for this runtime instance.</summary>
@@ -30,7 +30,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
 
     internal IDisposable BeginDispatch() => m_server.ExecuteAuthorityOperation(operation: () => {
         CheckActive();
-        return m_server.BeginExternalOperation(epoch: m_epoch);
+        return m_server.Extensions.BeginExternalOperation(epoch: m_epoch);
     });
     internal void ContributionDequeued() => m_pendingContributions--;
 
@@ -39,7 +39,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
             condition: m_disposed,
             instance: this
         );
-        m_server.CheckRecordedExtension(epoch: m_epoch);
+        m_server.Extensions.Check(epoch: m_epoch);
     }
 
     /// <inheritdoc/>
@@ -59,7 +59,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
             )) {
                 throw new InvalidOperationException(message: "The observation exceeds the extension's requested subjects.");
             }
-            return m_server.ObserveRecordedExtension(
+            return m_server.Extensions.Observe(
                 m_epoch,
                 query,
                 Principal
@@ -91,7 +91,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
         }
         return m_server.ExecuteAuthorityOperation(operation: () => {
             CheckActive();
-            if (!WorldServer.ExtensionRequestsAllow(
+            if (!WorldExtensions.RequestsAllow(
                 mutation: frozen,
                 principal: Principal,
                 requests: m_requests
@@ -101,7 +101,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
             if (m_pendingContributions >= m_maximumPendingContributions) {
                 throw new InvalidOperationException(message: "The extension's pending contribution budget is exhausted.");
             }
-            var sequence = m_server.EnqueueRecordedExtension(
+            var sequence = m_server.Extensions.Enqueue(
                 epoch: m_epoch,
                 mutation: frozen,
                 owner: this
@@ -125,6 +125,6 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
         Principal = principal;
         m_requests = [.. requests];
         m_maximumPendingContributions = maximumPendingContributions;
-        m_epoch = server.AdmitRecordedExtension();
+        m_epoch = server.Extensions.Admit();
     }
 }

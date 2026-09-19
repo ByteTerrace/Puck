@@ -256,7 +256,7 @@ public sealed class GranaryContentLawTests {
 
         Assert.Equal(
             expected: 1L,
-            actual: stage.Cells!.Single().Value
+            actual: stage.Cells!.Single().Value.Raw
         );
 
         var provider = Assert.Single(
@@ -297,7 +297,7 @@ public sealed class GranaryContentLawTests {
         )!;
         Assert.Equal(
             expected: 2L,
-            actual: stage.Cells!.Single().Value
+            actual: stage.Cells!.Single().Value.Raw
         );
         provider = Assert.Single(
             collection: fixture.Server.Definition.Placements,

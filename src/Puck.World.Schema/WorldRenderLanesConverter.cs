@@ -4,20 +4,20 @@ using System.Text.Json.Serialization;
 namespace Puck.World;
 
 /// <summary>Reads the four render expressions and omits trailing empty entries when writing.</summary>
-public sealed class WorldRenderLanesConverter : JsonConverter<IReadOnlyList<ValueExpression?>> {
+public sealed class WorldRenderLanesConverter : JsonConverter<IReadOnlyList<ExpressionProgram?>> {
     /// <inheritdoc/>
-    public override IReadOnlyList<ValueExpression?>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+    public override IReadOnlyList<ExpressionProgram?>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "Render lanes must be an array.");
         }
-        var lanes = new List<ValueExpression?>(capacity: 4);
+        var lanes = new List<ExpressionProgram?>(capacity: 4);
 
         while (reader.Read()) {
             if (reader.TokenType == JsonTokenType.EndArray) { return lanes; }
             if (lanes.Count == 4) { throw new JsonException(message: "Render lanes may contain at most four expressions."); }
             lanes.Add(item: ((reader.TokenType == JsonTokenType.Null)
                 ? null
-                : JsonSerializer.Deserialize<ValueExpression>(
+                : JsonSerializer.Deserialize<ExpressionProgram>(
                     options: options,
                     reader: ref reader
                 )));
@@ -25,7 +25,7 @@ public sealed class WorldRenderLanesConverter : JsonConverter<IReadOnlyList<Valu
         throw new JsonException(message: "Render lanes array is incomplete.");
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, IReadOnlyList<ValueExpression?> value, JsonSerializerOptions options) {
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<ExpressionProgram?> value, JsonSerializerOptions options) {
         if (value.Count > 4) {
             throw new JsonException(message: "Render lanes may contain at most four expressions.");
         }

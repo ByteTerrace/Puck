@@ -46,9 +46,9 @@ token's code. The board's cell at `c` is the code of the LAST token—in `tokens
 value names `c`; two tokens naming the same cell is not an authoring error, the later one in row order simply
 wins and the earlier one's code is absent from the board. The board is never written directly—an
 `UpsertStateCell`/`UpsertStateRow` targeting it, live or authored, is refused by name; write `tokens`/`codes`
-instead, and the engine recomputes the board's cells (`Puck.State.DerivedBoards.Compose`) at every compose and
-install, so the journaled document already carries them. A hypothetical frame keeps the same answer through a
-cheaper incremental path: a write to `tokens` rewrites only the moved token's own two board cells.
+instead, and `Puck.State.StateArena` recomputes the board's cells on every keyed write to either row and on
+every load, so the journaled document already carries them. A candidate inside a journal scope keeps the same
+answer: a write to `tokens` rewrites only the moved token's own two board cells.
 
 Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
 `SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
@@ -181,6 +181,11 @@ destination cell's entry cost. Negative terrain is impassable. Equal-cost
 nodes settle by ordinal; the visit bound counts settled nodes. A path budget
 refusal is distinct from proof that no route exists.
 
+`state.enums` declares symbolic value domains and `state.families` groups
+consecutively declared rows under one name; an `Int` row names an enum through
+its own `enum` member, and a write outside that enum's range is refused by name.
+See [Model state with rows and cells](../../docs/reference/state/data-model.md#symbolic-values-and-families).
+
 A plain keyed row with a declared `capacity` IS the stable token-identity
 domain—no dedicated facet, just `StateDomain.Keys` (`Domain` omitted or
 `{"$type": "keys"}`). Another row's `domain: {"$type": "keysOf", "row":
@@ -244,7 +249,7 @@ table (ordered zones over one token domain, in index order; an empty entry
 answers no index) and any row position in it—a `compareState` `state`, a
 `$reduce:`/`$match:` row, a `$zone:` endpoint's zone, a transfer end, an
 expression's row—spells `$zones[<index>]` with an infix key as the index
-(`game[from]`, `$each`, `$bind:<name>`, an expression), so one authored rule
+(`game[from]`, `$each`, `$local:<name>`, an expression), so one authored rule
 serves every pile of a game; `forEach: "$zones"` visits the table's own
 indices, and an evaluation whose live index selects no entry reads its gate
 closed (the table's gaps say which piles the rule is for; `world.rule.trace`
@@ -449,6 +454,35 @@ the real headless application. The [control script](../../tests/Puck.World.Canar
 checks that an occupied destination spends nothing. Complex scoring remains
 an addon concern; these operators introduce no scripts, recursion, or open loops.
 
+A `keysOf` row that authors no `capacity` is priced at the 4096-cell row
+ceiling inside every transform's storage term, document-wide—an attribute row
+keyed over a small domain (a poker hand's `rank`/`suit`, 52 cards) that omits
+`capacity` taxes every `transfer`, `sort`, and `boardCombine` in the whole
+document at that ceiling rather than its own size, and dropping the
+attribute row's own `keysOf` domain entirely (to save that budget) makes its
+cells resolve through no zone-scoped visibility at all, reading fully public
+regardless of the zone's own disclosure. Author `capacity` on a `keysOf` row
+to both price and disclose it correctly.
+
+Each imported game under `Assets/worlds/games/` is a document fragment,
+composed through `imports` (see "Document composition" below) rather than a
+single-parent `basis` chain: a `basis` chain cannot express "several
+independent slices of one document" without imposing an artificial order
+between unrelated games, while imports can, because sibling imports are
+collision-checked rather than silently overridden—a same-key row, object
+member, or list two games both declare refuses by name unless the importing
+file's own body restates the key. Content genuinely shared between two
+games' documents (`billiardsColors`, read by both billiards and bowling)
+stays substrate in the importing file rather than being forced under either
+game's own arbitrary ownership. `ModularTransform` stays a C# concern rather
+than an author-facing matrix; a quasicrystal inflation arrives as a
+generator draw source, the same seam the tiling generators below already
+use, not as authored linear-algebra content. A walker's own capsule reach
+already exceeds a 0.2 m board cell, so no body can stand on a table-scaled
+board itself without risking contact—an author keeps a walking kit at a
+standoff beside the table and moves pieces by console verb or rule rather
+than by having the body touch the board.
+
 ## The dependency firewall
 
 `Puck.World.Schema` references only `Puck.Abstractions`, `Puck.Assets`,
@@ -618,7 +652,7 @@ authors the frame (`Tenure`—`Presence`/`Endowed`—plus `SlotCreationId`, the
 watched `Link` adjacency row name, and `GraceSeconds`), and a federation partner
 fills it with a creation of their own through an ordinary `UpsertPlacement`.
 `Contributor` and `RetractDeadlineTick` are SERVER-STAMPED: the compose arm
-(`Server/WorldServer.Contributions.cs`) reads the contributor off the submitting
+(`Server/WorldTick.Contributions.cs`) reads the contributor off the submitting
 principal and refuses a payload that names either, and the per-tick presence
 sweep owns the deadline. An unfilled slot shows its own `SlotCreationId`, so
 there is no creationless placement to represent—the validator pins the pair
@@ -630,7 +664,7 @@ ordered list of `{When, PrototypeId}` entries, each `When` the SAME
 `WorldFieldCondition` grammar a `fields.reactions` Transform/Expose condition
 uses, tested at the placement's own coupled lattice cell
 (`Puck.Physics.Fields.FieldLattice.TryBodyCellOf`). The per-tick sweep
-(`Server/WorldServer.Responses.cs`, run right after the field lattice steps)
+(`Server/WorldTick.Responses.cs`, run right after the field lattice steps)
 tries entries in authored order and swaps to the first whose condition holds,
 through an ordinary `UpsertPlacement`; nothing reverts a swap when no entry
 holds. Refused alongside `Attach`/`Inhabit`/`FaceSources`, and every candidate
@@ -652,7 +686,7 @@ all skip it), and is exempt from the distributed-parent refusal
 (`WorldPlacementFrameCompilation`). Refused alongside `Inhabit`/`Attach`/
 `Respond`/`Mirror`/`FaceSources`. An authored placement id spelling the child
 separator `/` is refused by name; only the per-tick sweep
-(`Server/WorldServer.Deals.cs`) mints one. Read back with `world.placements`;
+(`Server/WorldTick.Deals.cs`) mints one. Read back with `world.placements`;
 `world.budget` counts every template's offsets beside the static instances.
 `Solid` compiles the same creation-shape transform chain the renderer emits.
 The field provider evaluates that SDF geometry directly; the analytic provider
@@ -717,7 +751,7 @@ carries the name in (`Declares`, `Names`, `Key`, `Expression`, `Binding`,
 `Template`)—and derives the JSON paths those members reach by walking
 `WorldJsonContext`, so [`docs/world-name-registry.md`](../../docs/world-name-registry.md)
 is generated (`puck registry`) and checked (`puck registry --check`), never
-hand-maintained. A member typed `CellName`, `ValueExpression`, `BindableScalar`,
+hand-maintained. A member typed `CellName`, `ExpressionProgram`, `BindableScalar`,
 `BindableColor`, or `WorldLatticeScalar`, or a string member whose name reads
 like a name position, must be registered or excluded with a reason, so a field
 added without a registration fails the check. `WorldModuleNamespace.cs` reads
@@ -758,7 +792,7 @@ twice, refuses; a document loaded as a world with `exports` still on it refuses
 at validation, since nothing imported it. The record is stripped from the
 composed tree, so a live document never carries it; `world.imports` prints each
 layer's `exports[...]` as authored. Every shipped game module under
-`Assets/worlds/games/` authors its surface; `solitaire.world.json` re-exports
+`Assets/worlds/games/` authors its surface; `solitaire.puck` re-exports
 its three tables' control rows, which its own imports must export first.
 
 **The validator is the one thick gate.** `WorldDefinitionValidator.cs` runs
@@ -801,6 +835,26 @@ settles it to its live computed value with its projected epoch reset to 0 (see
 a slightly LARGER base than it loaded—never the identical bytes—because
 some ticks always elapse before a save can be requested at all.
 
+### Groups (`WorldGroups.cs`)
+
+A `groups` section declares `WorldGroupKind` policy bundles—never a size
+label: a kind's role→capability map (`WorldGroupRole`, naming the
+`WorldCapability` set a member acting under that role may be granted through
+the group's `group:<id>` principal), its `WorldGroupLifetime`
+(`Ephemeral` auto-dissolves a runtime group the moment a leave/kick empties
+it, checked only once it held at least one member; `Persistent` survives at
+zero members until explicitly removed—an authored row is always re-seeded
+from the document regardless of this field, so it can never dissolve out from
+under its own declaration), its `WorldGroupEvictionPolicy` (`Remove` drops
+only the kicked member's row; `Disband` removes the whole group), and its
+per-kind member `Capacity`. Each `WorldGroup` row tracks a monotonic
+`Revision` and a `NextJoinOrdinal` that only ever advances—a departed
+member's ordinal is never reissued. The substrate-wide ceilings are
+`WorldGroupCapacity.MaxGroups` (128 groups per world) and
+`MaxMembersPerGroup` (64 members per group, the population ceiling every
+kind's own `Capacity` is bounded within), enforced in
+`WorldDefinitionValidator.Admission.cs`.
+
 ## Owned identity worlds
 
 A person or character is an ordinary `puck.world.definition.v1` document carrying an
@@ -825,7 +879,7 @@ own row together; the `$identity:<bodyRef>:<fact>` channel reads the lane, 0
 for a fact never written or a body driving under no identity; the HUD binds a
 lane cell as `state.identity.<bodyIndex>-<fact>` like any other keyed cell. The
 server mirrors the identity into the lane when a seat binds one and zeroes the
-lane when the seat unbinds (`Puck.World.Server`'s `WorldServer.IdentityFacts.cs`);
+lane when the seat unbinds (`Puck.World.Server`'s `WorldRuleHost.IdentityFacts.cs`);
 `identity.facts` echoes the identity's row and `identity.fact.set` writes one
 from the console.
 
@@ -1395,8 +1449,9 @@ simulation ticks, so a live change to the world's own `simulation.rateHz`
 moves no epoch and skews no accumulation. An explicit write (`UpsertStateRow`,
 or `UpsertStateCell` naming the cell) RE-BASES: the written value becomes the
 new base and the clock's engine-tick epoch becomes the engine tick the write
-applied at, `WorldServer.RebaseCellTraits` (per cell, `SettleCell`), run for
-both a live apply and `world.undo`'s per-entry replay (keyed off the journal
+applied at, in the arena the write composes through (`StateArena.TryWriteLive`
+for a per-cell write, `StateArena.TrySettleRedeclared` for a whole-row one),
+run for both a live apply and `world.undo`'s per-entry replay (keyed off the journal
 entry's own RECORDED engine tick — every journal entry, in-memory and
 durable, carries an engine tick beside its simulation tick) so undo rewinds
 an advancing cell exactly like it rewinds a draw site's `drawCursor`. A
@@ -1463,13 +1518,11 @@ independently advancing cells sees every cell's LIVE value in one linear
 pass. A per-cell VALUE write (`world.state.cell.set`, `UpsertStateCell`)
 carries no advance payload of its own, so it PRESERVES whatever the cell
 already declared (its own trait, or nothing — the row's default keeps
-applying) and re-bases its clock to the write's tick (and engine
-tick)—`WorldServer.RebaseCellTraits`'s
-widened job, run for a whole-row `UpsertStateRow` (which resettles every
-cell the row carries, since it re-declares the whole row) and for a per-cell
-`UpsertStateCell` (which resettles only the ONE cell it names)—both for a
-live apply and for `world.undo`'s per-entry replay, exactly as it already
-did for the scalar case. A key a write mints later inherits the row's
+applying) and re-bases its clock to the write's tick (and engine tick). The
+arena owns both: `StateArena.TryWriteLive` settles the ONE cell a per-cell
+`UpsertStateCell` names, and `StateArena.TrySettleRedeclared` settles every
+cell a whole-row `UpsertStateRow` carries, since it re-declares the whole
+row — both for a live apply and for `world.undo`'s per-entry replay. A key a write mints later inherits the row's
 default and starts its own clock from that tick (and engine tick). `world.state`'s
 cell line echoes a cell's effective trait the same way the row line echoes
 the row's: `advance=<num>/<den>/s@engineEpoch<n>`. A value that must wrap is
@@ -1485,7 +1538,7 @@ only the stored target and the final presented sample use the carrying row's
 encoding. That preserves sub-unit position and velocity across an integer
 target's rebase instead of quantizing the follower at every write. The
 stored cell value stays the TRUTH the target; a write rebases the cell's
-`clock` (`WorldServer.RebaseCellTraits`'s `SettleDynamicsClock` arm) the same way it rebases
+`clock` (the arena's own dynamics settle) the same way it rebases
 `advance`—the live eased sample and a `Retarget` velocity kick become the new
 `(y0, v0)` at the writing tick. `y0`/`v0` are authored and echoed in the
 fixed spelling on every row kind (they are the follower's continuous state,
@@ -1523,7 +1576,9 @@ effective cycle sets the phase and leaves the clock alone (a rule's
 declared envelope clamps the computed value on every read as it does an
 advancing cell's. Only a genuinely re-authored default or override — a fresh
 key, a switch in or out of cycle, a parameter change — resettles the clock,
-per the transition table in `docs/plans/state-authoring.md`. A cycling row
+per the behavior transitions in
+[Model state with rows and cells](../../docs/reference/state/data-model.md#choose-behavior-deliberately).
+A cycling row
 is refused as a `state:<row>` control context the same way an advancing one
 is. `world.state` echoes
 `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n> order=<order>`
@@ -1632,7 +1687,7 @@ document carries `kind` (`int` or `fixed`) and `entries` of integer `key` and
 A rule reads it through `$table:<name>:<key>` (single-value) or
 `$table:<name>:<column>:<key>`, where the key is an integer literal (proven
 present at compile), a `$cell:<row>:<key>` indirection, the bound `$each` key,
-or an int `$bind:<name>`. Values are never written, never hashed into the tick,
+or an int `$local:<name>`. Values are never written, never hashed into the tick,
 never checkpointed; a dynamic key the table does not carry is a
 `TableKeyMissing` refusal (`world.rule.failures`) that closes the gate or fails
 the expression, never a value. `world.tables` echoes every table's name, kind,
@@ -1652,11 +1707,11 @@ retaining their distinct placement and exclusivity checks.
 `Puck.State`'s `Rule` (`Name, Gate, Effects, Mode, ForEach, Bindings`) plus the
 `Decision` only a world evaluates, over the same `ActionPredicate`, `ActionEffect`
 and `ActionTriggerMode` types a kit's per-body actions use. The compiler is
-`Puck.State.RuleCompiler`; `WorldRuleCompiler` composes its public pieces with
-the world's registered vocabulary and the decision compile, against a
-`WorldRuleCompileContext` (the document's state section, its tables, patterns
+`Puck.State.Rules.RuleCompiler`; `WorldFactsCompiler` composes its public pieces
+with the world's registered vocabulary and the decision compile, against a
+`WorldFactsCompileContext` (the document's state section, its tables, patterns
 and generators, topologies anchored through placement `board` facets, lattice
-fill draws, placement ordinals, body references). `WorldRuleVocabulary` is the
+fill draws, placement ordinals, body references). `WorldFactsVocabulary` is the
 one `RuleVocabulary` the world registers: an operand family for its reserved
 channels (`WorldRuleFacts`—bodies, distance, line of sight, screens, links,
 regions, the population, the music clock, `$board:cellOf`), one `EffectFamily`
@@ -1664,18 +1719,20 @@ per world arm of `WorldEffect` with explicit transaction and `if`-branch
 admission, the four `WorldPredicate` body-program arms (which refuse in rule scope), and
 the `$pair:` key. The same vocabulary's `ExtendJson` is what `WorldJsonVocabulary`
 installs so those arms read and write under their `$type` discriminators. A
-compiled rule is a `CompiledWorldRule : CompiledRule` whose effects and operands
-are `Puck.State`'s class-typed facts plus the world's own (`WorldOperandKinds.cs`,
-`WorldEffectKinds.cs`); the world's operands read through `IWorldRuleReader`,
-the widening of `IRuleReader` that `WorldServer` implements beside `IRuleHost`,
-the state-host seam `Puck.State`'s `RuleEvaluator` drives—the mutation door a
-`StateMutation` maps through, the preflight scopes a transaction composes
-under, the world's own effect arms, and the decision and interaction kinds
-only the world evaluates. Gates admit
+compiled rule is a `CompiledWorldFactsRule : CompiledRule` whose effects and
+operands are `Puck.State.Rules`' compiled facts plus the world's own
+(`WorldFactOperands.cs`, `WorldFactEffects.cs`, whose payloads are
+`WorldOperandKinds.cs` and `WorldEffectKinds.cs`); the world's operands read
+through `IWorldFacts`, the facet `WorldRuleHost` implements beside `IEffectHost`,
+the host seam `Puck.State.Rules`' `RuleEvaluator` drives—the arena door a
+`Mutation` applies through, the journal scopes a transaction composes under, the
+world's own effect arms, and the decision and interaction kinds only the world
+evaluates. Gates admit
 `all`, `any`, `not`, `compareState`, and `compareValue`; they compile to a bounded postfix
 Boolean program, so nested logic does not allocate or recurse during a tick.
-Compile refusals travel in a `RuleException` carrying a `RuleRefusal` (the
-library's) or a `WorldRuleRefusal` (the world's arms).
+Compile refusals travel in a `RuleException` carrying a
+`Puck.State.Rules.RuleRefusal` (the rule compiler's) or a `WorldRuleRefusal`
+(the world's arms).
 
 ### Decision policies
 
@@ -1698,12 +1755,12 @@ changes:
     "options": [
       {
         "name": "rest",
-        "score": { "tokens": [{ "$type": "constant", "value": 1 }] },
+        "score": { "instructions": [{ "op": "Constant", "value": 1 }] },
         "effects": [{ "$type": "setState", "state": "activity", "value": 0 }]
       },
       {
         "name": "explore",
-        "score": { "tokens": [{ "$type": "constant", "value": 3 }] },
+        "score": { "instructions": [{ "op": "Constant", "value": 3 }] },
         "effects": [{ "$type": "setState", "state": "activity", "value": 1 }]
       }
     ]
@@ -1749,20 +1806,20 @@ binding, replacing a body generation, or changing the source policy starts a
 new decision episode; unrelated recompilation retains the episode and refreshes
 its compiled state handles.
 
-A rule's `bindings` list names values computed once per evaluation, after the
+A rule's `locals` list names values computed once per evaluation, after the
 `forEach` key and before the gate, in declared order: `{ "name", "kind"
-(`int`/`fixed`), "expression" }`. A later binding, the gate, and every effect
-read one as `$bind:<name>` wherever a state name is accepted; an earlier binding
+(`int`/`fixed`), "expression" }`. A later local, the gate, and every effect
+read one as `$local:<name>` wherever a state name is accepted; an earlier local
 cannot, so the list is feed-forward by construction. The value lives on the
 evaluation alone—an effect that changed the cells it was computed from does
 not change it, which is what lets `min(damage, hp)` be dealt and then recoiled
 from in the same rule. At most 16 per rule; each expression prices into
-`world.budget` like an effect's. A binding that cannot evaluate closes the gate
+`world.budget` like an effect's. A local that cannot evaluate closes the gate
 for that evaluation and reports an `Arithmetic` refusal; so does a
 `compareValue` conjunct whose expression faults—the conjunct reads false and
 the refusal is counted, so `world.rule.failures` names a rule that stopped
 firing on a domain fault instead of showing nothing. `world.rules` lists
-each rule's bindings by name and kind. The rule count itself has no ceiling of
+each rule's locals by name and kind. The rule count itself has no ceiling of
 its own: the per-tick work budget is the bound. That budget is worst-case but
 not blind: rules whose gates pin the same literal cells to disjoint ranges (a
 phase id, a mode, `hp <= 0` against `hp > 0`, a phase and a subphase) cannot
@@ -1773,7 +1830,7 @@ contain it, summed), one value plus one more per rule that can write that cell
 during the tick (effects apply immediately, so a rule advancing the phase lets
 the next phase's rules fire in the same tick), and lines pinning a further
 cell nest under the lines pinning fewer. Setup and candidate checks, including
-bindings and closed gates, still sum across every rule. Firing costs for rules
+locals and closed gates, still sum across every rule. Firing costs for rules
 whose ranges overlap, pin different cells, or have other gates still sum. A gate whose
 comparisons pin a cell to an empty range can never hold and is refused by
 name. `world.budget.rules` shows each line's pinned cells.
@@ -1879,12 +1936,12 @@ A rule blends new evidence toward the bound with an authored expression—
   "$type": "addState",
   "state": "boneHolderTrust",
   "key": "$each",
-  "expression": { "tokens": [
-    { "$type": "constant", "value": 1 },
-    { "$type": "state", "name": "boneHolderTrust", "key": "$each" },
-    { "$type": "subtract" },
-    { "$type": "constant", "value": 0.3 },
-    { "$type": "multiply" }
+  "expression": { "instructions": [
+    { "op": "Constant", "value": 1 },
+    { "op": "Operand", "name": "boneHolderTrust", "key": "$each" },
+    { "op": "Subtract" },
+    { "op": "Constant", "value": 0.3 },
+    { "op": "Multiply" }
   ] }
 }
 ```
@@ -1924,13 +1981,13 @@ against the live pair:
   "$type": "compareValue",
   "comparison": "NotEqual",
   "kind": "Int",
-  "left": { "tokens": [{ "$type": "state", "name": "boneHolderClaimMark", "key": "$each" }] },
-  "right": { "tokens": [
-    { "$type": "state", "name": "boneHolder" },
-    { "$type": "constant", "value": 32 },
-    { "$type": "shiftLeft" },
-    { "$type": "state", "name": "claimSeq" },
-    { "$type": "bitOr" }
+  "left": { "instructions": [{ "op": "Operand", "name": "boneHolderClaimMark", "key": "$each" }] },
+  "right": { "instructions": [
+    { "op": "Operand", "name": "boneHolder" },
+    { "op": "Constant", "value": 32 },
+    { "op": "ShiftLeft" },
+    { "op": "Operand", "name": "claimSeq" },
+    { "op": "BitOr" }
   ] }
 }
 ```
@@ -1946,6 +2003,15 @@ Level-mode re-evaluation does. See
 for the worked proof, including a control row with no freshness gate that
 keeps re-blending every tick.
 
+A keyed belief row is a `state` row local to its own world like any other: an
+individual's beliefs do not travel with it across a cross-world transfer.
+A `Distance` interaction's own reach is `O(population²)` in the worst case, so
+pricing its per-write cost conservatively against the work-unit ceiling can
+exceed that ceiling at a plausible population even for one cheap write per
+pair — a genuine cost, not something to hide behind a flat per-effect price.
+A belief dimension whose only source is a `Distance` interaction at that scale
+is retired rather than re-keyed onto the pair-key indirection above.
+
 ### World-rule state effects
 
 The state effects are `setState`, `addState`, `countdownState`,
@@ -1957,6 +2023,21 @@ runtime meaning: document and state changes use ordinary `WorldMutation`
 admission, while save, pose, body, cue, and lattice effects use dedicated
 deterministic paths. A body-only action such as `startTimer` still refuses at
 world scope rather than being reinterpreted.
+
+A market — a listing's escrow, an outbid's refund, a deadline's settle-or-
+return, a house fee — is an ordinary composition of these effects over keyed
+`state` rows: an escrow or refund is `addState`/`setState` (a literal, a live
+copy, or a computed share), a deadline is `scheduleState` compared against
+`$tick`, and a bid order is a `pushState` history ring. There is no bespoke
+market mutation kind, no market-only compose arm, and no market-only
+checkpoint finality barrier — a rule-authored settlement is an ordinary
+journal entry, undoable like any other write. The mutation-kind ordinals a
+retired bespoke market once reserved are never reassigned.
+
+Placement upsert/removal prices into `world.budget` through
+`WorldPlacementEffectCost.Of`, derived from what the install actually
+rebuilds (document write, population entry, and solid-field geometry) rather
+than a flat number.
 
 Predicates and effects address a (row, KEY) PAIR: an omitted `key` means the
 row's slot cell, and `WorldStateRow.IsKeyed` is the discriminator, so rules reach
@@ -2053,16 +2134,17 @@ C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
 direction)`, ...), a state read as its row name keyed `row[key]`—a bare name or number is the literal key,
 `row[other[k]]` reads the key live from another cell, and any other expression (`row[from + 1]`, or
 `row[(from)]` to read row `from`'s value as the key) compiles to an implicit int binding evaluated before the
-gate (traced as `$key<n>`, counted against the rule's binding ceiling).
+gate (traced as `$key<n>`, counted against the rule's local ceiling).
 Repeated identical expression-key spellings in the same binding scope share
-one implicit binding; declared bindings keep their names, and every evaluation
+one implicit local; declared locals keep their names, and every evaluation
 recomputes its values. Row names are backquoted,
 `` `seat-1` ``, when the name is not a bare identifier; a `$`-channel carries
-its colons. A table read is indexed the same way (`$table:moves:power[$bind:move]`
-is `$table:moves:power:$bind:move`). Nested brackets read a key from another
+its colons. A table read is indexed the same way (`$table:moves:power[$local:move]`
+is `$table:moves:power:$local:move`). Nested brackets read a key from another
 cell: `buffs[minion[$each]]` is the `$cell:minion:$each` indirection, a
 two-hop join in one read. Literals may be decimal or `0x` hexadecimal.
-The alternative spelling is a postfix `{ "tokens": [...] }` object.
+The alternative spelling is a postfix `{ "instructions": [...] }` object, each
+instruction naming its `op` and carrying that operation's own payload members.
 The string is syntax only: it parses to exactly the tokens an author
 could have written by hand (`ExpressionSpelling`, which lives with the
 token vocabulary, the opcode enum, the arithmetic, and the state transforms in
@@ -2212,7 +2294,7 @@ latest tick, rule, effect, and concrete reason; stderr narrates only the first
 occurrence of each category. To see WHY one rule did what it did,
 `world.rule.trace <rule> [evaluations]` arms a capture of its next evaluations
 (at most 32); after `world.wait`, `world.rule.trace` prints one line per
-evaluation—the tick, the `forEach` key, every binding's value, every gate
+evaluation—the tick, the `forEach` key, every local's value, every gate
 conjunct with the two values it compared and its verdict, whether the gate
 held (and whether an edge rule was already held), and each effect's spelling,
 computed value, and outcome: applied, refused with the reason, emitted, or
@@ -2255,7 +2337,7 @@ observer):
 ```json
 {
   "alignmentAffinity": {
-    "tokens": [{ "$type": "state", "name": "boneHolderTrust", "key": "$pair:left:cell:boneHolder:0" }]
+    "instructions": [{ "op": "Operand", "name": "boneHolderTrust", "key": "$pair:left:cell:boneHolder:0" }]
   }
 }
 ```
@@ -2321,7 +2403,9 @@ therefore two `Edge` interactions over two regions—one that lowers `Scale`
 on entering the shrinking region, a second, physically separate region that
 restores it on entering THAT one—never a single region's `Level` write
 paired with a self-resetting flag row, which is the same per-tick-write
-anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against.
+anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against. The garden's
+`drinkMe` bottle (shrinks on entry) and `eatMe` cake (restores on entry) are
+one authored instance of this primitive, not engine surface of their own.
 `WorldPopulation.SyncBodyScale` resyncs every active body's `Scale` wholesale
 from the row at the same `Install`/admission choke points `WorldGrants.SyncState`
 resyncs its own drive gates at, PLUS `RestoreCheckpoint` (after
@@ -2437,6 +2521,8 @@ A kit's optional `rigid` facet (`WorldRigid`: `mass`, `restitution`,
 `friction`, `rollingFriction`, `linearDamping`, `angularDamping`) hands its
 bodies to the rigid solver instead of a locomotion motion program—a passive
 physical entity such as a billiard ball, a bowling pin, or a chess piece.
+Rigid is a kit FACET, never a second body kind: any kit may carry it, and the
+facet's presence alone is the switch.
 `mass` is required and strictly positive; `restitution` lies in `[0, 1]`;
 `friction` is a Coulomb coefficient at a contact point (non-negative, not
 bounded by 1)—the SAME meaning against the static world and, as the pair's
@@ -2452,9 +2538,12 @@ authored directly, matching the engine's derived-limits convention. The
 validator also proves the authored coefficients and the collider-derived
 room-scale mass/inertia fit the engine's fixed-point placements; values that
 would quantize to zero, saturate, or overflow are refused before world boot.
-See the
+A rigid body's transfer across worlds is refused by name, and a carrier
+holding one refuses its own transfer rather than dropping what it holds. See
+the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
-for integration, contact, and checkpoint/hash coverage.
+for integration, contact, checkpoint/hash coverage, and the transfer refusal
+mechanism.
 
 A kit's optional `carry` facet (`WorldCarry.cs`: `offset`, `massEquivalent`,
 `maxCarryFraction` default 1, `maxReach` default 1.5) is a distinct facet
@@ -2650,7 +2739,7 @@ the job's cells—a token's cell is the zone it stands in, `legal` masks and
 default or `first`: the end of its zone a token must stand at to move;
 `insertFirst`, whether it lands first rather than last). Pile order is the
 zones' own, so nothing but an end token ever moves and the judge reads the
-pile a transfer landed on through the frame—`$reduce:count`, a key read,
+pile a transfer landed on through the arena—`$reduce:count`, a key read,
 `$reduce:arrangementRank`, a `$match` word—exactly as it reads the section.
 A zone job authors `turn` and `verdict` itself (no board binding supplies
 them), and paints no `reach`.
@@ -2665,27 +2754,27 @@ nothing—and `counts`, an integer row keyed by the tokens, receives per token
 how many candidates it accepted. `reach` and `held` are authored together.
 
 The job walks every (shape, token, target cell or direction) triple, in that
-fixed order: it copies the installed section into a value frame
-(`Puck.State.StateFrame`, every integer cell laid out once), applies the
-shape's move to the frame—a candidate whose geometry the shape itself
-refuses (an occupied landing, an unoccupied jump intermediate, an off-board
-companion) is skipped before judging, exactly like the section's original
-target-equals-source skip—and evaluates the frame-evaluable rules over it
-through a `FrameHost`: every rule that is neither an interaction nor a decision
-and reads no world-only fact (`RuleDataflow.ReadsHost`; a body's cell, its
-uprightness, quiescence). A candidate is accepted when the verdict reads
-`accept` and the turn changed. Nothing hypothetical reaches the installed
-section. The job restarts whenever any framed cell other than its own outputs
-changes, so a settling piece restarts it every tick until the board rests.
+fixed order: it opens a journal scope on the server's own arena
+(`ArenaSearchCandidate`), applies the shape's move inside it—a candidate whose
+geometry the shape itself refuses (an occupied landing, an unoccupied jump
+intermediate, an off-board companion) is skipped before judging, exactly like
+the section's original target-equals-source skip—and evaluates the judge's
+rules over the scoped arena through an `ArenaSearchEffectHost`: every rule that
+is neither an interaction nor a decision and reads no world-only fact (a body's
+cell, its uprightness, quiescence). A candidate is accepted when the verdict
+reads `accept` and the turn changed. A rewound scope leaves the arena
+byte-identical, so nothing hypothetical survives the walk. The job restarts
+whenever any cell other than its own outputs changes, so a settling piece
+restarts it every tick until the board rests.
 This root walk is unconditional and exhaustive—it never prunes and never
 skips a candidate whose geometry is valid—so `legal`/`reach`/`counts` are the
 same whether or not the job searches deeper.
 
 `depth` (default 1) and `score` ask what a position beyond the immediate ply is
 worth. `score` is an infix expression, in the rule expression grammar,
-compiled the same way a rule binding is (`RuleCompiler.CompileExpression`
+compiled the same way a rule local is (`RuleCompiler.CompileExpression`
 over `ExpressionSpelling.TryParse`'s tokens) and refused at validation if it
-reads a fact only the world host answers—a frame cannot evaluate one. It is
+reads a fact only the world host answers—a scoped judge cannot evaluate one. It is
 required whenever `depth` exceeds one, or `best` is authored. `best` is a
 keyed integer row receiving the deepest completed depth's answer: `token` (the
 mover's ordinal in `tokens`), `to` (its destination cell), and `score` (the
@@ -2696,16 +2785,16 @@ authored `depth` in turn, the same root walk negamaxes every accepted
 relocation to that depth—for each accepted root candidate, if plies remain
 it recurses one more ply and negates the reply (the value is from the
 perspective of the side that JUST MOVED, so an opponent's gain is this side's
-loss); once no plies remain, `score` is evaluated directly on the frame after
+loss); once no plies remain, `score` is evaluated directly on the arena after
 the ply. A position with no accepted relocation scores `-WorldSearchCapacity.
 MateScore` for the side to move—a magnitude shifted down from
 `long.MaxValue` so repeated negation and comparison across the deepest
 authored search never overflows. Alpha-beta prunes every ply past the root
 (the root itself never prunes, preserving the root outputs). The recursion runs
-on an explicit stack—one `StateFrame` per ply beyond the root, pooled and
-sized to `depth - 1`—rather than the call stack, so a tick boundary can
-suspend it at any node and a checkpoint carries it byte-for-byte (per-ply
-cursor, window, and best-so-far, plus the ply's own frame values). Depth
+on an explicit stack—one journal scope per ply beyond the root, sized to
+`depth - 1`—rather than the call stack, so a tick boundary can suspend it at
+any node and a checkpoint carries it byte-for-byte (per-ply cursor, window, and
+best-so-far). Depth
 completes before landing: the running best is overwritten every pass, so
 whatever it holds when the final depth finishes is that depth's answer.
 

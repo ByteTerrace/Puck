@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generates src/document/worldDefinition.generated.ts from a puck.world.def.v1 JSON Schema
+// Generates src/document/worldDefinition.generated.ts from a puck.world.definition.v1 JSON Schema
 // bundle. This script NEVER fetches or builds that bundle itself in --bundle mode — the caller
 // produces it first with:
 //
@@ -46,7 +46,7 @@ async function renderFromBundle(bundlePath) {
   const schema = JSON.parse(bundleText);
   const meta = schema["x-puck"] ?? {};
 
-  // The bundle's own title ("Puck world definition (puck.world.def.v1)") would otherwise name
+  // The bundle's own title ("Puck world definition (puck.world.definition.v1)") would otherwise name
   // the root export via json-schema-to-typescript's title-over-name precedence; force the clean
   // name the rest of the studio imports instead.
   const rootSchema = { ...schema, title: ROOT_TYPE_NAME };
@@ -59,7 +59,7 @@ async function renderFromBundle(bundlePath) {
 
   const header =
     "// GENERATED FILE — do not hand-edit.\n" +
-    "// Produced by scripts/generateWorldTypes.mjs from a puck.world.def.v1 schema bundle\n" +
+    "// Produced by scripts/generateWorldTypes.mjs from a puck.world.definition.v1 schema bundle\n" +
     "// (`puck.exe schema --bundle <path>` produces the bundle; this script never fetches it itself).\n" +
     "// Regenerate: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish\n" +
     "//             ./src/Puck.Cli/publish/puck.exe schema --bundle <bundle.json>\n" +

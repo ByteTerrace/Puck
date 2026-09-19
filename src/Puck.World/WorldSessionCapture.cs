@@ -272,6 +272,12 @@ internal static class WorldSessionCapture {
 
         return false;
     }
+    // Advance/Cycle are legitimate only for Int/Fixed rows (StateRow's own remarks), so a settled raw value always
+    // carries one of those two cases back.
+    private static CellValue RawCellValue(CellKind kind, long raw) => ((kind == CellKind.Fixed)
+        ? CellValue.Fixed(rawBits: raw)
+        : CellValue.Int(value: raw)
+    );
     // Settles every cell the row carries at `tick`/`engineTick`, whatever its effective behavior (its own, or its
     // row's default) resolves to: an advancing cell's live accumulated value (read against `engineTick`) becomes
     // its new stored base; a cycling cell's live rotation (or node) becomes its new stored phase, carrying its
@@ -296,12 +302,12 @@ internal static class WorldSessionCapture {
             if (behavior.Advance is { } advance) {
                 settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
-                    Value = advance.ComputeCurrentValue(
-                    baseValue: cell.Value,
+                    Value = RawCellValue(kind: row.Kind, raw: advance.ComputeCurrentValue(
+                    baseValue: cell.Value.Raw,
                     currentEngineTick: engineTick,
                     epochEngineTick: (clock?.EpochEngineTick ?? 0L),
                     row: row
-                ),
+                )),
                     Clock = new StateCellClock(EpochEngineTick: 0, EpochTick: 0),
                 });
 
@@ -314,13 +320,13 @@ internal static class WorldSessionCapture {
 
                 settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
-                    Value = cycle.SettledPhase(
-                    baseValue: cell.Value,
+                    Value = RawCellValue(kind: row.Kind, raw: cycle.SettledPhase(
+                    baseValue: cell.Value.Raw,
                     currentTick: tick,
                     epochTick: epochTick,
                     row: row,
                     substepTicks: substepTicks
-                ),
+                )),
                     Clock = new StateCellClock(EpochTick: 0, SubstepTicks: cycle.SettledSubstep(
                     currentTick: tick,
                     epochTick: epochTick,

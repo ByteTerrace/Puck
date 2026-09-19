@@ -21,7 +21,8 @@ internal static class WorldWireLeaves {
     /// <summary>Reads a <see cref="WorldMobilityIdentity"/>.</summary>
     public static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
         Incarnation: ReadEntityAddress(reader: ref reader),
-        Epoch: reader.ReadUInt64()
+        Epoch: reader.ReadUInt64(),
+        DepartedFrom: ReadEntityAddress(reader: ref reader)
     );
     /// <summary>Writes a <see cref="WorldEntityAddress"/>.</summary>
     public static void WriteEntityAddress(WireWriter writer, WorldEntityAddress address) {
@@ -38,5 +39,9 @@ internal static class WorldWireLeaves {
             address: mobility.Incarnation
         );
         writer.WriteUInt64(value: mobility.Epoch);
+        WriteEntityAddress(
+            writer: writer,
+            address: mobility.DepartedFrom
+        );
     }
 }

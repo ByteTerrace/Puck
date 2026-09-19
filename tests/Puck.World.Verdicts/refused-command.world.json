@@ -1,0 +1,105 @@
+{
+  "basis": "../../src/Puck.World/Assets/worlds/games/hearts.world.json",
+  "grants": [
+    {
+      "capability": "Mutate",
+      "principal": "seat1",
+      "subject": "section:state"
+    },
+    {
+      "capability": "Edit",
+      "principal": "seat1",
+      "subject": "all"
+    }
+  ],
+  "host": {
+    "exitAfterSeconds": 0,
+    "presentation": "None"
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "if",
+          "condition": {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$phase:heartsPassPhase",
+            "value": 0
+          },
+          "else": [
+            {
+              "$type": "setState",
+              "key": "ok",
+              "state": "wrongGuardRefused",
+              "value": 2
+            }
+          ],
+          "then": [
+            {
+              "$type": "setState",
+              "key": "ok",
+              "state": "wrongGuardRefused",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "fromState": "$phase:heartsPassPhase",
+          "key": "generation",
+          "state": "wrongGuardRefused"
+        }
+      ],
+      "mode": "Level",
+      "name": "verdict-wrong-guard-refused"
+    }
+  ],
+  "schedule": {
+    "directory": "out",
+    "rows": [
+      {
+        "command": "world.state.transform {\"$type\":\"transfer\",\"from\":\"heartsDeck\",\"to\":\"heartsHand1\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 3
+      },
+      {
+        "command": "world.state.act heartsPassPhase 7 {\"$type\":\"transfer\",\"from\":\"heartsHand1\",\"to\":\"heartsPass1\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 6
+      },
+      {
+        "command": "world.state.act heartsPassPhase 0 {\"$type\":\"transfer\",\"from\":\"heartsHand9\",\"to\":\"heartsPass1\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 8
+      }
+    ],
+    "settleTicks": 6
+  },
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "ok",
+            "value": 0
+          },
+          {
+            "key": "generation",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "wrongGuardRefused",
+        "verdict": {
+          "gate": "a guarded transform naming generation 7 when heartsPassPhase stands at 0 is refused, so the generation never advances",
+          "status": "ok"
+        }
+      }
+    ]
+  }
+}

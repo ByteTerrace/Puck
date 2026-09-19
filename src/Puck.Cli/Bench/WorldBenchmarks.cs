@@ -154,7 +154,7 @@ internal static class WorldBenchmarks {
         }
     }
     private static long ReadCell(WorldServer server, string row, string key) =>
-        server.Definition.State.Single(predicate: candidate => (candidate.Name.Value == row)).Cells!.Single(predicate: cell => (cell.Key.Value == key)).Value;
+        server.Definition.State.Single(predicate: candidate => (candidate.Name.Value == row)).Cells!.Single(predicate: cell => (cell.Key.Value == key)).Value.Raw;
     // Mirrors tests/Puck.World.Tests/SolitaireFixtures.cs's Request: enqueues the one action a scripted deal is,
     // keyed by the game's own incrementing request counter.
     private static void RequestDeal(WorldServer server, string game) {

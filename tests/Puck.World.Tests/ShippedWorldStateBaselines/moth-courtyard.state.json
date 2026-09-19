@@ -1,0 +1,808 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 600,
+  "engineTick": 1008000,
+  "hashes": {
+    "authoritative": "3fdc827efe50fc68",
+    "capture": "461c6fd8318bdce1",
+    "pose": "2284955c25f81ec2",
+    "world": "0f836870909f62de"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "airPose",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "1"
+          },
+          {
+            "key": "3",
+            "value": "1"
+          },
+          {
+            "key": "4",
+            "value": "0.75"
+          },
+          {
+            "key": "5",
+            "value": "0.1199951171875"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "airWings",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0.149993896484375"
+          },
+          {
+            "key": "2",
+            "value": "1"
+          },
+          {
+            "key": "3",
+            "value": "1"
+          },
+          {
+            "key": "4",
+            "value": "0.6999969482421875"
+          },
+          {
+            "key": "5",
+            "value": "0.5500030517578125"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0.100006103515625"
+          }
+        ]
+      },
+      {
+        "name": "blink",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "blinkAt",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 90
+          }
+        ]
+      },
+      {
+        "name": "blinkRest",
+        "kind": "Int",
+        "value": 90,
+        "draw": {
+          "generator": {
+            "source": "UniformRange",
+            "bound": 1,
+            "mode": "WithReplacement",
+            "rangeMin": 75,
+            "rangeMax": 150
+          },
+          "timing": "Event",
+          "skip": 0
+        }
+      },
+      {
+        "name": "stageStride",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "0.5"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0.1999969482421875"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "1.0500030517578125"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageBreath",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "0"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageBank",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "1.6999969482421875"
+          },
+          {
+            "key": "3",
+            "value": "-0.399993896484375"
+          },
+          {
+            "key": "4",
+            "value": "0"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageCruise",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "1.8000030517578125"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0.1999969482421875"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageCrouch",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "0.149993896484375"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0.25"
+          },
+          {
+            "key": "5",
+            "value": "0.899993896484375"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0.17999267578125"
+          }
+        ]
+      },
+      {
+        "name": "stageSalute",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "1"
+          },
+          {
+            "key": "2",
+            "value": "0"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "skyMode",
+        "kind": "Fixed",
+        "value": "1"
+      },
+      {
+        "name": "meadowWindSpeed",
+        "kind": "Fixed",
+        "value": "1.149993896484375"
+      },
+      {
+        "name": "meadowFlutterSpeed",
+        "kind": "Fixed",
+        "value": "4.3000030517578125"
+      },
+      {
+        "name": "meadowWindPose",
+        "kind": "Fixed",
+        "value": "0"
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "airPose",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 65536,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 65536,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 49152,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 7864,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "airWings",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 9830,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 65536,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 65536,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 45875,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 36045,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 6554,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "blink",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "blinkAt",
+      "cells": [
+        {
+          "key": "0",
+          "value": 90,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "blinkRest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 90,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stageStride",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 32768,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 13107,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 68813,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stageBreath",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stageBank",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 111411,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": -26214,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stageCruise",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 117965,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 13107,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stageCrouch",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 9830,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 16384,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 58982,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 11796,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stageSalute",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 65536,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "skyMode",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 65536,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "meadowWindSpeed",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 75366,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "meadowFlutterSpeed",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 281805,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "meadowWindPose",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

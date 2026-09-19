@@ -10,23 +10,10 @@ public sealed partial class WorldPopulation {
     // NetworkPeer — an inhabitant is a peer, not a separate kind).
     private void ActivateInhabitant(WorldDefinition definition, int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal, int desiredCount) {
         var entry = m_entries[index];
-        var kit = m_kits[kitIndex];
-        var body = new WorldBody(
-            tuning: kit.Tuning,
-            program: kit.BodyMotionProgram,
-            programs: m_bodyMotionPrograms,
-            actions: kit.Actions,
-            actionThresholds: kit.ActionThresholds,
-            actionShapes: kit.ActionShapes,
-            roleMask: kit.RoleMask,
-            roleOrdinals: kit.RoleOrdinals,
-            actionState: kit.ActionState,
-            collider: kit.Collider,
-            rigid: kit.Rigid,
-            carry: kit.Carry,
-            tether: kit.Tether,
-            maxSmoothError: m_fixedMotion.MaxSmoothError,
-            holds: kit.Holds
+        var body = BuildBodyForKit(
+            index: index,
+            kitIndex: kitIndex,
+            profile: null
         );
 
         body.SetContactConfiguration(
@@ -82,24 +69,11 @@ public sealed partial class WorldPopulation {
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
-        var kit = m_kits[entry.KitIndex];
         // Profileless — advances on the kit row's tuning with the row's lane bindings.
-        var player = new WorldBody(
-            tuning: kit.Tuning,
-            program: kit.BodyMotionProgram,
-            programs: m_bodyMotionPrograms,
-            actions: kit.Actions,
-            actionThresholds: kit.ActionThresholds,
-            actionShapes: kit.ActionShapes,
-            roleMask: kit.RoleMask,
-            roleOrdinals: kit.RoleOrdinals,
-            actionState: kit.ActionState,
-            collider: kit.Collider,
-            rigid: kit.Rigid,
-            carry: kit.Carry,
-            tether: kit.Tether,
-            maxSmoothError: m_fixedMotion.MaxSmoothError,
-            holds: kit.Holds
+        var player = BuildBodyForKit(
+            index: index,
+            kitIndex: entry.KitIndex,
+            profile: null
         );
 
         player.SetContactConfiguration(
@@ -255,25 +229,11 @@ public sealed partial class WorldPopulation {
 
         // The seat body constructs from the definition's designated seat kit row (its tuning and lane bindings); the
         // seated profile's speeds still override live.
-        var body = new WorldBody(
-            tuning: m_kits[m_seatKit].Tuning,
-            program: m_kits[m_seatKit].BodyMotionProgram,
-            programs: m_bodyMotionPrograms,
-            actions: m_kits[m_seatKit].Actions,
-            actionThresholds: m_kits[m_seatKit].ActionThresholds,
-            actionShapes: m_kits[m_seatKit].ActionShapes,
-            roleMask: m_kits[m_seatKit].RoleMask,
-            roleOrdinals: m_kits[m_seatKit].RoleOrdinals,
-            actionState: m_kits[m_seatKit].ActionState,
-            collider: m_kits[m_seatKit].Collider,
-            rigid: m_kits[m_seatKit].Rigid,
-            carry: m_kits[m_seatKit].Carry,
-            tether: m_kits[m_seatKit].Tether,
-            maxSmoothError: m_fixedMotion.MaxSmoothError,
-            holds: m_kits[m_seatKit].Holds
-        ) {
-            Profile = profile,
-        };
+        var body = BuildBodyForKit(
+            index: slot,
+            kitIndex: m_seatKit,
+            profile: profile
+        );
 
         body.SetContactConfiguration(
             field: m_contactField,
@@ -529,7 +489,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>The admission templates that actually reached the live grant table for the connection bound to
     /// <paramref name="bodyIndex"/> (see <see cref="TryAdmitRemotePeer"/>), or empty when the slot is not a
-    /// remote-admitted peer. <see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>'s one read.</summary>
+    /// remote-admitted peer. <see cref="Server.WorldGrants.RemintPeerAdmissionGrants"/>'s one read.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
     public IReadOnlyList<WorldAdmissionGrant> PeerAdmissionInstalledGrantTemplates(int bodyIndex) =>
         ((((uint)bodyIndex) < Capacity)
@@ -552,7 +512,7 @@ public sealed partial class WorldPopulation {
         ((((uint)bodyIndex) < Capacity) && m_entries[bodyIndex].IsAuthorityTransferred);
     /// <summary>The verified admission identity's own (Domain, Subject) for the connection currently bound to
     /// <paramref name="bodyIndex"/> (see <see cref="TryAdmitRemotePeer"/>), or two empty strings when the slot is
-    /// not a remote-admitted peer. <see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>'s re-authorization
+    /// not a remote-admitted peer. <see cref="Server.WorldGrants.RemintPeerAdmissionGrants"/>'s re-authorization
     /// key — it re-matches this pair against the rebuild candidate's own admission entries
     /// (<see cref="WorldAdmissionDoor.TryMatchEntry"/>) rather than trusting <see cref="PeerAdmissionInstalledGrantTemplates"/>
     /// is still what the current document would mint.</summary>
@@ -585,7 +545,7 @@ public sealed partial class WorldPopulation {
     /// release: a peer generation's rows go at its <c>PeerDisconnected</c> event, and a restored parked generation's
     /// go at <c>Server.WorldServer.RestoreCheckpoint</c> — by the time a park expires here, its principal holds
     /// nothing. Driven purely by <paramref name="tick"/> — no wall clock, no
-    /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldServer.ReclaimExpiredEscrows</c>,
+    /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldGrants.ReclaimExpiredEscrows</c>,
     /// which this mirrors and is swept beside every tick.
     /// <para><b>Deadline table.</b> <see cref="m_parkDeadlines"/> holds one entry per finite deadline the last
     /// rescan found; a tick whose <see cref="m_revision"/> has not moved since then only drains whatever the table
@@ -1003,25 +963,11 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        var body = new WorldBody(
-            tuning: m_kits[m_seatKit].Tuning,
-            program: m_kits[m_seatKit].BodyMotionProgram,
-            programs: m_bodyMotionPrograms,
-            actions: m_kits[m_seatKit].Actions,
-            actionThresholds: m_kits[m_seatKit].ActionThresholds,
-            actionShapes: m_kits[m_seatKit].ActionShapes,
-            roleMask: m_kits[m_seatKit].RoleMask,
-            roleOrdinals: m_kits[m_seatKit].RoleOrdinals,
-            actionState: m_kits[m_seatKit].ActionState,
-            collider: m_kits[m_seatKit].Collider,
-            rigid: m_kits[m_seatKit].Rigid,
-            carry: m_kits[m_seatKit].Carry,
-            tether: m_kits[m_seatKit].Tether,
-            maxSmoothError: m_fixedMotion.MaxSmoothError,
-            holds: m_kits[m_seatKit].Holds
-        ) {
-            Profile = profile,
-        };
+        var body = BuildBodyForKit(
+            index: slot,
+            kitIndex: m_seatKit,
+            profile: profile
+        );
 
         body.SetContactConfiguration(
             field: m_contactField,
@@ -1035,6 +981,10 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        // The slot is marked occupied before its body's state is written: occupancy admits the action-state lane
+        // ordinal, and the captured transfer state writes registers into it.
+        entry.Body = body;
+        entry.Active = true;
         // AFTER Pose's own CommitTeleport — see this method's own "Dynamic state" remarks above.
         body.ApplyTransferState(state: dynamicState);
         ClearDesignations(entry: entry);
@@ -1064,9 +1014,7 @@ public sealed partial class WorldPopulation {
             resetPhase: false,
             slot: slot
         );
-        entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
-        entry.Active = true;
         m_revision++;
 
         return true;
@@ -1140,12 +1088,12 @@ public sealed partial class WorldPopulation {
     /// <param name="grantTemplates">The verified admission entry's own grant templates for this connection (see
     /// <see cref="WorldAdmissionDoor"/>) — stored on the activated slot so a later whole-document rebuild can
     /// compare the then-live rows with the policy baseline before re-authorizing
-    /// (<see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>). Empty (never null) for the identical reason a
+    /// (<see cref="Server.WorldGrants.RemintPeerAdmissionGrants"/>). Empty (never null) for the identical reason a
     /// verified-but-granted-nothing identity is a legitimate outcome — see <see cref="WorldAdmissionEntry.Grants"/>.</param>
     /// <param name="identityDomain">The verified admission identity's own domain (see
     /// <see cref="WorldAdmissionDoor"/>) — stored alongside <paramref name="grantTemplates"/> so a later rebuild can
     /// re-match this identity against the current admission policy instead of trusting the connection-time
-    /// verdict still holds (<see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>).</param>
+    /// verdict still holds (<see cref="Server.WorldGrants.RemintPeerAdmissionGrants"/>).</param>
     /// <param name="identitySubject">The verified admission identity's own subject (empty for a Vouches root's
     /// chain-resolved subject).</param>
     /// <param name="admitted">The admitted peer entry on success.</param>

@@ -120,6 +120,15 @@ public sealed class WorldOwnedWorlds {
                 continue;
             }
 
+            if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out var spaceMismatchReason)) {
+                RefuseInPlace(
+                    fileName: fileName,
+                    reason: spaceMismatchReason
+                );
+
+                continue;
+            }
+
             m_identities.Add(item: new WorldIdentity(
                 document: document,
                 defaults: Defaults
@@ -344,7 +353,7 @@ public sealed class WorldOwnedWorlds {
                 owner.WriteState(row: row with {
                     Cells = [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Text: text
+                        Value: CellValue.Text(value: text)
                     )],
                 });
             } else if (
@@ -413,7 +422,7 @@ public sealed class WorldOwnedWorlds {
             );
         }
 
-        var current = slotCell.Value;
+        var current = slotCell.Value.Raw;
 
         if (!row.TryAdmitWrite(
             current: current,
@@ -433,7 +442,10 @@ public sealed class WorldOwnedWorlds {
         owner.WriteState(row: row with {
             Cells = [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: ((row.Kind == CellKind.Fixed)
+                    ? CellValue.Fixed(rawBits: value)
+                    : CellValue.Int(value: value)
+                )
             )],
         });
 
@@ -753,12 +765,12 @@ public sealed class WorldOwnedWorlds {
                     name: slots.MachineState,
                     row: out var machineRow
                 ) &&
-                    ((machineRow is { Kind: CellKind.Text, IsSlot: true }) && (machineRow.Cells![0].Text is { } machine)) &&
+                    ((machineRow is { Kind: CellKind.Text, IsSlot: true }) && (machineRow.Cells![0].Value.AsText is { } machine)) &&
                     identity.TryReadState(
                     name: slots.DeviceState,
                     row: out var deviceRow
                 ) &&
-                    ((deviceRow is { Kind: CellKind.Text, IsSlot: true }) && (deviceRow.Cells![0].Text is { } storedDevice)) &&
+                    ((deviceRow is { Kind: CellKind.Text, IsSlot: true }) && (deviceRow.Cells![0].Value.AsText is { } storedDevice)) &&
                     string.Equals(
                     a: machine,
                     b: MachineId.ToString(format: "D"),
@@ -799,7 +811,7 @@ public sealed class WorldOwnedWorlds {
             Kind: CellKind.Text,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: MachineId.ToString(format: "D")
+                    Value: CellValue.Text(value: MachineId.ToString(format: "D"))
                 )]
         ));
         profile.WriteState(row: new WorldStateRow(
@@ -807,7 +819,7 @@ public sealed class WorldOwnedWorlds {
             Kind: CellKind.Text,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: device.Value.ToString(format: "D")
+                    Value: CellValue.Text(value: device.Value.ToString(format: "D"))
                 )]
         ));
         profile.ReplaceDocument(document: profile.Document with { Identity = definition with { Controllers = [.. (definition.Controllers ?? []), slots] } });
@@ -827,6 +839,9 @@ public sealed class WorldOwnedWorlds {
         ArgumentNullException.ThrowIfNull(argument: document);
         if (document.Identity is null) {
             reason = "document has no identity section";
+            return false;
+        }
+        if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out reason)) {
             return false;
         }
         var incoming = new WorldIdentity(
@@ -975,7 +990,7 @@ public sealed class WorldOwnedWorlds {
             case ( { Kind: CellKind.Fixed, IsSlot: true } fixedRow, ActionStateKind.Counter):
                 value = new DurableStateValue(
                     Name: slot,
-                    Value: Puck.Maths.FixedQ4816.FromRawBits(value: fixedRow.Cells![0].Value),
+                    Value: Puck.Maths.FixedQ4816.FromRawBits(value: fixedRow.Cells![0].Value.AsFixed),
                     TimerTicks: 0
                 );
                 reason = string.Empty;
@@ -985,14 +1000,14 @@ public sealed class WorldOwnedWorlds {
             // value this lane cannot represent. It is reachable only on a row that does NOT declare Min 0 — declaring
             // it is what makes an Int row a timer, and the write door and the document validator both hold that floor.
             case ( { Kind: CellKind.Int, IsSlot: true } intRow, ActionStateKind.Timer):
-                if (intRow.Cells![0].Value < 0) {
-                    reason = $"{subject.Describe()} holds {intRow.Cells![0].Value}, which no tick count can carry — an int row read as a timer must declare a minimum of 0";
+                if (intRow.Cells![0].Value.AsInt < 0) {
+                    reason = $"{subject.Describe()} holds {intRow.Cells![0].Value.AsInt}, which no tick count can carry — an int row read as a timer must declare a minimum of 0";
                     return false;
                 }
                 value = new DurableStateValue(
                     Name: slot,
                     Value: Puck.Maths.FixedQ4816.Zero,
-                    TimerTicks: checked((ulong)intRow.Cells![0].Value)
+                    TimerTicks: checked((ulong)intRow.Cells![0].Value.AsInt)
                 );
                 reason = string.Empty;
                 return true;

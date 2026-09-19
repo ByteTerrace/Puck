@@ -48,7 +48,7 @@ public sealed class StateBehaviorWriteLawTests {
     public void ExplicitWriteToAnAdvancingCell_KeepsTheComposedValue(WorldDocumentWriteKind kind, long operand, long expected) {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(cell: new StateCell(
             Key: CellName.Parse(candidate: "0"),
-            Value: 10,
+            Value: CellValue.Int(value: 10),
             Advance: new StateAdvance(
                 PerSecondDenominator: 1,
                 PerSecondNumerator: 0
@@ -62,7 +62,7 @@ public sealed class StateBehaviorWriteLawTests {
         );
 
         Assert.Equal(
-            actual: StoredCell(definition: fixture.Server.Definition).Value,
+            actual: StoredCell(definition: fixture.Server.Definition).Value.AsInt,
             expected: expected
         );
         Assert.True(condition: WorldStateReader.TryRead(
@@ -85,7 +85,7 @@ public sealed class StateBehaviorWriteLawTests {
     public void SwitchingDynamicsOff_FreezesAtTheSampledPositionRatherThanTheTarget() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(cell: new StateCell(
             Key: CellName.Parse(candidate: "0"),
-            Value: 20,
+            Value: CellValue.Int(value: 20),
             Dynamics: new StateDynamics(Row: "kickZero"),
             Clock: new StateCellClock(Y0: (20L << Puck.Maths.FixedQ4816.FractionBitCount))
         )));
@@ -132,7 +132,7 @@ public sealed class StateBehaviorWriteLawTests {
 
         Assert.Null(@object: frozen.Dynamics);
         Assert.InRange(
-            actual: frozen.Value,
+            actual: frozen.Value.AsInt,
             high: 99L,
             low: 21L
         );
@@ -149,7 +149,7 @@ public sealed class StateBehaviorWriteLawTests {
     public void SwitchingAnAdvancingCellToDynamics_RestsTheTargetOnTheLiveValue() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(cell: new StateCell(
             Key: CellName.Parse(candidate: "0"),
-            Value: 10,
+            Value: CellValue.Int(value: 10),
             Advance: new StateAdvance(
                 PerSecondDenominator: 1,
                 PerSecondNumerator: 50400
@@ -187,7 +187,7 @@ public sealed class StateBehaviorWriteLawTests {
         var switched = StoredCell(definition: fixture.Server.Definition);
 
         Assert.True(
-            condition: (switched.Value >= liveBefore),
+            condition: (switched.Value.AsInt >= liveBefore),
             userMessage: $"target={switched.Value} liveBefore={liveBefore}"
         );
         Assert.True(condition: WorldStateReader.TryReadEased(
@@ -202,7 +202,7 @@ public sealed class StateBehaviorWriteLawTests {
         ));
         Assert.Equal(
             actual: eased,
-            expected: switched.Value
+            expected: switched.Value.AsInt
         );
     }
 
@@ -210,7 +210,7 @@ public sealed class StateBehaviorWriteLawTests {
     public void RetuningADynamicsFollower_KeepsTheTargetItWasEasingToward() {
         using var fixture = Fixtures.FreshServer(definition: (BuildDocument(cell: new StateCell(
             Key: CellName.Parse(candidate: "0"),
-            Value: 20,
+            Value: CellValue.Int(value: 20),
             Dynamics: new StateDynamics(Row: "kickZero"),
             Clock: new StateCellClock(Y0: (20L << Puck.Maths.FixedQ4816.FractionBitCount))
         )) with {
@@ -236,7 +236,7 @@ public sealed class StateBehaviorWriteLawTests {
         fixture.Step();
 
         Assert.Equal(
-            actual: StoredCell(definition: fixture.Server.Definition).Value,
+            actual: StoredCell(definition: fixture.Server.Definition).Value.AsInt,
             expected: 100L
         );
     }

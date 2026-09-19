@@ -411,6 +411,12 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
+            ValidateSpaceCompositionIdentity(
+                basisRow: basisObject,
+                overlayRow: overlayRow,
+                path: path
+            );
+
             if (TypeDiscriminatorsDiffer(
                 basis: basisObject,
                 overlay: overlayRow
@@ -558,6 +564,12 @@ public static class WorldDocumentBasis {
 
                 continue;
             }
+
+            ValidateSpaceCompositionIdentity(
+                basisRow: ((JsonObject)merged[index: existingIndex]!),
+                overlayRow: rowObject,
+                path: path
+            );
 
             if (JsonNode.DeepEquals(
                 node1: merged[index: existingIndex],
@@ -798,6 +810,42 @@ public static class WorldDocumentBasis {
             node2: overlayType
         )
         );
+    }
+    private static string? TryGetString(JsonObject obj, string propertyName) {
+        if (obj.TryGetPropertyValue(propertyName: propertyName, jsonNode: out var node) && (node is JsonValue val) && val.TryGetValue<string>(value: out var str)) {
+            return str;
+        }
+
+        return null;
+    }
+    private static int? TryGetInt(JsonObject obj, string propertyName) {
+        if (obj.TryGetPropertyValue(propertyName: propertyName, jsonNode: out var node) && (node is JsonValue val) && val.TryGetValue<int>(value: out var num)) {
+            return num;
+        }
+
+        return null;
+    }
+    private static void ValidateSpaceCompositionIdentity(JsonObject basisRow, JsonObject overlayRow, string path) {
+        if (!path.EndsWith(value: ".spaces", comparisonType: StringComparison.Ordinal) && !path.EndsWith(value: "spaces", comparisonType: StringComparison.Ordinal)) {
+            return;
+        }
+
+        var basisModel = TryGetString(obj: basisRow, propertyName: "model");
+        var overlayModel = TryGetString(obj: overlayRow, propertyName: "model");
+        var basisRevision = TryGetString(obj: basisRow, propertyName: "revision");
+        var overlayRevision = TryGetString(obj: overlayRow, propertyName: "revision");
+        var basisDimensions = TryGetInt(obj: basisRow, propertyName: "dimensions");
+        var overlayDimensions = TryGetInt(obj: overlayRow, propertyName: "dimensions");
+
+        if (
+            ((basisModel is not null) && (overlayModel is not null) && !string.Equals(a: basisModel, b: overlayModel, comparisonType: StringComparison.Ordinal)) ||
+            ((basisRevision is not null) && (overlayRevision is not null) && !string.Equals(a: basisRevision, b: overlayRevision, comparisonType: StringComparison.Ordinal)) ||
+            ((basisDimensions is not null) && (overlayDimensions is not null) && (basisDimensions != overlayDimensions))
+        ) {
+            var spaceName = (basisRow[propertyName: "name"]?.ToJsonString() ?? "unknown");
+
+            throw new JsonException(message: $"{path}: space {spaceName} redeclaration mismatch — model, revision, and dimensions must match.");
+        }
     }
 
     /// <summary>Computes the minimal delta tree whose <see cref="TryMerge"/> over <paramref name="basis"/> reproduces

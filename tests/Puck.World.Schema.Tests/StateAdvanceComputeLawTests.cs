@@ -47,7 +47,7 @@ public sealed class StateAdvanceComputeLawTests {
         Max: max,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0
+                Value: ((kind == CellKind.Fixed) ? CellValue.Fixed(rawBits: 0L) : CellValue.Int(value: 0L))
             )]
     );
 

@@ -6,45 +6,84 @@ namespace Puck.World;
 /// <summary>A disclosed literal cell, or, under <see cref="HiddenCells.Placeholder"/>, an anonymous card back
 /// (<see cref="Hidden"/> true, empty key, zero value, no text, no observation).</summary>
 public sealed record WorldObservedCell(string Key, long Value, string? Text = null, StateObservation? Observation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateVector? Vector = null);
 /// <summary>A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.
 /// <see cref="HiddenCount"/> counts the cells the row's <see cref="StateVisibility.Hidden"/> policy withheld
 /// from this observer (placeholders included), zero under <see cref="HiddenCells.Omit"/>.</summary>
 public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int HiddenCount = 0);
 /// <summary>Composes state observations for one authenticated recipient.</summary>
+/// <remarks>Every value, audience, zone membership and observation stamp is read from the live store, never from a
+/// document snapshot taken per observer: which zone holds a token decides who may read it, so a disclosure composed
+/// against a stale copy would answer for a table that has already moved.</remarks>
 public static class WorldStateDisclosure {
-    /// <summary>Whether the recipient may read a value, including its containing zone's policy.</summary>
-    public static bool CanRead(WorldDefinition definition, WorldStateRow row, StateCell cell, WorldPrincipal? recipient) =>
-        new Observer(
+    /// <summary>Determines whether the recipient may read one cell, including its containing zone's policy.</summary>
+    /// <param name="definition">The live document, for the row declarations.</param>
+    /// <param name="arena">The live store.</param>
+    /// <param name="row">The row carrying the cell.</param>
+    /// <param name="key">The cell's key.</param>
+    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
+    /// <returns><see langword="true"/> when the recipient may read the cell.</returns>
+    public static bool CanRead(WorldDefinition definition, StateArena arena, WorldStateRow row, CellName key, WorldPrincipal? recipient) {
+        var observer = new Observer(
+            arena: arena,
             definition: definition,
             recipient: recipient
-        ).CanRead(
-            cell: cell,
-            row: row
         );
-    /// <summary>Projects only rows/cells with explicit observation policies; token attributes inherit their zone's restrictions.</summary>
-    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, WorldPrincipal? recipient) {
+
+        return (!observer.TryRow(
+            ordinal: out var ordinal,
+            row: row
+        ) || observer.CanRead(
+            key: (arena.Catalog.Keys.TryResolve(
+                key: out var interned,
+                name: key
+            )
+                ? interned
+                : default),
+            row: row,
+            rowOrdinal: ordinal
+        ));
+    }
+    /// <summary>Projects only rows and cells with explicit observation policies; token attributes inherit their
+    /// zone's restrictions. Discloses stored truth for cells carrying dynamics (the arena never eases), while
+    /// value-over-time traits such as advance and cycle evaluate live.</summary>
+    /// <param name="definition">The live document, for the row declarations.</param>
+    /// <param name="arena">The live store.</param>
+    /// <param name="time">The clocks a cell's value-over-time trait is read at.</param>
+    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
+    /// <returns>The observed rows, or <see langword="null"/> when the document discloses nothing.</returns>
+    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, in ArenaTime time, WorldPrincipal? recipient) {
         var observer = new Observer(
+            arena: arena,
             definition: definition,
             recipient: recipient
         );
         var result = new List<WorldObservedRow>();
 
         foreach (var row in definition.State) {
-            if (
-                (row.Visibility is null) &&
-                !(row.Cells ?? []).Any(predicate: c => (c.Visibility is not null))
-            ) {
+            if (!observer.TryRow(
+                ordinal: out var rowOrdinal,
+                row: row
+            )) {
                 continue;
             }
 
+            var positions = arena.PositionCount(rowOrdinal: rowOrdinal);
+
+            if (
+                (row.Visibility is null) &&
+                !observer.AnyCellRestricted(
+                positions: positions,
+                rowOrdinal: rowOrdinal
+            )
+            ) {
+                continue;
+            }
             if (
                 (row.Visibility is { } policy) &&
-                !policy.Allows(
-                recipient: observer.Name,
-                rows: definition.State
-            )
+                !observer.Allows(policy: policy)
             ) {
                 continue;
             }
@@ -53,22 +92,59 @@ public static class WorldStateDisclosure {
             var hidden = 0;
             var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
 
-            foreach (var cell in (row.Cells ?? [])) {
+            for (var position = 0; (position < positions); position++) {
+                if (!arena.TryKeyAt(
+                    key: out var key,
+                    position: position,
+                    rowOrdinal: rowOrdinal
+                )) {
+                    continue;
+                }
+                if (!arena.TryReadLive(
+                    key: key,
+                    rowOrdinal: rowOrdinal,
+                    time: in time,
+                    value: out var value
+                )) {
+                    continue;
+                }
                 if (observer.CanRead(
-                    cell: cell,
-                    row: row
+                    key: key,
+                    row: row,
+                    rowOrdinal: rowOrdinal
                 )) {
                     cells.Add(item: new(
-                        cell.Key.Value,
-                        cell.Value,
-                        cell.Text,
-                        cell.Observation
+                        arena.Catalog.Keys[key: key].Value,
+                        (value.Kind switch {
+                            CellKind.Bool => (value.AsBool
+                                ? 1L
+                                : 0L),
+                            CellKind.Fixed => value.AsFixed,
+                            CellKind.Int => value.AsInt,
+                            _ => 0L,
+                        }),
+                        ((value.Kind == CellKind.Text)
+                            ? value.AsText
+                            : null),
+                        arena.Observation(
+                            key: key,
+                            rowOrdinal: rowOrdinal
+                        ),
+                        Hidden: false,
+                        Vector: Vector(
+                            arena: arena,
+                            key: key,
+                            rowOrdinal: rowOrdinal,
+                            value: value
+                        )
                     ));
+
                     continue;
                 }
                 if (hiddenPolicy == HiddenCells.Omit) {
                     continue;
                 }
+
                 hidden++;
                 if (hiddenPolicy == HiddenCells.Placeholder) {
                     cells.Add(item: new(
@@ -85,32 +161,42 @@ public static class WorldStateDisclosure {
                 hidden
             ));
         }
+
         return ((result.Count == 0)
             ? null
             : result
         );
     }
     /// <summary>Refuses flattening a presentation binding that could disclose a restricted value.</summary>
-    public static void ValidateBindings(WorldDefinition definition, object graph, WorldPrincipal? recipient) {
+    /// <param name="definition">The live document, for the row declarations.</param>
+    /// <param name="arena">The live store.</param>
+    /// <param name="graph">The presentation graph to flatten.</param>
+    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
+    /// <exception cref="InvalidOperationException">The graph references a row this recipient may not read whole.</exception>
+    public static void ValidateBindings(WorldDefinition definition, StateArena arena, object graph, WorldPrincipal? recipient) {
         var observer = new Observer(
+            arena: arena,
             definition: definition,
             recipient: recipient
         );
 
         foreach (var row in definition.State) {
-            if (
-                !(row.Cells ?? []).Any(predicate: c => !observer.CanRead(
-                cell: c,
+            if (!observer.TryRow(
+                ordinal: out var rowOrdinal,
                 row: row
-            )) &&
-                ((row.Visibility is null) || row.Visibility.Allows(
-                recipient: observer.Name,
-                rows: definition.State
-            ))
+            )) {
+                continue;
+            }
+            if (
+                !observer.AnyCellWithheld(
+                positions: arena.PositionCount(rowOrdinal: rowOrdinal),
+                row: row,
+                rowOrdinal: rowOrdinal
+            ) &&
+                ((row.Visibility is null) || observer.Allows(policy: row.Visibility))
             ) {
                 continue;
             }
-
             if (WorldStateDocumentValues.ReferencesRow(
                 definition: definition,
                 graph: graph,
@@ -121,20 +207,50 @@ public static class WorldStateDisclosure {
         }
     }
 
-    // One recipient's view of one document: the canonical token is formatted once, and the zones are indexed by
-    // token domain once, so a cell's read check costs the members of its own domain's zones and nothing else.
+    private static StateVector? Vector(StateArena arena, int rowOrdinal, CellKey key, in CellValue value) {
+        if (
+            (value.Kind != CellKind.Vector) ||
+            !arena.TryReadVector(
+            components: out var components,
+            key: key,
+            rowOrdinal: rowOrdinal
+        ) ||
+            !StateVector.TryCreate(
+            components: components,
+            error: out _,
+            vector: out var vector
+        )
+        ) {
+            return null;
+        }
+
+        return vector;
+    }
+
+    // One recipient's view of one live store: the canonical token is formatted once, and the ordered zones are
+    // indexed by token domain once, so a cell's read check costs the zones over its own domain and nothing else.
     private readonly struct Observer {
-        private readonly Dictionary<string, List<WorldStateRow>> m_zonesByDomain;
+        private readonly Dictionary<string, List<(int Ordinal, WorldStateRow Row)>> m_zonesByDomain;
+        private readonly StateArena m_arena;
         private readonly WorldDefinition m_definition;
 
-        public Observer(WorldDefinition definition, WorldPrincipal? recipient) {
+        public Observer(WorldDefinition definition, StateArena arena, WorldPrincipal? recipient) {
+            m_arena = arena;
             m_definition = definition;
             Name = recipient?.Describe();
             m_zonesByDomain = new(comparer: StringComparer.Ordinal);
+
             foreach (var row in definition.State) {
                 if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zoneDomain) {
                     continue;
                 }
+                if (!TryRow(
+                    ordinal: out var ordinal,
+                    row: row
+                )) {
+                    continue;
+                }
+
                 var domain = zoneDomain.Row.Value;
 
                 if (!m_zonesByDomain.TryGetValue(
@@ -144,21 +260,101 @@ public static class WorldStateDisclosure {
                     zones = [];
                     m_zonesByDomain[domain] = zones;
                 }
-                zones.Add(item: row);
+
+                zones.Add(item: (ordinal, row));
             }
         }
 
         public string? Name { get; }
 
-        public bool CanRead(WorldStateRow row, StateCell cell) {
+        // A restriction the store holds for the recipient's own token, or one a live text row lists it in.
+        public bool Allows(StateVisibility? policy) {
+            if (policy is null) {
+                return true;
+            }
+            if (policy.Allows(recipient: Name)) {
+                return true;
+            }
             if (
-                ((row.Visibility is { } policy) && !policy.Allows(
-                recipient: Name,
-                rows: m_definition.State
-            )) ||
-                ((cell.Visibility is { } cellPolicy) && !cellPolicy.Allows(
-                recipient: Name,
-                rows: m_definition.State
+                (Name is null) ||
+                (policy.ReadersFrom is null) ||
+                !m_definition.StateCatalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: policy.ReadersFrom
+            )
+            ) {
+                return false;
+            }
+
+            var readers = handle.Ordinal;
+            var positions = m_arena.PositionCount(rowOrdinal: readers);
+
+            for (var position = 0; (position < positions); position++) {
+                if (
+                    m_arena.TryReadAt(
+                    position: position,
+                    rowOrdinal: readers,
+                    value: out var value
+                ) &&
+                    (value.Kind == CellKind.Text) &&
+                    string.Equals(
+                    a: value.AsText,
+                    b: Name,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        public bool AnyCellRestricted(int rowOrdinal, int positions) {
+            for (var position = 0; (position < positions); position++) {
+                if (
+                    m_arena.TryKeyAt(
+                    key: out var key,
+                    position: position,
+                    rowOrdinal: rowOrdinal
+                ) &&
+                    (m_arena.Visibility(
+                    key: key,
+                    rowOrdinal: rowOrdinal
+                ) is not null)
+                ) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        public bool AnyCellWithheld(WorldStateRow row, int rowOrdinal, int positions) {
+            for (var position = 0; (position < positions); position++) {
+                if (
+                    m_arena.TryKeyAt(
+                    key: out var key,
+                    position: position,
+                    rowOrdinal: rowOrdinal
+                ) &&
+                    !CanRead(
+                    key: key,
+                    row: row,
+                    rowOrdinal: rowOrdinal
+                )
+                ) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        public bool CanRead(WorldStateRow row, int rowOrdinal, CellKey key) {
+            if (
+                !Allows(policy: row.Visibility) ||
+                !Allows(policy: m_arena.Visibility(
+                key: key,
+                rowOrdinal: rowOrdinal
             ))
             ) {
                 return false;
@@ -179,27 +375,43 @@ public static class WorldStateDisclosure {
                 return true;
             }
 
-            foreach (var zone in zones) {
-                foreach (var member in (zone.Cells ?? [])) {
-                    if (member.Key != cell.Key) {
-                        continue;
-                    }
-
-                    if (
-                        ((zone.Visibility is { } zonePolicy) && !zonePolicy.Allows(
-                        recipient: Name,
-                        rows: m_definition.State
-                    )) ||
-                        ((member.Visibility is { } memberPolicy) && !memberPolicy.Allows(
-                        recipient: Name,
-                        rows: m_definition.State
-                    ))
-                    ) {
-                        return false;
-                    }
+            // A token's audience is its zone's: whichever ordered zone over this domain currently holds the key
+            // decides, so this asks the store which one that is rather than a document's last export.
+            foreach (var (zoneOrdinal, zone) in zones) {
+                if (!m_arena.TryCellSlot(
+                    key: key,
+                    rowOrdinal: zoneOrdinal,
+                    slot: out _
+                )) {
+                    continue;
+                }
+                if (
+                    !Allows(policy: zone.Visibility) ||
+                    !Allows(policy: m_arena.Visibility(
+                    key: key,
+                    rowOrdinal: zoneOrdinal
+                ))
+                ) {
+                    return false;
                 }
             }
+
             return true;
+        }
+        public bool TryRow(WorldStateRow row, out int ordinal) {
+            if (m_definition.StateCatalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: row.Name
+            )) {
+                ordinal = handle.Ordinal;
+
+                return true;
+            }
+
+            ordinal = -1;
+
+            return false;
         }
     }
 }

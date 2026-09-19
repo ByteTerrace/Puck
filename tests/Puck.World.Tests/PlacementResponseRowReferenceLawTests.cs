@@ -97,7 +97,7 @@ public sealed class PlacementResponseRowReferenceLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: FixedQ4816.FromDouble(value: ThresholdValue).Value
+                        Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: ThresholdValue).Value)
                     )]
             ),
         ],
@@ -133,7 +133,7 @@ public sealed class PlacementResponseRowReferenceLawTests {
         using var literal = Fixtures.FreshServer(definition: Document(threshold: ((float)ThresholdValue)));
         using var row = Fixtures.FreshServer(definition: Document(threshold: new WorldLatticeScalar(Row: ThresholdRow)));
 
-        for (var index = 0; (index < 2); index++) {
+        for (var index = 0; (index < 20); index++) {
             literal.Step();
             row.Step();
 

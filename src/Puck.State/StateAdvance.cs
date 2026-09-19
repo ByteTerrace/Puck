@@ -13,9 +13,11 @@ namespace Puck.State;
 /// <remarks>
 /// <para>Nothing per-tick materializes or journals: the computed value (<see cref="ComputeCurrentValue"/>) is a pure
 /// function of the base, the carrying cell's own <see cref="StateCellClock.EpochEngineTick"/>, the rate, and the
-/// engine tick asked about. An explicit write — <c>UpsertStateRow</c> re-authoring the row, or an
-/// <c>UpsertStateCell</c> — rebases: the written value becomes the new base and the cell's clock epoch becomes the
-/// engine tick the write applied at.</para>
+/// engine tick asked about. An explicit write — an <c>UpsertStateCell</c>, or an <c>UpsertStateRow</c> carrying a
+/// stored value that differs from the one the cell already held — rebases: the written value becomes the new base and
+/// the cell's clock epoch becomes the engine tick the write applied at. An <c>UpsertStateRow</c> restating the stored
+/// base is not a write of the value: it moves the epoch, and the accumulation the cell had reached becomes the new
+/// base, so re-declaring a row never restarts what a reader was watching.</para>
 /// <para><see cref="ComputeCurrentValue"/> is applied only by <see cref="StateReader"/>'s central known-cell
 /// computation, so both its name and compiled-handle entrances, every aggregate, read-back, rule gate, HUD binding,
 /// and arithmetic write resolve an advancing row through the same code. An

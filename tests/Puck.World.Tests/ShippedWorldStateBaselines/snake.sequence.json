@@ -1,0 +1,194 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/snake.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "forward",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 120
+    },
+    {
+      "advance": 60
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "forward",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "advance": 15
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 15
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "forward",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 15
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 15
+    },
+    {
+      "advance": 45
+    },
+    {
+      "set": {
+        "row": "snakeTurnRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "add": {
+        "row": "snakeTurnSerial",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 15
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "forward",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "forward",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "strafe",
+        "value": -1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "forward",
+        "value": 1,
+        "holdSeconds": 0.2
+      }
+    },
+    {
+      "advance": 15
+    },
+    {
+      "advance": 20
+    }
+  ]
+}

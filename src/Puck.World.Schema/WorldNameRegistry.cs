@@ -17,6 +17,10 @@ public enum WorldNameKind : byte {
     Table,
     /// <summary>A <c>patterns</c> row.</summary>
     Pattern,
+    /// <summary>A <c>ruleGroups</c> row.</summary>
+    RuleGroup,
+    /// <summary>A <c>sets</c> row.</summary>
+    CellSet,
     /// <summary>A <c>state.lattices</c> topology.</summary>
     Topology,
     /// <summary>A <c>generators</c> row.</summary>
@@ -72,7 +76,7 @@ public sealed record WorldNameExclusion(Type Owner, string Member, string Reason
 /// <see cref="WorldJsonContext"/> rather than listed by hand (<see cref="Sites"/>). Two consumers read it: the
 /// <c>puck registry</c> verb renders it to <c>docs/world-name-registry.md</c> and checks the rendering against the
 /// model (<see cref="Render"/>, <see cref="Uncovered"/>), and <see cref="WorldModuleNamespace"/> prefixes an aliased
-/// import's names at compose time. A member typed <see cref="CellName"/>, <see cref="ValueExpression"/>,
+/// import's names at compose time. A member typed <see cref="CellName"/>, <see cref="ExpressionProgram"/>,
 /// <see cref="BindableScalar"/>, <see cref="BindableColor"/>, or <see cref="WorldLatticeScalar"/>, or a string
 /// member whose C# name reads like a name position, must be registered or excluded with a reason; the check names
 /// every member that is neither.
@@ -144,6 +148,30 @@ public static partial class WorldNameRegistry {
             nameof(PatternRow.Name),
             WorldNameKind.Pattern,
             WorldNameRole.Declares
+        ),
+        new(
+            typeof(CellSetRow),
+            nameof(CellSetRow.Name),
+            WorldNameKind.CellSet,
+            WorldNameRole.Declares
+        ),
+        new(
+            typeof(CellSetExpression.Board),
+            nameof(CellSetExpression.Board.Row),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(CellSetExpression.Zone),
+            nameof(CellSetExpression.Zone.Row),
+            WorldNameKind.Zone,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateFamily),
+            nameof(StateFamily.Members),
+            WorldNameKind.State,
+            WorldNameRole.Names
         ),
         new(
             typeof(LatticeTopology),
@@ -265,6 +293,18 @@ public static partial class WorldNameRegistry {
         ),
         // Rules.
         new(
+            typeof(Puck.State.Rules.RuleGroupDeclaration),
+            nameof(Puck.State.Rules.RuleGroupDeclaration.Name),
+            WorldNameKind.RuleGroup,
+            WorldNameRole.Declares
+        ),
+        new(
+            typeof(Puck.State.Rules.RuleGroupStep),
+            nameof(Puck.State.Rules.RuleGroupStep.Rule),
+            WorldNameKind.Rule,
+            WorldNameRole.Names
+        ),
+        new(
             typeof(Rule),
             nameof(Rule.ForEach),
             WorldNameKind.State,
@@ -277,8 +317,8 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
-            typeof(RuleBinding),
-            nameof(RuleBinding.Expression),
+            typeof(RuleLocal),
+            nameof(RuleLocal.Expression),
             WorldNameKind.State,
             WorldNameRole.Expression
         ),
@@ -700,6 +740,24 @@ public static partial class WorldNameRegistry {
             WorldExportFacet.Action
         ),
         new(
+            typeof(StateTransform.Push),
+            nameof(StateTransform.Push.FromState),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.Push),
+            nameof(StateTransform.Push.FromKey),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
+            typeof(StateTransform.Push),
+            nameof(StateTransform.Push.Expression),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
             typeof(StateTransform.ClearEnclosed),
             nameof(StateTransform.ClearEnclosed.Row),
             WorldNameKind.State,
@@ -712,35 +770,119 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Key
         ),
-        // Expression tokens (the postfix spelling).
         new(
-            typeof(ValueToken.State),
-            nameof(ValueToken.State.Name),
+            typeof(VectorTerm),
+            nameof(VectorTerm.From),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
+            typeof(StateTransform.Mix),
+            nameof(StateTransform.Mix.Into),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
+            typeof(StateTransform.Mean),
+            nameof(StateTransform.Mean.From),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
+            typeof(StateTransform.Mean),
+            nameof(StateTransform.Mean.Into),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
+            typeof(StateTransform.Mean),
+            nameof(StateTransform.Mean.Where),
             WorldNameKind.State,
             WorldNameRole.Names
         ),
         new(
-            typeof(ValueToken.State),
-            nameof(ValueToken.State.Key),
+            typeof(StateTransform.Nearest),
+            nameof(StateTransform.Nearest.From),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
+            typeof(StateTransform.Nearest),
+            nameof(StateTransform.Nearest.Query),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
+            typeof(StateTransform.Nearest),
+            nameof(StateTransform.Nearest.Into),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.Nearest),
+            nameof(StateTransform.Nearest.Where),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.Nearest),
+            nameof(StateTransform.Nearest.Exclude),
             WorldNameKind.State,
             WorldNameRole.Key
         ),
         new(
-            typeof(ValueToken.BoardShift),
-            nameof(ValueToken.BoardShift.Topology),
+            typeof(StateTransform.Remember),
+            nameof(StateTransform.Remember.Into),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.Remember),
+            nameof(StateTransform.Remember.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
+            typeof(StateTransform.Remember),
+            nameof(StateTransform.Remember.From),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        // Expression instructions (the IR spelling).
+        new(
+            typeof(InstructionPayload.State),
+            nameof(InstructionPayload.State.Name),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(InstructionPayload.State),
+            nameof(InstructionPayload.State.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
+            typeof(VectorOperand.Cell),
+            nameof(VectorOperand.Cell.Name),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(VectorOperand.Cell),
+            nameof(VectorOperand.Cell.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
+            typeof(InstructionPayload.Board),
+            nameof(InstructionPayload.Board.Topology),
             WorldNameKind.Topology,
             WorldNameRole.Names
         ),
         new(
-            typeof(ValueToken.BoardFill),
-            nameof(ValueToken.BoardFill.Topology),
-            WorldNameKind.Topology,
-            WorldNameRole.Names
-        ),
-        new(
-            typeof(ValueToken.BoardImage),
-            nameof(ValueToken.BoardImage.Topology),
-            WorldNameKind.Topology,
+            typeof(InstructionPayload.Fold),
+            nameof(InstructionPayload.Fold.Family),
+            WorldNameKind.State,
             WorldNameRole.Names
         ),
         // Patterns.
@@ -1159,14 +1301,59 @@ public static partial class WorldNameRegistry {
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
         new(
+            typeof(StateSpace),
+            nameof(StateSpace.Name),
+            "a space name declares a vector embedding space local to the document"
+        ),
+        new(
+            typeof(StateEnum),
+            nameof(StateEnum.Name),
+            "an enum name declares a symbolic value domain local to the document"
+        ),
+        new(
+            typeof(StateEnum),
+            nameof(StateEnum.Members),
+            "an enum member name is local to its enum"
+        ),
+        new(
+            typeof(StateFamily),
+            nameof(StateFamily.Name),
+            "a family name declares a row range local to the document"
+        ),
+        new(
+            typeof(CellSetExpression.Family),
+            nameof(CellSetExpression.Family.Name),
+            "a family name is local to the document that declares the range"
+        ),
+        new(
+            typeof(StateRow),
+            nameof(StateRow.Enum),
+            "an enum name is local to the document"
+        ),
+        new(
+            typeof(Puck.Commands.BindingContextDefinition),
+            nameof(Puck.Commands.BindingContextDefinition.Family),
+            "a binding context family is a host vocabulary name, not a state row"
+        ),
+        new(
+            typeof(WorldIconBadgeOverride),
+            nameof(WorldIconBadgeOverride.Family),
+            "a badge override family is a controller family name, not a state row"
+        ),
+        new(
             typeof(StateCell),
             nameof(StateCell.Key),
             "a cell key is local to its row"
         ),
         new(
-            typeof(RuleBinding),
-            nameof(RuleBinding.Name),
-            "a binding name is local to its rule, read as $bind:<name>"
+            typeof(WorldVerdictTrait),
+            nameof(WorldVerdictTrait.Status),
+            "a verdict's status cell key is local to its own row"
+        ),
+        new(
+            typeof(RuleLocal),
+            nameof(RuleLocal.Name),
+            "a local's name is local to its rule, read as $local:<name>"
         ),
         new(
             typeof(WorldDecisionOption),

@@ -1,3 +1,4 @@
+using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 namespace Puck.World;
 
 /// <summary>State-layout-specific flock expressions. Recompile on document installation, even when the
@@ -12,14 +13,14 @@ public sealed class CompiledWorldFlockAffinities {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(definition);
         Cohesion = ((profile.CohesionAffinity is { } cohesion)
-            ? WorldRuleCompiler.CompileFlockAffinity(
+            ? WorldFactsCompiler.CompileFlockAffinity(
                 definition: definition,
                 expression: cohesion
             )
             : null
         );
         Alignment = ((profile.AlignmentAffinity is { } alignment)
-            ? WorldRuleCompiler.CompileFlockAffinity(
+            ? WorldFactsCompiler.CompileFlockAffinity(
                 definition: definition,
                 expression: alignment
             )

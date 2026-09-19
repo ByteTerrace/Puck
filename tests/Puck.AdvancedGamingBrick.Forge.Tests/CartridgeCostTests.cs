@@ -31,7 +31,7 @@ public sealed class CartridgeCostTests {
         document: Document(body: body),
         profile: CartridgeCostProfile.Humble
     );
-    private static CartridgeStatement Set(ExpressionOp? operation, ValueExpression value) =>
+    private static CartridgeStatement Set(ExpressionOp? operation, ExpressionProgram value) =>
         new(
             Kind: "set",
             Target: new CartridgeTarget(State: "x"),

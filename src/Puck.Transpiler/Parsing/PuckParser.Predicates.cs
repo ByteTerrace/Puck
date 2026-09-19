@@ -110,10 +110,12 @@ public static partial class PuckParser {
         );
     }
     private static PredicateNode ParseNotGate(ParseContext context, DiagnosticBag? diagnostics, int depth = 0) {
-        if (depth >= 64) { throw CreateException(
+        if (depth >= 64) {
+            throw CreateException(
             context: context,
             message: "Negated gates nest at most 64 levels"
-        ); }
+        );
+        }
         SkipWhiteSpace(context: context);
         var start = context.Scanner.Cursor.Offset;
 
@@ -152,23 +154,10 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
 
         if (cursor.Current == '(') {
-            cursor.Advance();
-            var inner = ParseGate(
+            return ParseParenthesizedAtom(
                 context: context,
                 diagnostics: diagnostics
             );
-
-            SkipWhiteSpace(context: context);
-            if (!TryConsume(
-                c: ')',
-                context: context
-            )) {
-                throw CreateException(
-                    context: context,
-                    message: "Expected ')' closing parenthesized gate"
-                );
-            }
-            return inner;
         }
 
         if (
@@ -185,6 +174,61 @@ public static partial class PuckParser {
             context: context,
             diagnostics: diagnostics
         );
+    }
+    // What follows the balanced span decides what the span is: a comparator after it makes it one comparison's
+    // operand text (`(face[$zone:pile:last] ?? 1) == 0`), which is what lets the expression vocabulary (`??`,
+    // `isAbsent`) reach either side of a gate; anything else makes it a nested gate (`(a == 1 or b == 2) and c`).
+    // Deciding by lookahead rather than by trying the gate reading first is what keeps a nested operand span
+    // readable: in `((a == 1 ? x : y) == 0 : Int)` the inner span parses as a gate on its own, and only the
+    // comparator after it says it is not one.
+    private static PredicateNode ParseParenthesizedAtom(ParseContext context, DiagnosticBag? diagnostics) {
+        if (GroupReadsAsOperand(context: context)) {
+            return ParseComparisonPredicate(
+                context: context,
+                diagnostics: diagnostics
+            );
+        }
+
+        var cursor = context.Scanner.Cursor;
+
+        cursor.Advance();
+
+        var inner = ParseGate(
+            context: context,
+            diagnostics: diagnostics
+        );
+
+        SkipWhiteSpace(context: context);
+
+        if (!TryConsume(
+            c: ')',
+            context: context
+        )) {
+            throw CreateException(
+                context: context,
+                message: "Expected ')' closing parenthesized gate"
+            );
+        }
+
+        return inner;
+    }
+    // Whether the operand scan starting here ends on a comparison operator rather than on a gate keyword, a line
+    // end, or a closing delimiter. The scan is the same one a comparison's own operands use, so the span it covers
+    // is exactly the text the comparison would take: `(ax - 56) * (ax - 56) <= n` ends on a comparator, while
+    // `(a == 1 or b == 2) and c` ends on `and`.
+    private static bool GroupReadsAsOperand(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+        var savedPosition = cursor.Position;
+
+        _ = ScanOperandSpan(
+            context,
+            GateReservedWords,
+            stopAtComparator: true,
+            out var sawComparator
+        );
+        cursor.ResetPosition(position: savedPosition);
+
+        return sawComparator;
     }
     // A bare `name(...)` gate, taken only when nothing comparison-shaped follows it: `min(a, b) == 3` is a
     // comparison whose left operand happens to be a call, and reading the call as the whole gate would swallow the
@@ -203,10 +247,7 @@ public static partial class PuckParser {
             offset: start
         );
 
-        if (!TryReadIdentifier(
-            context: context,
-            identifier: out var name
-        )) {
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
             cursor.ResetPosition(position: savedPosition);
 
             return false;

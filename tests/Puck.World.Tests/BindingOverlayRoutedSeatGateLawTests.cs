@@ -21,7 +21,7 @@ public sealed class BindingOverlayRoutedSeatGateLawTests {
         ),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0
+                Value: CellValue.Int(value: 0)
             )]
     );
     private static WorldBindingOverlay GatedOverlay() => new(

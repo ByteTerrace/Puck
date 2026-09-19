@@ -4,7 +4,7 @@
 // own beyond `engineTypes` — `engine.worker.ts` reuses it unmodified inside a Worker's own global scope, so the
 // wire-decoding rules (which field is a decimal-string 64-bit value, which failure shape throws versus returns an
 // `ok:false` arm) exist in exactly one place.
-import type { EngineCell, EngineDiagnostic, EngineHostOptions, JudgeTrace, ParseResult, RowInfo, WorldEngine } from "./engineTypes";
+import type { CellKindName, CellValue, EngineCell, EngineDiagnostic, EngineHostOptions, JudgeTrace, ParseResult, RowInfo, WorldEngine } from "./engineTypes";
 
 /** The raw `[JSExport]` surface `main.mjs`'s `createEngine()` resolves — every member synchronous, taking and
  * returning JSON strings (see `Puck.World.Browser.Exports.BrowserExports`). */
@@ -36,6 +36,27 @@ export type CreateRawEngine = (options?: {
 // never the empty string (`CellName.TryParse` refuses an empty candidate outright).
 const ScalarSlotKey = "$value";
 
+/** Decodes the wire's tag-and-payload pair into the one carrier — see `Puck.World.Browser/README.md`'s
+ * "One cell value on the wire" for each kind's spelling. `null` where the arena holds no such cell. */
+function decodeCellValue(kind: string | null, value: string | null): CellValue | null {
+  if (kind === null || value === null) return null;
+
+  const tag = kind as CellKindName;
+
+  switch (tag) {
+    case "Int":
+    case "Fixed":
+      return { kind: tag, value: BigInt(value) };
+    case "Bool":
+      return { kind: "Bool", value: value === "true" };
+    case "Text":
+      return { kind: "Text", value };
+    case "Vector":
+      return { kind: "Vector", value };
+    default:
+      throw new Error(`'${kind}' is not a cell kind this facade decodes.`);
+  }
+}
 function mapDiagnostics(errors: readonly { path: string | null; message: string }[]): EngineDiagnostic[] {
   return errors.map((error) => ({ path: error.path ?? "", message: error.message }));
 }
@@ -105,15 +126,16 @@ export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void)
       raw.Release(handle);
     },
     async rows(handle) {
-      const result = JSON.parse(raw.Rows(handle)) as { ok: boolean; rows?: { name: string; kind: string; keyed: boolean; cells: { key: string; value: string; text: string | null }[] }[]; error?: string };
+      const result = JSON.parse(raw.Rows(handle)) as { ok: boolean; rows?: { name: string; kind: string; keyed: boolean; cells: { key: string; value: string | null }[] }[]; error?: string };
 
       if (!result.ok) throw new Error(result.error ?? `rows: handle '${handle}' names no live session.`);
 
+      // A snapshot carries the tag once for the whole row, so each cell spells its payload alone.
       return (result.rows ?? []).map((row): RowInfo => ({
         name: row.name,
-        kind: row.kind as RowInfo["kind"],
+        kind: row.kind as CellKindName,
         keyed: row.keyed,
-        cells: row.cells.map((cell) => ({ key: cell.key, value: BigInt(cell.value), text: cell.text ?? "" })),
+        cells: row.cells.map((cell) => ({ key: cell.key, value: decodeCellValue(row.kind, cell.value) })),
       }));
     },
     async rebind(handle, json) {
@@ -125,9 +147,9 @@ export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void)
       return (result.ok ? { ok: true, trace: mapJudgeTrace(result.trace) } : result);
     },
     async readRow(handle, row, key) {
-      const result = JSON.parse(raw.ReadRow(handle, row, key ?? ScalarSlotKey)) as { found: boolean; value: string; text: string | null };
+      const result = JSON.parse(raw.ReadRow(handle, row, key ?? ScalarSlotKey)) as { found: boolean; kind: string | null; value: string | null };
 
-      return { found: result.found, value: BigInt(result.value), text: result.text ?? "" };
+      return { found: result.found, value: decodeCellValue(result.kind, result.value) };
     },
     async writeRow(handle, row, key, value, write) {
       return JSON.parse(raw.WriteRow(handle, row, key ?? ScalarSlotKey, value.toString(), write)) as { ok: boolean; error?: string };

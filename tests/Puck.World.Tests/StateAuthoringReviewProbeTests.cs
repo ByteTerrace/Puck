@@ -10,7 +10,7 @@ public sealed class StateAuthoringReviewProbeTests {
             Name: CellName.Parse(candidate: "reviewGauge"),
             Kind: CellKind.Int,
             Dynamics: new StateDynamics(Row: "probe"),
-            Cells: [new StateCell(Key: StateRow.SlotKey, Value: 100, Clock: new StateCellClock(Y0: 20L * 65536L))]
+            Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 100), Clock: new StateCellClock(Y0: 20L * 65536L))]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
@@ -19,7 +19,7 @@ public sealed class StateAuthoringReviewProbeTests {
         ));
         fixture.Step();
         var actual = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "reviewGauge")!;
-        Assert.Equal(expected: 20L, actual: actual.Cells![0].Value);
+        Assert.Equal(expected: 20L, actual: actual.Cells![0].Value.Raw);
     }
 
     [Theory]
@@ -30,7 +30,7 @@ public sealed class StateAuthoringReviewProbeTests {
             Name: CellName.Parse(candidate: "reviewCounter"),
             Kind: CellKind.Int,
             Advance: new StateAdvance(PerSecondNumerator: 1, PerSecondDenominator: 1),
-            Cells: [new StateCell(Key: StateRow.SlotKey, Value: 10)]
+            Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 10))]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
@@ -42,6 +42,6 @@ public sealed class StateAuthoringReviewProbeTests {
         ));
         fixture.Step();
         var actual = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "reviewCounter")!;
-        Assert.Equal(expected: expected, actual: actual.Cells![0].Value);
+        Assert.Equal(expected: expected, actual: actual.Cells![0].Value.Raw);
     }
 }

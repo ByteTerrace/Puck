@@ -222,7 +222,7 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
             result: out var seat
         ) &&
             (seat >= 1) &&
-            (seat <= 4)
+            (seat <= WorldBodiesLimits.LocalSeatCount)
         ) {
             // Seat(slot) is right here: an operator's "seatN" token deliberately NAMES the seat identity as a
             // world.grant/world.revoke TARGET, regardless of who currently claims the slot.

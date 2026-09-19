@@ -5,6 +5,7 @@ namespace Puck.World.Tests;
 /// <summary>Pins the shape of the one shipped world: every district reachable by its arrival spawn and rooted under
 /// its court, the plaza's four arches framing their districts through view screens, the split seat layout beside the
 /// action layout, a capture station per district, and a radial gravity area under each planetoid.</summary>
+[Collection(name: DocumentCompositionCollection.Name)]
 public sealed class IslandLawTests {
     private static readonly string[] Arches = ["dive", "kart", "jump", "studio"];
     private static readonly string[] Districts = ["dive", "kart", "jump", "studio", "arena", "arcade", "granaries", "market", "proving", "garden"];

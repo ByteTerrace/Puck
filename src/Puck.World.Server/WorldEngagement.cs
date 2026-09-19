@@ -24,7 +24,7 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// <see cref="BuildPadSnapshot"/> for <see cref="IWorldMachineHost.Advance"/> to read, in-process, inside
 /// <see cref="WorldServer.Step"/>; body members become co-drive contributions queued for the target's next tick,
 /// through the exact same Drive-gated contribution path an addon or a co-driving seat already uses
-/// (<see cref="WorldServer.StageContribution"/>) — no second write path.
+/// (<see cref="WorldTick.StageContribution"/>) — no second write path.
 /// </summary>
 /// <remarks>
 /// The write half (<see cref="Compose"/>/<see cref="Dissolve"/>) is server-side authority reached only through
@@ -682,7 +682,7 @@ public sealed class WorldEngagement {
 
     /// <summary>Gets this tick's body-target contributions — <see cref="WorldServer.Step"/> drains this right after
     /// <see cref="FoldTick"/> and enqueues each as an ordinary <see cref="IntentSubmission"/> for the next tick's
-    /// drain, landing in <see cref="WorldServer.StageContribution"/> under the same Drive-over-body check every
+    /// drain, landing in <see cref="WorldTick.StageContribution"/> under the same Drive-over-body check every
     /// co-driving seat or addon contribution passes through — possession is Drive-over-body plus this application,
     /// never a second authority path.</summary>
     public IReadOnlyList<BodyRouteContribution> BodyContributions => m_bodyContributions;

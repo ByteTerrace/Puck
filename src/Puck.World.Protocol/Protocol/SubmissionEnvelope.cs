@@ -18,7 +18,8 @@ namespace Puck.World.Protocol;
 /// correlates back to this specific envelope — independent of <see cref="Sequence"/>, which orders arrival rather
 /// than identifying one submission.</param>
 /// <param name="OperationId">The stable operation identity carried through completion and persistence for a mutation
-/// payload. It is bound to the stamped actor and canonical payload bytes; non-mutation payloads may leave it empty.</param>
+/// payload. It is bound to the stamped actor and canonical payload bytes. The mutation ingress refuses an empty one, so
+/// the parameter carries no default: a non-mutation payload states <see cref="Guid.Empty"/> itself.</param>
 /// <param name="Principal">The acting identity the envelope is checked against — CLAIMED by the submitter, and
 /// (once a wire exists) validated against the connection's admitted principal set at the door before this envelope
 /// ever reaches the ordered domain. The local transport stamps the identity its own ingress door already resolved.</param>
@@ -30,7 +31,7 @@ public readonly record struct SubmissionEnvelope(
     long CorrelationId,
     WorldPrincipal Principal,
     WorldSubmissionPayload Payload,
-    Guid OperationId = default
+    Guid OperationId
 ) {
     /// <summary>The local stdin/loopback connection id — the only connection id that exists before a wire lands.</summary>
     public const int LocalConnectionId = 0;

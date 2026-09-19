@@ -231,7 +231,7 @@ public sealed class WorldCarryTangibilityLawTests {
         // Walk the carrier toward the wall in small per-tick steps (never one big jump — the sweep is a continuous
         // check from the ball's own previous position, not a teleport-safe one) far enough that an UNBLOCKED ball
         // would end up on the far side of the wall's near face.
-        for (var step = 0; (step < 8); step++) {
+        for (var step = 0; (step < 60); step++) {
             blockedCarrier.Pose(
                 pitchRadians: 0f,
                 rollRadians: 0f,
@@ -267,7 +267,7 @@ public sealed class WorldCarryTangibilityLawTests {
         );
         open.Step();
 
-        for (var step = 0; (step < 8); step++) {
+        for (var step = 0; (step < 60); step++) {
             openCarrier.Pose(
                 pitchRadians: 0f,
                 rollRadians: 0f,

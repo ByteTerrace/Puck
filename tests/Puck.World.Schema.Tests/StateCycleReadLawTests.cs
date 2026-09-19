@@ -37,7 +37,7 @@ public sealed class StateCycleReadLawTests {
         Max: max,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value,
+                Value: ((kind == CellKind.Fixed) ? CellValue.Fixed(rawBits: value) : CellValue.Int(value: value)),
                 Clock: clock
             )],
         Cycle: cycle
@@ -156,12 +156,12 @@ public sealed class StateCycleReadLawTests {
             Cells: [
                 new StateCell(
                     Key: CellName.Parse(candidate: "a"),
-                    Value: 0L,
+                    Value: CellValue.Int(value: 0L),
                     Cycle: new StateCycle(Power: 1)
                 ),
                 new StateCell(
                     Key: CellName.Parse(candidate: "b"),
-                    Value: 10L,
+                    Value: CellValue.Int(value: 10L),
                     Cycle: new StateCycle(
                         Power: 7,
                         TicksPerStep: 2
@@ -169,7 +169,7 @@ public sealed class StateCycleReadLawTests {
                 ),
                 new StateCell(
                     Key: CellName.Parse(candidate: "c"),
-                    Value: 4L
+                    Value: CellValue.Int(value: 4L)
                 ),
             ]
         );
@@ -341,7 +341,7 @@ public sealed class StateCycleReadLawTests {
             tick: 77UL
         );
         var settledRaw = cycle.SettledPhase(
-            baseValue: row.Cells![0].Value,
+            baseValue: row.Cells![0].Value.Raw,
             currentTick: 77UL,
             row: row
         );
@@ -628,7 +628,7 @@ public sealed class StateCycleReadLawTests {
                 Capacity: 4,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "0"),
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )],
                 Cycle: new StateCycle()
             ))
@@ -640,7 +640,7 @@ public sealed class StateCycleReadLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "k"),
-                        Value: 0L,
+                        Value: CellValue.Int(value: 0L),
                         Advance: new StateAdvance(
                             PerSecondDenominator: 1,
                             PerSecondNumerator: 1

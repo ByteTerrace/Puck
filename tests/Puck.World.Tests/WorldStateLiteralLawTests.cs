@@ -8,7 +8,7 @@ public sealed class WorldStateLiteralLawTests {
     private const long BeyondBinary32ExactInteger = 16_777_217L;
 
     [Fact]
-    public void ConsecutiveStateEffects_AreIndependentWhenALaterWriteRefuses() {
+    public void ConsecutiveStateEffects_RewindTogetherWhenALaterWriteRefuses() {
         var first = CellName.Parse(candidate: "atomic-first");
         var second = CellName.Parse(candidate: "atomic-second");
         var definition = Fixtures.BuildDocument() with {
@@ -18,7 +18,7 @@ public sealed class WorldStateLiteralLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
                 new WorldStateRow(
@@ -28,7 +28,7 @@ public sealed class WorldStateLiteralLawTests {
                 Max: 1L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
             ]),
@@ -53,12 +53,12 @@ public sealed class WorldStateLiteralLawTests {
         fixture.Step();
 
         Assert.Equal(
-            expected: 1L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == first)).Cells!.Single().Value
+            expected: 0L,
+            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == first)).Cells!.Single().Value.Raw
         );
         Assert.Equal(
             expected: 0L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == second)).Cells!.Single().Value
+            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == second)).Cells!.Single().Value.Raw
         );
     }
     [Fact]
@@ -72,7 +72,7 @@ public sealed class WorldStateLiteralLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: BeyondBinary32ExactInteger
+                        Value: CellValue.Int(value: BeyondBinary32ExactInteger)
                     )]
             ),
                 new WorldStateRow(
@@ -80,7 +80,7 @@ public sealed class WorldStateLiteralLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
             ]),
@@ -104,7 +104,7 @@ public sealed class WorldStateLiteralLawTests {
 
         Assert.Equal(
             expected: BeyondBinary32ExactInteger,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value
+            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value.Raw
         );
     }
     [Fact]
@@ -119,7 +119,7 @@ public sealed class WorldStateLiteralLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: Value
+                        Value: CellValue.Int(value: Value)
                     )]
             ),
                 new WorldStateRow(
@@ -127,7 +127,7 @@ public sealed class WorldStateLiteralLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
             ]),
@@ -151,7 +151,7 @@ public sealed class WorldStateLiteralLawTests {
 
         Assert.Equal(
             expected: 1L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value
+            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value.Raw
         );
     }
     [Fact]
@@ -163,7 +163,7 @@ public sealed class WorldStateLiteralLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             )]),
         };
@@ -177,13 +177,13 @@ public sealed class WorldStateLiteralLawTests {
             Effects: []
         );
 
-        var exception = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.Compile(
-            definition: definition,
+        var exception = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.Compile(
+            context: WorldFactsCompiler.Context(definition: definition),
             rule: rule
         ));
 
         Assert.Equal(
-            expected: RuleRefusal.StateCellUnaddressable,
+            expected: Puck.State.Rules.RuleRefusal.StateCellUnaddressable,
             actual: exception.Refusal
         );
         Assert.Contains(

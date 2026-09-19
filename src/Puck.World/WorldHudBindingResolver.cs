@@ -107,23 +107,21 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
         text = string.Empty;
 
         var resolved = (target
-            ? WorldStateReader.TryRead(
+            ? WorldStateReader.TryReadValue(
                 definition: m_client.Definition,
                 key: cellKey,
-                rawValue: out var rawValue,
                 row: out var row,
                 rowName: name,
-                text: out var cellText,
+                value: out var value,
                 tick: m_client.Tick,
                 engineTick: m_client.EngineTick
             )
-            : WorldStateReader.TryReadEased(
+            : WorldStateReader.TryReadEasedValue(
                 definition: m_client.Definition,
                 key: cellKey,
-                rawValue: out rawValue,
                 row: out row,
                 rowName: name,
-                text: out cellText,
+                value: out value,
                 tick: m_client.Tick,
                 engineTick: m_client.EngineTick
             )
@@ -132,57 +130,60 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
         if (
             !resolved ||
             (row is null) ||
-            (rawValue is not { } raw)
+            !value.HasValue
         ) {
             return;
         }
 
-        switch (row.Kind) {
+        switch (value.Kind) {
             case CellKind.Int:
-                text = raw.ToString(provider: CultureInfo.InvariantCulture);
-
-                if (
-                    (row.Min is { } lo) &&
-                    (row.Max is { } hi) &&
-                    (hi > lo)
-                ) {
-                    fraction = Math.Clamp(
-                        max: 1f,
-                        min: 0f,
-                        value: (((float)(raw - lo)) / (hi - lo))
-                    );
-                }
+                text = value.AsInt.ToString(provider: CultureInfo.InvariantCulture);
+                fraction = Fraction(
+                    raw: value.AsInt,
+                    row: row
+                );
 
                 break;
             case CellKind.Fixed:
-                text = FixedQ4816.FromRawBits(value: raw).ToString();
-
-                if (
-                    (row.Min is { } floLimit) &&
-                    (row.Max is { } fhiLimit) &&
-                    (fhiLimit > floLimit)
-                ) {
-                    fraction = Math.Clamp(
-                        max: 1f,
-                        min: 0f,
-                        value: (((float)(raw - floLimit)) / (fhiLimit - floLimit))
-                    );
-                }
+                text = FixedQ4816.FromRawBits(value: value.AsFixed).ToString();
+                fraction = Fraction(
+                    raw: value.AsFixed,
+                    row: row
+                );
 
                 break;
             case CellKind.Bool:
-                text = ((raw != 0)
+                text = (value.AsBool
                     ? "true"
                     : "false"
                 );
 
                 break;
             case CellKind.Text:
-                text = (cellText ?? string.Empty);
+                text = (value.AsText ?? string.Empty);
 
                 break;
+            case CellKind.Vector:
+                // A vector has no scalar reading and no envelope, so the gauge draws empty and the label names the
+                // shape rather than a component: a panel bound to one is an authoring mistake an operator reads off
+                // the panel, not a throw on the render path.
+                text = $"vector[{value.AsVector.Length.ToString(provider: CultureInfo.InvariantCulture)}]";
+
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(paramName: nameof(row.Kind));
         }
     }
+    // Cells share one envelope per row and carry none of their own, so a keyed row's gauge is exactly as meaningful
+    // as a slot's; a row declaring no range draws empty.
+    private static float Fraction(WorldStateRow row, long raw) => (((row.Min is { } lo) && (row.Max is { } hi) && (hi > lo))
+        ? Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: (((float)(raw - lo)) / (hi - lo))
+        )
+        : 0f
+    );
     private void ResolveTick(out float fraction, out string text) {
         var tick = m_client.Tick;
 

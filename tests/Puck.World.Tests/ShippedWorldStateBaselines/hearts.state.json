@@ -1,0 +1,3469 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 288,
+  "engineTick": 483840,
+  "hashes": {
+    "authoritative": "3d62c6a2673b1ea4",
+    "capture": "81b5de1c8e1d585d",
+    "pose": "cbf29ce484222325",
+    "world": "fd21ea491ab8b3cf"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "heartsCards",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          },
+          {
+            "key": "14",
+            "value": 14
+          },
+          {
+            "key": "15",
+            "value": 15
+          },
+          {
+            "key": "16",
+            "value": 16
+          },
+          {
+            "key": "17",
+            "value": 17
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": 19
+          },
+          {
+            "key": "20",
+            "value": 20
+          },
+          {
+            "key": "21",
+            "value": 21
+          },
+          {
+            "key": "22",
+            "value": 22
+          },
+          {
+            "key": "23",
+            "value": 23
+          },
+          {
+            "key": "24",
+            "value": 24
+          },
+          {
+            "key": "25",
+            "value": 25
+          },
+          {
+            "key": "26",
+            "value": 26
+          },
+          {
+            "key": "27",
+            "value": 27
+          },
+          {
+            "key": "28",
+            "value": 28
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "30",
+            "value": 30
+          },
+          {
+            "key": "31",
+            "value": 31
+          },
+          {
+            "key": "32",
+            "value": 32
+          },
+          {
+            "key": "33",
+            "value": 33
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "35",
+            "value": 35
+          },
+          {
+            "key": "36",
+            "value": 36
+          },
+          {
+            "key": "37",
+            "value": 37
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "39",
+            "value": 39
+          },
+          {
+            "key": "40",
+            "value": 40
+          },
+          {
+            "key": "41",
+            "value": 41
+          },
+          {
+            "key": "42",
+            "value": 42
+          },
+          {
+            "key": "43",
+            "value": 43
+          },
+          {
+            "key": "44",
+            "value": 44
+          },
+          {
+            "key": "45",
+            "value": 45
+          },
+          {
+            "key": "46",
+            "value": 46
+          },
+          {
+            "key": "47",
+            "value": 47
+          },
+          {
+            "key": "48",
+            "value": 48
+          },
+          {
+            "key": "49",
+            "value": 49
+          },
+          {
+            "key": "50",
+            "value": 50
+          },
+          {
+            "key": "51",
+            "value": 51
+          }
+        ]
+      },
+      {
+        "name": "heartsSuit",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 1
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 1
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 1
+          },
+          {
+            "key": "21",
+            "value": 1
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 1
+          },
+          {
+            "key": "24",
+            "value": 1
+          },
+          {
+            "key": "25",
+            "value": 1
+          },
+          {
+            "key": "26",
+            "value": 2
+          },
+          {
+            "key": "27",
+            "value": 2
+          },
+          {
+            "key": "28",
+            "value": 2
+          },
+          {
+            "key": "29",
+            "value": 2
+          },
+          {
+            "key": "30",
+            "value": 2
+          },
+          {
+            "key": "31",
+            "value": 2
+          },
+          {
+            "key": "32",
+            "value": 2
+          },
+          {
+            "key": "33",
+            "value": 2
+          },
+          {
+            "key": "34",
+            "value": 2
+          },
+          {
+            "key": "35",
+            "value": 2
+          },
+          {
+            "key": "36",
+            "value": 2
+          },
+          {
+            "key": "37",
+            "value": 2
+          },
+          {
+            "key": "38",
+            "value": 2
+          },
+          {
+            "key": "39",
+            "value": 3
+          },
+          {
+            "key": "40",
+            "value": 3
+          },
+          {
+            "key": "41",
+            "value": 3
+          },
+          {
+            "key": "42",
+            "value": 3
+          },
+          {
+            "key": "43",
+            "value": 3
+          },
+          {
+            "key": "44",
+            "value": 3
+          },
+          {
+            "key": "45",
+            "value": 3
+          },
+          {
+            "key": "46",
+            "value": 3
+          },
+          {
+            "key": "47",
+            "value": 3
+          },
+          {
+            "key": "48",
+            "value": 3
+          },
+          {
+            "key": "49",
+            "value": 3
+          },
+          {
+            "key": "50",
+            "value": 3
+          },
+          {
+            "key": "51",
+            "value": 3
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "heartsRank",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 3
+          },
+          {
+            "key": "2",
+            "value": 4
+          },
+          {
+            "key": "3",
+            "value": 5
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 7
+          },
+          {
+            "key": "6",
+            "value": 8
+          },
+          {
+            "key": "7",
+            "value": 9
+          },
+          {
+            "key": "8",
+            "value": 10
+          },
+          {
+            "key": "9",
+            "value": 11
+          },
+          {
+            "key": "10",
+            "value": 12
+          },
+          {
+            "key": "11",
+            "value": 13
+          },
+          {
+            "key": "12",
+            "value": 14
+          },
+          {
+            "key": "13",
+            "value": 2
+          },
+          {
+            "key": "14",
+            "value": 3
+          },
+          {
+            "key": "15",
+            "value": 4
+          },
+          {
+            "key": "16",
+            "value": 5
+          },
+          {
+            "key": "17",
+            "value": 6
+          },
+          {
+            "key": "18",
+            "value": 7
+          },
+          {
+            "key": "19",
+            "value": 8
+          },
+          {
+            "key": "20",
+            "value": 9
+          },
+          {
+            "key": "21",
+            "value": 10
+          },
+          {
+            "key": "22",
+            "value": 11
+          },
+          {
+            "key": "23",
+            "value": 12
+          },
+          {
+            "key": "24",
+            "value": 13
+          },
+          {
+            "key": "25",
+            "value": 14
+          },
+          {
+            "key": "26",
+            "value": 2
+          },
+          {
+            "key": "27",
+            "value": 3
+          },
+          {
+            "key": "28",
+            "value": 4
+          },
+          {
+            "key": "29",
+            "value": 5
+          },
+          {
+            "key": "30",
+            "value": 6
+          },
+          {
+            "key": "31",
+            "value": 7
+          },
+          {
+            "key": "32",
+            "value": 8
+          },
+          {
+            "key": "33",
+            "value": 9
+          },
+          {
+            "key": "34",
+            "value": 10
+          },
+          {
+            "key": "35",
+            "value": 11
+          },
+          {
+            "key": "36",
+            "value": 12
+          },
+          {
+            "key": "37",
+            "value": 13
+          },
+          {
+            "key": "38",
+            "value": 14
+          },
+          {
+            "key": "39",
+            "value": 2
+          },
+          {
+            "key": "40",
+            "value": 3
+          },
+          {
+            "key": "41",
+            "value": 4
+          },
+          {
+            "key": "42",
+            "value": 5
+          },
+          {
+            "key": "43",
+            "value": 6
+          },
+          {
+            "key": "44",
+            "value": 7
+          },
+          {
+            "key": "45",
+            "value": 8
+          },
+          {
+            "key": "46",
+            "value": 9
+          },
+          {
+            "key": "47",
+            "value": 10
+          },
+          {
+            "key": "48",
+            "value": 11
+          },
+          {
+            "key": "49",
+            "value": 12
+          },
+          {
+            "key": "50",
+            "value": 13
+          },
+          {
+            "key": "51",
+            "value": 14
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "heartsPenalty",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 1
+          },
+          {
+            "key": "27",
+            "value": 1
+          },
+          {
+            "key": "28",
+            "value": 1
+          },
+          {
+            "key": "29",
+            "value": 1
+          },
+          {
+            "key": "30",
+            "value": 1
+          },
+          {
+            "key": "31",
+            "value": 1
+          },
+          {
+            "key": "32",
+            "value": 1
+          },
+          {
+            "key": "33",
+            "value": 1
+          },
+          {
+            "key": "34",
+            "value": 1
+          },
+          {
+            "key": "35",
+            "value": 1
+          },
+          {
+            "key": "36",
+            "value": 1
+          },
+          {
+            "key": "37",
+            "value": 1
+          },
+          {
+            "key": "38",
+            "value": 1
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 0
+          },
+          {
+            "key": "49",
+            "value": 13
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "heartsDeck",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsHand1",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "5",
+            "value": true
+          },
+          {
+            "key": "7",
+            "value": true
+          },
+          {
+            "key": "19",
+            "value": true
+          },
+          {
+            "key": "25",
+            "value": true
+          },
+          {
+            "key": "30",
+            "value": true
+          },
+          {
+            "key": "32",
+            "value": true
+          },
+          {
+            "key": "33",
+            "value": true
+          },
+          {
+            "key": "37",
+            "value": true
+          },
+          {
+            "key": "43",
+            "value": true
+          },
+          {
+            "key": "47",
+            "value": true
+          },
+          {
+            "key": "51",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsHand2",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "2",
+            "value": true
+          },
+          {
+            "key": "3",
+            "value": true
+          },
+          {
+            "key": "13",
+            "value": true
+          },
+          {
+            "key": "15",
+            "value": true
+          },
+          {
+            "key": "17",
+            "value": true
+          },
+          {
+            "key": "21",
+            "value": true
+          },
+          {
+            "key": "27",
+            "value": true
+          },
+          {
+            "key": "28",
+            "value": true
+          },
+          {
+            "key": "31",
+            "value": true
+          },
+          {
+            "key": "36",
+            "value": true
+          },
+          {
+            "key": "46",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsHand3",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "4",
+            "value": true
+          },
+          {
+            "key": "11",
+            "value": true
+          },
+          {
+            "key": "12",
+            "value": true
+          },
+          {
+            "key": "14",
+            "value": true
+          },
+          {
+            "key": "16",
+            "value": true
+          },
+          {
+            "key": "18",
+            "value": true
+          },
+          {
+            "key": "23",
+            "value": true
+          },
+          {
+            "key": "26",
+            "value": true
+          },
+          {
+            "key": "29",
+            "value": true
+          },
+          {
+            "key": "35",
+            "value": true
+          },
+          {
+            "key": "38",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsHand4",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "6",
+            "value": true
+          },
+          {
+            "key": "8",
+            "value": true
+          },
+          {
+            "key": "20",
+            "value": true
+          },
+          {
+            "key": "22",
+            "value": true
+          },
+          {
+            "key": "24",
+            "value": true
+          },
+          {
+            "key": "34",
+            "value": true
+          },
+          {
+            "key": "40",
+            "value": true
+          },
+          {
+            "key": "41",
+            "value": true
+          },
+          {
+            "key": "44",
+            "value": true
+          },
+          {
+            "key": "48",
+            "value": true
+          },
+          {
+            "key": "50",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsPass1",
+        "kind": "Bool",
+        "capacity": 3,
+        "cells": [],
+        "phaseOf": "heartsPassPhase",
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsPass2",
+        "kind": "Bool",
+        "capacity": 3,
+        "cells": [],
+        "phaseOf": "heartsPassPhase",
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsPass3",
+        "kind": "Bool",
+        "capacity": 3,
+        "cells": [],
+        "phaseOf": "heartsPassPhase",
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsPass4",
+        "kind": "Bool",
+        "capacity": 3,
+        "cells": [],
+        "phaseOf": "heartsPassPhase",
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsTrick",
+        "kind": "Bool",
+        "capacity": 4,
+        "cells": [],
+        "phaseOf": "heartsTrickPhase",
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsWon1",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsWon2",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsWon3",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "39",
+            "value": true
+          },
+          {
+            "key": "42",
+            "value": true
+          },
+          {
+            "key": "45",
+            "value": true
+          },
+          {
+            "key": "49",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsWon4",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": true
+          },
+          {
+            "key": "1",
+            "value": true
+          },
+          {
+            "key": "9",
+            "value": true
+          },
+          {
+            "key": "10",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "heartsCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "heartsPassPhase",
+        "kind": "Int",
+        "cells": [],
+        "phase": {
+          "sequence": 0
+        }
+      },
+      {
+        "name": "heartsTrickPhase",
+        "kind": "Int",
+        "cells": [],
+        "phase": {
+          "sequence": 0
+        }
+      },
+      {
+        "name": "heartsStream",
+        "kind": "Int",
+        "value": 1608163715,
+        "draw": {
+          "generator": {
+            "source": "StreamDraw",
+            "bound": 1,
+            "mode": "WithReplacement"
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 52
+      },
+      {
+        "name": "heartsEvents",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 3
+          }
+        ],
+        "historyCursor": 2,
+        "domain": {
+          "$type": "ring",
+          "capacity": 16
+        }
+      },
+      {
+        "name": "heartsSuitMask",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "0",
+            "value": 8191
+          },
+          {
+            "key": "1",
+            "value": 67100672
+          },
+          {
+            "key": "2",
+            "value": 549688705024
+          },
+          {
+            "key": "3",
+            "value": 4503049871556608
+          }
+        ]
+      },
+      {
+        "name": "heartsPointMask",
+        "kind": "Int",
+        "value": 563499642126336
+      },
+      {
+        "name": "heartsHandMask",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "1",
+            "value": 2401484826738848
+          },
+          {
+            "key": "2",
+            "value": 70440016060428
+          },
+          {
+            "key": "3",
+            "value": 309850363920
+          },
+          {
+            "key": "4",
+            "value": 1428282806370624
+          }
+        ]
+      },
+      {
+        "name": "heartsTricks",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "4",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "heartsRound",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 13
+          },
+          {
+            "key": "4",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "heartsScore",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "heartsPassOffset",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 2
+          },
+          {
+            "key": "4",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "heartsAct",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "seat",
+            "value": 3
+          },
+          {
+            "key": "card",
+            "value": 49
+          },
+          {
+            "key": "request",
+            "value": 24
+          },
+          {
+            "key": "applied",
+            "value": 24
+          },
+          {
+            "key": "result",
+            "value": 1
+          },
+          {
+            "key": "ready",
+            "value": 0
+          },
+          {
+            "key": "seatOk",
+            "value": 1
+          },
+          {
+            "key": "inRange",
+            "value": 1
+          },
+          {
+            "key": "safeSeat",
+            "value": 3
+          },
+          {
+            "key": "safeCard",
+            "value": 49
+          },
+          {
+            "key": "mask",
+            "value": 563259803785232
+          },
+          {
+            "key": "cardSuit",
+            "value": 3
+          },
+          {
+            "key": "cardRank",
+            "value": 12
+          },
+          {
+            "key": "cardPoints",
+            "value": 13
+          },
+          {
+            "key": "ledMask",
+            "value": 4503049871556608
+          },
+          {
+            "key": "inHand",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "heartsTable",
+        "kind": "Int",
+        "capacity": 32,
+        "cells": [
+          {
+            "key": "stage",
+            "value": 3
+          },
+          {
+            "key": "deal",
+            "value": 0
+          },
+          {
+            "key": "handNo",
+            "value": 1
+          },
+          {
+            "key": "passDir",
+            "value": 1
+          },
+          {
+            "key": "turn",
+            "value": 3
+          },
+          {
+            "key": "leader",
+            "value": 3
+          },
+          {
+            "key": "ledSuit",
+            "value": -1
+          },
+          {
+            "key": "bestSeat",
+            "value": 0
+          },
+          {
+            "key": "bestRank",
+            "value": 0
+          },
+          {
+            "key": "inTrick",
+            "value": 0
+          },
+          {
+            "key": "trickNo",
+            "value": 2
+          },
+          {
+            "key": "trickPoints",
+            "value": 0
+          },
+          {
+            "key": "trickReady",
+            "value": 0
+          },
+          {
+            "key": "logSeat",
+            "value": 0
+          },
+          {
+            "key": "broken",
+            "value": 0
+          },
+          {
+            "key": "maskPending",
+            "value": 0
+          },
+          {
+            "key": "sortPending",
+            "value": 0
+          },
+          {
+            "key": "openPending",
+            "value": 0
+          },
+          {
+            "key": "passReady",
+            "value": 0
+          },
+          {
+            "key": "deliverPending",
+            "value": 0
+          },
+          {
+            "key": "rankPending",
+            "value": 0
+          },
+          {
+            "key": "rankScore",
+            "value": 0
+          },
+          {
+            "key": "refused",
+            "value": 4
+          },
+          {
+            "key": "accepted",
+            "value": 20
+          },
+          {
+            "key": "canonRank",
+            "value": 0
+          },
+          {
+            "key": "collectPending",
+            "value": 0
+          },
+          {
+            "key": "moon",
+            "value": 0
+          }
+        ]
+      }
+    ],
+    "families": [
+      {
+        "name": "heartsHand",
+        "size": 4,
+        "indices": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "members": null
+      },
+      {
+        "name": "heartsWon",
+        "size": 4,
+        "indices": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "members": null
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "heartsCards",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 17,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 21,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 25,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 27,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 28,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 29,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 31,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 32,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 33,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 35,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 37,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 38,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 39,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 40,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 41,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 42,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 43,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 44,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 45,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 46,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 47,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 48,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 49,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 50,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 51,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsSuit",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsRank",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 14,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsPenalty",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsDeck",
+      "cells": []
+    },
+    {
+      "row": "heartsHand1",
+      "cells": [
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsHand2",
+      "cells": [
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsHand3",
+      "cells": [
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsHand4",
+      "cells": [
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsPass1",
+      "cells": []
+    },
+    {
+      "row": "heartsPass2",
+      "cells": []
+    },
+    {
+      "row": "heartsPass3",
+      "cells": []
+    },
+    {
+      "row": "heartsPass4",
+      "cells": []
+    },
+    {
+      "row": "heartsTrick",
+      "cells": []
+    },
+    {
+      "row": "heartsWon1",
+      "cells": []
+    },
+    {
+      "row": "heartsWon2",
+      "cells": []
+    },
+    {
+      "row": "heartsWon3",
+      "cells": [
+        {
+          "key": "39",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsWon4",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsPassPhase",
+      "cells": []
+    },
+    {
+      "row": "heartsTrickPhase",
+      "cells": []
+    },
+    {
+      "row": "heartsStream",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1608163715,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsEvents",
+      "cells": [
+        {
+          "key": "0",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsSuitMask",
+      "cells": [
+        {
+          "key": "0",
+          "value": 8191,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 67100672,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 549688705024,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 4503049871556608,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsPointMask",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 563499642126336,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsHandMask",
+      "cells": [
+        {
+          "key": "1",
+          "value": 2401484826738848,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 70440016060428,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 309850363920,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1428282806370624,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsTricks",
+      "cells": [
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsRound",
+      "cells": [
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsScore",
+      "cells": [
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsPassOffset",
+      "cells": [
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsAct",
+      "cells": [
+        {
+          "key": "seat",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "card",
+          "value": 49,
+          "text": null
+        },
+        {
+          "key": "request",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "applied",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "result",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "ready",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "seatOk",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "inRange",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "safeSeat",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "safeCard",
+          "value": 49,
+          "text": null
+        },
+        {
+          "key": "mask",
+          "value": 563259803785232,
+          "text": null
+        },
+        {
+          "key": "cardSuit",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "cardRank",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "cardPoints",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "ledMask",
+          "value": 4503049871556608,
+          "text": null
+        },
+        {
+          "key": "inHand",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "heartsTable",
+      "cells": [
+        {
+          "key": "stage",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "deal",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "handNo",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "passDir",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "turn",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "leader",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "ledSuit",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "bestSeat",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "bestRank",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "inTrick",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "trickNo",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "trickPoints",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "trickReady",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "logSeat",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "broken",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "maskPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "sortPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "openPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "passReady",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "deliverPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "rankPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "rankScore",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "refused",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "accepted",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "canonRank",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "collectPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "moon",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

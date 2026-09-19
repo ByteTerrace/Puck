@@ -1,5 +1,10 @@
 using Xunit;
 
+using RuleCost = Puck.State.Rules.RuleCost;
+using RulePinnedCell = Puck.State.Rules.RulePinnedCell;
+using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
+using RuleWorkContributor = Puck.State.Rules.RuleWorkContributor;
+
 namespace Puck.World.Schema.Tests;
 
 /// <summary>All rule checks sum; distinct discriminator values may share firing costs only.</summary>
@@ -35,7 +40,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             Capacity: capacity,
             Cells: [new StateCell(
                     CellName.Parse(candidate: "0"),
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
     private static ActionPredicate PhaseIs(long value) =>
@@ -60,7 +65,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
     private static ActionPredicate SubIs(long value) =>
@@ -293,7 +298,10 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 value: 0
             )
         );
-        var linesA = WorldRuleWorkBudget.Contributors(definition: Document(ruleA)).Single();
+        // A cell key is bound to the catalog that minted it, so the pin renders against the same document the
+        // contributors were compiled from.
+        var documentA = Document(ruleA);
+        var linesA = WorldRuleWorkBudget.Contributors(definition: documentA).Single();
         var check = linesA.CheckUnits;
         var firing = linesA.FiringUnits;
 
@@ -373,8 +381,8 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             )
         );
         Assert.Equal(
-            $"sub.{WorldStateRow.SlotKey}<=0",
-            linesA.Discriminators.Single().Describe()
+            "sub.$value<=0",
+            linesA.Discriminators.Single().Describe(catalog: documentA.StateCatalog)
         );
     }
     [Fact]
@@ -476,9 +484,10 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             FiringUnits: 100,
             WorkUnits: 110,
             Discriminators: [new RulePinnedCell(
-                    Cell: "phase.value",
                     High: value,
-                    Low: value
+                    Key: PhaseCell.Key,
+                    Low: value,
+                    RowOrdinal: PhaseCell.RowOrdinal
                 )]
         )).ToArray();
 
@@ -486,7 +495,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             (3L, 130L),
             RuleWorkBudget.Tally(
                 contributors: lines,
-                writers: new Dictionary<string, long>()
+                writers: new Dictionary<(int RowOrdinal, CellKey Key), long>()
             )
         );
         // A preceding writer can admit another phase; its own cost belongs to its own contributor.
@@ -494,8 +503,11 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             (3L, 230L),
             RuleWorkBudget.Tally(
                 contributors: lines,
-                writers: new Dictionary<string, long> { ["phase.value"] = 1 }
+                writers: new Dictionary<(int RowOrdinal, CellKey Key), long> { [PhaseCell] = 1 }
             )
         );
     }
+
+    // The one pinned cell these exclusion lines discriminate on, addressed the way a compiled gate pins it.
+    private static readonly (int RowOrdinal, CellKey Key) PhaseCell = (0, default);
 }

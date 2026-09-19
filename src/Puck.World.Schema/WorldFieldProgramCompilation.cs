@@ -386,12 +386,11 @@ public sealed class WorldFieldProgram {
             reaction.Amount,
             index
         );
-        var tag = RequireState(
-            state,
-            reaction.Tag,
-            StateStorageShape.Keyed,
-            StateValueKind.Int,
-            $"fields.reactions[{index}].tag"
+        var tag = RequireKeyedState(
+            kind: CellKind.Int,
+            location: $"fields.reactions[{index}].tag",
+            name: reaction.Tag,
+            state: state
         );
         var target = field(
             reaction.Field,
@@ -414,12 +413,11 @@ public sealed class WorldFieldProgram {
             reaction.Value,
             index
         );
-        var row = RequireState(
-            state,
-            reaction.Row,
-            StateStorageShape.Keyed,
-            StateValueKind.Int,
-            $"fields.reactions[{index}].row"
+        var row = RequireKeyedState(
+            kind: CellKind.Int,
+            location: $"fields.reactions[{index}].row",
+            name: reaction.Row,
+            state: state
         );
 
         return new WorldFieldNode.Expose(
@@ -449,11 +447,11 @@ public sealed class WorldFieldProgram {
         )).ToImmutableArray();
         var spillRow = ((reaction.SpillRow is { } spillName)
             ? RequireState(
+                kind: CellKind.Fixed,
                 location: $"fields.reactions[{index}].spillRow",
                 name: spillName,
-                state: state,
-                storage: StateStorageShape.Slot,
-                valueKind: StateValueKind.Fixed
+                shape: RowShape.Slot,
+                state: state
             )
             : default
         );
@@ -528,7 +526,10 @@ public sealed class WorldFieldProgram {
         laterStateReads: later.StateReads.AsSpan(),
         laterStateWrites: later.StateWrites.AsSpan()
     );
-    private static StateHandle RequireState(StateCatalog state, string name, StateStorageShape storage, StateValueKind valueKind, string location) {
+    // A body-coupled reaction addresses its row one cell per body, under the body's own key, so every shape but
+    // Slot serves it: the predicate the document validator admits the row under (StateRow.IsKeyed), rather than
+    // any one RowShape case.
+    private static StateHandle RequireKeyedState(StateCatalog state, string name, CellKind kind, string location) {
         if (!state.TryResolve(
             handle: out var handle,
             lane: StateLane.Document,
@@ -540,10 +541,30 @@ public sealed class WorldFieldProgram {
         var descriptor = state[handle];
 
         if (
-            (descriptor.Storage != storage) ||
-            (descriptor.ValueKind != valueKind)
+            (descriptor.Shape == RowShape.Slot) ||
+            (descriptor.Kind != kind)
         ) {
-            throw new InvalidOperationException(message: $"{location} requires a {storage} {valueKind} world state row, but '{name}' is {descriptor.Storage} {descriptor.ValueKind}.");
+            throw new InvalidOperationException(message: $"{location} requires a keyed {kind} world state row, but '{name}' is {descriptor.Shape} {descriptor.Kind}.");
+        }
+
+        return handle;
+    }
+    private static StateHandle RequireState(StateCatalog state, string name, RowShape shape, CellKind kind, string location) {
+        if (!state.TryResolve(
+            handle: out var handle,
+            lane: StateLane.Document,
+            name: name
+        )) {
+            throw new InvalidOperationException(message: $"{location} names undeclared world state row '{name}'.");
+        }
+
+        var descriptor = state[handle];
+
+        if (
+            (descriptor.Shape != shape) ||
+            (descriptor.Kind != kind)
+        ) {
+            throw new InvalidOperationException(message: $"{location} requires a {shape} {kind} world state row, but '{name}' is {descriptor.Shape} {descriptor.Kind}.");
         }
 
         return handle;
@@ -560,7 +581,7 @@ public sealed class WorldFieldProgram {
     /// <returns>The immutable typed reaction program.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="state"/> is null.</exception>
     /// <exception cref="InvalidOperationException">A field or state dependency cannot be resolved to its required
-    /// storage and value shape.</exception>
+    /// row shape and cell kind.</exception>
     public static WorldFieldProgram Compile(WorldFieldsSection document, StateCatalog state) {
         ArgumentNullException.ThrowIfNull(argument: document);
         ArgumentNullException.ThrowIfNull(argument: state);
@@ -583,11 +604,13 @@ public sealed class WorldFieldProgram {
                 throw new InvalidOperationException(message: $"fields declares duplicate row '{row.Name}'.");
             }
 
+            // RowShape.Lattice alone says only that the row's domain is cellsOf; the physical field row is the
+            // Fixed one, since a discrete board over a cellsOf domain is refused anything but Int or Bool cells.
             var stateHandle = RequireState(
                 state: state,
                 name: row.Name,
-                storage: StateStorageShape.Lattice,
-                valueKind: StateValueKind.Fixed,
+                shape: RowShape.Lattice,
+                kind: CellKind.Fixed,
                 location: $"fields[{index}]"
             );
 
@@ -622,11 +645,11 @@ public sealed class WorldFieldProgram {
             return new WorldFieldScalarInput(
                 Literal: default,
                 State: RequireState(
+                    kind: CellKind.Fixed,
                     location: $"fields.reactions[{reaction}] scalar",
                     name: row,
-                    state: state,
-                    storage: StateStorageShape.Slot,
-                    valueKind: StateValueKind.Fixed
+                    shape: RowShape.Slot,
+                    state: state
                 )
             );
         }

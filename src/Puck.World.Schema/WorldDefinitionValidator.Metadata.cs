@@ -94,9 +94,9 @@ public static partial class WorldDefinitionValidator {
             value: out var row
         ) &&
             (row is { Kind: CellKind.Fixed, IsSlot: true }) &&
-            (row.Cells![0].Value <= 0L)
+            (row.Cells![0].Value.AsFixed <= 0L)
         ) {
-            errors.Add(item: $"{path} row '{name}' carries {((double)FixedQ4816.FromRawBits(value: row.Cells[0].Value)):0.####} — a locomotion rate must be positive.");
+            errors.Add(item: $"{path} row '{name}' carries {((double)FixedQ4816.FromRawBits(value: row.Cells[0].Value.AsFixed)):0.####} — a locomotion rate must be positive.");
         }
     }
     // The gravitational field (SIM-AFFECTING). The constant is non-negative and the softening length positive (a

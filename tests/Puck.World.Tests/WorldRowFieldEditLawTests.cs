@@ -33,7 +33,7 @@ public sealed class WorldRowFieldEditLawTests {
         CellKind.Text,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Text: text
+                Value: CellValue.Text(value: text)
             )]
     );
     private static HostRow Build(WorldPrototype? moth = null, IReadOnlyList<WorldStateRow>? state = null) => HostRow.Build(
@@ -216,7 +216,7 @@ public sealed class WorldRowFieldEditLawTests {
             CellKind.Text,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: "[0,0,0,1]"
+                    Value: CellValue.Text(value: "[0,0,0,1]")
                 )]
         );
         var bound = System.Text.Json.JsonSerializer.Deserialize<Puck.Assets.Documents.DocumentQuaternion>(
@@ -548,7 +548,7 @@ public sealed class WorldRowFieldEditLawTests {
             CellKind.Text,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: "[0,0,0,1]"
+                    Value: CellValue.Text(value: "[0,0,0,1]")
                 )]
         );
         using var row = Build(state: [armRot]);

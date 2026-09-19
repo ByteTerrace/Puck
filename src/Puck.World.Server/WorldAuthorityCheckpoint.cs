@@ -7,7 +7,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>One buffered live-edit op awaiting the next <c>Step</c>'s drain — the checkpointed mirror of
-/// <c>WorldServer</c>'s own private <c>PendingOp</c> union, carrying the identical payload under a public shape a
+/// <c>WorldServer</c>'s own private <c>WorldPendingOp</c> union, carrying the identical payload under a public shape a
 /// checkpoint's record graph can hold.</summary>
 public abstract record WorldPendingOpCheckpoint {
     /// <summary>A buffered document mutation.</summary>
@@ -188,7 +188,7 @@ public sealed record WorldAuthorityHostRowCheckpoint(
 /// captured definition declares a field lattice.
 /// </summary>
 public sealed record WorldAuthorityCheckpoint(
-    WorldServer.WorldServerCheckpoint Server,
+    WorldServerCheckpoint Server,
     WorldPopulation.WorldPopulationCheckpoint Population,
     WorldGrants.WorldGrantsCheckpoint Grants,
     WorldTransferEscrow.WorldTransferEscrowCheckpoint Escrow,
@@ -197,7 +197,7 @@ public sealed record WorldAuthorityCheckpoint(
     WorldOwnedWorlds.WorldOwnedWorldsCheckpoint OwnedWorlds,
     WorldAuthorityHostRowCheckpoint HostRow,
     FieldLattice.Checkpoint? Fields = null,
-    SearchCheckpoint? Search = null,
+    ArenaSearchCheckpoint? Search = null,
     WorldBoardEnforcementCheckpoint? BoardEnforcement = null,
     WorldMachineHostCheckpoint? Machines = null
 );

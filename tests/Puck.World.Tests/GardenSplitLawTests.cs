@@ -6,6 +6,7 @@ namespace Puck.World.Tests;
 /// <summary>Game imports retain their current rules, state, patterns, and topology in authored order.
 /// Chess's placement keys and parent frames remain valid when composition changes body ordering.
 /// Gameplay laws separately check behavior, so authoring can evolve without reversing changes to a migration fixture.</summary>
+[Collection(name: DocumentCompositionCollection.Name)]
 public sealed class GardenSplitLawTests {
     private static HashSet<string> KeysAsPlacementIds(WorldDefinition definition, string rowName) {
         var row = WorldDefinitionRows.FindStateRow(

@@ -301,7 +301,7 @@ public sealed class SolidFieldGridLawTests {
                 fixture.Step(stepTicks: stepTicks);
 
                 if ((tick % 30) == 0) {
-                    trace[((tick / 30) - 1)] = WorldRuntimeStateHash.HashAuthoritative(
+                    trace[((tick / 30) - 1)] = WorldStateHashComposition.HashAuthoritative(
                         server: fixture.Server,
                         tick: ((ulong)tick)
                     );

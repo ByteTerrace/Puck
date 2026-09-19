@@ -13,16 +13,16 @@ public sealed class WorldPhaseOrderLawTests {
         CellKind.Int,
         Cells: [new(
                 CellName.Parse(candidate: "0"),
-                1
+                CellValue.Int(value: 1)
             ), new(
                 CellName.Parse(candidate: "1"),
-                2
+                CellValue.Int(value: 2)
             ), new(
                 CellName.Parse(candidate: "2"),
-                2
+                CellValue.Int(value: 2)
             ), new(
                 CellName.Parse(candidate: "3"),
-                1
+                CellValue.Int(value: 1)
             )],
         Domain: new StateDomain.CellsOf("map")
     );
@@ -71,10 +71,47 @@ public sealed class WorldPhaseOrderLawTests {
         Row: "board",
         Value: 1
     );
+    // Admission is not a door of its own: the operation itself is submitted under the guard, and a refused guard
+    // composes nothing.
+    private static bool Admits(WorldDefinition definition, PhaseGuard guard, WorldPrincipal actor) => WorldArenaTransforms.TryApply(
+        actor: actor,
+        candidate: out _,
+        definition: definition,
+        guard: guard,
+        instance: "test",
+        reason: out _,
+        tick: 1,
+        transform: Ray()
+    );
     private static StatePhase Read(WorldDefinition definition) => WorldDefinitionRows.FindStateRow(
         definition.State,
         "turn"
     )!.Phase!;
+    // A mutation submission carries an operation id: the ingress door binds one to the stamped actor and the
+    // canonical payload, and refuses an envelope that leaves it empty before anything composes.
+    private static WorldMutationOutcome Transform(WorldFixture fixture, long sequence, PhaseGuard? guard = null) {
+        WorldSubmissionResult? result = null;
+
+        fixture.Server.Submit(
+            new(
+                SubmissionEnvelope.LocalConnectionId,
+                0,
+                sequence,
+                sequence,
+                WorldPrincipal.Console,
+                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
+                    WorldPrincipal.Console,
+                    Ray(),
+                    guard
+                )),
+                Guid.NewGuid()
+            ),
+            completed => result = completed
+        );
+        fixture.Step();
+
+        return Assert.IsType<WorldSubmissionResult.Mutation>(@object: result).Outcome;
+    }
 
     [Fact]
     public void AMatchingGuardAdmitsAndItsSuccessAdvancesTheGenerationByOne() {
@@ -83,65 +120,60 @@ public sealed class WorldPhaseOrderLawTests {
             Board()
         );
 
-        Assert.True(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.True(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: definition,
+            guard: new(
                 "turn",
                 0
-            ),
-            WorldPrincipal.Seat(slot: 0)
+            )
         ));
-        Assert.False(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.False(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: definition,
+            guard: new(
                 "turn",
                 1
-            ),
-            WorldPrincipal.Seat(slot: 0)
-        ));
-
-        Assert.True(condition: CompiledPatterns.TryCompileAll(
-            definition.Patterns,
-            out var patterns,
-            []
+            )
         ));
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 Ray(),
                 WorldPrincipal.Seat(slot: 0),
                 1,
                 "test",
-                out var candidate,
+                out var advanced,
                 out var reason,
-                patterns
+                new PhaseGuard(
+                    "turn",
+                    0
+                )
             ),
             userMessage: reason
         );
-        var advanced = WorldStateTransforms.Advance(
-            definition: candidate,
-            row: "turn"
-        );
-
         Assert.Equal(
             1L,
             Read(definition: advanced).Sequence
         );
-        Assert.False(condition: WorldStateTransforms.CanAct(
-            advanced,
-            new(
+        Assert.False(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: advanced,
+            guard: new(
                 "turn",
                 0
-            ),
-            WorldPrincipal.Seat(slot: 0)
+            )
         ));
-        Assert.True(condition: WorldStateTransforms.CanAct(
-            advanced,
-            new(
+        Assert.True(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: Document(
+                Phase(sequence: 1),
+                Board()
+            ),
+            guard: new(
                 "turn",
                 1
-            ),
-            WorldPrincipal.Seat(slot: 0)
+            )
         ));
     }
     [Fact]
@@ -153,57 +185,42 @@ public sealed class WorldPhaseOrderLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         fixture.Step();
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0
         );
 
-        fixture.Server.Submit(
-            new(
-                SubmissionEnvelope.LocalConnectionId,
-                0,
-                1,
-                1,
-                WorldPrincipal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
-                    WorldPrincipal.Console,
-                    Ray()
-                ))
-            ),
-            _ => { }
+        var unguarded = Transform(
+            fixture: fixture,
+            sequence: 1
         );
-        fixture.Step();
+
+        Assert.True(condition: unguarded.Refused);
         Assert.Equal(
             0L,
             Read(definition: fixture.Server.Definition).Sequence
         );
 
-        fixture.Server.Submit(
-            new(
-                SubmissionEnvelope.LocalConnectionId,
-                0,
-                2,
-                2,
-                WorldPrincipal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
-                    WorldPrincipal.Console,
-                    Ray(),
-                    new(
-                        "turn",
-                        0
-                    )
-                ))
+        var guarded = Transform(
+            fixture: fixture,
+            guard: new(
+                "turn",
+                0
             ),
-            _ => { }
+            sequence: 2
         );
-        fixture.Step();
+
+        Assert.True(
+            condition: guarded.Applied,
+            userMessage: guarded.Detail
+        );
         Assert.Equal(
             1L,
             Read(definition: fixture.Server.Definition).Sequence
         );
         Assert.NotEqual(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             )
@@ -211,31 +228,34 @@ public sealed class WorldPhaseOrderLawTests {
     }
     [Fact]
     public void AStaleSequenceRefusesAdmissionRegardlessOfActor() {
-        var definition = Document(Phase(sequence: 3));
+        var definition = Document(
+            Phase(sequence: 3),
+            Board()
+        );
 
-        Assert.False(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.False(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: definition,
+            guard: new(
                 "turn",
                 2
-            ),
-            WorldPrincipal.Seat(slot: 0)
+            )
         ));
-        Assert.False(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.False(condition: Admits(
+            actor: WorldPrincipal.World,
+            definition: definition,
+            guard: new(
                 "turn",
                 2
-            ),
-            WorldPrincipal.World
+            )
         ));
-        Assert.True(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.True(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: definition,
+            guard: new(
                 "turn",
                 3
-            ),
-            WorldPrincipal.Seat(slot: 0)
+            )
         ));
     }
     [Fact]
@@ -275,25 +295,28 @@ public sealed class WorldPhaseOrderLawTests {
     }
     [Fact]
     public void NamingAParticipantIsWorldProgramOnly() {
-        var definition = Document(Phase());
+        var definition = Document(
+            Phase(),
+            Board()
+        );
 
-        Assert.False(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.False(condition: Admits(
+            actor: WorldPrincipal.Seat(slot: 0),
+            definition: definition,
+            guard: new(
                 Participant: "seat1",
                 Row: "turn",
                 Sequence: 0
-            ),
-            WorldPrincipal.Seat(slot: 0)
+            )
         ));
-        Assert.True(condition: WorldStateTransforms.CanAct(
-            definition,
-            new(
+        Assert.True(condition: Admits(
+            actor: WorldPrincipal.World,
+            definition: definition,
+            guard: new(
                 Participant: "seat1",
                 Row: "turn",
                 Sequence: 0
-            ),
-            WorldPrincipal.World
+            )
         ));
     }
     [Fact]

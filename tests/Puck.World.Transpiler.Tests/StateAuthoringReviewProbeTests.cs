@@ -1,6 +1,3 @@
-using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -12,10 +9,7 @@ public sealed class StateAuthoringReviewProbeTests {
     [InlineData("let cap = 8\nstate { world { table health : Int capacity(cap) { hp = 10 } } }")]
     public void DeclarationAcceptsCompileTimeConstants(string body) {
         var source = "schema: \"puck.world.definition.v1\"\n" + body;
-        var parsed = PuckParser.ParseDocumentWithDiagnostics(source);
-        Assert.False(parsed.Diagnostics.HasErrors, parsed.Diagnostics.FormatReport(source));
-        var diagnostics = new DiagnosticBag();
-        _ = WorldDocumentEmitter.LowerWithDiagnostics(parsed.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
+        var diagnostics = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source).Diagnostics;
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(source));
     }
 }

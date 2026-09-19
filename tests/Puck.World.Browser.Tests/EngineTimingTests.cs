@@ -131,57 +131,52 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
         Time(
             label: "  -> TryParseAndValidate alone, over the already-composed island",
             action: () => {
-            var ok = BrowserParser.TryParseAndValidate(
-                utf8Json: composedUtf8,
-                errors: reparseErrors,
-                deferred: reparseDeferred,
-                definition: out _,
-                compilation: out _
-            );
+                var ok = BrowserParser.TryParseAndValidate(
+                    utf8Json: composedUtf8,
+                    errors: reparseErrors,
+                    deferred: reparseDeferred,
+                    definition: out _
+                );
 
-            Assert.True(
-                condition: ok,
-                userMessage: string.Join(
-                    separator: "; ",
-                    values: reparseErrors
-                )
-            );
-        }
+                Assert.True(
+                    condition: ok,
+                    userMessage: string.Join(
+                        separator: "; ",
+                        values: reparseErrors
+                    )
+                );
+            }
         );
 
         // Compile: BrowserExports.Compile's own core — TryParseAndValidate over the composed island a THIRD time
         // (once inside ComposeTree, once standalone above, once here) plus this project's own BrowserSession
-        // construction (FrameLayout, CompiledPatterns.TryCompileAll, FrameHost, LoadRows/DerivedBoards.Compose).
+        // construction (the arena's own layout and load, WorldFactsCompiler.CompileAll, and rule admission).
         List<string> compileErrors = [];
         List<string> compileDeferred = [];
 
         Time(
             label: "Compile (composed island: TryParseAndValidate + BrowserSession construction)",
             action: () => {
-            var ok = BrowserParser.TryParseAndValidate(
-                utf8Json: composedUtf8,
-                errors: compileErrors,
-                deferred: compileDeferred,
-                definition: out var definition,
-                compilation: out var compilation
-            );
+                var ok = BrowserParser.TryParseAndValidate(
+                    utf8Json: composedUtf8,
+                    errors: compileErrors,
+                    deferred: compileDeferred,
+                    definition: out var definition
+                );
 
-            Assert.True(
-                condition: ok,
-                userMessage: string.Join(
-                    separator: "; ",
-                    values: compileErrors
-                )
-            );
-            Assert.NotNull(@object: new BrowserSession(
-                definition: definition!,
-                compilation: compilation!
-            ));
-        }
+                Assert.True(
+                    condition: ok,
+                    userMessage: string.Join(
+                        separator: "; ",
+                        values: compileErrors
+                    )
+                );
+                Assert.NotNull(@object: new BrowserSession(definition: definition!));
+            }
         );
 
         // A second pass over the identical bytes, in the same process — separates one-time JIT/static-init cost
-        // (tier-0 compilation of WorldDefinitionValidator/WorldDocumentBasis/RuleEvaluator's own call graph, first
+        // (tier-0 compilation of WorldDefinitionValidator/WorldDocumentBasis/the rule compiler's own call graph, first
         // touch of source-generated JsonSerializer contexts) from steady-state per-call cost, the way a browser tab
         // that stays open across several edits experiences it.
         var warmRows = new List<(string Label, TimeSpan Elapsed)>();
@@ -216,20 +211,16 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
         TimeWarm(
             label: "Compile (composed island: TryParseAndValidate + BrowserSession construction)",
             action: () => {
-            var ok = BrowserParser.TryParseAndValidate(
-                utf8Json: composedUtf8,
-                errors: [],
-                deferred: [],
-                definition: out var definition,
-                compilation: out var compilation
-            );
+                var ok = BrowserParser.TryParseAndValidate(
+                    utf8Json: composedUtf8,
+                    errors: [],
+                    deferred: [],
+                    definition: out var definition
+                );
 
-            Assert.True(condition: ok);
-            Assert.NotNull(@object: new BrowserSession(
-                definition: definition!,
-                compilation: compilation!
-            ));
-        }
+                Assert.True(condition: ok);
+                Assert.NotNull(@object: new BrowserSession(definition: definition!));
+            }
         );
 
         output.WriteLine(message: "");

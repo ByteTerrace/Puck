@@ -147,7 +147,7 @@ if (!fs.existsSync(mainMjs)) {
     assert.equal(result.ok, true, JSON.stringify(result.errors));
     assert.ok(result.composed);
     assert.ok(result.document);
-    assert.ok(result.deferred.some(m => m.includes("screen-machine engine 'gaming-brick' registration deferred")));
+    assert.ok(result.deferred.some(m => m.includes("no machine catalog was supplied for 'gaming-brick'")));
   });
 
   test('Judge() over the composed island runs ticks 1-3 and reports hostFacts for a world-scoped read', async () => {

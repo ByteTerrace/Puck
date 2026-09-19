@@ -46,7 +46,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Int(value: value)
             )]
     );
     private static WorldStateRow TextRow(string name, string text) => new(
@@ -54,7 +54,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         Kind: CellKind.Text,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Text: text
+                Value: CellValue.Text(value: text)
             )]
     );
     private static bool Validates(WorldDefinition definition) => WorldDefinitionValidator.TryValidateLocally(

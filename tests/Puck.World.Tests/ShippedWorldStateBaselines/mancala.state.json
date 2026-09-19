@@ -1,0 +1,693 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 590,
+  "engineTick": 991200,
+  "hashes": {
+    "authoritative": "15d6f8d69fc36d65",
+    "capture": "1c872aeb6faee860",
+    "pose": "cbf29ce484222325",
+    "world": "b351dd5aba86cd25"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "mancalaBoard",
+        "kind": "Int",
+        "capacity": 14,
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 4
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 6
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 5
+          },
+          {
+            "key": "8",
+            "value": 5
+          },
+          {
+            "key": "9",
+            "value": 4
+          },
+          {
+            "key": "10",
+            "value": 4
+          },
+          {
+            "key": "11",
+            "value": 4
+          },
+          {
+            "key": "12",
+            "value": 4
+          },
+          {
+            "key": "13",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "mancalaBoard"
+        }
+      },
+      {
+        "name": "mancalaPitIndex",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "mancalaBoard"
+        }
+      },
+      {
+        "name": "mancalaTurn",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "mancalaSelectedPit",
+        "kind": "Int",
+        "min": -1,
+        "max": 13,
+        "value": 3
+      },
+      {
+        "name": "mancalaMoveRequest",
+        "kind": "Int",
+        "min": 0,
+        "value": 3
+      },
+      {
+        "name": "mancalaMoveApplied",
+        "kind": "Int",
+        "min": 0,
+        "value": 3
+      },
+      {
+        "name": "mancalaStatus",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      },
+      {
+        "name": "mancalaPitSeeds",
+        "kind": "Int",
+        "min": 0,
+        "value": 5
+      },
+      {
+        "name": "mancalaLastPit",
+        "kind": "Int",
+        "min": -1,
+        "max": 13,
+        "value": 8
+      },
+      {
+        "name": "mancalaExtraTurn",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "mancalaStage",
+        "kind": "Int",
+        "min": 0,
+        "max": 5,
+        "value": 0
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "graph",
+        "cells": [
+          {
+            "id": "0",
+            "centre": [
+              -0.5,
+              0,
+              -0.15
+            ]
+          },
+          {
+            "id": "1",
+            "centre": [
+              -0.3,
+              0,
+              -0.15
+            ]
+          },
+          {
+            "id": "2",
+            "centre": [
+              -0.1,
+              0,
+              -0.15
+            ]
+          },
+          {
+            "id": "3",
+            "centre": [
+              0.1,
+              0,
+              -0.15
+            ]
+          },
+          {
+            "id": "4",
+            "centre": [
+              0.3,
+              0,
+              -0.15
+            ]
+          },
+          {
+            "id": "5",
+            "centre": [
+              0.5,
+              0,
+              -0.15
+            ]
+          },
+          {
+            "id": "6",
+            "centre": [
+              0.75,
+              0,
+              0
+            ]
+          },
+          {
+            "id": "7",
+            "centre": [
+              0.5,
+              0,
+              0.15
+            ]
+          },
+          {
+            "id": "8",
+            "centre": [
+              0.3,
+              0,
+              0.15
+            ]
+          },
+          {
+            "id": "9",
+            "centre": [
+              0.1,
+              0,
+              0.15
+            ]
+          },
+          {
+            "id": "10",
+            "centre": [
+              -0.1,
+              0,
+              0.15
+            ]
+          },
+          {
+            "id": "11",
+            "centre": [
+              -0.3,
+              0,
+              0.15
+            ]
+          },
+          {
+            "id": "12",
+            "centre": [
+              -0.5,
+              0,
+              0.15
+            ]
+          },
+          {
+            "id": "13",
+            "centre": [
+              -0.75,
+              0,
+              0
+            ]
+          }
+        ],
+        "directions": [
+          {
+            "name": "forward",
+            "opposite": "backward"
+          },
+          {
+            "name": "backward",
+            "opposite": "forward"
+          },
+          {
+            "name": "across",
+            "opposite": "across"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "direction": "forward"
+          },
+          {
+            "from": "1",
+            "to": "2",
+            "direction": "forward"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "direction": "forward"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "direction": "forward"
+          },
+          {
+            "from": "4",
+            "to": "5",
+            "direction": "forward"
+          },
+          {
+            "from": "5",
+            "to": "6",
+            "direction": "forward"
+          },
+          {
+            "from": "6",
+            "to": "7",
+            "direction": "forward"
+          },
+          {
+            "from": "7",
+            "to": "8",
+            "direction": "forward"
+          },
+          {
+            "from": "8",
+            "to": "9",
+            "direction": "forward"
+          },
+          {
+            "from": "9",
+            "to": "10",
+            "direction": "forward"
+          },
+          {
+            "from": "10",
+            "to": "11",
+            "direction": "forward"
+          },
+          {
+            "from": "11",
+            "to": "12",
+            "direction": "forward"
+          },
+          {
+            "from": "12",
+            "to": "13",
+            "direction": "forward"
+          },
+          {
+            "from": "13",
+            "to": "0",
+            "direction": "forward"
+          },
+          {
+            "from": "0",
+            "to": "12",
+            "direction": "across"
+          },
+          {
+            "from": "1",
+            "to": "11",
+            "direction": "across"
+          },
+          {
+            "from": "2",
+            "to": "10",
+            "direction": "across"
+          },
+          {
+            "from": "3",
+            "to": "9",
+            "direction": "across"
+          },
+          {
+            "from": "4",
+            "to": "8",
+            "direction": "across"
+          },
+          {
+            "from": "5",
+            "to": "7",
+            "direction": "across"
+          }
+        ],
+        "name": "mancalaBoard",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 0.15
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "mancalaBoard",
+      "cells": [
+        {
+          "key": "0",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaPitIndex",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 13,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaTurn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaSelectedPit",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaMoveRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaMoveApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaStatus",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaPitSeeds",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 5,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaLastPit",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaExtraTurn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "mancalaStage",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

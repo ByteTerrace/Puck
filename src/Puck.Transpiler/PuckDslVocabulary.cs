@@ -18,9 +18,9 @@ public static class PuckDslVocabulary {
     ];
     private static readonly CellKind[] ComparisonKinds = [CellKind.Int, CellKind.Fixed];
 
-    /// <summary>The cell kinds a <c>: Kind</c>/<c>as Kind</c> annotation and a <c>bind</c> declaration admit, spelled
-    /// by their own enum member names. <c>CompareValue.Kind</c> and <c>RuleBinding.Kind</c> are both
-    /// <see cref="CellKind"/>, but only the numeric arms are meaningful for a comparison or a binding.</summary>
+    /// <summary>The cell kinds a <c>: Kind</c>/<c>as Kind</c> annotation and a <c>local</c> declaration admit, spelled
+    /// by their own enum member names. <c>CompareValue.Kind</c> and <c>RuleLocal.Kind</c> are both
+    /// <see cref="CellKind"/>, but only the numeric arms are meaningful for a comparison or a local.</summary>
     public static IReadOnlyList<string> ComparisonKindNames { get; } = [.. ComparisonKinds.Select(selector: static kind => Enum.GetName(value: kind)!)];
 
     /// <summary>Swaps a comparison's direction (never its equality) — <c>a &lt; b</c> read as <c>b &gt; a</c>.</summary>
@@ -88,7 +88,7 @@ public static class PuckDslVocabulary {
         comparison = default;
         return false;
     }
-    /// <summary>Reads a <c>: Kind</c>/<c>as Kind</c>/<c>bind</c> kind word, accepting only a member name this DSL
+    /// <summary>Reads a <c>: Kind</c>/<c>as Kind</c>/<c>local</c> kind word, accepting only a member name this DSL
     /// admits (<see cref="ComparisonKindNames"/>).</summary>
     /// <param name="word">The kind word.</param>
     /// <param name="kind">The matching cell kind.</param>

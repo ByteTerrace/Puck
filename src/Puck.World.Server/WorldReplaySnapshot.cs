@@ -1610,7 +1610,7 @@ public sealed class WorldReplaySnapshot {
         );
 
         server.RebuildDocuments = documents;
-        server.EnterExtensionReplay();
+        server.Extensions.EnterReplay();
 
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
         // other rule effect, but writing the world's own file is engine I/O. The tap narrates why no file write
@@ -1686,7 +1686,7 @@ public sealed class WorldReplaySnapshot {
                 tick: tick
             );
             poseHashes[tick] = HashState(population: population);
-            authoritativeHashes[tick] = WorldRuntimeStateHash.HashAuthoritative(
+            authoritativeHashes[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: server,
                 tick: (server.NextInputTick - 1UL)
             );
@@ -1700,7 +1700,7 @@ public sealed class WorldReplaySnapshot {
     /// <summary>Returns the deterministic per-tick population hash: every active body's fixed-point pose, rigid
     /// velocity/contact/rest residue, and carry relationship folded in index order, so two runs with identical input
     /// produce identical traces regardless of wall-clock or backend. This remains the diagnostic population trace;
-    /// replay verdicts compare the wider <see cref="WorldRuntimeStateHash.HashAuthoritative"/> scope.</summary>
+    /// replay verdicts compare the wider <see cref="WorldStateHashComposition.HashAuthoritative"/> scope.</summary>
     /// <param name="population">The entity table to hash.</param>
     /// <returns>The state hash.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="population"/> is <see langword="null"/>.</exception>

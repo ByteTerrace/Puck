@@ -131,8 +131,7 @@ public static partial class BrowserExports {
             utf8Json: Utf8(text: json),
             errors: errors,
             deferred: deferred,
-            definition: out var definition,
-            compilation: out var compilation
+            definition: out var definition
         )) {
             return Write(
                 value: new BrowserCompileResult(
@@ -144,10 +143,7 @@ public static partial class BrowserExports {
             );
         }
 
-        var session = new BrowserSession(
-            compilation: compilation!,
-            definition: definition!
-        );
+        var session = new BrowserSession(definition: definition!);
         var handle = BrowserSessionRegistry.Add(session: session);
 
         return Write(
@@ -170,7 +166,7 @@ public static partial class BrowserExports {
         ),
         info: BrowserExportsJsonContext.Default.BrowserOutcome
     );
-    /// <summary>Reads every row's authored cells through the installed frame.</summary>
+    /// <summary>Reads every row's authored cells through the installed arena.</summary>
     /// <param name="handle">The session handle.</param>
     /// <returns><c>{ok, rows[]}</c>.</returns>
     [JSExport]
@@ -224,8 +220,7 @@ public static partial class BrowserExports {
             utf8Json: Utf8(text: json),
             errors: errors,
             deferred: deferred,
-            definition: out var definition,
-            compilation: out _
+            definition: out var definition
         )) {
             return Write(
                 value: new BrowserOutcome(
@@ -254,7 +249,7 @@ public static partial class BrowserExports {
             info: BrowserExportsJsonContext.Default.BrowserOutcome
         );
     }
-    /// <summary>Judges one tick, capturing every rule's evaluations and the frame's own before/after diff.</summary>
+    /// <summary>Judges one tick, capturing every rule's evaluations and the arena's own before/after diff.</summary>
     /// <param name="handle">The session handle.</param>
     /// <param name="tick">The tick, as a decimal string.</param>
     /// <returns><c>{ok, trace}</c>.</returns>
@@ -288,11 +283,11 @@ public static partial class BrowserExports {
             info: BrowserExportsJsonContext.Default.BrowserJudgeExportResult
         );
     }
-    /// <summary>Reads one cell through the installed frame.</summary>
+    /// <summary>Reads one cell through the installed arena.</summary>
     /// <param name="handle">The session handle.</param>
     /// <param name="row">The row name.</param>
     /// <param name="key">The cell key.</param>
-    /// <returns><c>{found, value, text}</c>.</returns>
+    /// <returns><c>{found, kind, value}</c>.</returns>
     [JSExport]
     public static string ReadRow(string handle, string row, string key) {
         if (!BrowserSessionRegistry.TryGet(
@@ -300,11 +295,7 @@ public static partial class BrowserExports {
             session: out var session
         )) {
             return Write(
-                value: new BrowserCellValue(
-                    Found: false,
-                    Text: null,
-                    Value: 0L
-                ),
+                value: BrowserCellValue.Absent,
                 info: BrowserExportsJsonContext.Default.BrowserCellValue
             );
         }
@@ -317,7 +308,7 @@ public static partial class BrowserExports {
             info: BrowserExportsJsonContext.Default.BrowserCellValue
         );
     }
-    /// <summary>Writes one cell through the installed frame.</summary>
+    /// <summary>Writes one cell through the installed arena.</summary>
     /// <param name="handle">The session handle.</param>
     /// <param name="row">The row name.</param>
     /// <param name="key">The cell key.</param>
@@ -370,7 +361,7 @@ public static partial class BrowserExports {
             info: BrowserExportsJsonContext.Default.BrowserOutcome
         );
     }
-    /// <summary>Evaluates one infix or postfix expression against the installed frame.</summary>
+    /// <summary>Evaluates one infix or postfix expression against the installed arena.</summary>
     /// <param name="handle">The session handle.</param>
     /// <param name="expression">The infix or <c>{"tokens":[...]}</c> postfix spelling.</param>
     /// <param name="kind">The kind the expression must produce — one of <see cref="CellKind"/>'s declared names (<c>Int</c>/<c>Fixed</c>).</param>
@@ -464,7 +455,7 @@ public static partial class BrowserExports {
             info: BrowserExportsJsonContext.Default.BrowserBoardMaskResult
         );
     }
-    /// <summary>Gets the installed frame's deterministic content hash.</summary>
+    /// <summary>Gets the installed arena's deterministic content hash.</summary>
     /// <param name="handle">The session handle.</param>
     /// <returns><c>{ok, hash, error?}</c>.</returns>
     [JSExport]

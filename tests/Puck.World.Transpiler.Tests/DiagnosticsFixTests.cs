@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Xunit;
 
@@ -13,18 +12,12 @@ public class DiagnosticsFixTests {
         [.. diagnostics.Where(predicate: static d => (d.Severity == DiagnosticSeverity.Error)).Select(selector: static d => d.Code)];
     private static (JsonObject Json, DiagnosticBag Diagnostics) Compile(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            source,
-            diagnostics: diagnostics
-        );
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
         );
 
-        return ((lowered.Value ?? []), diagnostics);
+        return ((compilation.Json ?? []), compilation.Diagnostics);
     }
     private static DiagnosticBag Parse(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";

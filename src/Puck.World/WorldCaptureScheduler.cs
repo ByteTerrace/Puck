@@ -50,7 +50,7 @@ internal sealed class WorldCaptureScheduler {
     private readonly string m_directory;
     private readonly List<WorldCaptureManifestEntry> m_landed = [];
     private readonly WorldRenderProbe? m_renderProbe;
-    private readonly Dictionary<ulong, List<WorldCaptureRow>> m_schedule = [];
+    private readonly WorldTickSchedule<WorldCaptureRow> m_schedule = new();
     private readonly WorldServer m_server;
     private readonly string m_worldFile;
 
@@ -86,15 +86,10 @@ internal sealed class WorldCaptureScheduler {
             }
 
             foreach (var tick in row.Ticks) {
-                if (!m_schedule.TryGetValue(
-                    key: tick,
-                    value: out var atTick
-                )) {
-                    atTick = [];
-                    m_schedule[tick] = atTick;
-                }
-
-                atTick.Add(item: row);
+                m_schedule.Add(
+                    row: row,
+                    tick: tick
+                );
             }
         }
     }
@@ -105,7 +100,7 @@ internal sealed class WorldCaptureScheduler {
     // WorldReplayTape already trusts rather than inventing a second one. Body/identity state lanes are ephemeral
     // per-body counters/timers outside the world-scoped decision surface a capture cares about (state.world is what
     // a rule/capture-station row lives in) and are left out, same as the population hash's own documented scope.
-    internal static ulong ComputeStateHash(WorldServer server, ulong tick) => WorldRuntimeStateHash.Hash(
+    internal static ulong ComputeStateHash(WorldServer server, ulong tick) => WorldStateHashComposition.Hash(
         scope: WorldStateHashScope.Capture,
         server: server,
         tick: tick
@@ -115,7 +110,7 @@ internal sealed class WorldCaptureScheduler {
         server: server,
         tick: tick
     ),
-        WorldStateHashScope.Pose or WorldStateHashScope.World or WorldStateHashScope.Authoritative => WorldRuntimeStateHash.Hash(
+        WorldStateHashScope.Pose or WorldStateHashScope.World or WorldStateHashScope.Authoritative => WorldStateHashComposition.Hash(
         scope: scope,
         server: server,
         tick: tick
@@ -545,21 +540,15 @@ internal sealed class WorldCaptureScheduler {
     public void PublishTick(ulong tick) {
         FinalizePending();
 
-        if (
-            (m_schedule.Count == 0) ||
-            !m_schedule.TryGetValue(
-            key: tick,
-            value: out var rows
-        )
-        ) {
-            return;
-        }
-
-        foreach (var row in rows) {
-            Arm(
+        // A tick published twice (a rewound authority timeline) arms nothing the second time: the capture is an
+        // event the document wrote once.
+        _ = m_schedule.Publish(
+            fire: static (armed, row) => armed.Scheduler.Arm(
                 row: row,
-                tick: tick
-            );
-        }
+                tick: armed.Tick
+            ),
+            state: (Scheduler: this, Tick: tick),
+            tick: tick
+        );
     }
 }

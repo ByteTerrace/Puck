@@ -5,8 +5,8 @@ using Xunit;
 
 namespace Puck.World.Browser.Tests;
 
-/// <summary>The determinism canary's native half: computes <see cref="StateFrameHash"/> over a fixed document, tick,
-/// and write sequence, and compares it against the recorded baseline in <c>Fixtures/browser-parity/expected.json</c>
+/// <summary>The determinism canary's native half: computes <see cref="StateArena.ComputeHash"/> over a fixed
+/// document, tick, and write sequence, and compares it against the recorded baseline in <c>Fixtures/browser-parity/expected.json</c>
 /// — the same file the Node harness (<c>engine-wasm.test.cjs</c>) reads to prove the wasm build folds the identical
 /// bytes. Set <c>PUCK_BROWSER_PARITY_RECORD=1</c> to overwrite the baseline with freshly computed hashes instead of
 /// comparing against them.</summary>
@@ -67,8 +67,7 @@ public sealed class BrowserParityRecordingTests {
                 utf8Json: ComposedTicTacToeBytes(),
                 errors: errors,
                 deferred: deferred,
-                definition: out var definition,
-                compilation: out var compilation
+                definition: out var definition
             ),
             userMessage: string.Join(
                 separator: "; ",
@@ -76,10 +75,7 @@ public sealed class BrowserParityRecordingTests {
             )
         );
 
-        return new BrowserSession(
-            definition: definition!,
-            compilation: compilation!
-        );
+        return new BrowserSession(definition: definition!);
     }
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);

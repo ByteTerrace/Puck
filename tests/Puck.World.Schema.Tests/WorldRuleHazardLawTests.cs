@@ -35,7 +35,7 @@ public sealed class WorldRuleHazardLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    5L
+                    CellValue.Int(value: 5L)
                 )]
         );
 
@@ -100,8 +100,8 @@ public sealed class WorldRuleHazardLawTests {
         var hazard = Assert.Single(collection: hazards);
 
         Assert.Equal(
-            RuleHazardKind.WriteAfterRead,
-            hazard.Kind
+            actual: hazard.Kind,
+            expected: Puck.State.Rules.RuleHazardKind.WriteAfterRead
         );
         Assert.Equal(
             ("faint", "damage", $"hp.{WorldStateRow.SlotKey}"),
@@ -134,7 +134,7 @@ public sealed class WorldRuleHazardLawTests {
     }
     [Fact]
     public void ReadAndWriteSetsFollowIndirectionsAndBranches() {
-        var rule = WorldRuleCompiler.CompileAll(definition: Document(Rule(
+        var definition = Document(Rule(
             "r",
             new ActionEffect.Transaction(Effects: [
                 new ActionEffect.SetState(
@@ -143,22 +143,35 @@ public sealed class WorldRuleHazardLawTests {
                 ),
             ]),
             HpAtMost(value: 0)
-        )))[0];
+        ));
+        var rule = WorldFactsCompiler.CompileAll(definition: definition)[0];
+        var catalog = definition.StateCatalog;
+        var slot = catalog.Keys.Intern(name: WorldStateRow.SlotKey);
+
+        int Ordinal(string row) {
+            Assert.True(condition: catalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: row
+            ));
+
+            return handle.Ordinal;
+        }
 
         Assert.Contains(
-            new RuleAccess(
-                "hp",
-                WorldStateRow.SlotKey
+            new CellAccess(
+                Key: slot,
+                RowOrdinal: Ordinal(row: "hp")
             ),
-            RuleDataflow.Reads(rule: rule)
+            Puck.State.Rules.RuleDataflow.Reads(rule: rule)
         );
         Assert.Contains(
-            new RuleAccess(
-                "armor",
-                WorldStateRow.SlotKey,
-                IsSet: true
+            new CellAccess(
+                IsSet: true,
+                Key: slot,
+                RowOrdinal: Ordinal(row: "armor")
             ),
-            RuleDataflow.Writes(rule: rule)
+            Puck.State.Rules.RuleDataflow.Writes(rule: rule)
         );
     }
     [Fact]
@@ -182,8 +195,8 @@ public sealed class WorldRuleHazardLawTests {
         var hazard = Assert.Single(collection: sets);
 
         Assert.Equal(
-            RuleHazardKind.WriteAfterWrite,
-            hazard.Kind
+            actual: hazard.Kind,
+            expected: Puck.State.Rules.RuleHazardKind.WriteAfterWrite
         );
         Assert.Contains(
             "'regen' wins",

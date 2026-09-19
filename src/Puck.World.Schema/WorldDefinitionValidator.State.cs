@@ -176,15 +176,13 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (StateCycle.Phase(
-                    baseValue: cell.Value,
-                    kind: row.Kind
-                ) is < 0 or >= SymmetryLattice.NodeCount) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
-                        kind: row.Kind,
-                        raw: cell.Value
-                    )} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{(SymmetryLattice.NodeCount - 1)}.");
-                }
+                ValidateLatticeCell(
+                    cell: cell,
+                    cycle: cycle,
+                    errors: errors,
+                    row: row,
+                    subject: $"{path} ('{row.Name}') cell '{cell.Key}'"
+                );
             }
         }
     }
@@ -211,16 +209,25 @@ public static partial class WorldDefinitionValidator {
             subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
         );
 
+        ValidateLatticeCell(
+            cell: cell,
+            cycle: cycle,
+            errors: errors,
+            row: row,
+            subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
+        );
+    }
+    private static void ValidateLatticeCell(WorldStateRow row, StateCell cell, StateCycle cycle, string subject, List<string> errors) {
         if (
             StateCycle.IsLatticeOutput(output: cycle.Output) &&
             (StateCycle.Phase(
-            baseValue: cell.Value,
+            baseValue: cell.Value.Raw,
             kind: row.Kind
         ) is < 0 or >= SymmetryLattice.NodeCount)
         ) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') value {DescribeValue(
+            errors.Add(item: $"{subject} value {DescribeValue(
                 kind: row.Kind,
-                raw: cell.Value
+                raw: cell.Value.Raw
             )} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{(SymmetryLattice.NodeCount - 1)}.");
         }
     }
@@ -338,6 +345,12 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        if (row.Kind == CellKind.Vector) {
+            errors.Add(item: $"{path} ('{row.Name}') declares draw on a vector row — vector rows cannot draw.");
+
+            return;
+        }
+
         if (
             row.IsKeyed &&
             GeneratorEngine.TryResolveSource(
@@ -411,7 +424,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (
-            !GeneratorEngine.Exhausts(source: generator.Source) ||
+            !StateGenerator.Exhausts(source: generator.Source) ||
             (generator.Mode == GeneratorMode.WithReplacement)
         ) {
             errors.Add(item: $"{path} carries {masks.Count} drawn mask(s) but the site's source never exhausts (source={StateSpelling.GeneratorSource(source: generator.Source)}, mode={generator.Mode}) — clear drawnMasks when re-authoring a site to a non-exhausting source.");
@@ -772,7 +785,7 @@ public static partial class WorldDefinitionValidator {
         // validate, and then be silently ignored at fire time. Refused against the DECLARED DEFAULT — the most a
         // non-nullable field can distinguish, and exactly the set of values that could mislead.
         if (
-            !GeneratorEngine.Exhausts(source: generator.Source) &&
+            !StateGenerator.Exhausts(source: generator.Source) &&
             (generator.Mode != GeneratorMode.WithReplacement)
         ) {
             errors.Add(item: $"{path}.source={StateSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov, weightedNumeric and symmetryOrbit exhaust; uniformRange and streamDraw have no entry set to draw from.");
@@ -1052,7 +1065,138 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
+    private static Dictionary<string, StateEnum> ValidateEnums(IReadOnlyList<StateEnum>? enums, List<string> errors) {
+        var byName = new Dictionary<string, StateEnum>(comparer: StringComparer.Ordinal);
+
+        if (enums is null) {
+            return byName;
+        }
+
+        if (enums.Count > StateCapacity.MaxEnums) {
+            errors.Add(item: $"state enums count {enums.Count} exceeds the maximum of {StateCapacity.MaxEnums}.");
+        }
+
+        for (var index = 0; (index < enums.Count); index++) {
+            var symbols = enums[index];
+            var path = $"state.enums[{index}]";
+
+            if (symbols is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+            if (!byName.TryAdd(
+                key: symbols.Name.Value,
+                value: symbols
+            )) {
+                errors.Add(item: $"{path}.name '{symbols.Name}' is duplicated.");
+            }
+            if (!symbols.TryValidate(reason: out var reason)) {
+                errors.Add(item: $"{path} {reason}");
+            }
+        }
+
+        return byName;
+    }
+    private static Dictionary<string, StateSpace> ValidateSpaces(IReadOnlyList<StateSpace>? spaces, List<string> errors) {
+        var byName = new Dictionary<string, StateSpace>(comparer: StringComparer.Ordinal);
+
+        if (spaces is null) {
+            return byName;
+        }
+
+        if (spaces.Count > StateCapacity.MaxVectorSpaces) {
+            errors.Add(item: $"state spaces count {spaces.Count} exceeds the maximum of {StateCapacity.MaxVectorSpaces}.");
+        }
+
+        for (var index = 0; (index < spaces.Count); index++) {
+            var space = spaces[index];
+            var path = $"state.spaces[{index}]";
+
+            if (space is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!byName.TryAdd(key: space.Name.Value, value: space)) {
+                errors.Add(item: $"{path}.name '{space.Name}' is duplicated.");
+            }
+
+            if (space.Name.Value.Length > StateSpace.MaxNameLength) {
+                errors.Add(item: $"{path}.name '{space.Name}' length {space.Name.Value.Length} exceeds the maximum of {StateSpace.MaxNameLength}.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: space.Model) || (space.Model.Length > StateSpace.MaxModelLength)) {
+                errors.Add(item: $"{path}.model must be non-empty and at most {StateSpace.MaxModelLength} characters.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: space.Revision) || (space.Revision.Length > StateSpace.MaxRevisionLength)) {
+                errors.Add(item: $"{path}.revision must be non-empty and at most {StateSpace.MaxRevisionLength} characters.");
+            }
+
+            if ((space.Dimensions < StateCapacity.MinVectorDimensions) || (space.Dimensions > StateCapacity.MaxVectorDimensions)) {
+                errors.Add(item: $"{path}.dimensions {space.Dimensions} must be between {StateCapacity.MinVectorDimensions} and {StateCapacity.MaxVectorDimensions}.");
+            }
+        }
+
+        return byName;
+    }
+    private static void ValidateVectorRow(WorldStateRow row, string path, IReadOnlyDictionary<string, StateSpace>? spaces, out StateSpace? resolvedSpace, List<string> errors) {
+        resolvedSpace = null;
+
+        if (row.Kind != CellKind.Vector) {
+            if (row.Space is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares space '{row.Space}' on a {StateSpelling.Kind(kind: row.Kind)} row — only vector rows carry a space.");
+            }
+
+            return;
+        }
+
+        if (row.EffectiveDomain is not (StateDomain.Slot or StateDomain.Keys)) {
+            errors.Add(item: $"{path} ('{row.Name}') has kind 'vector' but domain '{row.EffectiveDomain.GetType().Name}' — vector rows admit only slot or keyed domains.");
+        }
+
+        if (row.ValuesFrom is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares valuesFrom on a vector row — only int and fixed rows carry valuesFrom.");
+        }
+
+        if (row.Phase is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares phase on a vector row.");
+        }
+
+        if (row.PhaseOf is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares phaseOf on a vector row.");
+        }
+
+        if (row.Inverse is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares inverse on a vector row.");
+        }
+
+        if (spaces is not null) {
+            if (row.Space is not null) {
+                if (!spaces.TryGetValue(key: row.Space, value: out resolvedSpace)) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares space '{row.Space}' which is not a declared space.");
+                }
+            } else if (spaces.Count == 1) {
+                resolvedSpace = spaces.Values.First();
+            } else if (spaces.Count == 0) {
+                errors.Add(item: $"{path} ('{row.Name}') is kind 'vector' but no spaces are declared.");
+            } else {
+                errors.Add(item: $"{path} ('{row.Name}') is kind 'vector' without a declared space and multiple spaces are declared.");
+            }
+        }
+
+        if (resolvedSpace is not null) {
+            var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
+            var rowVectorBytes = checked((((long)effectiveCapacity) * resolvedSpace.Dimensions));
+
+            if (rowVectorBytes > StateCapacity.MaxVectorRowBytes) {
+                errors.Add(item: $"{path} ('{row.Name}') vector byte size {rowVectorBytes} ({effectiveCapacity} * {resolvedSpace.Dimensions}) exceeds the maximum per-row ceiling of {StateCapacity.MaxVectorRowBytes}.");
+            }
+        }
+    }
+    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, IReadOnlyDictionary<string, StateSpace> spaces, IReadOnlyDictionary<string, StateEnum> enums, List<string> errors) {
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
 
         if (rows is null) {
@@ -1064,6 +1208,8 @@ public static partial class WorldDefinitionValidator {
         if (rows.Count > StateCapacity.MaxRows) {
             errors.Add(item: $"state count {rows.Count} exceeds the maximum of {StateCapacity.MaxRows}.");
         }
+
+        var totalVectorBytes = 0L;
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
@@ -1084,11 +1230,41 @@ public static partial class WorldDefinitionValidator {
 
             ValidateStateRow(
                 dynamicsNames: dynamicsNames,
+                enums: enums,
                 errors: errors,
                 generators: generators,
                 path: path,
-                row: row
+                row: row,
+                spaces: spaces
             );
+
+            if (row.Kind == CellKind.Vector) {
+                var vectorSpace = ((row.Space is not null)
+                    ? spaces.GetValueOrDefault(key: row.Space)
+                    : ((spaces.Count == 1) ? spaces.Values.First() : null)
+                );
+
+                if (vectorSpace is not null) {
+                    var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
+
+                    totalVectorBytes += checked((((long)effectiveCapacity) * vectorSpace.Dimensions));
+                }
+            }
+        }
+
+        if (totalVectorBytes > StateCapacity.MaxVectorSectionBytes) {
+            errors.Add(item: $"state total vector byte size {totalVectorBytes} exceeds the maximum section ceiling of {StateCapacity.MaxVectorSectionBytes}.");
+        }
+
+        var distinctKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var row in rows) {
+            foreach (var cell in (row?.Cells ?? [])) {
+                distinctKeys.Add(item: cell.Key.Value);
+            }
+        }
+        if (distinctKeys.Count > StateCapacity.MaxCellKeys) {
+            errors.Add(item: $"state declares {distinctKeys.Count} distinct cell keys, more than the {StateCapacity.MaxCellKeys} one catalog interns.");
         }
 
         return byName;
@@ -1101,7 +1277,7 @@ public static partial class WorldDefinitionValidator {
     // either door reaches, in exactly one place. Cross-row invariants (a keysOf zone's domain, a cellsOf board's
     // topology, a knowledge board's source/mask, an inverse board's derivation) are NOT here — see
     // <see cref="ValidateTokenAndPhaseRow"/>, <see cref="ValidateBoardRow"/> and <see cref="ValidateDisclosureRow"/>.
-    private static void ValidateStateRow(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, string path, List<string> errors) {
+    private static void ValidateStateRow(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, string path, List<string> errors, IReadOnlyDictionary<string, StateSpace>? spaces = null, IReadOnlyDictionary<string, StateEnum>? enums = null) {
         // A field-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
         // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
         // door so the shape cannot be held by convention.
@@ -1149,6 +1325,30 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        ValidateVectorRow(
+            errors: errors,
+            path: path,
+            resolvedSpace: out var resolvedSpace,
+            row: row,
+            spaces: spaces
+        );
+
+        StateEnum? resolvedEnum = null;
+
+        if (row.Enum is { } symbols) {
+            if (row.Kind != CellKind.Int) {
+                errors.Add(item: $"{path} ('{row.Name}') names enum '{symbols}' on a {StateSpelling.Kind(kind: row.Kind)} row — only int rows carry a symbolic domain.");
+            } else if (
+                (enums is null) ||
+                !enums.TryGetValue(
+                key: symbols.Value,
+                value: out resolvedEnum
+            )
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') names enum '{symbols}', which the state section does not declare.");
+            }
+        }
+
         var numeric = ((row.Kind == CellKind.Int) || (row.Kind == CellKind.Fixed));
 
         // Min/Max/Overflow are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
@@ -1186,10 +1386,10 @@ public static partial class WorldDefinitionValidator {
         // per entity index), so only a keyed (table) row — one declaring Capacity — has a body to address; a
         // slot has exactly one value shared by every body, which is not what a per-body gate means.
         if (
-            (row.Kind == CellKind.Text) &&
+            ((row.Kind == CellKind.Text) || (row.Kind == CellKind.Vector)) &&
             row.GatesDrive
         ) {
-            errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive on a text row — a drive gate reads a cell as zero/nonzero, which a text cell has no honest reading for.");
+            errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive on a {row.Kind.ToString().ToLowerInvariant()} row — a drive gate reads a cell as zero/nonzero, which a {row.Kind.ToString().ToLowerInvariant()} cell has no honest reading for.");
         }
 
         if (
@@ -1277,6 +1477,17 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
+            // A cell whose value is not of its row's kind is refused before anything reads that value: every check
+            // below may read the number, the text or the vector the row's kind promises.
+            if (!row.TryAdmitKind(
+                reason: out var kindReason,
+                value: cell.Value
+            )) {
+                errors.Add(item: $"{cellPath} {kindReason}.");
+
+                continue;
+            }
+
             // A cell key can no longer be empty, dotted, or otherwise unsafe — CellName refuses that at JSON
             // parse, before this method ever sees the cell — so this checks only uniqueness and the reserved key.
             if (!keys.Add(item: cell.Key)) {
@@ -1286,6 +1497,13 @@ public static partial class WorldDefinitionValidator {
                 (cell.Key == WorldStateRow.SlotKey)
             ) {
                 errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
+            } else if (
+                (row.EffectiveDomain is StateDomain.Slot) &&
+                (cell.Key != WorldStateRow.SlotKey)
+            ) {
+                // A slot row holds exactly one cell, addressed by the reserved key; the store addresses no other
+                // position of it, so a differently named cell is refused here rather than dropped at load.
+                errors.Add(item: $"{path} ('{row.Name}') is a slot row, whose one cell is '{WorldStateRow.SlotKey}' — it addresses no cell '{cell.Key}'.");
             } else if (!StateReservedCells.TryValidateReservedCell(
                 row: row,
                 key: cell.Key,
@@ -1381,21 +1599,35 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
             }
 
+            if (row.Kind == CellKind.Vector) {
+                if ((resolvedSpace is not null) && (cell.Value.AsVector.Length != resolvedSpace.Dimensions)) {
+                    errors.Add(item: $"{cellPath}.vector dimensions {cell.Value.AsVector.Length} must match space '{resolvedSpace.Name}' dimensions {resolvedSpace.Dimensions}.");
+                }
+
+                if (cell.Advance is not null) {
+                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a vector cell — vector cells do not accumulate.");
+                }
+
+                if (cell.Dynamics is not null) {
+                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a vector cell — vector cells do not ease.");
+                }
+
+                if (cell.Cycle is not null) {
+                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle on a vector cell — vector cells do not turn.");
+                }
+
+                continue;
+            }
+
             if (row.Kind == CellKind.Text) {
-                if (cell.Text is null) {
-                    errors.Add(item: $"{cellPath}.text is required.");
-                } else if (cell.Text.Length > StateCapacity.MaxTextValueLength) {
-                    errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {StateCapacity.MaxTextValueLength}.");
+                if (cell.Value.AsText.Length > StateCapacity.MaxTextValueLength) {
+                    errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Value.AsText.Length} exceeds the maximum of {StateCapacity.MaxTextValueLength}.");
                 }
 
                 continue;
             }
 
             if (row.Kind == CellKind.Bool) {
-                if (cell.Value is not (0 or 1)) {
-                    errors.Add(item: $"{cellPath}.value {cell.Value} must be 0 or 1 for a bool row.");
-                }
-
                 continue;
             }
 
@@ -1403,13 +1635,15 @@ public static partial class WorldDefinitionValidator {
             // cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads the SAME row trait at its
             // own door precisely so it can never admit a value this walk would refuse at the owned world's next
             // boot.
+            var raw = cell.Value.Raw;
+
             if (
                 (minDeclared is { } lowerBound) &&
-                (cell.Value < lowerBound)
+                (raw < lowerBound)
             ) {
                 errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
                     kind: row.Kind,
-                    raw: cell.Value
+                    raw: raw
                 )} is below its declared minimum {DescribeValue(
                     kind: row.Kind,
                     raw: lowerBound
@@ -1418,15 +1652,24 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (maxDeclared is { } upperBound) &&
-                (cell.Value > upperBound)
+                (raw > upperBound)
             ) {
                 errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
                     kind: row.Kind,
-                    raw: cell.Value
+                    raw: raw
                 )} is above its declared maximum {DescribeValue(
                     kind: row.Kind,
                     raw: upperBound
                 )}.");
+            }
+
+            // The store's own admission door refuses a symbolic value outside its domain on every write, so an
+            // authored cell that names one has to refuse here rather than at the arena's load.
+            if (
+                (resolvedEnum is { } symbolic) &&
+                !symbolic.Admits(value: raw)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {raw} is outside enum '{symbolic.Name}', whose members are 0..{(symbolic.Count - 1)}.");
             }
         }
     }

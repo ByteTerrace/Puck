@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Puck.Mcp;
+using Puck.State;
+using Puck.World;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -462,4 +464,119 @@ public sealed class RemoteMcpTests {
         Assert.Throws<ArgumentException>(testCode: () => RemoteMcpServer.Build(options with { SubjectClaim = "oid" }));
         Assert.Throws<ArgumentException>(testCode: () => RemoteMcpServer.Build(options with { AllowedOrigins = ["*"] }));
     }
+    // The attached session runs the real `world.state.cell.set` handler against a real WorldServer: `alice` holds
+    // Mutate+Edit grants on both rows and `bob` holds none, so the tool call itself only proves the write was
+    // buffered — the grant verdict lands at the next tick boundary, exactly as it would for any other caller of
+    // `world.state.cell.set`, and is read back from the server's own state afterward.
+    [Fact]
+    public async Task StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused() {
+        if (!SupportedPlatform()) { return; }
+        await using var fixture = new RemoteMcpFixture();
+        fixture.CommandHelp = "read; set <value>; wait; world.state.cell.set <row> <key> <value>";
+        fixture.UseRealWorldSession = true;
+        await fixture.StartAsync(Token);
+
+        using var aliceHttp = fixture.Http(token: fixture.Token(subject: "alice"));
+        using var bobHttp = fixture.Http(token: fixture.Token(subject: "bob"));
+        await using var alice = await fixture.ClientAsync(
+            http: aliceHttp,
+            revision: "2026-07-28",
+            token: Token
+        );
+        await using var bob = await fixture.ClientAsync(
+            http: bobHttp,
+            revision: "2026-07-28",
+            token: Token
+        );
+
+        var tools = await alice.ListToolsAsync(cancellationToken: Token);
+        Assert.Contains("puck_state_vector_write", tools.Select(tool => tool.Name));
+
+        var aliceAttachment = await Attach(client: alice);
+        var bobAttachment = await Attach(client: bob);
+
+        Assert.True(StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], vector: out var sampleVector, error: out var err), err);
+        var validVector = sampleVector!.ToBase64Url();
+
+        var aliceResult = await alice.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "embedding",
+                ["key"] = "g1",
+                ["vector"] = validVector
+            },
+            cancellationToken: Token
+        );
+        Assert.False(condition: aliceResult.IsError, userMessage: aliceResult.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text);
+
+        var aliceSlotResult = await alice.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "slot_embedding",
+                ["vector"] = validVector
+            },
+            cancellationToken: Token
+        );
+        Assert.False(condition: aliceSlotResult.IsError);
+
+        var bobResult = await bob.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = bobAttachment,
+                ["row"] = "embedding",
+                ["key"] = "u1",
+                ["vector"] = validVector
+            },
+            cancellationToken: Token
+        );
+        Assert.False(condition: bobResult.IsError);
+
+        var server = fixture.RealWorldServer!;
+
+        server.Advance(stepTicks: 1);
+
+        var embeddingRow = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "embedding");
+
+        Assert.NotNull(embeddingRow);
+        Assert.Contains(embeddingRow.Cells ?? [], cell => (cell.Key.Value == "g1"));
+        Assert.DoesNotContain(embeddingRow.Cells ?? [], cell => (cell.Key.Value == "u1"));
+
+        var slotRow = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "slot_embedding");
+
+        Assert.NotNull(slotRow);
+        var slotCell = Assert.Single(slotRow.Cells ?? []);
+
+        Assert.True(slotCell.Value.AsVector.Span.SequenceEqual(other: sampleVector.Components));
+
+        var crossResult = await bob.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "embedding",
+                ["key"] = "cell1",
+                ["vector"] = validVector
+            },
+            cancellationToken: Token
+        );
+        Assert.True(condition: crossResult.IsError);
+
+        var invalidVectorResult = await alice.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "embedding",
+                ["key"] = "cell1",
+                ["vector"] = "b64u:AQID"
+            },
+            cancellationToken: Token
+        );
+        Assert.True(condition: invalidVectorResult.IsError);
+        Assert.Contains(
+            expectedSubstring: "invalid vector",
+            actualString: Output(result: invalidVectorResult)
+        );
+    }
 }
+

@@ -1,0 +1,326 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 630,
+  "engineTick": 1058400,
+  "hashes": {
+    "authoritative": "617495125c9543b7",
+    "capture": "9d2bff1db9255c66",
+    "pose": "cbf29ce484222325",
+    "world": "c2d7f1e69042f090"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "board",
+        "kind": "Int",
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "points"
+        }
+      },
+      {
+        "name": "checkerPoint",
+        "kind": "Int",
+        "min": -1,
+        "max": 23,
+        "cells": [
+          {
+            "key": "w0",
+            "value": 0
+          },
+          {
+            "key": "w1",
+            "value": 1
+          },
+          {
+            "key": "b0",
+            "value": 23
+          },
+          {
+            "key": "b1",
+            "value": 22
+          }
+        ]
+      },
+      {
+        "name": "origPoint",
+        "kind": "Int",
+        "min": -1,
+        "max": 23,
+        "cells": [
+          {
+            "key": "w0",
+            "value": 0
+          },
+          {
+            "key": "w1",
+            "value": 1
+          },
+          {
+            "key": "b0",
+            "value": 23
+          },
+          {
+            "key": "b1",
+            "value": 22
+          }
+        ]
+      },
+      {
+        "name": "dice",
+        "kind": "Int",
+        "min": 1,
+        "max": 6,
+        "cells": [
+          {
+            "key": "d1",
+            "value": 3
+          },
+          {
+            "key": "d2",
+            "value": 1
+          }
+        ],
+        "draw": {
+          "generator": {
+            "source": "UniformRange",
+            "bound": 1,
+            "mode": "WithReplacement",
+            "rangeMin": 1,
+            "rangeMax": 6
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 2
+      },
+      {
+        "name": "cube",
+        "kind": "Int",
+        "min": 1,
+        "max": 64,
+        "value": 1
+      },
+      {
+        "name": "turn",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "verdict",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "best",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "token",
+            "value": 0
+          },
+          {
+            "key": "to",
+            "value": 3
+          },
+          {
+            "key": "score",
+            "value": -3
+          }
+        ]
+      },
+      {
+        "name": "moveCounts",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "w0",
+            "value": 2
+          },
+          {
+            "key": "w1",
+            "value": 2
+          },
+          {
+            "key": "b0",
+            "value": 0
+          },
+          {
+            "key": "b1",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "checkerPoint",
+          "ordered": false
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "ring",
+        "width": 24,
+        "name": "points",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "board",
+      "cells": []
+    },
+    {
+      "row": "checkerPoint",
+      "cells": [
+        {
+          "key": "w0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "w1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "b0",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "b1",
+          "value": 22,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "origPoint",
+      "cells": [
+        {
+          "key": "w0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "w1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "b0",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "b1",
+          "value": 22,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "dice",
+      "cells": [
+        {
+          "key": "d1",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "d2",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "cube",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "turn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "verdict",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "best",
+      "cells": [
+        {
+          "key": "token",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "to",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "score",
+          "value": -3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "moveCounts",
+      "cells": [
+        {
+          "key": "w0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "w1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "b0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "b1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

@@ -273,7 +273,7 @@ public sealed class WorldCarryCommandLawTests {
             Capacity: 8,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: scale.Value
+                    Value: CellValue.Fixed(rawBits: scale.Value)
                 )]
         );
 

@@ -106,12 +106,12 @@ public sealed partial class WorldServer {
         try {
             var captured = ExecuteAuthorityOperation(operation: () => {
                 var template = ReflowTemplate(
-                    definition: m_definition,
+                    definition: m_document.Definition,
                     request: request
                 );
 
                 if (template?.Deal?.Reflow is null) { return (Definition: ((WorldDefinition?)null), Tick: 0UL, Reason: "the template declares no reflow policy"); }
-                if (!TryAdmitCompleteMutation(
+                if (!m_document.TryAdmitCompleteMutation(
                     new WorldMutation.UpsertPlacement(
                         Placement: template,
                         Principal: principal
@@ -121,7 +121,7 @@ public sealed partial class WorldServer {
                 )) {
                     return (Definition: ((WorldDefinition?)null), Tick: 0UL, Reason: admission.Describe());
                 }
-                return (Definition: ((WorldDefinition?)m_definition), Tick: m_lastCompletedTick, Reason: string.Empty);
+                return (Definition: ((WorldDefinition?)m_document.Definition), Tick: m_tick.CompletedTick, Reason: string.Empty);
             });
 
             definition = captured.Definition;
@@ -448,10 +448,12 @@ public sealed partial class WorldServer {
         var mutations = new List<WorldMutation>();
 
         for (var index = 0; (index < children.Length); index++) {
-            if (children[index] != selected[index]) { mutations.Add(item: new WorldMutation.UpsertPlacement(
+            if (children[index] != selected[index]) {
+                mutations.Add(item: new WorldMutation.UpsertPlacement(
                 principal,
                 selected[index]
-            )); }
+            ));
+            }
         }
         var moved = mutations.Count;
 
@@ -557,7 +559,7 @@ public sealed partial class WorldServer {
             ExpectedCells: expectedCells,
             ExpectedSpatialReads: [spatialRead]
         );
-        var admission = ExecuteAuthorityOperation(operation: () => (TryAdmitCompleteMutation(
+        var admission = ExecuteAuthorityOperation(operation: () => (m_document.TryAdmitCompleteMutation(
             batch,
             preMetered: true,
             out var verdict
@@ -568,7 +570,7 @@ public sealed partial class WorldServer {
         if (admission.Length != 0) { reason = admission; return false; }
         // Pure preflight checks exact payment, including trait clamps. Installation owns full document, render
         // envelope and authority validation against the then-current world; none runs on this worker's snapshot.
-        if (!TryCompose(
+        if (!WorldDocument.TryCompose(
             definition,
             batch,
             tick,
@@ -576,8 +578,7 @@ public sealed partial class WorldServer {
             InstanceIdentity,
             out _,
             out reason,
-            out _,
-            patterns: null
+            out _
         )) { return false; }
         proposal = new WorldPlacementProposal(
             Candidates: work,

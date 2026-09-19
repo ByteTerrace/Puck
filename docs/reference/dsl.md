@@ -17,9 +17,10 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Ast/` | The syntax tree: documents, blocks, properties, expressions, rules, predicates, effect statements. |
 | `Parsing/` | `PuckParser` (partial, over Parlot): the document reader, its operand scanner, its predicate and rule-body readers. |
 | `Diagnostics/` | `Diagnostic`/`DiagnosticBag`/`SourceSpan`/`SourceMap` and the `PUCK…` code constants. |
-| `Formatting/` | `PuckFormatter`: the canonical text layout, applied to source rather than to a tree. |
+| `Formatting/` | `PuckPrinter`: the one formatter, printing a parsed tree back as source. |
 | `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
 | `Modules/` | `ModuleResolver`: `import` resolution and alias composition. |
+| `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
 | `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `m`, `cm`, `mm`, `hz`, `%` represent. |
 | (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s comparison and cell-kind enums. |
 
@@ -41,6 +42,49 @@ legal; it is a syntax shape only, so a second document vocabulary with its own r
 without touching this project. `Puck.World.Transpiler` is `puck.world.definition.v1`'s vocabulary for it today —
 see its [README](../../src/Puck.World.Transpiler/README.md#state-declarations) for `state.world`'s exact lowering,
 defaults, and refusals.
+
+A few invariants hold across every declaration form the world vocabulary lowers:
+
+- **One declaration produces one row.** The transpiler never splits a declaration into several rows, never
+  generates a state name, and never changes a grant or a binding.
+- **Declarations are accepted only under `state.world`.** `state.body` and `state.identity` hold a different
+  record, `ActionStateSlot`, and take no declaration syntax.
+- **A declaration does not imply storage scope.** A `table player { }` declares one world row, not
+  per-player storage.
+- **One trait has one spelling.** Accumulation is `advance`, with the sign carrying direction; there is no
+  separate `regen` and `decay`.
+- **Dot access belongs to the state engine's grammar.** `row.key` is an `ExpressionSpelling` spelling of
+  `row[key]`, so the DSL, JSON documents, and every other expression consumer agree on what it means. Row and
+  cell names themselves forbid dots, so the HUD binding `state.<row>.<key>` stays unambiguous.
+- **Equivalence is classified per form.** A concise declaration must compile byte-identically to its explicit
+  JSON equivalent. Dot access keeps the authored operand text, so it is judged by semantic equivalence instead:
+  identical tokens and identical compiled rule facts against the bracket spelling.
+
+### Vector spaces, `embeds(...)`, and vector literals
+
+The state section supports declared embedding spaces and vector rows:
+
+```puck
+state {
+    spaces {
+        space lore { model: "puck-fixture" revision: "1" dimensions: 256 }
+    }
+    world {
+        table events : Vector {
+            ambush = "Bandits ambushed the caravan on the north road"
+        }
+        table lines : Text embeds(lineVectors) {
+            warn = "Stay close to the wagons tonight."
+        }
+        slot situation : Vector = "Travellers approach the gate at dusk"
+    }
+}
+```
+
+- **`spaces` block**: declares one or more named vector embedding spaces with `model`, `revision`, and `dimensions`.
+- **`Vector` kind**: creates rows of unit-normalized signed 8-bit vectors. In source, values are written as plain text literals.
+- **`embeds(vectorRow)` modifier**: links a `Text` table to an auto-generated or explicitly paired `Vector` table, automatically embedding each text entry into vector state.
+- **Embedding literals**: `embed("text")` produces a vector operand inside rule gates and effects, resolved during transpilation against the companion `.embeddings.json` lock file produced by `puck embed`.
 
 ## `for`, over an array known at compile time
 
@@ -227,9 +271,122 @@ classification and reuses the same arithmetic; it never restates that `ms` divid
 The one place the core itself asserts a dimension is `schedule <row> in 250ms`, where the grammar—not a field
 name—says the operand is a time.
 
+## Embedded language blocks: `sql { ... }`
+
+```puck
+sql {
+    CREATE TABLE fighters (
+        id   TEXT PRIMARY KEY,
+        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
+    ) CAPACITY 32;
+
+    INSERT INTO fighters (id, hp, mana) VALUES
+        ('hero', 80, 50);
+
+    DECLARE turnCount INT DEFAULT 0;
+
+    CREATE RULE healHero ON ENTER AS
+        UPDATE fighters SET hp = hp + 10 WHERE id = 'hero';
+}
+```
+
+The core parser supports embedded language blocks through `IDocumentVocabulary.IsEmbeddedLanguage`. When
+an identifier matches an admitted embedded language (such as `sql`), the parser produces an `EmbeddedBlockNode`
+preserving raw statement text and token spans without running the core Parlot expression parser on its body.
+The owning vocabulary lowers the embedded language directly into document JSON, and which identifiers those are
+is one row each of that vocabulary's own construct table—for the world, the generated
+[world vocabulary](world-vocabulary.md).
+
+## Rewriting a source: `PuckSyntaxRewriter` and `puck migrate`
+
+A change to the surface syntax is applied to the sources that use it by a
+*migration*: one named rewrite over the syntax tree, run over a directory by
+[`puck migrate`](cli.md#the-puck-dsl-verbs). Derive from
+`Puck.Transpiler.Rewriting.PuckSyntaxRewriter`, override the hook for the node
+kind being reshaped, and call the base method to descend:
+
+```csharp
+private sealed class CountsBecomeCalls : PuckSyntaxRewriter {
+    protected override ExpressionNode RewriteExpression(ExpressionNode expression) =>
+        (base.RewriteExpression(expression: expression) switch {
+            IdentifierExpressionNode identifier when (identifier.Name == "zoneCount")
+                => new CallExpressionNode(
+                    Arguments: [new ArgumentNode(Name: null, Value: identifier)],
+                    Name: "count"
+                ),
+            var other => other,
+        });
+}
+```
+
+The base hooks do nothing but descend, so a rewriter that overrides nothing is
+the identity and prints its input back byte for byte. Every node is rebuilt with
+the record `with` operator, so a node the rewrite did not touch keeps its own
+`SyntaxTrivia`—its author's comments, blank-line runs, and line breaks. Because
+the walk is over source rather than a lowered document, `let`, `template`,
+`for`, `import`, units, and `sql { }` survive as themselves instead of as their
+expansion; the printer writes the surviving `for` loop, not the rows it would
+produce.
+
+Two things raise `PuckRewriteException` rather than a diagnostic, because both
+are defects in the rewrite instead of refusals about a source: a node kind the
+descent has no arm for, which is how a newly added syntax node announces that
+the rewriter has fallen behind the tree; and a hook that answers a typed
+position—a `template`'s body, a `transform`'s call—with a node that position
+cannot hold.
+
+A `PuckMigration` wraps such a rewriter with the name `migrate` selects it by,
+a one-line summary, and `ReshapedMembers`: the `/`-separated document member
+paths the rewrite may change, where a `*` segment matches any one object key or
+array index and a path covers everything beneath it. An empty list is the claim
+a rewrite of the compile-time layer alone makes, since that layer is evaluated
+away before the document exists. `migrate` compiles each source it would change
+before and after, and holds the migration to the claim, so a rewrite that moves
+an undeclared member is refused with the member named and nothing written.
+
+A comment is not in the document, so no member declaration can speak for one. A
+second verdict covers them: the comments of the migrated source, in reading
+order, must equal the comments it started with, and a rewrite that drops, adds,
+moves, or rewords one is refused by name unless it declares `ReshapesComments`.
+The verdict is read off the tree the migrated text parses back to, so it covers
+the printer as well as the rewrite. A rewrite that mints a fresh node in place
+of one the author commented is the case to watch — carry the old node's
+`Trivia` onto the new one:
+
+```csharp
+=> (property with { Value = new LiteralExpressionNode(Value: 480) { Trivia = property.Value.Trivia } }),
+```
+
+### What the descent reaches, and what it hands over whole
+
+Every node reaches a hook, and every syntax-node child of every node is
+rebuilt—a law over each concrete node type enforces both. What the descent
+cannot do is reach *inside* a member that carries its own sub-grammar as text,
+so a rewrite matching `IdentifierExpressionNode` silently misses a name written
+in one. These are those members; a rewrite that must reach one edits the string
+on the node the hook hands it:
+
+| Member | Carries |
+|---|---|
+| `EmbeddedBlockNode.Body` | the whole `sql { }` dialect, as one span of text |
+| `ComparisonPredicateNode.LeftText`, `.RightText` | a gate's operands |
+| `RhsOperandNode.Text` | an effect's right-hand side |
+| `LocalStatementNode.ExpressionText` | a `local`'s initializer |
+| `ScoreStatementNode.Text` | an option's score |
+| `CellSetDeclarationNode.Expression` | a `set`'s cell-set algebra |
+| `PatternDeclarationNode.Value`, `.Attribute` | a pattern's per-token expression and source row |
+| `LiteralExpressionNode.RawText`, `DerivedStateNode.RawExpression` | the author's own digits and infix text, preferred over the value beside them—see the refusal above |
+
+`PatternDeclarationNode.Match` is the one child that is not a syntax node at all
+(it is a `Puck.State.PatternNode`), so the descent has no hook for the match
+algebra; a rewrite reshapes it by replacing the whole `Match` on the declaration
+the statement hook hands it. Should any of these become a syntax node, the child
+law fails under its node's name until the arm rewrites it.
+
 ## Verification
 
-The [DSL release plan](../plans/dsl-release-hardening.md) preserves the semantic-consistency decisions, regression combinations and combined World release evidence required before further language growth.
+The [release evidence package](../plans/runtime-and-delivery.md#the-evidence-package) and [its decisions](../decisions/runtime-and-delivery.md#release-evidence) hold the semantic-consistency decisions, regression combinations, and combined World release evidence required before further language growth.
 
 Lowering keeps compile-time values immutable and borrows cached arrays for reads. Indexing one element does not
 copy its containing array; a copy is made when a value enters output. `distinct` uses structural hashing and

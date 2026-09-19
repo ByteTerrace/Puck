@@ -1,153 +1,58 @@
-using System.Globalization;
-
 namespace Puck.State;
 
-/// <summary>One resolved read operand of a rule — the base every case type derives from, whether declared here or by
-/// a document project's <see cref="OperandFamily"/>. Case types are classes, never records or structs: nothing at
-/// runtime compares two operands for equality or identity, so a generated structural <c>Equals</c> would be a hazard
-/// nobody asked for. <see cref="ValueKind"/> is set once by the case's own constructor; everything else lives on the
-/// concrete case type, reached through the virtuals every case answers for itself: what it reads
-/// (<see cref="Read"/>), what one read costs (<see cref="Cost"/>), and which cells the read touches
-/// (<see cref="CollectReads"/>).</summary>
-public abstract class OperandFact {
+/// <summary>One resolved read operand whose read needs a host facet. The facet is the type argument, so the
+/// evaluator resolves it from the host once and hands it to <see cref="Read"/>; a fact reaching a capability it did
+/// not name in its type does not compile.</summary>
+/// <typeparam name="TFacet">The facet the read needs.</typeparam>
+/// <remarks>Case types are classes, never records or structs: nothing at runtime compares two operands for equality
+/// or identity, so a generated structural <c>Equals</c> would be a hazard nobody asked for. A document project's
+/// operand family registers the case; the facet is read off this base rather than declared on the case, so
+/// <see cref="RuleNeeds"/> reads the declaration and never a self-report.</remarks>
+public abstract class OperandFact<TFacet> : IFacetFact, ICompiledFact where TFacet : IFacet {
     /// <summary>Initializes the operand with the encoding its value is returned in.</summary>
     /// <param name="valueKind">The raw encoding this operand's value is returned in.</param>
     protected OperandFact(CellKind valueKind) => ValueKind = valueKind;
 
-    /// <summary>Gets a value indicating whether the read needs the document host — a fact only it can answer (a body,
-    /// a region, a clock) — so a frame over the section alone cannot evaluate it.</summary>
-    public virtual bool HostOnly => false;
+    /// <inheritdoc/>
+    public FacetRef Facet => FacetRef.Of<TFacet>();
+
+    /// <inheritdoc/>
+    FacetRef? ICompiledFact.RequiredFacet => Facet;
+
     /// <summary>Gets the raw encoding this operand's value is returned in.</summary>
     public CellKind ValueKind { get; }
 
     /// <summary>Appends every state cell the read touches, including the cells its key indirections resolve through.</summary>
     /// <param name="into">The read set being collected.</param>
-    public virtual void CollectReads(List<RuleAccess> into) { }
+    public virtual void CollectReads(List<CellAccess> into) { }
     /// <summary>Returns the conservative work units one read costs — a state-candidate visit count for a read that
     /// scans, 1 for a direct read.</summary>
     /// <param name="context">The compile context the operand was resolved against.</param>
-    public abstract long Cost(RuleCompileContext context);
-    /// <summary>Reads the operand's live fact for the evaluation in flight. Allocation-free on every case declared
-    /// here; a document project's case keeps the same contract.</summary>
+    /// <returns>The work units.</returns>
+    public abstract long Cost(IRuleCostContext context);
+    /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    public abstract RuleFact Read(IRuleReader reader);
+    /// <param name="facet">The facet the evaluator resolved from the host.</param>
+    /// <returns>The fact.</returns>
+    public abstract RuleFact Read(IStateReader reader, TFacet facet);
 }
-/// <summary>Shared shape for the case types that address a state row through a (row, key-or-indirection) pair —
-/// so a generic caller that must accept any of them (a token-domain check inside a pattern's own value expression)
-/// can read the row name and the live key indirection without a type-pattern switch enumerating every other case.</summary>
-public interface IStateAddressedOperand {
-    /// <summary>The row this operand addresses.</summary>
-    string Row { get; }
-    /// <summary>The live key indirection (<see cref="RuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
-    /// a literal key.</summary>
-    CompiledCellRef? KeyFrom { get; }
-}
-/// <summary>A cell key resolved live by the engine or a document project's <see cref="KeyFamily"/>.</summary>
-public abstract class KeyFact {
+/// <summary>A cell key whose resolution needs a host facet, handed to <see cref="Resolve"/> as the type argument
+/// names it. The key is interned (<see cref="CellKey"/>), never a string.</summary>
+/// <typeparam name="TFacet">The facet the resolution needs.</typeparam>
+public abstract class KeyFact<TFacet> : IFacetFact, ICompiledFact where TFacet : IFacet {
+    /// <inheritdoc/>
+    public FacetRef Facet => FacetRef.Of<TFacet>();
+
+    /// <inheritdoc/>
+    FacetRef? ICompiledFact.RequiredFacet => Facet;
+
     /// <summary>Appends every state cell the resolution reads through.</summary>
     /// <param name="into">The read set being collected.</param>
-    public virtual void CollectReads(List<RuleAccess> into) { }
-    /// <summary>Resolves the key for the evaluation in flight. Allocation-free in steady state: a key minted once is
-    /// cached by the family's own reader.</summary>
+    public virtual void CollectReads(List<CellAccess> into) { }
+    /// <summary>Resolves the key for the evaluation in flight. Allocation-free in steady state: a key the host
+    /// mints once stays interned in the catalog's key table.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    public abstract string Resolve(IRuleReader reader);
-    /// <summary>Resolves the key as an integer index for the evaluation in flight — a live zone's table index, a
-    /// table's key. A key that spells no integer (an empty zone's endpoint) answers none.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="index">The index, on success.</param>
-    public virtual bool TryResolveIndex(IRuleReader reader, out long index) =>
-        long.TryParse(
-            s: Resolve(reader: reader),
-            style: NumberStyles.Integer,
-            provider: CultureInfo.InvariantCulture,
-            result: out index
-        );
-
-    /// <summary>Gets a value indicating whether the resolution needs the document host.</summary>
-    public virtual bool HostOnly => false;
-}
-/// <summary>The key an implicit binding computed: the cell whose ordinal is the bound integer, spelled as that
-/// integer — what <c>row[from + 1]</c> resolves through.</summary>
-public sealed class BindingKeyFact : KeyFact {
-    /// <summary>Initializes the fact.</summary>
-    /// <param name="ordinal">The binding's slot in the rule.</param>
-    public BindingKeyFact(int ordinal) => Ordinal = ordinal;
-
-    /// <summary>Gets the binding's slot.</summary>
-    public int Ordinal { get; }
-
-    /// <inheritdoc/>
-    public override string Resolve(IRuleReader reader) => IndexKeyCache.Get(index: reader.BindingValue(ordinal: Ordinal));
-    /// <inheritdoc/>
-    public override bool TryResolveIndex(IRuleReader reader, out long index) {
-        index = reader.BindingValue(ordinal: Ordinal);
-
-        return true;
-    }
-}
-/// <summary>A state cell address whose integer value is read as a cell key at evaluation time
-/// (<see cref="RuleFacts.CellKeyPrefix"/>), a bound key token, or a document project's own live key
-/// (<see cref="Custom"/>) — every dynamic key resolves through this one indirection carrier.</summary>
-/// <param name="Row">The row holding the indirection cell, for a <c>$cell:</c> indirection; empty otherwise.</param>
-/// <param name="Key">The indirection cell's key, for a <c>$cell:</c> indirection; empty otherwise.</param>
-/// <param name="Binding">The bound key read instead, when not <see cref="BoundKey.None"/>; then
-/// <paramref name="Row"/>/<paramref name="Key"/> are empty.</param>
-/// <param name="Handle">The compiled handle for <paramref name="Row"/> when <paramref name="Binding"/> is
-/// <see cref="BoundKey.None"/> — resolved once at compile time so the per-tick indirection read never repeats a
-/// row-name scan; <see langword="default"/> (invalid) for a binding-carried reference, which names no row.</param>
-/// <param name="Custom">A document project's own live key, or <see langword="null"/> for a <c>$cell:</c>/binding
-/// indirection.</param>
-/// <param name="InnerKeyBinding">For a <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection whose own inner <c>&lt;key&gt;</c>
-/// spells a binding token (<c>$each</c>/<c>$left</c>/<c>$right</c>) rather than a literal declared cell — <paramref
-/// name="Row"/>/<paramref name="Handle"/> still name the row, but the cell read every evaluation is whichever one the
-/// current binding names, never a compile-time-fixed <paramref name="Key"/> (left empty in this case).
-/// <see cref="BoundKey.None"/> for an ordinary literal-keyed <c>$cell:</c> indirection. Distinct from
-/// <paramref name="Binding"/>, which spells "the whole key is the binding, no row at all" — this spells "the row is
-/// known, the cell is the binding".</param>
-/// <param name="CellKey">The pre-parsed literal <paramref name="Key"/> of the source cell, or default.
-/// An indirection reads that cell's value to obtain the destination key.</param>
-public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellName CellKey = default);
-/// <summary>One state cell a rule reads or writes — a literal <c>row.key</c>, or a whole row when the key is resolved
-/// live (a <c>$cell:</c> indirection, a bound <c>$each</c>, a push, a generate, a transform).</summary>
-/// <param name="Row">The state row.</param>
-/// <param name="Key">The literal key, or <see langword="null"/> for any key of the row.</param>
-/// <param name="IsSet">For a write, whether it replaces the cell (a set) rather than accumulating into it (an add).</param>
-public readonly record struct RuleAccess(string Row, string? Key, bool IsSet = false) {
-    /// <summary>Appends the cells a key indirection reads through, if any.</summary>
-    /// <param name="reference">The indirection.</param>
-    /// <param name="into">The read set being collected.</param>
-    public static void CollectReference(CompiledCellRef? reference, List<RuleAccess> into) {
-        if (reference is not { } cell) {
-            return;
-        }
-        if (cell.Custom is { } custom) {
-            custom.CollectReads(into: into);
-            return;
-        }
-        if (cell.Row.Length == 0) {
-            return;
-        }
-
-        into.Add(item: new RuleAccess(
-            Row: cell.Row,
-            Key: ((cell.Binding == BoundKey.None)
-            ? cell.Key
-            : null)
-        ));
-    }
-    /// <summary>Formats the access as <c>row.key</c> or <c>row.*</c>.</summary>
-    public string Describe() => $"{Row}.{(Key ?? "*")}";
-    /// <summary>Gets a value indicating whether two accesses can touch the same cell.</summary>
-    /// <param name="other">The other access.</param>
-    public bool Overlaps(RuleAccess other) =>
-        (string.Equals(
-            a: Row,
-            b: other.Row,
-            comparisonType: StringComparison.Ordinal
-        ) &&
-        ((Key is null) || (other.Key is null) || string.Equals(
-            a: Key,
-            b: other.Key,
-            comparisonType: StringComparison.Ordinal
-        )));
+    /// <param name="facet">The facet the evaluator resolved from the host.</param>
+    /// <returns>The interned key.</returns>
+    public abstract CellKey Resolve(IStateReader reader, TFacet facet);
 }

@@ -26,9 +26,11 @@ using Puck.Cli.PublishRelease;
 using Puck.Cli.Registry;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
+using Puck.Cli.Test;
 using Puck.Cli.Search;
 using Puck.Cli.Shaders;
 using Puck.Cli.Transpiler;
+using Puck.Cli.Vocabulary;
 using Puck.Cli.WasmStdlib;
 using Puck.Cli.WorktreeBase;
 
@@ -110,6 +112,7 @@ internal static class PuckRootCommand {
             DeclarationsCommand.Create(),
             DocLinksCommand.Create(),
             DocsBuildCommand.Create(),
+            EmbedCommand.Create(),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
@@ -123,13 +126,16 @@ internal static class PuckRootCommand {
             PackagesCommand.Create(),
             ParityCommand.Create(),
             PuckFmtCommand.Create(),
+            PuckMigrateCommand.Create(),
             PublishCommand.Create(),
             ReferencesCommand.Create(),
             RegistryCommand.Create(),
             ScanCommand.Create(),
             SchemaCommand.Create(),
+            TestCommand.Create(),
             SearchCommand.Create(),
             ShadersCommand.Create(),
+            VocabularyCommand.Create(),
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
             WorktreeBaseCommand.Create(),

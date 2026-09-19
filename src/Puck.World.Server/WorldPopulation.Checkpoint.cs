@@ -253,6 +253,7 @@ public sealed partial class WorldPopulation {
                 : null
             );
             var body = BuildBodyForKit(
+                index: captured.Index,
                 kitIndex: bodyKitIndex,
                 profile: profile
             );
@@ -269,6 +270,10 @@ public sealed partial class WorldPopulation {
                 pitchRadians: FixedQ4816.Zero,
                 rollRadians: FixedQ4816.Zero
             );
+            // The slot is marked occupied before its body's state is written: occupancy admits the action-state
+            // lane ordinal, and the captured transfer state writes registers into it.
+            entry.Body = body;
+            entry.Active = true;
             body.ApplyTransferState(state: captured.DynamicState);
             body.ApplyIntegrationResidue(residue: captured.Residue);
 
@@ -281,8 +286,6 @@ public sealed partial class WorldPopulation {
                 entry.Designations[slot] = captured.Designations[slot];
             }
 
-            entry.Body = body;
-            entry.Active = true;
             entry.KitIndex = captured.KitIndex;
             entry.BodyColor = captured.BodyColor;
             entry.CatalogRig = captured.CatalogRig;

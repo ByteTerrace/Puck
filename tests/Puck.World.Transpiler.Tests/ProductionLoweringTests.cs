@@ -1,34 +1,30 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
 public sealed class ProductionLoweringTests {
-    private static JsonObject Lower(string source) => WorldDocumentEmitter.Lower(PuckParser.ParseDocument(source));
+    private static JsonObject Lower(string source) => WorldCompiler.Compile(source: source).RequireJson();
 
     [Fact]
     public void CancellationStopsLoweringBeforeExpansion() {
         using var cancellation = new CancellationTokenSource();
 
         cancellation.Cancel();
-        var document = PuckParser.ParseDocument("value: range(0, 1000)");
-
-        Assert.Throws<OperationCanceledException>(testCode: () => WorldDocumentEmitter.LowerWithDiagnostics(
-            document,
-            cancellationToken: cancellation.Token
+        Assert.Throws<OperationCanceledException>(testCode: () => WorldCompiler.Compile(
+            cancellationToken: cancellation.Token,
+            source: "value: range(0, 1000)"
         ));
     }
     [InlineData("position [d,0,0]\ndelaySeconds: d")]
     [InlineData("delaySeconds: d\nposition [d,0,0]")]
     [Theory]
     public void ConstantUnitsAreCheckedAtEveryDestination(string body) {
-        var result = WorldDocumentEmitter.LowerWithDiagnostics(
-            PuckParser.ParseDocument(("let d = 1m\n" + body)),
-            cancellationToken: TestContext.Current.CancellationToken
+        var result = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: ("let d = 1m\n" + body)
         );
 
         Assert.Single(
@@ -69,16 +65,19 @@ public sealed class ProductionLoweringTests {
     }
     [Fact]
     public void FailedConvenienceCompilationCannotEmitPartialData() {
-        Assert.Throws<InvalidOperationException>(testCode: () => WorldDocumentEmitter.CompileToJson(PuckParser.ParseDocument("missing()")));
+        Assert.Throws<InvalidOperationException>(testCode: () => WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: "missing()"
+        ).RequireJson());
     }
     [Fact]
     public void FormatterPreservesRawAndInterpolatedLiteralValues() {
         const string Source = "value: \"\"\"a:     b\n  indent\n\n{}[]\"\"\"\nother: $\"\"\"a  {1+2}\n   b\"\"\"";
-        var formatted = PuckFormatter.Format(Source);
+        var formatted = PuckFormat.Format(Source);
 
         Assert.Equal(
             formatted,
-            PuckFormatter.Format(formatted)
+            PuckFormat.Format(formatted)
         );
         Assert.True(condition: JsonNode.DeepEquals(
             node1: Lower(source: Source),
@@ -98,13 +97,11 @@ public sealed class ProductionLoweringTests {
     [InlineData("value: range(9223372036854775807, 2)")]
     [Theory]
     public void InvalidOrUnboundedInputHasLocatedDiagnostic(string source) {
-        var parsed = PuckParser.ParseDocumentWithDiagnostics(source);
+        var parsed = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
+        );
 
-        if (parsed.Value is { } document) { WorldDocumentEmitter.LowerWithDiagnostics(
-            document,
-            diagnostics: parsed.Diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        ); }
         Assert.True(condition: parsed.Diagnostics.HasErrors);
         Assert.All(
             parsed.Diagnostics.Where(predicate: d => (d.Severity == DiagnosticSeverity.Error)),
@@ -113,10 +110,9 @@ public sealed class ProductionLoweringTests {
     }
     [Fact]
     public void RepeatedCopiesCannotBypassTheWorkBudget() {
-        var document = PuckParser.ParseDocument("let a = range(0, 10000)\nvalue: map(range(0, 1000), i => a)");
-        var result = WorldDocumentEmitter.LowerWithDiagnostics(
-            document,
-            cancellationToken: TestContext.Current.CancellationToken
+        var result = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: "let a = range(0, 10000)\nvalue: map(range(0, 1000), i => a)"
         );
 
         Assert.Contains(

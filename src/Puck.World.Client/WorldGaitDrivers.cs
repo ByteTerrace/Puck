@@ -54,23 +54,21 @@ public static class WorldGaitDrivers {
         }
 
         var resolved = (eased
-            ? WorldStateReader.TryReadEased(
+            ? WorldStateReader.TryReadEasedValue(
                 definition: definition,
                 key: key,
-                rawValue: out var raw,
                 row: out var row,
                 rowName: rowName,
-                text: out _,
+                value: out var cell,
                 tick: tick,
                 engineTick: engineTick
             )
-            : WorldStateReader.TryRead(
+            : WorldStateReader.TryReadValue(
                 definition: definition,
                 key: key,
-                rawValue: out raw,
                 row: out row,
                 rowName: rowName,
-                text: out _,
+                value: out cell,
                 tick: tick,
                 engineTick: engineTick
             )
@@ -79,18 +77,24 @@ public static class WorldGaitDrivers {
         if (
             !resolved ||
             (row is null) ||
-            (raw is not { } bits)
+            !cell.HasValue
         ) {
             return false;
         }
 
-        value = (row.Kind switch {
-            CellKind.Fixed => ((float)((double)FixedQ4816.FromRawBits(value: bits))),
-            CellKind.Text => 0f,
-            _ => ((float)bits),
+        // A gait phase is a number; text and vector cells have none, so they drive nothing rather than driving the
+        // carrier's bits as if they were one.
+        value = (cell.Kind switch {
+            CellKind.Int => ((float)cell.AsInt),
+            CellKind.Fixed => ((float)((double)FixedQ4816.FromRawBits(value: cell.AsFixed))),
+            CellKind.Bool => (cell.AsBool
+                ? 1f
+                : 0f),
+            CellKind.Text or CellKind.Vector => 0f,
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(rowName)),
         });
 
-        return (row.Kind != CellKind.Text);
+        return (cell.Kind is not (CellKind.Text or CellKind.Vector));
     }
     private static float Wrap(float radians) {
         var wrapped = MathF.IEEERemainder(

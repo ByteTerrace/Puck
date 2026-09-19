@@ -17,7 +17,7 @@ public sealed class WorldStateDocumentValuesLawTests {
                 Kind: CellKind.Text,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Text: "resolved"
+                        Value: CellValue.Text(value: "resolved")
                     )]
             ),
         ])

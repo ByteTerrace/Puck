@@ -1,0 +1,399 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+kits {
+  rows [
+    {
+      bodyContact: "Solid"
+      bodyMotionProgram: "walk"
+      collider: sphere(radius: 0.28)
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: "Free"
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: "Gravity"
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "bowlingBall"
+      rigid {
+        angularDamping: 0.6
+        friction: 0.2
+        linearDamping: 0.3
+        mass: 2.2
+        restitution: 0.35
+        rollingFriction: 1
+      }
+    }
+    {
+      bodyContact: "Solid"
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.075, 0.245, 0.075], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: "Free"
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: "Gravity"
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "bowlingPin"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.4
+        linearDamping: 0.05
+        mass: 0.15
+        restitution: 0.1
+        rollingFriction: 0.15
+      }
+    }
+  ]
+}
+
+placements {
+  placement "bowlingLane" {
+    prototype: "bowlingLane"
+    position [10, 0, 10]
+    solid
+  }
+
+  placement "bowlingBall" {
+    prototype: "billiardBall"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingBall"
+      look: "bowlingBall"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0, -0.35, -2.1]
+  }
+
+  placement "pin0" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0, -0.35, 1.6]
+  }
+
+  placement "pin1" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [-0.13, -0.35, 1.82]
+  }
+
+  placement "pin2" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0.13, -0.35, 1.82]
+  }
+
+  placement "pin3" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [-0.26, -0.35, 2.04]
+  }
+
+  placement "pin4" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0, -0.35, 2.04]
+  }
+
+  placement "pin5" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0.26, -0.35, 2.04]
+  }
+
+  placement "pin6" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [-0.39, -0.35, 2.26]
+  }
+
+  placement "pin7" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [-0.13, -0.35, 2.26]
+  }
+
+  placement "pin8" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0.13, -0.35, 2.26]
+  }
+
+  placement "pin9" {
+    prototype: "bowlingPin"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "bowlingPin"
+      look: "bowlingPin"
+      source: "Idle"
+    }
+    parent: "bowlingLane"
+    position [0.39, -0.35, 2.26]
+  }
+}
+
+prototypes {
+  prototype "bowlingPin" {
+    document {
+      name: "bowlingPin"
+      palette [
+        {
+          color: "state.billiardsColors.pin"
+          roughness: 0.734
+          specular: 0.1
+        }
+        {
+          color: "state.billiardsColors.pinBand"
+          roughness: 0.734
+          specular: 0.1
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.06, 0]
+        rotation [0.7071, 0, 0, 0.7071]
+        scale [0.06, 0.06, 0.34]
+      }
+
+      shape Box "band" {
+        blend: "SmoothUnion"
+        material: 1
+        position [0, 0.28, 0]
+        rotation: "state.transforms.identity"
+        scale [0.075, 0.02, 0.075]
+        smooth: 0.01
+      }
+    }
+  }
+
+  prototype "bowlingLane" {
+    document {
+      name: "bowlingLane"
+      palette [
+        {
+          color: "state.billiardsColors.tray"
+          roughness: 0.891
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "floor" {
+        material: 0
+        position [0, -0.45, 0]
+        rotation: "state.transforms.identity"
+        scale [0.9, 0.05, 2.6]
+      }
+
+      shape Box "wallEast" {
+        material: 0
+        position [0.85, -0.05, 0]
+        rotation: "state.transforms.identity"
+        scale [0.05, 0.35, 2.6]
+      }
+
+      shape Box "wallWest" {
+        material: 0
+        position [-0.85, -0.05, 0]
+        rotation: "state.transforms.identity"
+        scale [0.05, 0.35, 2.6]
+      }
+
+      shape Box "wallFar" {
+        material: 0
+        position [0, -0.05, 2.55]
+        rotation: "state.transforms.identity"
+        scale [0.9, 0.35, 0.05]
+      }
+    }
+  }
+}

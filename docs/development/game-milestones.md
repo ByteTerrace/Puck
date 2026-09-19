@@ -8,8 +8,8 @@ feature claim.
 
 Per the repository's verification guidance, each entry names the exact check,
 command, or test that produced it. For the binding design decisions, see
-[Reference game design](../game/design.md); for proposed sequencing, see the
-[Game development plan](../plans/game-development.md).
+[Reference game design](../game/design.md); for proposed sequencing, see
+[Play](../plans/play.md).
 
 ---
 
@@ -315,4 +315,99 @@ lane end to end — step into a frame and the whole party transfers, all-or-noth
 durations authored in seconds with ticks derived at compile; per-world clocks; `studio` and the first border crossing; a walkable four-zone corner whose four hosts
   exchange geometry and generation-addressed bodies and migrate both human and autonomous entities
   through invisible reciprocal topology rather than portal furniture.
+
+**The DSL and cartridge release review's follow-up run** recorded 880 passing
+tests, three release packages and isolated host insertion/shutdown on both
+cartridge targets. It corrected wide comparisons, alignment and persistence,
+scene reads, queue bounds, integer precision, lexical bindings, runtime
+expression lowering, diagnostics, literal-preserving formatting, evaluation
+limits and CLI/LSP routing. At 1,000 elements, the indexed-map allocation probe
+fell from 89.2 MB to 1.37 MB. These are historical observations, not
+performance ceilings or a release certificate.
+
+**Verified at the shader-pipeline checkpoint `af91b442f39046726b5f6a92852eef52d962802c`:**
+a three-pass feedback example, shared fullscreen execution, one-off
+compilation, temporal controls, reload recovery, output inspection and
+capture. The recorded run passed 100 shader tests, a World Release build
+without warnings, schema checks, and actual GPU and World workflows on
+DirectX and Vulkan. These are dated observations, not coverage of future
+changes or of the hybrid renderer the shader-pipeline plan proposes.
+
+**Verified for the machine-extension host's integrated milestone** (133
+passed, 0 failed, 0 skipped on the focused machine, lifecycle, retirement,
+group-role, and checkpoint laws; World Debug, CLI Release, and World.Browser
+Release builds each passed with 0 warnings and 0 errors; a fresh Release CLI
+`schema --check` matched the root world, projection, Silo, and 66 section
+schemas including `machines.schema.json`; `registry --check` matched 1177
+name sites regenerated from the combined model): booting the default world,
+all three aliased arcade machines reported Running with no fault, 25 imported
+documents composed, exit 0; on the mirror world, `ax=76` matched machine byte
+`0x4C`, and removing display 0 retained generation 1 while completed segments
+rose from 8 to 14 with world mutations continuing, exit 0; on the
+named-operation fixture, reset, insertion, and forge playback Applied across
+generations 1 through 4, a stale generation was Refused, and generation 4
+stayed Running with completed segments reaching 24 after both displays were
+removed, exit 0; `git diff --check` passed and the machine coordinator staged
+or committed nothing. The default world's timed three-tick probe did not
+reach its post-barrier queries, so the startup queries prove admission and
+composition, not default-world performance; the mirror and operation runs
+supply the advancement evidence. These checks were headless, with no image
+parity, audio-listening, or GPU-performance claim; the shader-pipeline work
+owns its own rendered/backend evidence.
+
+The same integration fixed: checkpoint restoration clearing both role-derived
+authority maps and rebuilding them without incrementing the captured revision
+(live document installation still invalidates authority projections),
+covering fresh and previously populated grant tables including group-owned
+reach, with byte-identical checkpoint recapture — an integrated foundation
+fix, not machine snapshot support. (The JSON-quoting, aliased-feed,
+named-screen-inspection, and link-membership invariants are stated in
+[the Machines README](../../src/Puck.World.Machines/README.md).)
+
+From the repository root:
+
+```powershell
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj --no-restore --nologo -v:q --filter 'FullyQualifiedName~Machine|FullyQualifiedName~WorldSiloLifecycleLawTests|FullyQualifiedName~WorldAuthorityRetirementLawTests|FullyQualifiedName~WorldGroupRoleAuthorityLawTests|FullyQualifiedName~WorldAuthorityCheckpointCodecLawTests'
+dotnet build src/Puck.World/Puck.World.csproj --no-restore --nologo -v:q
+dotnet build src/Puck.Cli/Puck.Cli.csproj -c Release --no-restore --nologo -v:q
+dotnet build src/Puck.World.Browser/Puck.World.Browser.csproj -c Release --no-restore --nologo -v:q
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll schema --check
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll registry --check
+```
+
+These commands assume dependencies have already been restored. To inspect the
+checked-in mirror world interactively, create an isolated state directory and
+launch the built application from the repository root:
+
+```powershell
+$machineStateDirectory = Join-Path ([IO.Path]::GetTempPath()) ('puck-machine-review-' + [Guid]::NewGuid().ToString('N'))
+dotnet src/Puck.World/bin/Debug/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/tools/hgb-mirror.world.json --state-dir $machineStateDirectory --headless
+```
+
+Send these lines through its console/stdin. Use BOM-less UTF-8 and the normal
+[stdin barrier contract](../../.claude/skills/puck-world/references/console.md);
+wall-clock sleeps do not establish completed machine/world ticks:
+
+```text
+world.wait 8
+machine.state mirror
+world.state ax
+screen.peek 0 0xC200
+world.state wtEcho
+screen.peek 0 0xC205
+world.row.remove screens 0
+world.wait 3
+machine.state mirror
+world.state wtEcho
+world.status
+```
+
+The machine must retain its generation and keep advancing after display
+removal; the mirror's other, camera-fed display remains; bindings must report
+availability; world-to-machine `ax` must agree with the observed byte. A
+changing guest-derived value may advance between observations, so the
+recorded sample is not a promise every independent run samples the same
+phase. Changes in this isolated session do not edit the checked-in `.puck`
+source. Omit `--headless` for the rendered experience; that launch is an
+interaction recipe, not rendered validation evidence.
 

@@ -21254,6 +21254,55 @@
     },
     {
       "CoveredBy": [
+        "signed-byte-vectors.admission-tolerance"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.AdmissionTolerance(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.cosine-vs-oracle"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.CosineQ16(System.ReadOnlySpan<System.SByte>,System.ReadOnlySpan<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-vs-oracle"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.Dot(System.ReadOnlySpan<System.SByte>,System.ReadOnlySpan<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.normalize-admits"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.IsUnitAdmissible(System.ReadOnlySpan<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-vs-oracle"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.SumOfSquares(System.ReadOnlySpan<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.normalize-admits"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.TryNormalize(System.ReadOnlySpan<System.Int64>,System.Span<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.quantize-unit"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.TryQuantizeUnit(System.ReadOnlySpan<System.Double>,System.Span<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "quantization.simplest-rational-minimality"
       ],
       "Id": "Puck.Maths.SimplestRational.InOpenInterval(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",

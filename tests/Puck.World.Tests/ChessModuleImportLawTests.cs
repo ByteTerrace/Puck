@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// ordinal table the engine's own <c>placement:$each</c> resolution rides — never a literal body index.
 /// </summary>
 public sealed class ChessModuleImportLawTests {
-    private static long Cell(WorldStateRow row, string key) => (row.Cells?.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value
+    private static long Cell(WorldStateRow row, string key) => (row.Cells?.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value.AsInt
         ?? ((row.EffectiveDomain is StateDomain.CellsOf board)
         ? board.Empty
         : throw new InvalidOperationException(message: $"missing {row.Name}[{key}]")));
@@ -53,7 +53,7 @@ public sealed class ChessModuleImportLawTests {
             z: z
         );
 
-        for (var tick = 0; (tick < 50); tick++) {
+        for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
         }
     }
@@ -113,7 +113,7 @@ public sealed class ChessModuleImportLawTests {
     // The first stable physical position seeds accepted state. Later settles are judged
     // against lastLegal; rejected or incomplete observations never replace that baseline.
     private static void SettleFromSpawn(WorldFixture fixture) {
-        for (var tick = 0; (tick < 50); tick++) {
+        for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
         }
     }
@@ -962,7 +962,7 @@ public sealed class ChessModuleImportLawTests {
             yawRadians: 0f,
             z: (OriginZ + (0.5f * CellSize))
         );
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();
         }
 
@@ -1056,6 +1056,10 @@ public sealed class ChessModuleImportLawTests {
     }
 
     private const float CellSize = 0.2f;
+    // One settle window, in simulation ticks: the module's own `settleHold` row counts 60 consecutive quiescent
+    // ticks before the derive chain fires, and a posed piece has to fall from SpawnHeight and latch resting first,
+    // so a window shorter than that observes no derive at all.
+    private const int SettleTicks = 400;
     // Restated tabletop world origin: [20, -0.5, -12] (composed position) + the fragment's own LOCAL chessBoard
     // origin [-0.8, 1.25, -0.8] = [19.2, 0.75, -12.8] — the SAME resolution TopologyCompilation.Find(WorldDefinition,
     // string) performs at runtime; recomputed by hand here as the test's own control on the anchor math.

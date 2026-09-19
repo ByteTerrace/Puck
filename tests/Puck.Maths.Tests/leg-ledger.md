@@ -1,4 +1,4 @@
-﻿# Puck.Maths.Tests — LEG LEDGER
+# Puck.Maths.Tests — LEG LEDGER
 
 Machine-written by the assembly ledger when the leg gates ran. Every gate statement declares the legs it stands
 on — every one of them a law case in LawRegistry.cs — and this file is those declarations read back. Never
@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 806 | 527 |
+| classical | — | 812 | 533 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -24,14 +24,14 @@ adversarial review's job, not this file's.
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
 | structural | — | 1186 | 594 |
-| **total** | | **2283** | **751** |
+| **total** | | **2289** | **757** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 610 | 878 | 1062 | 187 |
+| law: Default | 616 | 884 | 1062 | 187 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -279,7 +279,7 @@ adversarial review's job, not this file's.
 | core.fixed-saturate-clamps-to-the-extremes | law: Default | classical | — | FixedSaturate.Add over swept raw pairs at width 4, and FixedSaturate.ToInt64 over an Int128 accumulator built from each pair (the left raw shifted one bit past the long range plus the right raw), so every pair exercises an in-range and a far-out narrowing | Exact BigInteger addition clamped to [long.MinValue, long.MaxValue] in the claim: no Int128 comparison is shared with the subject, which decides on Int128 against the long extremes | — | — |
 | core.fixed-saturate-clamps-to-the-extremes | law: Default | structural | — | The seams the clamp decides on: Int128.MinValue and MaxValue, each long extreme and its two neighbours, zero, and Add at FixedQ4816.MaxValue + Epsilon and MinValue - one raw unit | The literal expected narrowings: a wrap at either seam, or a clamp one unit early, fails by name | — | — |
 | core.fixed-tick-conversion-exact-refuses-inexact-decimals | law: Default | classical | — | FixedTickConversion.TryDurationEngineTicksExact at a curated edge set (zero; a negative duration; every dyadic value already authored in a shipped or scenario document — 0.25, 0.5, 1.0, 3.0; the finest terminating-decimal grid that is ALWAYS exact — 0.00125 (1/800 s) and eleven further multiples of it; each of 50400's non-trivial divisors expressed as a terminating decimal — 0.1, 0.01, 0.02, 0.04, 0.05, 0.2, 0.5; curated INEXACT decimals at 3-6 fraction digits, including a decimal approximation of 1/24 s and of 35/12 s; and exact values whose tick counts exceed UInt64, including Decimal.MaxValue) plus a dense sweep of every 37th millisecond (0.001 s steps, mostly inexact since 1000 does not divide 50400) across the first two seconds | an independent BigInteger recomputation that never calls decimal multiplication or Truncate: decimal.GetBits decomposes the authored value into its sign, base-10 scale, and unscaled 96-bit integer with no precision loss, then unscaled * TicksPerSecond is tested for exact divisibility by 10^scale via BigInteger remainder — the SAME question the subject answers through decimal arithmetic, transcribed from the definition through a completely different numeric path | — | — |
-| core.fixed-tick-conversion-exact-refuses-inexact-decimals | law: Default | structural | — | this is the exactness seam for authored-duration engine-tick storage: Puck.World.Data's WorldRuleCompiler.ResolveWrite calls this member for every world-rule 'valueSeconds' countdown/cooldown, refusing (WorldRuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes | — | — | — |
+| core.fixed-tick-conversion-exact-refuses-inexact-decimals | law: Default | structural | — | this is the exactness seam for authored-duration engine-tick storage: Puck.State.Rules' RuleCompiler calls this member for every rule's 'valueSeconds' write and every authored delay, refusing (RuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes | — | — | — |
 | core.fixed-tick-conversion-rounds-up-against-rational-arithmetic | law: Default | classical | — | FixedTickConversion.DurationTicks at rates 0, 1, 7, 24, 30, 60, 120, 240, 1000, and 50400 (TicksPerSecond) — and DurationEngineTicks held equal to the 50400 case — at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second | an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * ratePerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check | — | — |
 | core.fixed-tick-conversion-rounds-up-against-rational-arithmetic | law: Default | structural | — | this is the seam headless P1 (docs/project-map.md) dissolves: Puck.World.Server's WorldBody and Puck.World.Data's WorldDefinition kit-effect compile path both call this ONE member instead of the Data project reaching into the Server project (or vice versa) for the seconds-to-ticks round-up — the law's coverage of the member is what keeps that single call site honest as both callers change | — | — | — |
 | core.fnv1a-published-vector | law: Default | classical | — | Fnv1aHash over UTF-8 'hello' | 0xa430d84680aabd0b | — | the published FNV-1a 64-bit reference vector; packed integer folds are also compared with explicit little-endian byte folds |
@@ -1963,6 +1963,12 @@ adversarial review's job, not this file's.
 | scalar.trigonometry-turns | law: Default | classical | — | SinCosTurns on the shared scalar transcendental domain | Oracles.EncloseSinCosTurns with 0.50000001 raw Q16 ULP envelope | — | — |
 | scalar.trigonometry-turns-deep | law: Deep | classical | — | MIRROR of scalar.trigonometry-turns over the Deep domain budget | Independent turn interval series with the same fixed error envelope | — | — |
 | scalar.trigonometry-twiddles | law: Default | classical | — | Every FFT and DCT plan twiddle for powers of two from 1 through 1024 | Oracles.EncloseSinCosTurns of each exact ideal dyadic phase, with 0.50000001 raw Q16 ULP envelope; inverse entries equal exact conjugates | — | — |
+| signed-byte-vectors.admission-tolerance | law: Default | classical | — | SignedByteVectorFunctions.AdmissionTolerance calculation | ceil(sqrt(n)/2)+1 for every n in [1, 1024] | — | — |
+| signed-byte-vectors.cosine-vs-oracle | law: Default | classical | — | SignedByteVectorFunctions.CosineQ16 against exact rational oracle rounded with BigInteger | Exact BigInteger rational rounding oracle with self-cosine 65536, symmetry, range [-65536, 65536], and orthogonal/opposite vectors | — | — |
+| signed-byte-vectors.dot-tiers-vs-scalar-rung | law: Default | classical | — | SignedByteVectorFunctions supported SIMD tiers (Vector128, Vector256, Vector512) | SignedByteVectorFunctions.DotScalar reference rung over identical inputs | — | — |
+| signed-byte-vectors.dot-vs-oracle | law: Default | classical | — | SignedByteVectorFunctions.Dot and SumOfSquares against independent BigInteger sum over random vectors, all-127, all--127, alternating extremes, and -128, at lengths 0 through 1025 and 1048577 | BigInteger sum of products | — | — |
+| signed-byte-vectors.normalize-admits | law: Default | classical | — | SignedByteVectorFunctions.TryNormalize output matches BigInteger rounding oracle and passes IsUnitAdmissible | BigInteger rounding oracle across dimensions 8, 9, 255, 256, 1000, 1024, one-hot, equal magnitudes, quotients on .5, 2^24 bound, and zero/over-bound refusals | — | — |
+| signed-byte-vectors.quantize-unit | law: Default | classical | — | SignedByteVectorFunctions.TryQuantizeUnit pinned bytes for known double vectors | Pinned byte sequences and refusals for non-finite, oversize, and zero inputs | — | — |
 | smoke.binary-field-product-vs-oracle | law: Smoke | classical | — | BinaryFields.Degree8.Multiply and BinaryFields.Degree16.Multiply | Oracles.BinaryFieldProduct at degrees 8 and 16. MIRROR of presented.gf2-twins-binaryfield's oracle legs and of binary-field.product-and-reduction-vs-oracle at SmokeDomain: no new evidence. ENVELOPE: the lane encoding Subjects.PackBits carries reads bit zero of each lane, so the swept element is eight or sixteen operand PARITIES rather than a full-range draw — the same envelope presented.gf2-twins-binaryfield already runs under | — | — |
 | smoke.closed-unit-mul-ties-to-even | law: Smoke | classical | — | UnitInterval32.Multiply(x, y) — its own branchless UInt128 ties-to-even at the 2⁻³² grid | Oracles.ClosedUnitProduct — one Oracles.RoundDyadic of the exact BigInteger product at shift 32. MIRROR of closed-unit.mul-vs-oracle at SmokeDomain | — | — |
 | smoke.complex-twin-quad | law: Smoke | shared-substrate | fused-substrate | FixedComplex.op_Multiply | QuadraticAlgebra<FixedQ4816>.Multiply at the (0, −1) relation, integer lane | FixedQ4816.RoundProductSum, BOTH overloads (long and Int128) — the IDENTICAL member, not a sibling copy, selected at the identical 2³¹ FusedArithmetic.RawMagnitude gate. MIRROR of complex.twin-quad at SmokeDomain: no new evidence | — |

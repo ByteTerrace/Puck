@@ -10,7 +10,10 @@ public sealed class WorldFieldProgramLawTests {
     private static WorldStateSection BuildState(
         WorldStateRow? season = null,
         IReadOnlyList<WorldReaction>? reactions = null,
-        string fieldName = "heat"
+        string fieldName = "heat",
+        WorldStateRow? burning = null,
+        WorldStateRow? exposed = null,
+        IReadOnlyList<WorldStateRow>? extra = null
     ) => new(
         Lattices: [new WorldFieldTopology(
                 Name: "ground",
@@ -75,19 +78,20 @@ public sealed class WorldFieldProgramLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Fixed(rawBits: 0L)
                     )]
             )),
-            new WorldStateRow(
+            (burning ?? new WorldStateRow(
                 Name: CellName.Parse(candidate: "burning"),
                 Kind: CellKind.Int,
                 Capacity: 16
-            ),
-            new WorldStateRow(
+            )),
+            (exposed ?? new WorldStateRow(
                 Name: CellName.Parse(candidate: "exposed"),
                 Kind: CellKind.Int,
                 Capacity: 16
-            ),
+            )),
+            .. (extra ?? []),
         ]
     );
 
@@ -137,6 +141,48 @@ public sealed class WorldFieldProgramLawTests {
             expected: [0],
             actual: transform.FieldWrites.Select(selector: static handle => handle.Ordinal)
         );
+    }
+    [Fact]
+    public void Compile_AdmitsEveryKeyedShapeAsABodyCoupledTarget() {
+        var tokens = new WorldStateRow(
+            Name: CellName.Parse(candidate: "tokens"),
+            Kind: CellKind.Int,
+            Capacity: 4
+        );
+
+        foreach (var domain in new StateDomain[] {
+            StateDomain.Keys.Instance,
+            new StateDomain.KeysOf(Row: tokens.Name),
+            new StateDomain.KeysOf(
+                Row: tokens.Name,
+                Ordered: true
+            ),
+            new StateDomain.CellsOf(Topology: "board"),
+            new StateDomain.Ring(Capacity: 8),
+        }) {
+            var state = BuildState(
+                burning: new WorldStateRow(
+                    Name: CellName.Parse(candidate: "burning"),
+                    Kind: CellKind.Int,
+                    Domain: domain
+                ),
+                exposed: new WorldStateRow(
+                    Name: CellName.Parse(candidate: "exposed"),
+                    Kind: CellKind.Int,
+                    Domain: domain
+                ),
+                extra: [tokens]
+            );
+            var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+
+            var program = WorldFieldProgram.Compile(
+                document: fields,
+                state: StateCatalog.Compile(section: state)
+            );
+
+            Assert.Single(collection: program.Nodes.OfType<WorldFieldNode.Emit>());
+            Assert.Single(collection: program.Nodes.OfType<WorldFieldNode.Expose>());
+        }
     }
     [Fact]
     public void Compile_DoesNotInventAnOrderingEdgeBetweenIndependentBodyOutputs() {
@@ -241,8 +287,8 @@ public sealed class WorldFieldProgramLawTests {
                     actual: field.Maximum
                 );
                 Assert.Equal(
-                    expected: StateStorageShape.Lattice,
-                    actual: catalog[field.State].Storage
+                    expected: RowShape.Lattice,
+                    actual: catalog[field.State].Shape
                 );
             }
         );
@@ -359,6 +405,26 @@ public sealed class WorldFieldProgramLawTests {
         Assert.Equal(
             expected: FixedQ4816.FromDouble(value: 0.125),
             actual: decay.Rate.Literal
+        );
+    }
+    [Fact]
+    public void Compile_RefusesASlotRowAsABodyCoupledTarget() {
+        var state = BuildState(burning: new WorldStateRow(
+            Name: CellName.Parse(candidate: "burning"),
+            Kind: CellKind.Int,
+            Domain: StateDomain.Slot.Instance
+        ));
+        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+
+        var exception = Assert.Throws<InvalidOperationException>(testCode: () => WorldFieldProgram.Compile(
+            document: fields,
+            state: StateCatalog.Compile(section: state)
+        ));
+
+        Assert.Contains(
+            expectedSubstring: "requires a keyed Int world state row",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
         );
     }
     [Fact]
@@ -616,17 +682,17 @@ public sealed class WorldFieldProgramLawTests {
             comparisonType: StringComparison.Ordinal
         )
             ? row with {
-                    Field = row.Field! with {
-                        Color = "#336699",
-                        Paint = [new WorldLatticeFill.Rect(
+                Field = row.Field! with {
+                    Color = "#336699",
+                    Paint = [new WorldLatticeFill.Rect(
                     MaxX: 1f,
                     MaxZ: 1f,
                     MinX: 0f,
                     MinZ: 0f,
                     Value: 1f
                 )],
-                    },
-                }
+                },
+            }
             : row)).ToArray();
         var cosmetic = original.WithWorldState(rows: cosmeticRows);
 
@@ -679,10 +745,12 @@ public sealed class WorldFieldProgramLawTests {
             b: "season",
             comparisonType: StringComparison.Ordinal
         )
-            ? row with { Cells = [new StateCell(
+            ? row with {
+                Cells = [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 123L
-                )] }
+                    Value: CellValue.Fixed(rawBits: 123L)
+                )],
+            }
             : row)).ToArray();
         var updated = original.WithWorldState(rows: rows);
 

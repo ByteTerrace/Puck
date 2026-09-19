@@ -293,7 +293,7 @@ public static class WorldAdmissionDoor {
     /// <summary>Matches an already-verified (domain, subject) identity against a set of admission entries, through
     /// the same (domain, subject, mode) predicate <see cref="TryAdmit"/> uses at first connection — factored out so
     /// a later re-authorization (a whole-document rebuild re-checking an already-connected peer against the
-    /// current policy rather than the connection-time one — see <c>Server.WorldServer.RemintPeerAdmissionGrants</c>)
+    /// current policy rather than the connection-time one — see <c>Server.WorldGrants.RemintPeerAdmissionGrants</c>)
     /// can never drift from what a fresh connection would decide. This performs no cryptographic verification at
     /// all — the caller already holds a verified identity; this only asks "does this set of admission entries still
     /// trust it, and if so, what does the matching entry mint."</summary>

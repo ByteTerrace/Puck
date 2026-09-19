@@ -64,9 +64,11 @@ public sealed record CartridgeDocument {
     /// <remarks>In tall mode a sprite's tile index selects a pair, so the low bit of the index is ignored.</remarks>
     public bool TallSprites { get; init; }
     /// <summary>Gets the horizontal background scroll, in pixels modulo 256.</summary>
-    public required ValueExpression ScrollX { get; init; }
+    [JsonConverter(typeof(ExpressionSpellingJsonConverter))]
+    public required ExpressionProgram ScrollX { get; init; }
     /// <summary>Gets the vertical background scroll, in pixels modulo 256.</summary>
-    public required ValueExpression ScrollY { get; init; }
+    [JsonConverter(typeof(ExpressionSpellingJsonConverter))]
+    public required ExpressionProgram ScrollY { get; init; }
 }
 /// <summary>
 /// A panel drawn over the background from its top-left corner down and right, out of its own tile map. Games use it
@@ -81,9 +83,9 @@ public sealed record CartridgeDocument {
 public sealed record CartridgeWindow(
     int[] Map,
     int[]? MapPalettes,
-    ValueExpression X,
-    ValueExpression Y,
-    ValueExpression Visible);
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram X,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Y,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Visible);
 /// <summary>
 /// The cartridge's color. Each palette holds four colors on the humble machine and sixteen on the advanced one, and a
 /// tile's pixel digits index within whichever palette its map cell or sprite selects.
@@ -143,7 +145,7 @@ public sealed record CartridgeArray(string Name, int[] Initial);
 /// </remarks>
 /// <param name="Clear">The palette entry the surface is filled with each frame, or null to leave it as drawn.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeBitmap(ValueExpression? Clear = null) {
+public sealed record CartridgeBitmap([property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Clear = null) {
     /// <summary>The surface's height in pixels.</summary>
     public const int Height = 160;
     /// <summary>The surface's width in pixels.</summary>
@@ -168,10 +170,10 @@ public sealed record CartridgeBitmap(ValueExpression? Clear = null) {
 public sealed record CartridgeLayer(
     int[] Map,
     int[]? MapPalettes,
-    ValueExpression ScrollX,
-    ValueExpression ScrollY,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram ScrollX,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram ScrollY,
     int Priority,
-    ValueExpression Visible);
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Visible);
 /// <summary>
 /// A scroll change applied from one scanline down, which is how a picture gets a fixed panel over a scrolling world
 /// or layers that drift at different speeds.
@@ -184,7 +186,7 @@ public sealed record CartridgeLayer(
 /// <param name="ScrollX">The horizontal scroll from that line down.</param>
 /// <param name="ScrollY">The vertical scroll from that line down.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeRasterRow(int Line, ValueExpression ScrollX, ValueExpression ScrollY);
+public sealed record CartridgeRasterRow(int Line, [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram ScrollX, [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram ScrollY);
 /// <summary>
 /// A background that rotates and scales about a centre. Only the advanced machine has one; the humble machine's
 /// backgrounds only scroll, so a document declaring this is refused for that target.
@@ -208,11 +210,11 @@ public sealed record CartridgeRasterRow(int Line, ValueExpression ScrollX, Value
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeAffine(
     int[] Map,
-    ValueExpression Angle,
-    ValueExpression Scale,
-    ValueExpression CentreX,
-    ValueExpression CentreY,
-    ValueExpression Visible);
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Angle,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Scale,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram CentreX,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram CentreY,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Visible);
 /// <summary>
 /// The state slots a clock step fills from the cartridge's battery-backed real-time clock. Every field is optional;
 /// a slot left unnamed is simply not written.
@@ -356,25 +358,25 @@ public sealed record CartridgeStatement(
     string Kind,
     CartridgeTarget? Target = null,
     ExpressionOp? Operation = null,
-    ValueExpression? Value = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Value = null,
     ActionPredicate? When = null,
     CartridgeStatement[]? Then = null,
     CartridgeStatement[]? Else = null,
     int? Count = null,
     string? Index = null,
     CartridgeStatement[]? Body = null,
-    ValueExpression? Row = null,
-    ValueExpression? Column = null,
-    ValueExpression? Tile = null,
-    ValueExpression? Palette = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Row = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Column = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Tile = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Palette = null,
     string? Screen = null,
     string? Sound = null,
-    ValueExpression? Rate = null,
-    ValueExpression? Amount = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Rate = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Amount = null,
     string? Toward = null,
     string? Surface = null,
-    ValueExpression? Weight = null,
-    ValueExpression? Colour = null);
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Weight = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Colour = null);
 /// <summary>An ordered, conditional group of state changes.</summary>
 /// <param name="Name">The diagnostic name.</param>
 /// <param name="Body">Steps executed in declaration order.</param>
@@ -401,12 +403,12 @@ public sealed record CartridgeRule(string Name, CartridgeStatement[] Body, Actio
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeSprite(
     string Name,
-    ValueExpression Tile,
-    ValueExpression X,
-    ValueExpression Y,
-    ValueExpression Visible,
-    ValueExpression? Palette = null,
-    ValueExpression? FlipX = null,
-    ValueExpression? FlipY = null,
-    ValueExpression? BehindBackground = null,
-    ValueExpression? Turn = null);
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Tile,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram X,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Y,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram Visible,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Palette = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? FlipX = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? FlipY = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? BehindBackground = null,
+    [property: JsonConverter(typeof(ExpressionSpellingJsonConverter))] ExpressionProgram? Turn = null);

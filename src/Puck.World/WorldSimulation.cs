@@ -13,7 +13,7 @@ namespace Puck.World;
 /// screen machine (<c>Server.WorldMachineHost.Advance</c>) → the tick's snapshot, delivered to the client
 /// synchronously — then every other instance), and this shell's post-step syncs the seats' bindings and publishes
 /// their context before the seat intents finish.</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldPeerHost peerHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances, WorldViewComposer composer, WorldServiceExtensions extensions) : IFixedStepSimulation, IWorldSimulationClock {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances, WorldViewComposer composer, WorldServiceExtensions extensions) : IFixedStepSimulation, IWorldSimulationClock {
     private readonly WorldServer m_server = server;
     private readonly WorldClient m_client = client;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
@@ -26,6 +26,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         instances: instances,
         peerHost: peerHost,
         replayTape: replayTape,
+        scheduleRunner: scheduleRunner,
         server: server,
         waitGate: waitGate
     );

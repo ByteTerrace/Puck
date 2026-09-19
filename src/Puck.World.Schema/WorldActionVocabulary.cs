@@ -5,7 +5,7 @@ using Puck.Physics.Motion;
 namespace Puck.World;
 
 /// <summary>The predicate arms the world adds to <see cref="ActionPredicate"/>: body facts and per-body action
-/// state a kit's action programs gate on. <see cref="WorldRuleVocabulary"/> registers them under their
+/// state a kit's action programs gate on. <see cref="WorldFactsVocabulary"/> registers them under their
 /// <c>$type</c> discriminators; none has a world-rule meaning, so a rule gate spelling one refuses by name.</summary>
 public static class WorldPredicate {
     /// <summary>The fact holds this tick.</summary>
@@ -26,7 +26,7 @@ public static class WorldPredicate {
     public sealed record Held(string Channel) : ActionPredicate;
 }
 /// <summary>The effect arms the world adds to <see cref="ActionEffect"/>, registered by
-/// <see cref="WorldRuleVocabulary"/>. The body-program arms (vertical velocity, planar impulse, timers, designation
+/// <see cref="WorldFactsVocabulary"/>. The body-program arms (vertical velocity, planar impulse, timers, designation
 /// by <see cref="ActionTarget"/>) belong to a kit's action programs and refuse in a world rule; the body-keyed,
 /// document, cue, field, pose, and save arms belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
@@ -70,7 +70,7 @@ public static class WorldEffect {
     /// ceiling.</summary>
     /// <param name="Key">The struck body reference — <c>body:&lt;n&gt;</c>, <c>argmax:&lt;row&gt;</c>/
     /// <c>argmin:&lt;row&gt;</c>, or <c>placement:&lt;id&gt;</c> (see
-    /// <see cref="WorldRuleCompileContext.BodyRefVocabulary"/>).</param>
+    /// <see cref="WorldFactsCompileContext.BodyRefVocabulary"/>).</param>
     /// <param name="HeadingKey">The body reference whose forward facing supplies the impulse direction — the same
     /// reference grammar as <paramref name="Key"/>.</param>
     /// <param name="MagnitudeState">The declared kind=Fixed row naming the impulse's magnitude.</param>
@@ -120,7 +120,7 @@ public static class WorldEffect {
         string Key,
         string Fact,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one
     /// of <paramref name="SpawnPoint"/> and <paramref name="Position"/> is authored.</summary>

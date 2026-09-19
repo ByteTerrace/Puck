@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -9,35 +7,25 @@ namespace Puck.World.Transpiler.Tests;
 // Interpolation, raw strings, `for`, indexing and the number builtins: the pieces that let a document say how its
 // data is generated instead of listing it.
 public class GenerationSyntaxTests {
-    private static JsonObject Lower(string body) {
-        var diagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            PuckParser.ParseDocument($"schema: \"puck.world.definition.v1\"\n\n{body}"),
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+    private static WorldCompilation Compile(string body) =>
+        WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: $"schema: \"puck.world.definition.v1\"\n\n{body}"
         );
+    private static JsonObject Lower(string body) {
+        var compilation = Compile(body: body);
 
         Assert.False(
-            condition: diagnostics.HasErrors,
+            condition: compilation.Diagnostics.HasErrors,
             userMessage: string.Join(
                 separator: "\n",
-                values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
+                values: compilation.Diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
             )
         );
 
-        return lowered.Value!;
+        return compilation.RequireJson();
     }
-    private static DiagnosticBag LowerForDiagnostics(string body) {
-        var diagnostics = new DiagnosticBag();
-
-        WorldDocumentEmitter.LowerWithDiagnostics(
-            PuckParser.ParseDocument($"schema: \"puck.world.definition.v1\"\n\n{body}"),
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        return diagnostics;
-    }
+    private static DiagnosticBag LowerForDiagnostics(string body) => Compile(body: body).Diagnostics;
     private static string Text(JsonNode? node) => Assert.IsAssignableFrom<JsonValue>(@object: node).GetValue<string>();
 
     [Fact]

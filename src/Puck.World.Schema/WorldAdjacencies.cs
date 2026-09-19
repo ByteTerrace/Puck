@@ -8,8 +8,10 @@ namespace Puck.World;
 /// <summary>What happens when an adjacent authority cannot be observed or accept a handoff.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldAdjacencyUnavailable>))]
 public enum WorldAdjacencyUnavailable : byte {
-    /// <summary>The boundary behaves as closed terrain. The local authority remains authoritative and never lets a
-    /// body fall through an unowned seam.</summary>
+    /// <summary>The handoff is refused and the local authority stays authoritative. At a boundary a body walks
+    /// through, one whose frame is yaw-only, the body is clamped one raw unit inside it, as against closed terrain.
+    /// At a pitched boundary, a floor or a ceiling, the body keeps its pose and its velocity and goes on moving
+    /// under the local authority: a clamp there would pin a falling body in mid-air at the plane.</summary>
     Closed,
 }
 /// <summary>
@@ -17,7 +19,12 @@ public enum WorldAdjacencyUnavailable : byte {
 /// neighbour; the owned half-space is therefore on the non-positive side of the boundary plane.
 /// </summary>
 /// <param name="Center">The boundary rectangle's center in this world's coordinates.</param>
-/// <param name="OutwardYawDegrees">The outward heading, in degrees (0 = +Z, 90 = +X).</param>
+/// <param name="OutwardYawDegrees">The outward heading, in degrees (0 = +Z, 90 = +X). It also fixes the rectangle's
+/// own right axis, which is the yaw's horizontal right whatever the pitch — so on a face lying flat, where the
+/// heading contributes nothing to the outward direction, this is the rectangle's roll about the vertical and the
+/// arrival turn it gives the seam is still <c>counterpartYaw - thisYaw - 180</c>
+/// (<see cref="WorldFrameIsometry.MapVector"/>). An untwisted seam therefore authors its two yaws 180 degrees apart
+/// whether it stands as a wall or lies flat as a floor.</param>
 /// <param name="OutwardPitchDegrees">The outward elevation, in degrees (+90 = +Y, -90 = -Y).</param>
 /// <param name="Width">The full span along the boundary's local right axis.</param>
 /// <param name="Height">The full span along the boundary's local up axis.</param>
@@ -108,8 +115,11 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
                 normal = -Y;
                 break;
             default: {
+                    // Pitch is an elevation: positive raises the outward normal toward +Y, which is the negated
+                    // right-handed angle about the frame's own right axis. The cardinal arms above are this arm's
+                    // exact quarter-turn values.
                     var rotation = FixedQuaternion.FromAxisAngle(
-                        angle: (pitch * WorldAngles.DegreesToRadians),
+                        angle: -(pitch * WorldAngles.DegreesToRadians),
                         axis: right
                     );
 
@@ -497,24 +507,24 @@ public static class WorldAdjacencyPolicy {
         }
         return reach;
     }
-    /// <summary>Returns the ownership threshold appropriate to a boundary's traversal geometry. A vertical wall
-    /// (world-up in its plane) carries the full reciprocal contact hysteresis: ordinary grounded travel is horizontal,
-    /// so a deadband that wide costs nothing. A floor/ceiling boundary cannot carry that much — one body radius of
-    /// delayed ownership would put handoff after solid destination terrain, or past the end of a held ascent — so it
-    /// carries the much smaller <paramref name="verticalSettleDeadband"/> instead.</summary>
+    /// <summary>Returns the ownership threshold appropriate to a boundary's traversal geometry. Each geometry closes
+    /// against whatever can carry a body back across the plane it was just handed over: a vertical wall (world-up in
+    /// its plane) against two body reaches plus contact skin, since ordinary grounded travel is horizontal and
+    /// another body beside the seam may legally push an arrival that far; a floor or ceiling against one authority
+    /// step of vertical travel, which is the axis its kits drive it along.</summary>
     /// <param name="frame">The compiled local boundary frame.</param>
     /// <param name="reciprocalHysteresis">The non-negative two-body contact hysteresis.</param>
-    /// <param name="verticalSettleDeadband">The non-negative vertical settle deadband
-    /// (<see cref="TryVerticalSettleDeadband"/>).</param>
+    /// <param name="verticalOwnershipDeadband">The non-negative vertical ownership deadband
+    /// (<see cref="TryVerticalOwnershipDeadband"/>).</param>
     /// <returns><paramref name="reciprocalHysteresis"/> for a vertical wall;
-    /// <paramref name="verticalSettleDeadband"/> for a floor/ceiling boundary.</returns>
+    /// <paramref name="verticalOwnershipDeadband"/> for a floor/ceiling boundary.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Either depth is negative.</exception>
-    public static FixedQ4816 OwnershipThreshold(in WorldFaceFrame frame, FixedQ4816 reciprocalHysteresis, FixedQ4816 verticalSettleDeadband) {
+    public static FixedQ4816 OwnershipThreshold(in WorldFaceFrame frame, FixedQ4816 reciprocalHysteresis, FixedQ4816 verticalOwnershipDeadband) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: reciprocalHysteresis.Value);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: verticalSettleDeadband.Value);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: verticalOwnershipDeadband.Value);
         return (frame.IsYawOnly
             ? reciprocalHysteresis
-            : verticalSettleDeadband
+            : verticalOwnershipDeadband
         );
     }
     /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs.</summary>
@@ -687,8 +697,8 @@ public static class WorldAdjacencyPolicy {
                     y: neighbour.Hysteresis
                 ),
                 y: FixedQ4816.Max(
-                    x: local.SettleDeadband,
-                    y: neighbour.SettleDeadband
+                    x: local.VerticalOwnershipDeadband,
+                    y: neighbour.VerticalOwnershipDeadband
                 )
             )
         );
@@ -772,25 +782,33 @@ public static class WorldAdjacencyPolicy {
 
         return false;
     }
-    /// <summary>Derives the settle deadband a floor/ceiling ownership boundary must carry: strictly more than the
-    /// distance a body at rest can fall back through the authored plane in one of its own authority steps, plus the
-    /// contact skin the solver keeps between that body and every surface.</summary>
+    /// <summary>Derives the ownership deadband a floor/ceiling boundary must carry: strictly more than the vertical
+    /// distance one authority step can move a body, plus the contact skin the solver keeps between that body and
+    /// every surface.</summary>
     /// <remarks>
-    /// <para>The separating invariant: the deadband is larger than any uncommanded descent and smaller than any
-    /// commanded one. A settling body sags at most one step of gravity from rest and therefore never re-crosses; a
-    /// body driven or already falling downward clears the deadband inside one step and transfers. The two-body
-    /// contact envelope <see cref="TryReciprocalHysteresis"/> derives for a wall breaks the second half.</para>
-    /// <para>Per kit: the steepest fall acceleration any of its holds author, over one step, capped by their fastest
-    /// terminal speed, carried over one more step to a distance. Every quotient rounds outward and one raw unit is
-    /// added last, so the result strictly exceeds the sag. A kit whose holds are all Pull or None authors neither, so
-    /// its sag is zero and its deadband is the contact skin alone plus that one raw unit.</para>
+    /// <para>The deadband is a hysteresis width, and what it bounds is the vertical travel a kit's holds admit by
+    /// themselves: gravity over one step, and a hold's authored terminal speed. No single step of that travel can
+    /// carry a body back across the plane it was just handed over, so a body settling or hovering under its holds
+    /// at the seam changes authority at most once instead of every other tick; a body descending deliberately
+    /// clears the deadband in a bounded number of steps, during which the neighbour's composed field still serves
+    /// its contact — <see cref="TryDeriveOverlap(WorldOverlapTerms, WorldOverlapTerms, out FixedQ4816, out string)"/>
+    /// covers the deadband.</para>
+    /// <para>Vertical motion no hold bounds is outside it: a full-lift row, which may author no envelope, a
+    /// vertical-velocity effect, a Pull row's carried momentum, a rigid kit's impulses. A body those drive past the
+    /// deadband in one step is handed over, once per crossing, because the boundary sweep tests the whole step's
+    /// segment; ownership follows a body that really is on the other side.</para>
+    /// <para>Per kit: the fastest vertical travel its holds admit — their fastest terminal speed, or the steepest
+    /// fall acceleration over one step where that is greater — carried over one more step to a distance. Every
+    /// quotient rounds outward and one raw unit is added last, so the result strictly exceeds that travel. A kit
+    /// whose holds are all Pull or None authors neither, so its travel is zero and its deadband is the contact skin
+    /// alone plus that one raw unit.</para>
     /// </remarks>
-    /// <param name="definition">The document whose kits, contact skin, and authority rate bound the sag.</param>
+    /// <param name="definition">The document whose kits, contact skin, and authority rate bound the travel.</param>
     /// <param name="depth">The derived deadband; zero when this returns <see langword="false"/>.</param>
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the deadband is representable.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static bool TryVerticalSettleDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
+    public static bool TryVerticalOwnershipDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         depth = FixedQ4816.Zero;
@@ -798,7 +816,7 @@ public static class WorldAdjacencyPolicy {
             val1: definition.SimulationRateHz,
             val2: 1
         );
-        var sagRaw = 0L;
+        var travelRaw = 0L;
 
         foreach (var kit in definition.Kits) {
             if (kit?.Motion is not { } motion) {
@@ -824,7 +842,10 @@ public static class WorldAdjacencyPolicy {
                     return false;
                 }
 
-                stepSpeed = FixedQ4816.Min(
+                // The greater of the two, not the lesser: a row's terminal speed is reachable, so a body already at
+                // it travels that far in one step whatever its acceleration, and an unbounded row's acceleration is
+                // the only speed it names.
+                stepSpeed = FixedQ4816.Max(
                     x: terminalSpeed,
                     y: new FixedQ4816(Value: acceleratedRaw)
                 );
@@ -836,26 +857,26 @@ public static class WorldAdjacencyPolicy {
                 denominator: rate,
                 fractionBitsDenominator: 0,
                 fractionBitsOut: FixedQ4816.FractionBitCount,
-                result: out var kitSagRaw
+                result: out var kitTravelRaw
             )) {
-                reason = $"kit '{kit.Name}' one-step vertical sag exceeds the fixed-point range at {rate}Hz";
+                reason = $"kit '{kit.Name}' one-step vertical travel exceeds the fixed-point range at {rate}Hz";
                 return false;
             }
 
-            sagRaw = Math.Max(
-                val1: sagRaw,
-                val2: kitSagRaw
+            travelRaw = Math.Max(
+                val1: travelRaw,
+                val2: kitTravelRaw
             );
         }
 
         try {
             var skin = CeilingFixed(value: MathF.Abs(x: definition.Collision.ContactSkin));
 
-            depth = new FixedQ4816(Value: checked(((sagRaw + skin.Value) + 1L)));
+            depth = new FixedQ4816(Value: checked(((travelRaw + skin.Value) + 1L)));
             reason = string.Empty;
             return true;
         } catch (OverflowException) {
-            reason = "the vertical settle deadband exceeds the fixed-point range";
+            reason = "the vertical ownership deadband exceeds the fixed-point range";
             return false;
         }
     }

@@ -91,28 +91,30 @@ public sealed class TextLayout {
         var cursorX = 0.0f;
         var baselineY = 0.0f;
         var maxRight = 0.0f;
-        var lineVisualLeft = 0.0f;
-        var lineVisualRight = 0.0f;
+        // Visual bounds seed empty so a glyph lying wholly to one side of the pen origin is not widened to include
+        // the origin; a line with no visible glyph records a zero-width span at the origin.
+        var lineVisualLeft = float.PositiveInfinity;
+        var lineVisualRight = float.NegativeInfinity;
         var lineStartIndex = 0;
         var lineHasContent = false;
         var lineCount = 1;
         int? previousUnicode = null;
 
         void StartNewLine() {
-            lineBreaks?.Add(item: (
-                StartIndex: lineStartIndex,
-                VisualLeft: lineVisualLeft,
-                VisualRight: lineVisualRight
-            ));
+            lineBreaks?.Add(item: VisualSpan());
             lineStartIndex = placements.Count;
-            lineVisualLeft = 0.0f;
-            lineVisualRight = 0.0f;
+            lineVisualLeft = float.PositiveInfinity;
+            lineVisualRight = float.NegativeInfinity;
             lineHasContent = false;
             lineCount++;
             cursorX = 0.0f;
             baselineY -= lineStep;
             previousUnicode = null;
         }
+        (int StartIndex, float VisualLeft, float VisualRight) VisualSpan() => ((lineVisualLeft <= lineVisualRight)
+            ? (lineStartIndex, lineVisualLeft, lineVisualRight)
+            : (lineStartIndex, 0.0f, 0.0f)
+        );
 
         try {
             while (runes.MoveNext()) {
@@ -203,11 +205,7 @@ public sealed class TextLayout {
         }
 
         if (lineBreaks is not null) {
-            lineBreaks.Add(item: (
-                StartIndex: lineStartIndex,
-                VisualLeft: lineVisualLeft,
-                VisualRight: lineVisualRight
-            ));
+            lineBreaks.Add(item: VisualSpan());
             maxRight = MathF.Max(
                 x: maxRight,
                 y: AlignLines(

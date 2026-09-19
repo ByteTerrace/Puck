@@ -38,7 +38,7 @@ public sealed class IdentityProjectionWireLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
-                        Value: FixedQ4816.FromDouble(value: 4.5).Value
+                        Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: 4.5).Value)
                     )]
             ),
                 new WorldStateRow(
@@ -46,7 +46,7 @@ public sealed class IdentityProjectionWireLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
-                        Value: FixedQ4816.FromDouble(value: 2.25).Value
+                        Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: 2.25).Value)
                     )]
             ),
                 new WorldStateRow(
@@ -54,7 +54,7 @@ public sealed class IdentityProjectionWireLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
-                        Value: 91L
+                        Value: CellValue.Int(value: 91L)
                     )]
             ),
             ]),
@@ -81,7 +81,7 @@ public sealed class IdentityProjectionWireLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: WorldStateRow.SlotKey),
-                        Value: 91L
+                        Value: CellValue.Int(value: 91L)
                     )]
             ),
             ]),
@@ -117,12 +117,17 @@ public sealed class IdentityProjectionWireLawTests {
                     ),
                     CatalogRig: 3,
                     Mobility: new WorldMobilityIdentity(
-                        Incarnation: new WorldEntityAddress(
+                        DepartedFrom: new WorldEntityAddress(
                             Authority: "machine-a/boot",
                             Generation: 1,
                             Index: 0
                         ),
-                        Epoch: 0UL
+                        Epoch: 0UL,
+                        Incarnation: new WorldEntityAddress(
+                            Authority: "machine-a/boot",
+                            Generation: 1,
+                            Index: 0
+                        )
                     )
                 ),
             ]
@@ -177,12 +182,17 @@ public sealed class IdentityProjectionWireLawTests {
                     ),
                     CatalogRig: 3,
                     Mobility: new WorldMobilityIdentity(
-                        Incarnation: new WorldEntityAddress(
+                        DepartedFrom: new WorldEntityAddress(
                             Authority: "machine-a/boot",
                             Generation: 1,
                             Index: 0
                         ),
-                        Epoch: 0UL
+                        Epoch: 0UL,
+                        Incarnation: new WorldEntityAddress(
+                            Authority: "machine-a/boot",
+                            Generation: 1,
+                            Index: 0
+                        )
                     )
                 ),
             ]

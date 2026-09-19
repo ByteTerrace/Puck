@@ -39,8 +39,7 @@ public sealed class ValidatorMessagePathRatchetTests {
                 utf8Json: utf8Json,
                 errors: errors,
                 deferred: deferred,
-                definition: out _,
-                compilation: out _
+                definition: out _
             ),
             userMessage: string.Join(
                 separator: "; ",
@@ -58,8 +57,7 @@ public sealed class ValidatorMessagePathRatchetTests {
             utf8Json: utf8Json,
             errors: errors,
             deferred: deferred,
-            definition: out _,
-            compilation: out _
+            definition: out _
         );
 
         return [.. errors.Select(selector: BrowserErrorPaths.Split)];

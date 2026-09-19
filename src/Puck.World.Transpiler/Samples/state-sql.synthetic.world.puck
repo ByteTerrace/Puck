@@ -1,0 +1,40 @@
+schema: "puck.world.definition.v1"
+documentId: "state-sql-synthetic-v1"
+
+// Hybrid world demonstrating the pure SQL authoring dialect coexisting with native grid topology.
+sql {
+  CREATE TABLE characters (
+    id TEXT PRIMARY KEY,
+    hp INT CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+    mana INT CHECK (mana >= 0) ADVANCE 5 PER SECOND
+  ) CAPACITY 10;
+
+  INSERT INTO characters (id, hp, mana) VALUES
+    ('hero', 100, 50),
+    ('goblin', 30, 0);
+
+  DECLARE gold INT DEFAULT 10 CHECK (gold >= 0);
+
+  CREATE TABLE deck (id TEXT PRIMARY KEY REFERENCES cardNames) ORDERED CAPACITY 3;
+
+  CREATE RULE healHero ON ENTER AS
+    UPDATE characters SET hp = hp + 10 WHERE id = 'hero';
+
+  CREATE RULE spendMana EVERY TICK AS
+    UPDATE characters SET mana = mana - 1 WHERE id = 'hero';
+}
+
+state {
+  world {
+    table cardNames: Int capacity(3) {
+      king = 0
+      queen = 1
+      jack = 2
+    }
+
+    grid board: Int dimensions(width: 2, depth: 2) empty(-1) {
+      "0" = 1
+      "3" = 2
+    }
+  }
+}

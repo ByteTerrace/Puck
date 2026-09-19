@@ -43,6 +43,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
         var totalCells = 0L;
+        var derivation = new BoardDerivation(definition: definition);
 
         foreach (var row in (definition.State ?? [])) {
             if (
@@ -55,6 +56,7 @@ public static partial class WorldDefinitionValidator {
             if (ValidateBoardRow(
                 board: board,
                 definition: definition,
+                derivation: derivation,
                 errors: errors,
                 row: row
             ) is { } compiled) {
@@ -71,7 +73,7 @@ public static partial class WorldDefinitionValidator {
     // (<see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>). Returns the resolved topology so the
     // whole-document walk can total its cells against the world storage budget; null when the row names no valid
     // topology (already refused by name).
-    private static CompiledTopology? ValidateBoardRow(WorldDefinition definition, WorldStateRow row, StateDomain.CellsOf board, List<string> errors) {
+    private static CompiledTopology? ValidateBoardRow(WorldDefinition definition, WorldStateRow row, StateDomain.CellsOf board, BoardDerivation derivation, List<string> errors) {
         if (
             (row.Kind is not (CellKind.Int or CellKind.Bool)) ||
             (row.Draw is not null) ||
@@ -121,21 +123,20 @@ public static partial class WorldDefinitionValidator {
         if (row.Inverse is { } inverse) {
             ValidateDerivedBoard(
                 definition: definition,
+                derivation: derivation,
                 errors: errors,
                 inverse: inverse,
-                row: row,
-                topology: compiled
+                row: row
             );
         }
         return compiled;
     }
     // A derived board's tokens/codes both resolve to keyed integer rows, codes carries exactly the tokens row's own
-    // keys in the same order (so the two rows' cell lists correspond by index — see DerivedBoards.Compose), and the
-    // board's own authored cells (if any) are exactly what the derivation would produce today — an authored
-    // mismatch is refused rather than silently overwritten, since the mutation door and the live compose step both
-    // refuse a direct write to a derived board's cells and this is the door a hand-authored or foreign document
-    // passes through instead.
-    private static void ValidateDerivedBoard(WorldDefinition definition, WorldStateRow row, StateInverse inverse, CompiledTopology topology, List<string> errors) {
+    // keys in the same order (so the two rows' cell lists correspond by index), and the board's own authored cells
+    // (if any) are exactly what the derivation would produce today — an authored mismatch is refused rather than
+    // silently overwritten, since the mutation door and the live compose step both refuse a direct write to a
+    // derived board's cells and this is the door a hand-authored or foreign document passes through instead.
+    private static void ValidateDerivedBoard(WorldDefinition definition, WorldStateRow row, StateInverse inverse, BoardDerivation derivation, List<string> errors) {
         var tokens = WorldDefinitionRows.FindStateRow(
             definition.State,
             inverse.Tokens.Value
@@ -178,21 +179,69 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        var derived = DerivedBoards.Compose(
-            definition.State,
-            inverse,
-            topology
-        );
         var authored = (row.Cells ?? []);
 
-        if (
-            (authored.Count > 0) &&
-            !MatchesDerivation(
+        if (authored.Count == 0) {
+            return;
+        }
+
+        if (derivation.Cells(name: row.Name) is not { } derived) {
+            errors.Add(item: $"state row '{row.Name}': its inverse's derivation could not be computed, so its authored cells cannot be checked — {derivation.Reason}");
+
+            return;
+        }
+
+        if (!MatchesDerivation(
             authored: authored,
             derived: derived
-        )
-        ) {
+        )) {
             errors.Add(item: $"state row '{row.Name}': authored cells must be empty or match its inverse's derivation — the board is never authored, only derived.");
+        }
+    }
+    // The arena's own recompute, read back as the derivation an authored board must match: loading a section is
+    // what recomputes every derived board from its tokens and codes rows, so the walk checks against the store
+    // rather than against a second reading of the same rule. One arena serves a whole validation pass, and is built
+    // on the first board that actually carries authored cells.
+    private sealed class BoardDerivation(WorldDefinition definition) {
+        private IReadOnlyList<StateRow>? m_rows;
+        private bool m_loaded;
+        private string m_reason = string.Empty;
+
+        // Why the arena the derivation reads could not be built, or empty when it was. A derivation that answers no
+        // cells is a validation line naming this, never a silently skipped check.
+        public string Reason => m_reason;
+
+        public IReadOnlyList<StateCell>? Cells(CellName name) {
+            if (!m_loaded) {
+                m_loaded = true;
+
+                try {
+                    // The participant and identity lanes come from the same function the server's own arena is laid
+                    // out by, so the derivation is read off the store the server would have built.
+                    if (StateArena.TryCreate(
+                        arena: out var arena,
+                        catalog: definition.StateCatalog,
+                        options: WorldSlotLanes.Options(definition: definition),
+                        reason: out var reason,
+                        section: definition.StateRaw,
+                        time: ArenaTime.Origin
+                    )) {
+                        m_rows = arena.ToRows();
+                    } else {
+                        m_reason = reason;
+                    }
+                } catch (InvalidOperationException exception) {
+                    m_reason = exception.Message;
+                }
+            }
+
+            return ((m_rows is null)
+                ? null
+                : (StateRows.FindStateRow(
+                    rows: m_rows,
+                    name: name.Value
+                )?.Cells ?? [])
+            );
         }
     }
     // Set comparison, not order-sensitive: an authored board's cell order is whatever the author or a prior save
@@ -205,7 +254,7 @@ public static partial class WorldDefinitionValidator {
         var byKey = new Dictionary<CellName, long>(capacity: derived.Count);
 
         foreach (var cell in derived) {
-            byKey[cell.Key] = cell.Value;
+            byKey[cell.Key] = cell.Value.Raw;
         }
 
         foreach (var cell in authored) {
@@ -215,7 +264,7 @@ public static partial class WorldDefinitionValidator {
                 key: cell.Key,
                 value: out var value
             ) ||
-                (value != cell.Value)
+                (value != cell.Value.Raw)
             ) {
                 return false;
             }
@@ -277,7 +326,7 @@ public static partial class WorldDefinitionValidator {
                 (domainName is null) ||
                 (row.Kind != CellKind.Int) ||
                 (topology is null) ||
-                (row.Cells ?? []).Any(predicate: c => ((c is not null) && (((ulong)c.Value) >= ((ulong)topology.CellCount))))
+                (row.Cells ?? []).Any(predicate: c => ((c is not null) && (((ulong)c.Value.Raw) >= ((ulong)topology.CellCount))))
             ) {
                 errors.Add(item: $"state row '{row.Name}': valuesFrom requires token-keyed integer positions inside a discrete topology.");
             }
@@ -308,7 +357,7 @@ public static partial class WorldDefinitionValidator {
         }
         if (
             (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) &&
-            ((row.Kind != CellKind.Bool) || (row.Cells ?? []).Any(predicate: c => ((c is not null) && (c.Value != 1))))
+            ((row.Kind != CellKind.Bool) || (row.Cells ?? []).Any(predicate: c => ((c is not null) && (c.Value.Raw != 1))))
         ) {
             errors.Add(item: $"state row '{row.Name}': an ordered keysOf (pile/zone) row contains boolean membership cells whose value is true.");
         }

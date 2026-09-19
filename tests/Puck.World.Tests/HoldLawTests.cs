@@ -126,8 +126,10 @@ public sealed class HoldLawTests {
             HashRaw: canonical.Hash
         );
     }
-    private static WorldDefinition BuildHoldDocument(IReadOnlyList<WorldHold>? holds, bool ceiling = false, float stamina = 0f, bool holdable = true) {
-        var document = Fixtures.BuildDocument();
+    // rateHz defaults to the rate every recorded trace and hold-row selection law below was authored at; a law
+    // whose loop counts ticks to mean elapsed TIME names its own.
+    private static WorldDefinition BuildHoldDocument(IReadOnlyList<WorldHold>? holds, bool ceiling = false, float stamina = 0f, bool holdable = true, int rateHz = Fixtures.RecordedTraceRateHz) {
+        var document = Fixtures.BuildDocumentAtRate(rateHz: rateHz);
         var channels = document.Channels.ToList();
 
         channels.Add(item: new WorldChannel(Name: "release", Shape: ChannelShape.Binary, Composition: true));
@@ -401,7 +403,7 @@ public sealed class HoldLawTests {
             return ((double)(body.FixedPosition.Y - start));
         }
 
-        var seconds = (((double)(24UL * Fixtures.StepTicks)) / EngineTicks.PerSecond);
+        var seconds = (((double)(24UL * Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz))) / EngineTicks.PerSecond);
         var fast = Rise(speed: 2f);
         var slow = Rise(speed: 1f);
 
@@ -575,7 +577,7 @@ public sealed class HoldLawTests {
     public void SpendDrainsTheSlotAndDropsTheRowAtItsFloor_WhereARowSpendingNothingKeepsHolding() {
         var spend = new WorldHoldSpend(RatePerSecond: 4f, State: "stamina");
 
-        using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(spend: spend), Air()], stamina: 0.25f));
+        using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(spend: spend), Air()], rateHz: Fixtures.DefaultRateHz, stamina: 0.25f));
         var spender = JoinBody(fixture: fixture);
 
         Assert.NotNull(@object: DriveIntoWall(
@@ -598,7 +600,7 @@ public sealed class HoldLawTests {
 
         Assert.True(condition: dropped, userMessage: "a spent slot must drop the row that spends it");
 
-        using var control = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()], stamina: 0.25f));
+        using var control = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()], rateHz: Fixtures.DefaultRateHz, stamina: 0.25f));
         var endless = JoinBody(fixture: control);
 
         Assert.NotNull(@object: DriveIntoWall(
@@ -1823,7 +1825,7 @@ public sealed class HoldLawTests {
 
             Pose(body: body, y: 6f, z: 10f);
 
-            for (var tick = 0; (tick < 8); tick++) {
+            for (var tick = 0; (tick < 60); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
                 lines[tick] = TraceLine(body: body);
@@ -2007,9 +2009,9 @@ public sealed class HoldLawTests {
 
                 uninterrupted.SubmitIntent(intent: release);
                 restored.SubmitIntent(intent: release);
-                elapsed = checked((elapsed + Fixtures.StepTicks));
+                elapsed = checked((elapsed + Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz)));
 
-                var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick++);
+                var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz), Tick: nextTick++);
 
                 fixture.Server.Step(context: in context);
                 restoredServer.Step(context: in context);

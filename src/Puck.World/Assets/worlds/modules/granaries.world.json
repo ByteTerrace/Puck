@@ -150,12 +150,40 @@
         {
           "$type": "setState",
           "state": "granarySurveyApplied",
-          "expression": "granarySurveyRequest"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "granarySurveyRequest"
+              }
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "granarySurveyPage",
-          "expression": "(granarySurveyPage + 1) % 3"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "granarySurveyPage"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Constant",
+                "value": 3
+              },
+              {
+                "op": "Modulo"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -186,7 +214,14 @@
             {
               "$type": "setState",
               "state": "granaryIrrigationStage",
-              "expression": "granaryIrrigationRequest"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "granaryIrrigationRequest"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -214,7 +249,14 @@
             {
               "$type": "setState",
               "state": "granaryPowerStage",
-              "expression": "granaryPowerRequest"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "granaryPowerRequest"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",

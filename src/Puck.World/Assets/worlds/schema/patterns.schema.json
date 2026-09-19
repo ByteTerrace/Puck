@@ -16,14 +16,8 @@
         "type": "string"
       },
       "kind": {
-        "description": "The numeric kind of the values the word is read from: Int or Fixed.",
-        "enum": [
-          "Int",
-          "Fixed",
-          "Bool",
-          "Text"
-        ],
-        "title": "CellKind"
+        "$ref": "./common.schema.json#/$defs/CellKind",
+        "description": "The numeric kind of the values the word is read from: Int or Fixed."
       },
       "symbols": {
         "description": "The alphabet, 1..32 named value ranges.",
@@ -76,7 +70,7 @@
         "default": 64
       },
       "value": {
-        "$ref": "./common.schema.json#/$defs/ValueExpression",
+        "$ref": "./common.schema.json#/$defs/ExpressionProgram",
         "description": "For a zone source, an expression in the pattern\u0027s kind evaluated once per token in pile order, where a state token keyed $token reads that token\u0027s cell of a row keyed over the zone\u0027s token domain: the word over a tuple of attributes (suit * 16 \u002B rank) rather than one. Exclusive with Attribute.",
         "default": null
       }

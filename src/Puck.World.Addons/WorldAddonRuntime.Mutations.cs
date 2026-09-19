@@ -12,7 +12,7 @@ public sealed partial class WorldAddonRuntime {
     // (4) the reserved answer cell (bookkeeping only: the ABI handshake's outCap <= inCap-1 relation already proves
     // this can never overflow ReservedAnswers), (5) pointer safety (unsigned ptr/len, the payload-size ceilings, an
     // immediate host-side copy), (6) the per-kind decode (WorldAddonMutationDecoder). A cleared act ENQUEUES a
-    // PendingOp.Mutate — it is NEVER applied here; application (compose -> revalidate -> swap) runs later THIS SAME
+    // WorldPendingOp.Mutate — it is NEVER applied here; application (compose -> revalidate -> swap) runs later THIS SAME
     // Step, at WorldServer.Step's DrainPendingOps, before intents. Every other outcome is DECIDED here but not yet
     // DELIVERED: every reserved slot's verdict is staged into the guest's next input batch by ResolveReads/
     // StageBatch — never here, and never by DrainPendingOps directly.
@@ -112,7 +112,7 @@ public sealed partial class WorldAddonRuntime {
                 // TryApplyMutation, later THIS same Step) over the identical predicate.
                 //
                 // meter: true — THIS is the metering point for a guest act; the apply path knows not to charge it
-                // again (PendingOp.Mutate carries SourceAddonInstanceId for exactly that).
+                // again (WorldPendingOp.Mutate carries SourceAddonInstanceId for exactly that).
                 var kindOrdinal = ((int)query.A);
                 var section = ((WorldSection)subject.Value);
 
@@ -232,7 +232,7 @@ public sealed partial class WorldAddonRuntime {
                 );
 
                 // STAGE 6 — the per-kind hand-walked decode. On success the mutation is NOT applied here: it
-                // enqueues as a PendingOp with this act's (addon instance id, ordinal) completion fields, drained
+                // enqueues as a WorldPendingOp with this act's (addon instance id, ordinal) completion fields, drained
                 // the SAME Step at WorldServer.Step's DrainPendingOps (before intents) through the identical
                 // compose->revalidate->swap path a console-submitted mutation runs — CompleteMutation stages the
                 // outcome (Applied or Rejected) into this slot once that drain decides it. The instance id, not this

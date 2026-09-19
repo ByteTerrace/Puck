@@ -69,6 +69,8 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["dynamics"] = exportType(typeof(StateDynamics)),
             ["cycle"] = exportType(typeof(StateCycle)),
             ["clock"] = ClockSchema(),
+            ["space"] = new JsonObject { ["type"] = "string" },
+            ["enum"] = new JsonObject { ["type"] = "string" },
         };
 
         foreach (var member in claimed) {
@@ -95,6 +97,11 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ));
         }
 
+        // A symbolic value domain rides an Int row alone.
+        allOf.Add(item: new JsonObject {
+            ["if"] = new JsonObject { ["required"] = new JsonArray("enum") },
+            ["then"] = KindCondition(kind: nameof(CellKind.Int)),
+        });
         allOf.Add(item: DrawSiteDependency());
         // 'clock' is the slot cell's own timing state (see StateCellClock) and rides beside 'value' alone.
         allOf.Add(item: new JsonObject {
@@ -121,6 +128,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
         nameof(CellKind.Fixed),
         nameof(CellKind.Bool),
         nameof(CellKind.Text),
+        nameof(CellKind.Vector),
     ];
 
     // ReadCell's own switch: Text reads/writes a string, Bool a boolean, Fixed the decimal FixedQ4816 spelling, and
@@ -128,6 +136,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
     // read through the same per-kind switch.
     private static JsonObject ValueSchemaFor(string kind) => (kind switch {
         nameof(CellKind.Text) => new JsonObject { ["type"] = "string" },
+        nameof(CellKind.Vector) => new JsonObject { ["type"] = "string", ["description"] = "Unpadded base64url encoded signed 8-bit vector components." },
         nameof(CellKind.Bool) => new JsonObject { ["type"] = "boolean" },
         nameof(CellKind.Fixed) => new JsonObject { ["type"] = "string", ["description"] = "The decimal FixedQ4816 spelling (e.g. \"12.5\"), never raw bits." },
         _ => new JsonObject { ["type"] = "integer" },
@@ -145,21 +154,45 @@ public abstract partial class StateRowJsonConverter<TRow> {
     // Every occurrence a row's own "kind" governs the representation of: the slot "value" sugar, the envelope
     // bounds, and each keyed cell's own "value" — narrowed together so a document authoring the wrong kind's
     // representation anywhere in the row fails the same conditional.
-    private static JsonObject KindConditionBlock(string kind) => new() {
-        ["if"] = KindCondition(kind: kind),
-        ["then"] = new JsonObject {
-            ["properties"] = new JsonObject {
-                ["value"] = ValueSchemaFor(kind: kind),
-                ["min"] = EnvelopeSchemaFor(kind: kind),
-                ["max"] = EnvelopeSchemaFor(kind: kind),
-                ["cells"] = new JsonObject {
-                    ["items"] = new JsonObject {
-                        ["properties"] = new JsonObject { ["value"] = ValueSchemaFor(kind: kind) },
+    private static JsonObject KindConditionBlock(string kind) {
+        if (kind == nameof(CellKind.Vector)) {
+            return new JsonObject {
+                ["if"] = KindCondition(kind: kind),
+                ["then"] = new JsonObject {
+                    ["properties"] = new JsonObject {
+                        ["value"] = ValueSchemaFor(kind: kind),
+                        ["cells"] = new JsonObject {
+                            ["items"] = new JsonObject {
+                                ["properties"] = new JsonObject { ["value"] = ValueSchemaFor(kind: kind) },
+                            },
+                        },
+                    },
+                    ["not"] = new JsonObject {
+                        ["anyOf"] = new JsonArray(
+                            new JsonObject { ["required"] = new JsonArray("min") },
+                            new JsonObject { ["required"] = new JsonArray("max") }
+                        ),
+                    },
+                },
+            };
+        }
+
+        return new JsonObject {
+            ["if"] = KindCondition(kind: kind),
+            ["then"] = new JsonObject {
+                ["properties"] = new JsonObject {
+                    ["value"] = ValueSchemaFor(kind: kind),
+                    ["min"] = EnvelopeSchemaFor(kind: kind),
+                    ["max"] = EnvelopeSchemaFor(kind: kind),
+                    ["cells"] = new JsonObject {
+                        ["items"] = new JsonObject {
+                            ["properties"] = new JsonObject { ["value"] = ValueSchemaFor(kind: kind) },
+                        },
                     },
                 },
             },
-        },
-    };
+        };
+    }
     // A row's own "value"/"cells[].value" is authored in one of four representations, resolved by the sibling
     // "kind" member — see KindConditionBlock. Absent a fixed kind at this node (kind lives one level up, on the
     // enclosing row), the bare member accepts any one of the four; the row-level allOf narrows it precisely.

@@ -154,7 +154,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             userMessage: hysteresisReason
         );
         Assert.True(
-            WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
                 definition: local,
                 depth: out var settle,
                 reason: out var settleReason
@@ -179,7 +179,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 ownershipThreshold: WorldAdjacencyPolicy.OwnershipThreshold(
                     frame: in sourceFrame,
                     reciprocalHysteresis: hysteresis,
-                    verticalSettleDeadband: settle
+                    verticalOwnershipDeadband: settle
                 )
             );
         }
@@ -378,7 +378,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             userMessage: hysteresisReason
         );
         Assert.True(
-            WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
                 definition: local,
                 depth: out var settle,
                 reason: out var settleReason
@@ -390,7 +390,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var threshold = WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in sourceFrame,
             reciprocalHysteresis: hysteresis,
-            verticalSettleDeadband: settle
+            verticalOwnershipDeadband: settle
         );
 
         using var walk = SeamWalk(local: local);
@@ -487,6 +487,11 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             return false;
         }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+
+            return false;
+        }
     }
     private sealed class SeamNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField? m_field;
@@ -581,6 +586,11 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             return false;
         }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+
+            return false;
+        }
     }
     private sealed class CornerNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField m_field;

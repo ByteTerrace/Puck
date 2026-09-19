@@ -118,18 +118,18 @@ public class DecompilerSugarTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "when $physics:quiescent == 1 and settleHold < 60"
         );
-        // The one gate in this file whose compareValue.left begins with '(' (§1.2/A11: `ParseAtom` would
-        // otherwise misread the leading paren as a nested-gate grouping) falls back to a plain `gate:` property,
-        // still printed through the call-form escape hatch rather than a literal `$type` object.
+        // A gate whose compareValue.left is a parenthesized expression spells as a `when` like any other: the
+        // comparator standing after the balanced span is what says the span is an operand rather than a nested
+        // gate, so no gate in this file falls back to the plain `gate:` property.
         Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "and ((absolute(move[mover]) == 1 &"
+        );
+        Assert.DoesNotContain(
             actualString: puck,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "gate: all(predicates: ["
-        );
-        Assert.Contains(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "compareState(comparison: \"Equal\", state: \"settleHold\", value: 60)"
         );
     }
     [Fact]

@@ -536,6 +536,51 @@ public sealed class TextContractTests {
             layout.Width
         );
     }
+    [Theory]
+    [InlineData(1f, 3f)]
+    [InlineData(-3f, -1f)]
+    public void LayoutCenterAlignmentCentersVisualBoundsAwayFromPenOrigin(float left, float right) {
+        var atlas = CreateAtlas(
+            glyphs: [new FontAtlasGlyph(
+                unicode: 'A',
+                advance: 4f,
+                planeBounds: new FontAtlasBounds(
+                    Bottom: 0f,
+                    Left: left,
+                    Right: right,
+                    Top: 1f
+                ),
+                atlasBounds: new FontAtlasBounds(
+                    Bottom: 1f,
+                    Left: 0f,
+                    Right: 1f,
+                    Top: 0f
+                )
+            )],
+            imageData: new FontAtlasImageData(
+                height: 1,
+                rgbaPixels: [1, 2, 3, 4],
+                width: 1
+            ),
+            width: 1
+        );
+        var layout = new TextLayout().Layout(
+            atlas: atlas,
+            options: new TextLayoutOptions(Alignment: TextAlignment.Center),
+            text: "A"
+        );
+        var placement = Assert.Single(collection: layout.Placements);
+
+        // The two-unit visual span must center on zero, regardless of its side bearing.
+        Assert.Equal(
+            -1f,
+            placement.PlaneBounds.Left
+        );
+        Assert.Equal(
+            1f,
+            placement.PlaneBounds.Right
+        );
+    }
     [Fact]
     public void LayoutCenterAlignmentCentersShorterLines() {
         var layout = new TextLayout().Layout(

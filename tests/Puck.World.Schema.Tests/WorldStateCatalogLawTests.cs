@@ -13,21 +13,10 @@ public sealed class ShapeWalkCollection {
     /// <summary>The collection name test classes reference via <c>[Collection(ShapeWalkCollection.Name)]</c>.</summary>
     public const string Name = "state-catalog-shape-walk";
 }
-/// <summary>Proves the typed state catalog's stable ordinal, ownership, storage-shape, value-kind, and handle
+/// <summary>Proves the typed state catalog's stable ordinal, lane, row-shape, cell-kind, role, and handle
 /// resolution contracts.</summary>
 [Collection(name: ShapeWalkCollection.Name)]
 public sealed class WorldStateCatalogLawTests {
-    [InlineData(CellKind.Int, StateValueKind.Int)]
-    [InlineData(CellKind.Fixed, StateValueKind.Fixed)]
-    [InlineData(CellKind.Bool, StateValueKind.Bool)]
-    [InlineData(CellKind.Text, StateValueKind.Text)]
-    [Theory]
-    public void WorldRowValueKinds_PreserveTheCellKindDiscriminant(CellKind cellKind, StateValueKind valueKind) {
-        Assert.Equal(
-            actual: ((byte)valueKind),
-            expected: ((byte)cellKind)
-        );
-    }
     [Fact]
     public void Compile_AssignsStableGlobalAndLaneOrdinals_InLaneThenDocumentOrder() {
         var section = BuildSection();
@@ -45,54 +34,61 @@ public sealed class WorldStateCatalogLawTests {
                 ordinal: 0,
                 laneOrdinal: 0,
                 name: "score",
-                ownership: StateLane.Document,
-                storage: StateStorageShape.Slot,
-                valueKind: StateValueKind.Int
+                lane: StateLane.Document,
+                shape: RowShape.Slot,
+                kind: CellKind.Int,
+                role: StateParticipantRole.None
             ),
             descriptor => AssertDescriptor(
                 descriptor,
                 ordinal: 1,
                 laneOrdinal: 1,
                 name: "labels",
-                ownership: StateLane.Document,
-                storage: StateStorageShape.Keyed,
-                valueKind: StateValueKind.Text
+                lane: StateLane.Document,
+                shape: RowShape.Keyed,
+                kind: CellKind.Text,
+                role: StateParticipantRole.None
             ),
             descriptor => AssertDescriptor(
                 descriptor,
                 ordinal: 2,
                 laneOrdinal: 2,
                 name: "heat",
-                ownership: StateLane.Document,
-                storage: StateStorageShape.Lattice,
-                valueKind: StateValueKind.Fixed
+                lane: StateLane.Document,
+                shape: RowShape.Lattice,
+                kind: CellKind.Fixed,
+                role: StateParticipantRole.None,
+                hostOwned: true
             ),
             descriptor => AssertDescriptor(
                 descriptor,
                 ordinal: 3,
                 laneOrdinal: 3,
                 name: "open",
-                ownership: StateLane.Document,
-                storage: StateStorageShape.Slot,
-                valueKind: StateValueKind.Bool
+                lane: StateLane.Document,
+                shape: RowShape.Slot,
+                kind: CellKind.Bool,
+                role: StateParticipantRole.None
             ),
             descriptor => AssertDescriptor(
                 descriptor,
                 ordinal: 4,
                 laneOrdinal: 0,
                 name: "jumpUses",
-                ownership: StateLane.Participant,
-                storage: StateStorageShape.Slot,
-                valueKind: StateValueKind.Counter
+                lane: StateLane.Participant,
+                shape: RowShape.Slot,
+                kind: CellKind.Fixed,
+                role: StateParticipantRole.Counter
             ),
             descriptor => AssertDescriptor(
                 descriptor,
                 ordinal: 5,
                 laneOrdinal: 0,
                 name: "cooldown",
-                ownership: StateLane.Identity,
-                storage: StateStorageShape.Slot,
-                valueKind: StateValueKind.Timer
+                lane: StateLane.Identity,
+                shape: RowShape.Slot,
+                kind: CellKind.Int,
+                role: StateParticipantRole.Timer
             )
         );
     }
@@ -123,8 +119,12 @@ public sealed class WorldStateCatalogLawTests {
             actual: catalog[jumpUses].Name
         );
         Assert.Equal(
-            expected: StateValueKind.Counter,
-            actual: catalog[jumpUses].ValueKind
+            expected: StateParticipantRole.Counter,
+            actual: catalog[jumpUses].Role
+        );
+        Assert.Equal(
+            expected: CellKind.Fixed,
+            actual: catalog[jumpUses].Kind
         );
 
         Assert.False(condition: catalog.TryResolve(
@@ -173,10 +173,12 @@ public sealed class WorldStateCatalogLawTests {
         var section = BuildSection();
         var rows = section.World!.ToArray();
 
-        rows[0] = rows[0] with { Cells = [new StateCell(
+        rows[0] = rows[0] with {
+            Cells = [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 7L
-            )] };
+                Value: CellValue.Int(value: 7L)
+            )],
+        };
         var definition = new WorldDefinition(StateRaw: section with { World = rows });
         var catalog = definition.StateCatalog;
 
@@ -188,13 +190,13 @@ public sealed class WorldStateCatalogLawTests {
         Assert.True(condition: WorldStateReader.TryReadHandle(
             catalog: catalog,
             definition: definition,
+            engineTick: 0UL,
             handle: score,
             key: null,
             rawValue: out var raw,
             row: out var row,
             text: out _,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ));
         Assert.Equal(
             expected: "score",
@@ -210,13 +212,13 @@ public sealed class WorldStateCatalogLawTests {
         Assert.Throws<ArgumentException>(testCode: () => WorldStateReader.TryReadHandle(
             catalog: foreign,
             definition: definition,
+            engineTick: 0UL,
             handle: score,
             key: null,
             rawValue: out _,
             row: out _,
             text: out _,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ));
     }
     [Fact]
@@ -278,10 +280,12 @@ public sealed class WorldStateCatalogLawTests {
             b: "score",
             comparisonType: StringComparison.Ordinal
         )
-            ? row with { Cells = [new StateCell(
+            ? row with {
+                Cells = [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 7L
-                )] }
+                    Value: CellValue.Int(value: 7L)
+                )],
+            }
             : row)).ToArray();
         var updated = original.WithWorldState(rows: rows);
 
@@ -359,6 +363,29 @@ public sealed class WorldStateCatalogLawTests {
         );
     }
     [Fact]
+    public void MatchesShape_WithVectorRow_ReturnsTrue() {
+        var section = new WorldStateSection(
+            World: [
+                new WorldStateRow(
+                    Name: CellName.Parse(candidate: "embeddings"),
+                    Kind: CellKind.Vector,
+                    Space: "lore"
+                )
+            ],
+            Spaces: [
+                new StateSpace(
+                    Name: CellName.Parse(candidate: "lore"),
+                    Model: "puck-fixture",
+                    Revision: "1",
+                    Dimensions: 16
+                )
+            ]
+        );
+        var catalog = StateCatalog.Compile(section: section);
+
+        Assert.True(condition: catalog.MatchesShape(section: section));
+    }
+    [Fact]
     public void Compile_NullSection_ProducesAnEmptyCatalog() {
         var catalog = StateCatalog.Compile(section: null);
 
@@ -409,7 +436,7 @@ public sealed class WorldStateCatalogLawTests {
                 Capacity: 4,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "primary"),
-                        Text: "ready"
+                        Value: CellValue.Text(value: "ready")
                     )]
             ),
             new WorldStateRow(
@@ -443,10 +470,14 @@ public sealed class WorldStateCatalogLawTests {
                 Depth: 2
             )]
     );
-    private static void AssertDescriptor(StateDescriptor descriptor, int ordinal, int laneOrdinal, string name, StateLane ownership, StateStorageShape storage, StateValueKind valueKind) {
+    private static void AssertDescriptor(StateDescriptor descriptor, int ordinal, int laneOrdinal, string name, StateLane lane, RowShape shape, CellKind kind, StateParticipantRole role, bool hostOwned = false) {
         Assert.Equal(
             expected: ordinal,
             actual: descriptor.Handle.Ordinal
+        );
+        Assert.Equal(
+            expected: ordinal,
+            actual: descriptor.Ordinal
         );
         Assert.Equal(
             expected: laneOrdinal,
@@ -457,16 +488,25 @@ public sealed class WorldStateCatalogLawTests {
             actual: descriptor.Name
         );
         Assert.Equal(
-            expected: ownership,
-            actual: descriptor.Ownership
+            expected: lane,
+            actual: descriptor.Lane
         );
         Assert.Equal(
-            expected: storage,
-            actual: descriptor.Storage
+            expected: shape,
+            actual: descriptor.Shape
         );
         Assert.Equal(
-            expected: valueKind,
-            actual: descriptor.ValueKind
+            expected: kind,
+            actual: descriptor.Kind
+        );
+        Assert.Equal(
+            expected: role,
+            actual: descriptor.Role
+        );
+        Assert.False(condition: descriptor.Generated);
+        Assert.Equal(
+            actual: descriptor.HostOwned,
+            expected: hostOwned
         );
     }
 }

@@ -1,0 +1,301 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+kits {
+  rows [
+    {
+      bodyContact: "Solid"
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.015, 0.05, 0.03], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: "Free"
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: "Gravity"
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "domino"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.5
+        linearDamping: 0.05
+        mass: 0.03
+        restitution: 0.05
+        rollingFriction: 0.1
+      }
+    }
+  ]
+}
+
+placements {
+  placement "dominoRun" {
+    prototype: "dominoRun"
+    position [3, -0.45, -6]
+  }
+
+  placement "domino0" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0, 0, 0]
+  }
+
+  placement "domino1" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.08, 0, 0]
+  }
+
+  placement "domino2" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.16, 0, 0]
+  }
+
+  placement "domino3" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.24, 0, 0]
+  }
+
+  placement "domino4" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.32, 0, 0]
+  }
+
+  placement "domino5" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.4, 0, 0]
+  }
+
+  placement "domino6" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.48, 0, 0]
+  }
+
+  placement "domino7" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.56, 0, 0]
+  }
+
+  placement "domino8" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.64, 0, 0]
+  }
+
+  placement "domino9" {
+    prototype: "domino"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "domino"
+      look: "domino"
+      source: "Idle"
+    }
+    parent: "dominoRun"
+    position [0.72, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "domino" {
+    document {
+      name: "domino"
+      palette [
+        {
+          color: "#EDE0C8"
+          roughness: 0.774
+          specular: 0.1
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "body" {
+        material: 0
+        position [0, 0.05, 0]
+        rotation: "state.transforms.identity"
+        scale [0.015, 0.05, 0.03]
+      }
+    }
+  }
+
+  prototype "dominoRun" {
+    document {
+      name: "dominoRun"
+      palette [
+        {
+          color: "#EDE0C8"
+          roughness: 0.774
+          specular: 0.1
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "marker" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.001, 0.001, 0.001]
+      }
+    }
+  }
+}

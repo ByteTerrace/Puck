@@ -2,9 +2,9 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Every top-level state effect in a rule evaluates its own expression and is its own boundary: a later
-/// effect refused by its destination's envelope leaves the earlier writes applied and is reported by rule and effect.
-/// Only a transaction groups effects atomically.</summary>
+/// <summary>Every top-level state effect in a rule evaluates its own expression, and a firing is one boundary: a
+/// later effect refused by its destination's envelope rewinds the whole firing and is reported by rule and
+/// effect.</summary>
 public sealed class WorldRuleEffectRunLawTests {
     private static WorldDefinition Document(long capturedMax, bool asTransaction) {
         ActionEffect[] writes = [Set(
@@ -52,10 +52,10 @@ public sealed class WorldRuleEffectRunLawTests {
                 CellName.Parse(candidate: "masks"),
                 [Set(
                         "ownVac",
-                        new ValueToken.Constant(Value: 1m)
+                        Instruction.Constant(value: 1m)
                     ), Set(
                         "ownOcc",
-                        new ValueToken.Constant(Value: 4m)
+                        Instruction.Constant(value: 4m)
                     )]
             ),
                 new WorldRule(
@@ -67,9 +67,9 @@ public sealed class WorldRuleEffectRunLawTests {
             ],
         };
     }
-    private static ActionEffect.SetState Set(string state, params ValueToken[] tokens) => new(
+    private static ActionEffect.SetState Set(string state, params Instruction[] tokens) => new(
         State: state,
-        Expression: new ValueExpression(Tokens: tokens)
+        Expression: new ExpressionProgram(Instructions: tokens)
     );
     private static WorldStateRow Slot(string name, long value, long max) =>
         new(
@@ -79,10 +79,10 @@ public sealed class WorldRuleEffectRunLawTests {
             Max: max,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    value
+                    CellValue.Int(value: value)
                 )]
         );
-    private static ValueToken[] Tz(string row) => [new ValueToken.State(row), new ValueToken.TrailingZeroCount()];
+    private static Instruction[] Tz(string row) => [Instruction.Operand(name: row), Instruction.Of(operation: ExpressionOp.TrailingZeroCount)];
     private static long Value(WorldFixture fixture, string row) =>
         StateRows.FindCell(
             cells: WorldDefinitionRows.FindStateRow(
@@ -90,10 +90,10 @@ public sealed class WorldRuleEffectRunLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [Fact]
-    public void ALaterRefusedEffectLeavesEarlierWritesAppliedAndIsReported() {
+    public void ALaterRefusedEffectRewindsTheFiringAndIsReported() {
         using var fixture = Fixtures.FreshServer(definition: Document(
             asTransaction: false,
             capturedMax: 16
@@ -102,7 +102,7 @@ public sealed class WorldRuleEffectRunLawTests {
         fixture.Step();
 
         Assert.Equal(
-            2L,
+            0L,
             Value(
                 fixture: fixture,
                 row: "toCell"
@@ -118,7 +118,7 @@ public sealed class WorldRuleEffectRunLawTests {
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            RuleEffectRefusal.MutationRejected,
+            Puck.State.Rules.RuleEffectRefusal.MutationRejected,
             diagnostic.Refusal
         );
         Assert.Equal(
@@ -132,7 +132,7 @@ public sealed class WorldRuleEffectRunLawTests {
         );
     }
     [Fact]
-    public void ATransactionIsTheOneAtomicGroup() {
+    public void ATransactionGroupsItsEffectsAtomically() {
         using var fixture = Fixtures.FreshServer(definition: Document(
             asTransaction: true,
             capturedMax: 16

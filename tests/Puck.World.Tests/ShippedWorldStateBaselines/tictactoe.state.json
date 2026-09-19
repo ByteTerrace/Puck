@@ -1,0 +1,969 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 600,
+  "engineTick": 1008000,
+  "hashes": {
+    "authoritative": "7a981f9533b914e1",
+    "capture": "a51c1a3624477a21",
+    "pose": "cbf29ce484222325",
+    "world": "aee5c667e011fe99"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "a_tttBoard",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "4",
+            "value": 1
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "a_tttCube"
+        }
+      },
+      {
+        "name": "a_tttActive",
+        "kind": "Int",
+        "min": 1,
+        "max": 2,
+        "value": 1
+      },
+      {
+        "name": "a_tttMoveCell",
+        "kind": "Int",
+        "min": -1,
+        "max": 63,
+        "value": 0
+      },
+      {
+        "name": "a_tttMoveRequest",
+        "kind": "Int",
+        "min": 0,
+        "value": 2
+      },
+      {
+        "name": "a_tttMoveApplied",
+        "kind": "Int",
+        "min": 0,
+        "value": 2
+      },
+      {
+        "name": "a_tttBoardVersion",
+        "kind": "Int",
+        "min": 0,
+        "value": 2
+      },
+      {
+        "name": "a_tttWinCheckVersion",
+        "kind": "Int",
+        "min": 0,
+        "value": 2
+      },
+      {
+        "name": "a_tttWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      },
+      {
+        "name": "a_tttMoveCount",
+        "kind": "Int",
+        "min": 0,
+        "max": 64,
+        "value": 2
+      },
+      {
+        "name": "a_tttXWin",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "a_tttOWin",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "a_tttMaskX",
+        "kind": "Int",
+        "min": -9223372036854775808,
+        "max": 9223372036854775807,
+        "value": 16
+      },
+      {
+        "name": "a_tttMaskO",
+        "kind": "Int",
+        "min": -9223372036854775808,
+        "max": 9223372036854775807,
+        "value": 1
+      },
+      {
+        "name": "b_tttBoard",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "8",
+            "value": 1
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "b_tttCube"
+        }
+      },
+      {
+        "name": "b_tttActive",
+        "kind": "Int",
+        "min": 1,
+        "max": 2,
+        "value": 2
+      },
+      {
+        "name": "b_tttMoveCell",
+        "kind": "Int",
+        "min": -1,
+        "max": 63,
+        "value": 8
+      },
+      {
+        "name": "b_tttMoveRequest",
+        "kind": "Int",
+        "min": 0,
+        "value": 1
+      },
+      {
+        "name": "b_tttMoveApplied",
+        "kind": "Int",
+        "min": 0,
+        "value": 1
+      },
+      {
+        "name": "b_tttBoardVersion",
+        "kind": "Int",
+        "min": 0,
+        "value": 1
+      },
+      {
+        "name": "b_tttWinCheckVersion",
+        "kind": "Int",
+        "min": 0,
+        "value": 1
+      },
+      {
+        "name": "b_tttWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      },
+      {
+        "name": "b_tttMoveCount",
+        "kind": "Int",
+        "min": 0,
+        "max": 64,
+        "value": 1
+      },
+      {
+        "name": "b_tttXWin",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "b_tttOWin",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "b_tttMaskX",
+        "kind": "Int",
+        "min": -9223372036854775808,
+        "max": 9223372036854775807,
+        "value": 256
+      },
+      {
+        "name": "b_tttMaskO",
+        "kind": "Int",
+        "min": -9223372036854775808,
+        "max": 9223372036854775807,
+        "value": 0
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "box",
+        "width": 4,
+        "depth": 4,
+        "layers": 4,
+        "layerHeight": 1,
+        "directions": [
+          {
+            "name": "L0",
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L1",
+            "x": 0,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L2",
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L3",
+            "x": 0,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L4",
+            "x": 1,
+            "y": -1,
+            "z": -1
+          },
+          {
+            "name": "L5",
+            "x": 1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L6",
+            "x": 1,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L7",
+            "x": 1,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L8",
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "L9",
+            "x": 1,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L10",
+            "x": 1,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L11",
+            "x": 1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L12",
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L0Back",
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L1Back",
+            "x": 0,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L2Back",
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L3Back",
+            "x": 0,
+            "y": -1,
+            "z": -1
+          },
+          {
+            "name": "L4Back",
+            "x": -1,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L5Back",
+            "x": -1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L6Back",
+            "x": -1,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L7Back",
+            "x": -1,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L8Back",
+            "x": -1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "L9Back",
+            "x": -1,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L10Back",
+            "x": -1,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L11Back",
+            "x": -1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L12Back",
+            "x": -1,
+            "y": -1,
+            "z": -1
+          }
+        ],
+        "name": "a_tttCube",
+        "origin": [
+          0,
+          -32,
+          0
+        ],
+        "cellSize": 1
+      },
+      {
+        "$type": "box",
+        "width": 4,
+        "depth": 4,
+        "layers": 4,
+        "layerHeight": 1,
+        "directions": [
+          {
+            "name": "L0",
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L1",
+            "x": 0,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L2",
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L3",
+            "x": 0,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L4",
+            "x": 1,
+            "y": -1,
+            "z": -1
+          },
+          {
+            "name": "L5",
+            "x": 1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L6",
+            "x": 1,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L7",
+            "x": 1,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L8",
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "L9",
+            "x": 1,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L10",
+            "x": 1,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L11",
+            "x": 1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L12",
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L0Back",
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L1Back",
+            "x": 0,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L2Back",
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L3Back",
+            "x": 0,
+            "y": -1,
+            "z": -1
+          },
+          {
+            "name": "L4Back",
+            "x": -1,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L5Back",
+            "x": -1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L6Back",
+            "x": -1,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L7Back",
+            "x": -1,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L8Back",
+            "x": -1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "L9Back",
+            "x": -1,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L10Back",
+            "x": -1,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L11Back",
+            "x": -1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L12Back",
+            "x": -1,
+            "y": -1,
+            "z": -1
+          }
+        ],
+        "name": "b_tttCube",
+        "origin": [
+          0,
+          -32,
+          0
+        ],
+        "cellSize": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "a_tttBoard",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttActive",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttMoveCell",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttMoveRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttMoveApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttBoardVersion",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttWinCheckVersion",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttMoveCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttXWin",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttOWin",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttMaskX",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 16,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "a_tttMaskO",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttBoard",
+      "cells": [
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttActive",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttMoveCell",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttMoveRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttMoveApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttBoardVersion",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttWinCheckVersion",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttMoveCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttXWin",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttOWin",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttMaskX",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 256,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "b_tttMaskO",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

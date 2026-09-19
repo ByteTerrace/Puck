@@ -118,7 +118,8 @@ if (!fs.existsSync(mainMjs)) {
       const row = rows.find((r) => r.kind === 'Int' && !r.keyed);
       assert.ok(row, 'no scalar Int row in the composed document');
       for (const cell of row.cells) {
-        assert.equal(typeof cell.value, 'bigint', `RowInfo cell value for '${row.name}' must be a bigint, not ${typeof cell.value}`);
+        assert.equal(cell.value.kind, 'Int', `RowInfo cell for '${row.name}' must carry its row's own kind`);
+        assert.equal(typeof cell.value.value, 'bigint', `RowInfo cell value for '${row.name}' must be a bigint, not ${typeof cell.value.value}`);
       }
 
       // 1 (not an arbitrary larger value) - matches the row's own authored envelope, exactly as
@@ -126,8 +127,10 @@ if (!fs.existsSync(mainMjs)) {
       const written = await engine.writeRow(handle, row.name, undefined, 1n, 'set');
       assert.equal(written.ok, true, written.error);
       const read = await engine.readRow(handle, row.name);
-      assert.equal(read.value, 1n);
-      assert.equal(typeof read.value, 'bigint');
+      assert.equal(read.found, true);
+      assert.equal(read.value.kind, 'Int');
+      assert.equal(read.value.value, 1n);
+      assert.equal(typeof read.value.value, 'bigint');
 
       const judged = await engine.judge(handle, 1n);
       assert.equal(judged.ok, true, judged.error);

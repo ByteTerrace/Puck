@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
@@ -33,12 +32,7 @@ public sealed class TetrisSideBySide {
             path3: "tetris.cgb.cartridge.json"
         ));
 
-        return JsonSerializer.Deserialize<CartridgeDocument>(
-            json: json,
-            options: new JsonSerializerOptions {
-            PropertyNameCaseInsensitive = true,
-        }
-        )!;
+        return CartridgeDocuments.Parse(utf8: System.Text.Encoding.UTF8.GetBytes(s: json));
     }
     // Two screens in one column pair, sampled a tile at a time: a full-pixel diff of two different games says nothing,
     // while the shapes at tile resolution are what a reader compares.

@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class DerivedBoardLawTests {
     private static StateCell Cell(string key, long value) => new(
         Name(value: key),
-        value
+        CellValue.Int(value: value)
     );
     private static WorldStateRow CodesRow() => new(
         Name(value: "codes"),
@@ -105,7 +105,7 @@ public sealed class DerivedBoardLawTests {
             Find(
                 document: fixture.Server.Definition,
                 row: "board"
-            ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value
+            ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
         );
     }
     [Fact]
@@ -161,11 +161,41 @@ public sealed class DerivedBoardLawTests {
         );
         Assert.Equal(
             5,
-            board.Cells!.Single(predicate: c => (c.Key.Value == "2")).Value
+            board.Cells!.Single(predicate: c => (c.Key.Value == "2")).Value.Raw
         );
         Assert.Equal(
             9,
-            board.Cells!.Single(predicate: c => (c.Key.Value == "1")).Value
+            board.Cells!.Single(predicate: c => (c.Key.Value == "1")).Value.Raw
+        );
+    }
+    // The board is never authored, only derived, and the derivation the walk checks against is the arena's own
+    // recompute: a document carrying board cells its tokens and codes rows do not produce is refused.
+    [Fact]
+    public void AnAuthoredBoardDisagreeingWithItsDerivationIsRefused() {
+        var document = Fixtures.BuildDocument() with {
+            StateRaw = new(
+            World: [TokensRow(
+                    a: 0,
+                    b: 1
+                ), CodesRow(), DerivedBoardRow(cells: [Cell(
+                        key: "0",
+                        value: 7
+                    ), Cell(
+                        key: "1",
+                        value: 9
+                    )])],
+            Lattices: [Grid()]
+        ),
+            Rules = [],
+        };
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: document,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            expectedSubstring: "the board is never authored, only derived",
+            actualString: reason
         );
     }
     [Fact]
@@ -182,11 +212,11 @@ public sealed class DerivedBoardLawTests {
 
         Assert.Equal(
             5,
-            board.Cells!.Single(predicate: c => (c.Key.Value == "0")).Value
+            board.Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
         );
         Assert.Equal(
             9,
-            board.Cells!.Single(predicate: c => (c.Key.Value == "1")).Value
+            board.Cells!.Single(predicate: c => (c.Key.Value == "1")).Value.Raw
         );
         Assert.DoesNotContain(
             collection: board.Cells!,
@@ -239,12 +269,12 @@ public sealed class DerivedBoardLawTests {
             ).Cells
         );
         Assert.NotEqual(
-            WorldRuntimeStateHash.Hash(
+            WorldStateHashComposition.Hash(
                 scope: WorldStateHashScope.World,
                 server: plainFixture.Server,
                 tick: 0UL
             ),
-            WorldRuntimeStateHash.Hash(
+            WorldStateHashComposition.Hash(
                 scope: WorldStateHashScope.World,
                 server: derivedFixture.Server,
                 tick: 0UL
@@ -284,7 +314,7 @@ public sealed class DerivedBoardLawTests {
         // code is simply absent from the board, not a collision refusal.
         Assert.Equal(
             9,
-            Assert.Single(collection: board.Cells!).Value
+            Assert.Single(collection: board.Cells!).Value.Raw
         );
         Assert.Equal(
             "3",

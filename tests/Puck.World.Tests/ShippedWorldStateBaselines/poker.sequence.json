@@ -1,0 +1,43 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/poker.world.json",
+  "host": {
+    "kind": "spliced"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "add": {
+        "row": "table",
+        "key": "dealRequest",
+        "value": 1
+      }
+    },
+    {
+      "advance": 300
+    },
+    {
+      "set": {
+        "row": "betAction1",
+        "key": "act",
+        "value": 1
+      }
+    },
+    {
+      "advance": 100
+    },
+    {
+      "set": {
+        "row": "betAction2",
+        "key": "act",
+        "value": 1
+      }
+    },
+    {
+      "advance": 200
+    }
+  ]
+}

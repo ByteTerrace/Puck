@@ -1,0 +1,19 @@
+# Positive leg — the traveller's kit at 60 Hz, measured tick-exactly.
+# Nothing here presses a button on a schedule: every measured number is a per-body counter that a
+# kit action advanced on exact simulation ticks (coyoteTicks counts the airborne ticks on which
+# Recently(Grounded, 0.1s) still held; riseTicks counts Rising ticks), or a settled fixed point
+# (the dash's exact landing x). world.wait only has to be LONG ENOUGH, never exact — that is the
+# whole reason a scripted press is nowhere in this script.
+world.wait 30
+wire.errors reset
+world.kits
+body.where 0
+body.state 0
+
+# Walk off the deck's -Z edge. The kit's own Airborne-edge trigger fires the coyote jump inside
+# the window, the third Rising tick cuts it to 40 %, and the Airborne-edge dash spends the air
+# charge. 3 s at 6.5 m/s clears the 8 m plate with margin.
+body.fly 1 0 0 0 0 0 3
+world.wait 220
+body.where 0
+body.state 0

@@ -50,7 +50,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeOwnedWorlds(section: checkpoint.OwnedWorlds));
         body.WriteBlock(value: EncodeHostRow(section: checkpoint.HostRow));
         body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
-        body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? SearchCheckpoint.Empty)));
+        body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty)));
         body.WriteBlock(value: EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)));
         body.WriteBlock(value: EncodeMachines(section: (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty)));
 

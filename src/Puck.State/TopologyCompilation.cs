@@ -34,7 +34,7 @@ public static class TopologyCompilation {
     // A validated graph (TryValidateGraph) compiles straight into the flat adjacency table every other kind fills
     // through its coordinates: slot (cell, direction) holds the edge's destination, the implied reverse edge fills
     // the destination's opposite slot, and every unfilled slot reads -1.
-    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, Vector3 anchorOffset, TopologyKind kind, int radius) {
+    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, LatticeTopology source, Vector3 anchorOffset, TopologyKind kind, int radius) {
         var count = graph.Cells.Count;
         var directionCount = graph.Directions.Count;
         var ids = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -88,6 +88,7 @@ public static class TopologyCompilation {
 
         for (var index = 0; (index < count); index++) { identity[index] = index; }
         return new CompiledTopology(
+            source,
             kind,
             count,
             directionCount,
@@ -636,7 +637,8 @@ public static class TopologyCompilation {
                 anchorOffset: anchorOffset,
                 graph: graph,
                 kind: TopologyKind.Graph,
-                radius: 0
+                radius: 0,
+                source: graph
             );
         }
         if (topology is LatticeTopology.Tiling tiling) {
@@ -644,7 +646,8 @@ public static class TopologyCompilation {
                 graph: TilingGenerator.Generate(tiling: tiling),
                 anchorOffset: anchorOffset,
                 kind: TopologyKind.Tiling,
-                radius: tiling.Radius
+                radius: tiling.Radius,
+                source: tiling
             );
         }
 
@@ -749,6 +752,7 @@ public static class TopologyCompilation {
             indices
         );
         var compiled = new CompiledTopology(
+            topology,
             topology.Kind,
             coordinates.Count,
             directions.Length,

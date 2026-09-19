@@ -1,0 +1,300 @@
+{
+  "id": "traveller-kit",
+  "title": "A Hollow-Knight-tight movement kit at 60 Hz: coyote time is exactly six ticks, the dash is exactly five flat metres, the air dash stays spent until touchdown, and the jump cut halves the rise",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 28,
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "binding": "One flat document at simulation.rateHz 60 with a deck, a wall and a floor 20 m below, and ONE kit authored entirely in today's action vocabulary. The measurement discipline is the point: NOTHING here presses a button on a schedule. A scripted body.press lands on whatever tick the console pump happens to drain on, so every number this proof pins is instead either a settled fixed point or a per-body counter that a kit onFact trigger advanced on exact simulation ticks. coyoteTicks counts the airborne ticks on which Recently(Grounded, 0.1s) still held; riseTicks counts Rising ticks; dashSpentTicks counts airborne ticks with the air charge at zero; the dashes fire from Grounded-edge and Airborne-edge triggers, which are clocked by the body's own facts, not by stdin. world.wait therefore only has to be LONG ENOUGH, never exact, and a loaded host's catch-up burst cannot move a verdict. The positive leg establishes, tick-exactly: coyote time is 6 ticks at 60 Hz for an authored 0.1 s window (the forcing world's own target number); a PlanarImpulse of speed 25 for 0.2 s moves the body exactly 5.00 m and exactly flat — pos goes from (0.00, 0.03, 0.00) to (5.00, 0.03, 0.00), zero vertical and zero lateral drift; the air dash fires once (airDashFires 1), is spent for 68 of the fall's 69 airborne ticks, and its charge is back at 1 the tick the body grounds (requested=0 effective=1 — resetFact Grounded is the restore-on-contact mechanism); the coyote-gated jump fires once through the real Recently(Grounded, 0.1s) gate; and ScaleVerticalVelocity 0.4 fired on the third Rising tick cuts the rise to 11 ticks. world.kits echoes shaping=response(engage=instant release=instant) — 'acceleration: instant' is spelled by OMITTING the rate — and a second kit in the same document carries the jetpack shape the vocabulary does admit, jet:Lift(rise=28 fall=46)[thrust=1] with a fuel spend row. The discriminating leg runs the SAME script against discriminating.world.json, whose ONLY differences are the authored coyote window (0.05 s instead of 0.1 s) and the removal of the jump-cut trigger. If coyoteTicks were a constant rather than the authored window converted to ticks, or if ScaleVerticalVelocity did not really shorten the rise, the two legs would read identically. They do not: coyoteTicks falls 6 -> 3, exactly linear in the authored seconds, and riseTicks rises 11 -> 24 with cutFires 1 -> 0.",
+  "positive": {
+    "world": "tests/Puck.World.Canaries/traveller-kit/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.kits",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "instant acceleration is spelled by omitting the rate, and echoed as instant",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "shaping=response(engage=instant release=instant)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the jetpack shape the vocabulary admits is a Lift hold with thrust, not an action",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "jet:Lift(rise=28 fall=46)[thrust=1]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the ground dash moved exactly five metres and exactly flat",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(5.00, 0.03, 0.00) yaw=0° pitch=0° roll=0° facts=grounded",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the ground dash fired exactly once, off the body's own Grounded edge",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "groundDashes:counter/ephemeral writable=false envelope=none requested=1 effective=1",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "coyote time is exactly six ticks for an authored 0.1 s window at 60 Hz",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "coyoteTicks:counter/ephemeral writable=false envelope=none requested=6 effective=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the coyote-gated jump fired exactly once through the real recency gate",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "jumpFires:counter/ephemeral writable=false envelope=none requested=1 effective=1",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the jump cut fired once on the third Rising tick",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "cutFires:counter/ephemeral writable=false envelope=none requested=1 effective=1",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the cut rise lasts eleven ticks",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "riseTicks:counter/ephemeral writable=false envelope=none requested=11 effective=11",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the air dash fired exactly once",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "airDashFires:counter/ephemeral writable=false envelope=none requested=1 effective=1",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the air charge was spent to zero and restored to one by ground contact",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "airDashes:counter/ephemeral writable=false envelope=none requested=0 effective=1",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the air dash stayed spent for 68 of the fall's 69 airborne ticks",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "dashSpentTicks:counter/ephemeral writable=false envelope=none requested=68 effective=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the fall lasted 69 airborne ticks and the counter reset on touchdown",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "airTicks:counter/ephemeral writable=false envelope=none requested=69 effective=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the air dash added a second exact five metres and the body settled on the lower floor",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(10.00, -19.97, -19.50) yaw=0° pitch=0° roll=0° facts=grounded",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no mutation was rejected",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "world.mutation rejected",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no unhandled exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/traveller-kit/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.kits",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.state",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "a 0.05 s authored window is exactly three ticks, so coyoteTicks tracks the document and is no constant",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "coyoteTicks:counter/ephemeral writable=false envelope=none requested=3 effective=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "six ticks is not what a shorter window reads",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "coyoteTicks:counter/ephemeral writable=false envelope=none requested=6 effective=0",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "with no cut trigger the jump cut never fires",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "cutFires:counter/ephemeral writable=false envelope=none requested=0 effective=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "an uncut rise lasts twenty-four ticks, more than double the cut one",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "riseTicks:counter/ephemeral writable=false envelope=none requested=24 effective=24",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the cut rise length is not what an uncut jump reads",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "riseTicks:counter/ephemeral writable=false envelope=none requested=11 effective=11",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "the uncut jump keeps the body airborne longer",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "airTicks:counter/ephemeral writable=false envelope=none requested=84 effective=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the dash is unchanged by the coyote window, so the two legs differ only where they were authored to",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(5.00, 0.03, 0.00) yaw=0° pitch=0° roll=0° facts=grounded",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no unhandled exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}

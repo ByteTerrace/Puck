@@ -70,7 +70,7 @@ public sealed class CartridgeContractTests {
     private static CartridgeStatement Set(string name, string expression) => new(
         Kind: "set",
         Target: new(name),
-        Value: ValueExpression.Parse(text: expression)
+        Value: ExpressionProgram.Parse(text: expression)
     );
 
     [InlineData("256 / 2")]
@@ -276,7 +276,7 @@ public sealed class CartridgeContractTests {
                         name: "out"
                     )],
                 CartridgeExpressions.Gate(
-                    ValueExpression.Parse(text: "cells[scene]"),
+                    ExpressionProgram.Parse(text: "cells[scene]"),
                     ActionStateComparison.Equal,
                     CartridgeExpressions.Of(constant: 10)
                 )

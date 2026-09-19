@@ -16,7 +16,7 @@ public sealed class WorldPairKeyLawTests {
                 "trust"
             )!.Cells,
             key: Name(value: key)
-        )?.Value;
+        )?.Value.Raw;
     private static WorldDefinition Document(params WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(World: [Trust()]),
         Rules = rules,
@@ -119,7 +119,7 @@ public sealed class WorldPairKeyLawTests {
             Capacity: 1,
             Cells: [new StateCell(
                     Name(value: "0"),
-                    1
+                    Puck.State.CellValue.Int(value: 1L)
                 )]
         );
         var observers = new WorldStateRow(
@@ -128,10 +128,10 @@ public sealed class WorldPairKeyLawTests {
             Capacity: 4,
             Cells: [new StateCell(
                     Name(value: "0"),
-                    1
+                    Puck.State.CellValue.Int(value: 1L)
                 ), new StateCell(
                     Name(value: "2"),
-                    1
+                    Puck.State.CellValue.Int(value: 1L)
                 )]
         );
         var definition = Fixtures.BuildDocument() with {

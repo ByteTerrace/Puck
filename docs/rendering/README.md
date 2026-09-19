@@ -15,7 +15,7 @@ owning projects.
   manifests, pipeline graphs, resource bindings, configuration, and live
   loading.
 
-- [Shader pipelines and hybrid rendering](../plans/shader-pipeline-evolution.md) records
+- [Rendering](../plans/rendering.md) records
   the planned work beyond the current pipeline foundation, including hybrid
   rendering and shared visibility.
 

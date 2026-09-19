@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 public sealed class WorldBoardSymmetryLawTests {
     private static StateCell Cell(string key, long value = 1) => new(
         Name(value: key),
-        value
+        CellValue.Int(value: value)
     );
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(
@@ -34,7 +34,7 @@ public sealed class WorldBoardSymmetryLawTests {
         CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                0L
+                CellValue.Int(value: 0L)
             )]
     );
     private static LatticeTopology Topology(TopologyKind kind, int width, int depth) => ((kind == TopologyKind.Hex)
@@ -67,7 +67,7 @@ public sealed class WorldBoardSymmetryLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [Fact]
     public void AnAuthoredAliasResolvesAlongsideTheCanonicalSpellingButElementNameAlwaysAnswersTheCanonicalOne() {
@@ -180,10 +180,10 @@ public sealed class WorldBoardSymmetryLawTests {
                     Name(value: "imageMask"),
                     [new ActionEffect.SetState(
                             State: "imageMask",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:2"), new ValueToken.BoardImage(
-                                    Element: "-z+x",
-                                    Topology: "map"
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:2"), Instruction.Board(operation: ExpressionOp.BoardImage, 
+                                    index: "-z+x",
+                                    topology: "map"
                                 ),
             ])
                         )]
@@ -299,10 +299,10 @@ public sealed class WorldBoardSymmetryLawTests {
                     Name(value: "bad"),
                     [new ActionEffect.SetState(
                             State: "bad",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:2"), new ValueToken.BoardImage(
-                                    Element: "rot45",
-                                    Topology: "map"
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:2"), Instruction.Board(operation: ExpressionOp.BoardImage, 
+                                    index: "rot45",
+                                    topology: "map"
                                 ),
             ])
                         )]
@@ -310,7 +310,7 @@ public sealed class WorldBoardSymmetryLawTests {
         ]
         );
 
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: badElement));
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: badElement));
     }
     [InlineData(TopologyKind.Grid, 4, 4, 8)]
     [InlineData(TopologyKind.Grid, 4, 2, 4)]

@@ -562,8 +562,11 @@ public sealed partial class WorldPopulation {
             )
         );
     }
-    /// <summary>Reads or mints the stable mobility identity for one active occupant. A new local incarnation is
-    /// derived from the complete authority/index/generation address; a transferred incarnation retains its origin.</summary>
+    /// <summary>Reads or mints the stable mobility identity for one active occupant and returns it stamped with the
+    /// slot it holds here, which is what this authority offers a destination. A new local incarnation is derived
+    /// from the complete authority/index/generation address; a transferred incarnation retains its origin. The
+    /// stored identity keeps the stamp it arrived with, so the occupant still names where it came from while an
+    /// onward offer is pending.</summary>
     public WorldMobilityIdentity EnsureMobility(int index, string authority) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
         var entry = m_entries[index];
@@ -574,21 +577,52 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: $"body:{index} is not active");
         }
+
+        var here = new WorldEntityAddress(
+            Authority: authority,
+            Index: index,
+            Generation: entry.Generation
+        );
+
         if (
             (entry.Mobility is null) ||
             (entry.MobilityGeneration != entry.Generation)
         ) {
             entry.Mobility = new WorldMobilityIdentity(
-                Incarnation: new WorldEntityAddress(
-                    Authority: authority,
-                    Index: index,
-                    Generation: entry.Generation
-                ),
-                Epoch: 0UL
+                DepartedFrom: here,
+                Epoch: 0UL,
+                Incarnation: here
             );
             entry.MobilityGeneration = entry.Generation;
         }
-        return entry.Mobility.Value;
+
+        return (entry.Mobility.Value with { DepartedFrom = here });
+    }
+    /// <summary>Reads the slot an arrived occupant held under the authority it last left, without minting or
+    /// changing state.</summary>
+    /// <param name="index">The current population slot.</param>
+    /// <param name="departedFrom">The address on success.</param>
+    /// <returns><see langword="true"/> when the slot holds an occupant that arrived by a committed handoff.</returns>
+    public bool TryDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+        departedFrom = default;
+
+        if (((uint)index) >= ((uint)Capacity)) { return false; }
+
+        var entry = m_entries[index];
+
+        if (
+            !entry.Active ||
+            (entry.Body is null) ||
+            (entry.Mobility is not { } mobility) ||
+            (entry.MobilityGeneration != entry.Generation) ||
+            (mobility.Epoch == 0UL)
+        ) {
+            return false;
+        }
+
+        departedFrom = mobility.DepartedFrom;
+
+        return true;
     }
     /// <summary>Returns the <see cref="WorldBody"/> an entry owns while active, or <see langword="null"/> for an inactive
     /// entry. The <c>player.*</c> command wire resolves an index <c>1..128</c> to the entry's own body and produces
@@ -754,10 +788,9 @@ public sealed partial class WorldPopulation {
     // The shared body-construction pattern ActivateInhabitant/ActivateSimulated/RestoreDetachedSeat each already
     // run for their own kit index — factored out here so a restore reconstructs an arbitrary slot's body under
     // ITS OWN captured kit, not just the local-seat kit RestoreDetachedSeat assumes.
-    private WorldBody BuildBodyForKit(byte kitIndex, WorldIdentity? profile) {
+    private WorldBody BuildBodyForKit(byte kitIndex, WorldIdentity? profile, int index) {
         var kit = m_kits[kitIndex];
-
-        return new WorldBody(
+        var body = new WorldBody(
             tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
@@ -776,8 +809,48 @@ public sealed partial class WorldPopulation {
         ) {
             Profile = profile,
         };
+
+        // Every body reaches its named action state through the arena slot lanes at its own entity index. The
+        // ordinal is admitted and born by the entry's own occupancy flag, so a body's registers answer only once
+        // its slot is marked active.
+        body.BindActionStateLane(
+            lane: m_actionStateLane,
+            ordinal: index
+        );
+
+        return body;
     }
 
+    /// <summary>Gets the arena slot lanes every body's named action state is stored in.</summary>
+    public WorldActionStateLane ActionStateLane => m_actionStateLane;
+
+    /// <summary>Binds the arena the slot lanes live in and reconciles their roster with the live entity table.</summary>
+    /// <param name="arena">The server's columnar store.</param>
+    /// <param name="definition">The installed world document, whose <c>state.body</c> and <c>state.identity</c>
+    /// declarations are the register file.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> or <paramref name="definition"/> is
+    /// <see langword="null"/>.</exception>
+    public void BindActionStateLane(StateArena arena, WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        m_actionStateLane.Bind(
+            arena: arena,
+            definitions: FixedWorldKit.CompileActionStateFile(
+                bodyState: definition.BodyState,
+                identityState: definition.IdentityState
+            )
+        );
+
+        // A fresh arena joins nobody, so the roster is reconciled against the table rather than assumed: an active
+        // slot re-joins (and is re-born), and every other ordinal is left released.
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index].Active) {
+                m_actionStateLane.Join(ordinal: index);
+            } else {
+                m_actionStateLane.Leave(ordinal: index);
+            }
+        }
+    }
     /// <summary>Sets the exact rendered material color retained by an authority-transferred body.</summary>
     public void SetBodyColor(int slot, Vector3 color) {
         if (((uint)slot) < ((uint)Capacity)) {

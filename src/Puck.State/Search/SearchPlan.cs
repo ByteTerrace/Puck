@@ -113,7 +113,7 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
 }
 /// <summary>One search job's baked chance node: the ply whose move choice the job's search averages over instead of
 /// choosing, and the outcome table a document project bakes once from the row's own declared generator (its cells'
-/// cross product — two dice of <c>uniformRange 1..6</c> bake 36 outcomes) so <see cref="SearchRuntime"/> reads pure
+/// cross product — two dice of <c>uniformRange 1..6</c> bake 36 outcomes) so a search runtime reads pure
 /// data. Negamax computes the exact weighted average over every outcome at <see cref="AtDepth"/>; a
 /// <see cref="SearchMethod.Tree"/> job instead samples one outcome per playout at the ply its own playout numbering
 /// reaches <see cref="AtDepth"/>, from the job's own stream.</summary>
@@ -126,8 +126,8 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
 public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, long[] Outcomes, ulong[] Weights);
 /// <summary>One search job's fully resolved plan — every row it reads or writes, by name, plus the compiled shapes
 /// and the per-tick node quota. A document project derives this from its own authored row (validating it against
-/// the document, resolving row and topology references) and hands the plan to <see cref="SearchRuntime"/>, which
-/// reads nothing else about where the job came from.</summary>
+/// the document, resolving row and topology references) and resolves it against a catalog
+/// (<c>ArenaSearchPlan</c>), which reads nothing else about where the job came from.</summary>
 /// <param name="Name">The stable job name, for its status and error reporting.</param>
 /// <param name="Tokens">The keyed integer row whose cells are the tokens and whose values are the board cells they
 /// stand on; a value that is no cell is a token off the board, which the job leaves alone.</param>
@@ -140,9 +140,6 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// <param name="Nodes">The relocations judged per tick.</param>
 /// <param name="JudgeCost">The work units one judge run costs.</param>
 /// <param name="Depth">How many plies the job searches ahead.</param>
-/// <param name="Score">The compiled score program a two-sided negamax job compares plies by, negated for the
-/// side that did not just move; <see langword="null"/> when <paramref name="Scores"/> carries the job's scoring
-/// instead, or the job carries none.</param>
 /// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
 /// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
 /// <param name="Legal">The row keyed by <paramref name="Tokens"/> receiving each token's accepted-cell bitmask, or
@@ -157,10 +154,10 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// <param name="Iterations">The tree iterations a <see cref="SearchMethod.Tree"/> job runs.</param>
 /// <param name="Chance">The job's baked chance node, or <see langword="null"/> for a job with none.</param>
 /// <param name="Scores">A keyed integer row, one cell per seat in <paramref name="Turn"/>'s own ordinal order,
-/// holding each seat's own current score; <see langword="null"/> when <paramref name="Score"/> carries the job's
-/// scoring instead. A level maximizes the mover seat's own entry rather than negating the reply, so an n-seat
-/// job never assumes one seat's gain is another's loss (max-n); mutually exclusive with <paramref name="Score"/>,
-/// and, since the outcome the tree method backpropagates alternates sign along the path, not authored with
+/// holding each seat's own current score; <see langword="null"/> when the job's judge carries its scoring instead.
+/// A level maximizes the mover seat's own entry rather than negating the reply, so an n-seat job never assumes one
+/// seat's gain is another's loss (max-n); mutually exclusive with <see cref="SearchPlan.Scored"/>, and, since the
+/// outcome the tree method backpropagates alternates sign along the path, not authored with
 /// <see cref="SearchMethod.Tree"/>.</param>
 public sealed record SearchPlan(
     string Name,
@@ -174,7 +171,6 @@ public sealed record SearchPlan(
     int Nodes,
     long JudgeCost,
     int Depth,
-    CompiledExpressionToken[]? Score,
     string? Best,
     SearchShapePlan[] Shapes,
     string? Legal = null,
@@ -186,17 +182,7 @@ public sealed record SearchPlan(
     int Iterations = 0,
     SearchChancePlan? Chance = null,
     string? Scores = null
-);
-/// <summary>One state write a finished search job wants applied, through whatever mutation door the document
-/// project owns — <see cref="SearchRuntime"/> knows only that a job wants these writes made, never how a document
-/// project encodes them on the wire.</summary>
-public abstract record SearchWrite {
-    /// <summary>Sets one row's cell to a value.</summary>
-    /// <param name="Row">The row name.</param>
-    /// <param name="Key">The cell key.</param>
-    /// <param name="Value">The value.</param>
-    public sealed record Cell(string Row, string Key, long Value) : SearchWrite;
-    /// <summary>Clears every cell of a board row — issued before a job repaints it sparsely.</summary>
-    /// <param name="Row">The row name.</param>
-    public sealed record ClearBoard(string Row) : SearchWrite;
+) {
+    /// <summary>Gets a value indicating whether the job compares plies by a score its judge reads.</summary>
+    public bool Scored { get; init; }
 }

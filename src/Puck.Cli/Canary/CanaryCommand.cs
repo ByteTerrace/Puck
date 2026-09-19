@@ -193,47 +193,23 @@ internal static partial class CanaryCommand {
             Console.WriteLine(value: $"canary: selected {manifests.Count} proof(s).");
         }
 
-        var worldProject = Path.Combine(
-            path1: repositoryRoot,
-            path2: "src",
-            path3: "Puck.World",
-            path4: "Puck.World.csproj"
-        );
-        var artifact = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "bin", "Release", "net10.0", "Puck.World.dll"]);
+        if (!WorldArtifactBuild.TryBuild(
+            artifact: out var artifact,
+            build: out var build,
+            error: out var buildError,
+            outputDirectory: null,
+            repositoryRoot: repositoryRoot,
+            timeout: CliProcess.RemainingBudget(
+                budget: BuildBudget,
+                clock: buildClock
+            ),
+            verb: "canary"
+        )) {
+            Console.Error.WriteLine(value: $"ERROR: {buildError}");
 
-        Console.WriteLine(value: "canary: building Puck.World once (Release).");
-
-        CliProcessResult build;
-
-        try {
-            build = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
-                input: string.Empty,
-                timeout: CliProcess.RemainingBudget(
-                    budget: BuildBudget,
-                    clock: buildClock
-                )
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            Console.Error.WriteLine(value: $"ERROR: could not start the one Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-
-            return 2;
-        }
-
-        if (
-            build.TimedOut ||
-            (build.ExitCode != 0)
-        ) {
-            Console.Error.WriteLine(value: (build.TimedOut
-                ? $"ERROR: the one Puck.World build exceeded the {BuildBudget.TotalSeconds:0}-second build budget."
-                : $"ERROR: the one Puck.World build exited {build.ExitCode}."));
-            PrintCaptured(result: build);
-
-            return 2;
-        }
-        if (!File.Exists(path: artifact)) {
-            Console.Error.WriteLine(value: $"ERROR: the Puck.World build exited 0 but did not produce the exact artifact {artifact}.");
+            if (build is not null) {
+                PrintCaptured(result: build);
+            }
 
             return 2;
         }
@@ -721,6 +697,21 @@ internal static partial class CanaryCommand {
                 }
 
                 root = parent;
+            }
+        }
+
+        // A document's machine content lives beside `worlds` in the same `Assets` tree (a cabinet reaches
+        // `../../cartridges/…`), so when the worlds sit inside a content root the whole root is staged, never the
+        // worlds' own directory alone — the relative paths the documents carry then resolve in the copy too.
+        for (var ancestor = root; !string.IsNullOrEmpty(value: ancestor); ancestor = Path.GetDirectoryName(path: ancestor)) {
+            if (string.Equals(
+                a: Path.GetFileName(path: ancestor),
+                b: "Assets",
+                comparisonType: StringComparison.Ordinal
+            )) {
+                root = ancestor;
+
+                break;
             }
         }
 

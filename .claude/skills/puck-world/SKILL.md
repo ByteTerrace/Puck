@@ -178,11 +178,21 @@ Grammar, `let`/`template`/modules, units, and diagnostics belong to
 semantics — the rule/gate/effect mapping in
 [references/mutations.md](references/mutations.md).
 
+Every construct of that vocabulary is described once, in
+`src/Puck.World.Transpiler/Vocabulary/`: keyword, members with their kinds and
+defaults, the document member it lowers to, and what the printer requires
+before it may print a node back as that construct. The parser's
+embedded-language test, the decompiler's sugar guards, and the language
+server's completion and hover read it, and `puck vocabulary [--check]`
+generates [the inventory](../../../docs/reference/world-vocabulary.md) from it.
+Read the table before deciding a construct's spelling or its refusal, and add a
+member there rather than at a reader.
+
 ## The world project family
 
 | Project | Owns | Key types |
 |---|---|---|
-| `src/Puck.State` | The state and rule engine beneath the document, with no world or presentation concept | `IStateSection`/`StateRow`/`StateCell` and the traits (`StateAdvance`/`StateDynamics`/`StateCycle`), `StateDomain`, `StatePhase`/`PhaseGuard`, `StateVisibility`, `StateCatalog`/`StateHandle`, `StateReader`, `StateCellWriter`, `LatticeTopology`/`CompiledTopology`/`TopologyCompilation`, `Draw`/`StateGenerator`/`GeneratorEngine`, `PatternRow`/`CompiledPattern`, `DynamicsRow`, `CompiledTable`, `ValueExpression`/`ValueToken`/`ExpressionSpelling`, `ExpressionOp`/`ExpressionArithmetic`, `TableDocument`/`TableCanonicalizer`/`TableRow`, the `StateTransform` union, `SafeName`/`CellName`, `CellKind`, `RuleFacts`, `ActionStateComparison`/`ActionTriggerMode`, `Search/SearchRuntime` (negamax with a transposition table and UCT over a state frame; the world host lands its writes) — no `World` name; consumers reach them through a project-wide `Using` |
+| `src/Puck.State` | The state and rule engine beneath the document, with no world or presentation concept | `IStateSection`/`StateRow`/`StateCell` and the traits (`StateAdvance`/`StateDynamics`/`StateCycle`), `StateDomain`, `StatePhase`/`PhaseGuard`, `StateVisibility`, `StateCatalog`/`StateHandle`, `StateReader`, `StateArena`, `LatticeTopology`/`CompiledTopology`/`TopologyCompilation`, `Draw`/`StateGenerator`/`GeneratorEngine`, `PatternRow`/`CompiledPattern`, `DynamicsRow`, `CompiledTable`, `ValueExpression`/`ValueToken`/`ExpressionSpelling`, `ExpressionOp`/`ExpressionArithmetic`, `TableDocument`/`TableCanonicalizer`/`TableRow`, the `StateTransform` union, `SafeName`/`CellName`, `CellKind`, `RuleFacts`, `ActionStateComparison`/`ActionTriggerMode`, `Search/SearchPlan` (the resolved job a search runtime walks; `Puck.State.Search` owns the walk) — no `World` name; consumers reach them through a project-wide `Using` |
 | `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records (`WorldStateSection`/`WorldStateRow` extend the engine's section and row with the body lanes and the `gatesDrive`/`field` traits; `WorldFieldTopology` is the physical lattice case), `WorldDefinitionValidator`, `WorldDefinitionSerialization` (`WorldJsonContext` over the generated `WorldJsonSourceContext`, `WorldJsonVocabulary` adding the document's arms to the engine's polymorphic bases); authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`WorldPrincipal`, admission entries) |
 | `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — all four namespaced `Puck.World.Server` still, moved here as files without a rename |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
@@ -496,17 +506,21 @@ Client code never mutates local state before the server's verdict
 (completions, not discarded replies). Details:
 [references/authority.md](references/authority.md).
 
-**Rule writes land on a frame; the document installs once per tick.** During
-`EvaluateWorldRules` every state effect writes the host's `StateFrame`
-(`WorldServer.RuleFrame.cs`) and rules read through it; what the frame
-accumulated folds into one mutation through the ordinary door at the end of the
-tick, so every other reader (bodies, fields, search, the console) sees a rule's
-write only after that fold. Row versions on the frame drive the rule scheduler
-and memoized bindings (`RuleSchedule`, `IRuleReader.TryRowVersion`); a rule
-whose read rows are unchanged keeps its closed verdict. A text cell, a removal,
-a draw, a shuffle, and a random or slice transfer take the cross-row path,
-which composes but still folds once. `puck bench world` measures the tick path
-on the fixture and the shipped world.
+**Rule writes land on the arena; the document installs once per tick.** During
+`EvaluateWorldRules` every state effect writes the host's `StateArena`
+(`WorldRuleHost.cs`, `WorldServer.Arena.cs`) inside its own firing's journal
+scope, and rules read through the same arena; one rule firing is one scope,
+committed on success and rewound on the first refusal. What the arena
+accumulated across the tick's firings exports into one mutation through the
+ordinary door at the end of the tick (`InstallArenaExport`), so every other
+reader (bodies, fields, search, the console) sees a rule's write only after
+that export. Row versions on the arena drive the rule scheduler and memoized
+bindings (`RuleSchedule`, `IStateReader.TryRowVersion`); a rule whose read
+rows are unchanged keeps its closed verdict. A text cell, a removal, a draw, a
+shuffle, and a random or slice transfer take the same arena kernels
+(`WorldArenaTransforms.TryApply`), which compose but still export once.
+`puck bench world` measures the tick path on the fixture and the shipped
+world.
 
 **Narrate through the hub, never the console.** Server writes nothing to
 `System.Console`; every line is a `WorldNarration` through
@@ -576,7 +590,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   full flag surface is parsed in `Program.cs` (`--backend`, `--width`,
   `--height`, `--exit-after-seconds`, `--present-mode`, `--world`,
   `--recording`, `--storage-uri`, `--user-id`, `--state-dir`, `--headless`,
-  `--capture-dir`, `--listen`, `--connect`); host-related flags are nullable
+  `--capture-dir`, `--schedule-dir`, `--listen`, `--connect`); host-related flags are nullable
   deployment overrides. Absent host overrides leave the world document's
   `host` section in control. `--world` accepts a `.puck` path directly —
   `PuckWorldLoader` compiles it in memory before boot — or an ordinary JSON
@@ -596,6 +610,42 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `--capture-dir`). The camera program's `select` op dispatches to named
   sub-programs keyed on a live `state.<row>` value — the discrete sibling
   of `blend`.
+- A world may author a `schedule` section, the command-side sibling of
+  `captures`: rows of `(tick, principal, command)` submitted at that
+  completed-tick coordinate through a session bound to the authored seat, so
+  admission, grants, phase guards and refusals behave as for a live actor. The
+  section is INERT unless the boot passes `--schedule-dir`, which both arms it
+  and names its output directory: any other boot submits no row, writes no
+  export, and says so once on stderr. `principal` is `seat1`..`seat4` only —
+  `console` is refused (it is trusted at every gate, so a step acting as it
+  proves nothing about authority; author the step's power in the document's own
+  `grants`), as are `peer:`/`addon:`. `command` must open with a verb in
+  `WorldScheduleCommands.Admitted` — state mutations, guarded transforms, body
+  intents/poses, `player.join`/`player.leave` — and every process, clock, file
+  or authority verb (`quit`, `world.rate`, `world.save`, `world.load`,
+  `world.grant`) is refused at validation with the row's index. The tick pins
+  the SUBMISSION — an `Immediate` verb runs inline in it, a `Simulation` verb
+  applies at `tick + 1`. At `max(rows[].tick) + settleTicks` the host writes
+  `WorldStateExport`'s canonical `state-export.json` plus a
+  `puck.world.schedule-manifest.v1` `schedule.json` into the armed directory.
+  The manifest carries one entry per DECLARED row (a row whose tick the run
+  never reached reads `outcome: "unreached"`, never an absent entry), every
+  local edit echo including refusals, and `authoredExportTick`/`truncated`
+  beside `exportTick` — a run that ended early records a truncated run rather
+  than presenting what it reached as the export, and `puck test` refuses such a
+  leg with exit 2. A `state` row may
+  carry a `verdict` trait (`gate` prose plus the `status` cell key; the
+  row's other cells are the values the gate saw, status 0/1/2 =
+  never-evaluated/pass/fail). `world.schedule` and `world.verdicts` are the
+  read-backs; `puck test <path>` boots each such world twice through the real
+  executable, refuses one whose two exports differ, and prints one line per
+  verdict. This section and that trait are what a `.puck`
+  `test "name" { given { } when { } expect { } }` block at a world's root lowers
+  to, one generated world per block: `given` writes boot cells, `when` becomes
+  the schedule rows on a tick grid, and each `expect` line becomes a verdict row
+  plus a rule gated on the export tick alone. `puck test` takes the `.puck`
+  source directly and runs the worlds its tests generated — see
+  [Testing a world](../../../docs/authoring/testing-a-world.md).
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
   replays) — use a temp dir for hermetic verification runs; parallel runs
   each need their own.

@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 /// negative write.</summary>
 public sealed class WorldRuleCountdownLawTests {
     private static long CountdownValue(WorldFixture fixture, CellName name) =>
-        fixture.Server.Definition.State.Single(predicate: row => (row.Name == name)).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: row => (row.Name == name)).Cells!.Single().Value.Raw;
     private static WorldDefinition DurationDocument(decimal seconds) {
         var countdownName = CellName.Parse(candidate: "cooldown");
 
@@ -17,7 +17,10 @@ public sealed class WorldRuleCountdownLawTests {
                 Name: countdownName,
                 Kind: CellKind.Int,
                 Min: 0L,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey)]
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: CellValue.Int(value: 0L)
+                    )]
             )
             ]),
             Rules = [
@@ -43,7 +46,7 @@ public sealed class WorldRuleCountdownLawTests {
                 Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 1183L
+                        Value: CellValue.Int(value: 1183L)
                     )]
             )
             ]),

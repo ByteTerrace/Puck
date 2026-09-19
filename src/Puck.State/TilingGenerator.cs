@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
@@ -42,79 +43,14 @@ public static class TilingGenerator {
     public const int MaxPenroseInflations = 9;
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<LatticeTopology.Tiling, LatticeTopology.Graph> Graphs = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<LatticeTopology.Tiling, PenroseTiles> PenroseTilesValue = new();
 
     private static LatticeTopology.Graph Build(LatticeTopology.Tiling tiling) {
-        var radius = Math.Max(
-            val1: 1,
-            val2: tiling.Radius
+        var tiles = Sorted(tiling: tiling);
+        var edgeOwners = ShareEdges(
+            tileVertexIds: out var tileVertexIds,
+            tiles: tiles
         );
-        var tiles = ((tiling.Family == TilingFamily.Penrose)
-            ? Penrose(radius: radius)
-            : Periodic(
-                family: tiling.Family,
-                radius: radius
-            )
-        );
-        // Rings outward from the origin, then by angle: consecutive ordinals cluster, and the order is a pure function
-        // of the geometry.
-        tiles.Sort(comparison: static (a, b) => {
-            var byDistance = Quantize(value: a.Centre.Length).CompareTo(value: Quantize(value: b.Centre.Length));
-
-            return ((byDistance != 0)
-                ? byDistance
-                : Quantize(value: Math.Atan2(
-                    a.Centre.Y,
-                    a.Centre.X
-                )).CompareTo(value: Quantize(value: Math.Atan2(
-                    b.Centre.Y,
-                    b.Centre.X
-                )))
-            );
-        });
-
-        // Vertices merge by quantized position; an edge is a vertex pair; two tiles sharing an edge are neighbours.
-        var vertexIds = new Dictionary<(long, long), int>();
-        var edgeOwners = new Dictionary<(int, int), List<(int Tile, int Edge)>>();
-        var tileVertexIds = new int[tiles.Count][];
-
-        for (var index = 0; (index < tiles.Count); index++) {
-            var vertices = tiles[index].Vertices;
-            var ids = new int[vertices.Length];
-
-            for (var v = 0; (v < vertices.Length); v++) {
-                var key = (Quantize(value: vertices[v].X), Quantize(value: vertices[v].Y));
-
-                if (!vertexIds.TryGetValue(
-                    key: key,
-                    value: out var id
-                )) {
-                    id = vertexIds.Count;
-                    vertexIds[key] = id;
-                }
-                ids[v] = id;
-            }
-            tileVertexIds[index] = ids;
-            for (var v = 0; (v < ids.Length); v++) {
-                var a = ids[v];
-                var b = ids[((v + 1) % ids.Length)];
-                var edge = (Math.Min(
-                    val1: a,
-                    val2: b
-                ), Math.Max(
-                    val1: a,
-                    val2: b
-                ));
-
-                if (!edgeOwners.TryGetValue(
-                    key: edge,
-                    value: out var owners
-                )) {
-                    owners = [];
-                    edgeOwners[edge] = owners;
-                }
-                owners.Add(item: (index, v));
-            }
-        }
 
         // Every edge's outward normal angle, quantized to the family's own angle set, names the direction slot.
         var directionDegrees = new SortedSet<int>();
@@ -218,6 +154,86 @@ public static class TilingGenerator {
         provider: CultureInfo.InvariantCulture,
         handler: $"a{degrees}"
     );
+    // The tiles a family lays down, in the order the cell ordinals read them: rings outward from the origin, then by
+    // angle, so consecutive ordinals cluster and the order is a function of the geometry alone.
+    private static List<Tile> Sorted(LatticeTopology.Tiling tiling) {
+        var radius = Math.Max(
+            val1: 1,
+            val2: tiling.Radius
+        );
+        var tiles = ((tiling.Family == TilingFamily.Penrose)
+            ? Penrose(radius: radius)
+            : Periodic(
+                family: tiling.Family,
+                radius: radius
+            )
+        );
+
+        tiles.Sort(comparison: static (a, b) => {
+            var byDistance = Quantize(value: a.Centre.Length).CompareTo(value: Quantize(value: b.Centre.Length));
+
+            return ((byDistance != 0)
+                ? byDistance
+                : Quantize(value: Math.Atan2(
+                    a.Centre.Y,
+                    a.Centre.X
+                )).CompareTo(value: Quantize(value: Math.Atan2(
+                    b.Centre.Y,
+                    b.Centre.X
+                )))
+            );
+        });
+
+        return tiles;
+    }
+    // Vertices merge by quantized position; an edge is a vertex pair; two tiles sharing an edge are neighbours.
+    private static Dictionary<(int, int), List<(int Tile, int Edge)>> ShareEdges(List<Tile> tiles, out int[][] tileVertexIds) {
+        var edgeOwners = new Dictionary<(int, int), List<(int Tile, int Edge)>>();
+        var vertexIds = new Dictionary<(long, long), int>();
+
+        tileVertexIds = new int[tiles.Count][];
+
+        for (var index = 0; (index < tiles.Count); index++) {
+            var vertices = tiles[index].Vertices;
+            var ids = new int[vertices.Length];
+
+            for (var v = 0; (v < vertices.Length); v++) {
+                var key = (Quantize(value: vertices[v].X), Quantize(value: vertices[v].Y));
+
+                if (!vertexIds.TryGetValue(
+                    key: key,
+                    value: out var id
+                )) {
+                    id = vertexIds.Count;
+                    vertexIds[key] = id;
+                }
+                ids[v] = id;
+            }
+            tileVertexIds[index] = ids;
+            for (var v = 0; (v < ids.Length); v++) {
+                var a = ids[v];
+                var b = ids[((v + 1) % ids.Length)];
+                var edge = (Math.Min(
+                    val1: a,
+                    val2: b
+                ), Math.Max(
+                    val1: a,
+                    val2: b
+                ));
+
+                if (!edgeOwners.TryGetValue(
+                    key: edge,
+                    value: out var owners
+                )) {
+                    owners = [];
+                    edgeOwners[edge] = owners;
+                }
+                owners.Add(item: (index, v));
+            }
+        }
+
+        return edgeOwners;
+    }
     private static List<Tile> Penrose(int radius) {
         var inflations = 0;
 
@@ -646,6 +662,58 @@ public static class TilingGenerator {
             _ => throw new InvalidOperationException(message: $"'{family}' is not a periodic tiling family"),
         };
     }
+    // A rhomb of edge length 1 with acute angle t has diagonals 2*sin(t/2) and 2*cos(t/2): 0.618 and 1.902 for the
+    // thin rhomb's 36 degrees, 1.176 and 1.618 for the fat rhomb's 72. A short diagonal under 1 therefore names the
+    // thin rhomb with the quantum to spare.
+    private static PenroseRhomb Rhomb(Tile tile) {
+        var vertices = tile.Vertices;
+        var shorter = Math.Min(
+            val1: (vertices[2] - vertices[0]).Length,
+            val2: (vertices[3] - vertices[1]).Length
+        );
+
+        return ((shorter < 1.0)
+            ? PenroseRhomb.Thin
+            : PenroseRhomb.Fat
+        );
+    }
+    private static PenroseTiles DescribePenrose(LatticeTopology.Tiling tiling) {
+        var tiles = Sorted(tiling: tiling);
+        var edgeOwners = ShareEdges(
+            tileVertexIds: out _,
+            tiles: tiles
+        );
+        var kinds = new PenroseRhomb[tiles.Count];
+        var sides = new int[tiles.Count][];
+
+        for (var index = 0; (index < tiles.Count); index++) {
+            kinds[index] = Rhomb(tile: tiles[index]);
+            sides[index] = [-1, -1, -1, -1];
+        }
+
+        foreach (var owners in edgeOwners.Values) {
+            if (owners.Count != 2) {
+                continue;
+            }
+
+            var (first, firstSide) = owners[0];
+            var (second, secondSide) = owners[1];
+
+            sides[first][firstSide] = second;
+            sides[second][secondSide] = first;
+        }
+
+        var shared = new IReadOnlyList<int>[tiles.Count];
+
+        for (var index = 0; (index < tiles.Count); index++) {
+            shared[index] = sides[index];
+        }
+
+        return new PenroseTiles(
+            Kinds: kinds,
+            Sides: shared
+        );
+    }
 
     /// <summary>Returns the graph a tiling generates, computed once per record instance.</summary>
     /// <param name="tiling">The tiling.</param>
@@ -656,6 +724,29 @@ public static class TilingGenerator {
             key: tiling,
             createValueCallback: static t => Build(tiling: t)
         );
+    }
+    /// <summary>Returns a Penrose patch's per-tile facts, computed once per record instance.</summary>
+    /// <param name="tiling">The tiling.</param>
+    /// <param name="tiles">The patch's tiles in cell order, on success.</param>
+    /// <param name="reason">Why the tiling carries no rhombs, or empty on success.</param>
+    /// <returns><see langword="true"/> when the tiling is a Penrose one.</returns>
+    public static bool TryDescribePenrose(LatticeTopology.Tiling tiling, [NotNullWhen(true)] out PenroseTiles? tiles, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: tiling);
+
+        if (tiling.Family != TilingFamily.Penrose) {
+            reason = $"tiling '{tiling.Name}' lays down {tiling.Family} tiles, and only a Penrose tiling carries rhomb kinds and ribbons";
+            tiles = null;
+
+            return false;
+        }
+
+        reason = string.Empty;
+        tiles = PenroseTilesValue.GetValue(
+            key: tiling,
+            createValueCallback: static t => DescribePenrose(tiling: t)
+        );
+
+        return true;
     }
 
     // A polygon: its vertices in cyclic order and its centroid, in edge-length units.

@@ -67,13 +67,15 @@ public static class DocumentCanonicalizer {
     /// document its family vouches for.</summary>
     /// <typeparam name="TDocument">The document family's record type.</typeparam>
     /// <param name="document">The validated, normalized document.</param>
+    /// <param name="options">The family's own options, from <see cref="DocumentJsonOptions.With"/>, when its
+    /// vocabulary spells a shared model type differently; <see langword="null"/> uses the shared shape.</param>
     /// <returns>The document plus its canonical bytes and hash.</returns>
-    public static CanonicalDocument<TDocument> Canonicalize<TDocument>(TDocument document) {
+    public static CanonicalDocument<TDocument> Canonicalize<TDocument>(TDocument document, JsonSerializerOptions? options = null) {
         ArgumentNullException.ThrowIfNull(document);
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(
             value: document,
-            options: DocumentJsonOptions.Shared
+            options: (options ?? DocumentJsonOptions.Shared)
         );
 
         return new CanonicalDocument<TDocument>(

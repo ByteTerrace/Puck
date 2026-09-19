@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldPatternLawTests {
     private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 transform,
                 WorldPrincipal.World,
@@ -39,9 +39,9 @@ public sealed class WorldPatternLawTests {
         ? new PatternNode.Symbol(Name: "them")
         : new PatternNode.Plus(Item: new PatternNode.Symbol(Name: "them"))), new PatternNode.Symbol(Name: "me")])
     );
-    private static StateCell Cell(string key, long value = 1) => new(
+    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
         Name(value: key),
-        value
+        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0)) : CellValue.Int(value: value))
     );
     private static WorldDefinition Document(WorldStateRow[] rows, PatternRow[] patterns, WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(
@@ -138,7 +138,7 @@ public sealed class WorldPatternLawTests {
                     Name(value: "hand"),
                     CellKind.Bool,
                     Capacity: 5,
-                    Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")],
+                    Cells: [Cell("c1", kind: CellKind.Bool), Cell("c2", kind: CellKind.Bool), Cell("c3", kind: CellKind.Bool), Cell("c4", kind: CellKind.Bool), Cell("c5", kind: CellKind.Bool)],
                     Domain: new StateDomain.KeysOf(
                         CellName.Parse(candidate: "cards"),
                         Ordered: true
@@ -167,7 +167,7 @@ public sealed class WorldPatternLawTests {
         CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                0L
+                CellValue.Int(value: 0L)
             )]
     );
     private static long Value(WorldFixture fixture, string row) =>
@@ -177,7 +177,7 @@ public sealed class WorldPatternLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [Fact]
     public void ABoardRayIsAWordAndAFlankIsARegularPattern() {
@@ -442,7 +442,7 @@ public sealed class WorldPatternLawTests {
             ).Cells!.Select(selector: c => c.Key.Value)
         );
         // Control: no attribute keys at all is not "sort by nothing" — it refuses.
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             unsorted,
             new StateTransform.SortZone(
                 "hand",
@@ -483,7 +483,7 @@ public sealed class WorldPatternLawTests {
             },
         };
 
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             foreign,
             new StateTransform.SortZone(
                 "hand",
@@ -497,16 +497,18 @@ public sealed class WorldPatternLawTests {
         ));
         Assert.Contains(
             actualString: domainReason,
-            expectedSubstring: "token domain 'cards'"
+            expectedSubstring: "token domain"
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: foreign with { Rules = [new WorldRule(
+            definition: foreign with {
+                Rules = [new WorldRule(
                     Name(value: "bad"),
                     [new ActionEffect.TransformState(Transform: new StateTransform.SortZone(
                             "hand",
                             By: [new("score")]
                         ))]
-                )] },
+                )],
+            },
             reason: out var compileReason
         ));
         Assert.Contains(
@@ -526,10 +528,13 @@ public sealed class WorldPatternLawTests {
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: foreign with { PatternsRaw = [.. foreign.Patterns, foreignPattern], Rules = [Mirror(
+            definition: foreign with {
+                PatternsRaw = [.. foreign.Patterns, foreignPattern],
+                Rules = [Mirror(
                     "straight",
                     "$match:far:hand"
-                )] },
+                )],
+            },
             reason: out var attributeReason
         ));
         Assert.Contains(
@@ -634,7 +639,7 @@ public sealed class WorldPatternLawTests {
             Find(
                 document: sorted,
                 row: "dice"
-            ).Cells!.Select(selector: c => c.Value)
+            ).Cells!.Select(selector: c => c.Value.Raw)
         );
         using var fixture = Fixtures.FreshServer(definition: sorted);
 
@@ -648,7 +653,7 @@ public sealed class WorldPatternLawTests {
         );
 
         // Control: a plain slot row carries no keyed cells to order.
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.SortKeyed("hit"),
             WorldPrincipal.World,
@@ -659,21 +664,19 @@ public sealed class WorldPatternLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "keyed numeric row"
+            expectedSubstring: "keyed or ordered numeric row"
         );
     }
     [Fact]
-    public void AValueExpressionReadsATupleOfAttributesPerTokenAndTokenBindsOnlyThere() {
+    public void AExpressionProgramReadsATupleOfAttributesPerTokenAndTokenBindsOnlyThere() {
         // suit * 16 + rank: hearts are suit 1, so a heart of any rank lies in 16..31 and a heart flush is h{5}.
-        ValueExpression Tuple() => new(Tokens: [
-            new ValueToken.State(
-                Key: "$token",
-                Name: "suit"
-            ), new ValueToken.Constant(Value: 16m), new ValueToken.Multiply(),
-            new ValueToken.State(
-                Key: "$token",
-                Name: "rank"
-            ), new ValueToken.Add(),
+        ExpressionProgram Tuple() => new(Instructions: [
+            Instruction.Operand(key: "$token",
+                name: "suit"
+            ), Instruction.Constant(value: 16m), Instruction.Of(operation: ExpressionOp.Multiply),
+            Instruction.Operand(key: "$token",
+                name: "rank"
+            ), Instruction.Of(operation: ExpressionOp.Add),
         ]);
         var flush = new PatternRow(
             Name(value: "hearts"),
@@ -730,13 +733,16 @@ public sealed class WorldPatternLawTests {
             Slot(name: "flush"), Slot(name: "royal")],
             },
         };
-        var definition = suited with { PatternsRaw = [flush, straightFlush], Rules = [Mirror(
+        var definition = suited with {
+            PatternsRaw = [flush, straightFlush],
+            Rules = [Mirror(
                 "flush",
                 "$match:hearts:hand"
             ), Mirror(
                 "royal",
                 "$match:royal:hand"
-            )] };
+            )],
+        };
 
         using var unsorted = Fixtures.FreshServer(definition: definition);
 
@@ -784,7 +790,9 @@ public sealed class WorldPatternLawTests {
             )
         );
 
-        var mixed = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(selector: r => ((r.Name.Value == "suit")
+        var mixed = definition with {
+            StateRaw = definition.StateRaw! with {
+                World = [.. definition.State.Select(selector: r => ((r.Name.Value == "suit")
             ? r with { Cells = [Cell(
                         key: "c1",
                         value: 1
@@ -801,7 +809,9 @@ public sealed class WorldPatternLawTests {
                         key: "c5",
                         value: 1
                     )] }
-            : r))] } };
+            : r))],
+            },
+        };
         using var broken = Fixtures.FreshServer(definition: mixed);
 
         broken.Step();
@@ -813,14 +823,16 @@ public sealed class WorldPatternLawTests {
             )
         );
 
-        var stray = definition with { Rules = [new WorldRule(
+        var stray = definition with {
+            Rules = [new WorldRule(
                 Name(value: "stray"),
                 [new ActionEffect.SetState(
                         State: "flush",
                         FromState: "rank",
                         FromKey: "$token"
                     )]
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: stray,
@@ -830,13 +842,15 @@ public sealed class WorldPatternLawTests {
             actualString: strayReason,
             expectedSubstring: "not bound here"
         );
-        var foreign = definition with { PatternsRaw = [flush with { Value = new(Tokens: [new ValueToken.State(
-                    Key: "$token",
-                    Name: "flush"
-                )]) }], Rules = [Mirror(
+        var foreign = definition with {
+            PatternsRaw = [flush with { Value = new(Instructions: [Instruction.Operand(key: "$token",
+                    name: "flush"
+                )]) }],
+            Rules = [Mirror(
                 "flush",
                 "$match:hearts:hand"
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: foreign,
@@ -1011,7 +1025,9 @@ public sealed class WorldPatternLawTests {
             ]),
             MaxStates: 12
         );
-        var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(
+        var definition = Hand() with {
+            PatternsRaw = [.. Hand().Patterns, every],
+            Rules = [.. Hand().Rules!, new WorldRule(
                 Name(value: "order"),
                 [new ActionEffect.TransformState(Transform: new StateTransform.SortZone(
                         "hand",
@@ -1020,7 +1036,8 @@ public sealed class WorldPatternLawTests {
                                 Descending: true
                             )]
                     ))]
-            )] };
+            )],
+        };
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
 

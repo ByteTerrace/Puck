@@ -1,7 +1,5 @@
-using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
-using Puck.Maths;
 
 namespace Puck.World;
 
@@ -51,7 +49,7 @@ public sealed record WorldDecision(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDecisionOption(
     CellName Name,
-    ValueExpression Score,
+    ExpressionProgram Score,
     IReadOnlyList<ActionEffect> Effects,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecisionNeighbors? Neighbors = null
@@ -70,19 +68,3 @@ public sealed record WorldDecisionOption(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDecisionNeighbors(decimal Range, int CandidateBudget, int MaxCandidates,
     decimal HalfAngleDegrees = 180, bool RequiresLineOfSight = false, bool RetainCurrent = true);
-/// <summary>Validated, fixed-point neighbor perception parameters.</summary>
-public sealed record CompiledWorldDecisionNeighbors(WorldDecisionNeighbors Source, FixedQ4816 Range, FixedQ4816 MinimumDot) {
-    /// <summary>Gets the power-of-two raw grid width shared by ranges of the same scale. Bounds each query to 27 cells.</summary>
-    public FixedQ4816 CellWidth => FixedQ4816.FromRawBits(value: checked((long)BitOperations.RoundUpToPowerOf2(value: ((ulong)Range.Value))));
-}
-/// <summary>A compiled decision policy. PolicyIdentity is the canonical source rule and seeds lifecycle reconciliation, not randomness.</summary>
-public sealed record CompiledWorldDecision(
-    CompiledWorldDecisionOption[] Options, WorldDecisionMode Mode, CellKind ScoreKind,
-    ulong PeriodTicks, ulong CommitmentTicks, long IncumbentBonus, ulong Seed,
-    GateToken[]? Interrupt, EffectFact[] OnNoChoice, string PolicyIdentity
-);
-/// <summary>A decision option compiled through the ordinary world predicate, expression, and effect compilers.</summary>
-public sealed record CompiledWorldDecisionOption(
-    string Name, GateToken[] Gate, CompiledExpressionToken[] Score, EffectFact[] Effects,
-    CompiledWorldDecisionNeighbors? Neighbors = null
-);

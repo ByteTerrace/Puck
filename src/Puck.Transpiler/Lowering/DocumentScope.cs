@@ -27,6 +27,20 @@ public interface IDocumentVocabulary {
     /// <param name="positionalIndex">The argument's 0-based position.</param>
     /// <returns>The key, or <see langword="null"/> to fall back to the positional <c>arg&lt;n&gt;</c> spelling.</returns>
     string? NameCallArgument(string callName, int positionalIndex);
+    /// <summary>Returns whether the given identifier introduces an embedded language block (e.g. <c>sql { ... }</c>) for this vocabulary.</summary>
+    /// <param name="identifier">The block identifier.</param>
+    /// <returns><c>true</c> if the block should be parsed as raw embedded source rather than standard DSL statements.</returns>
+    bool IsEmbeddedLanguage(string identifier) => false;
+    /// <summary>Returns whether a declaration statement of <paramref name="keyword"/> writes
+    /// <paramref name="modifier"/> bare — as a flag with no argument list, the way a <c>table</c> writes
+    /// <c>evicts</c>.</summary>
+    /// <param name="keyword">The declaration's opening keyword as written (<c>table</c>, <c>slot</c>,
+    /// <c>pile</c>, <c>grid</c>).</param>
+    /// <param name="modifier">The bare identifier read where a <c>name(args)</c> modifier could stand.</param>
+    /// <returns><c>true</c> when the modifier belongs to that declaration and is written without arguments.</returns>
+    /// <remarks>An identifier not followed by <c>(</c> otherwise belongs to whatever statement comes next, so
+    /// answering <c>false</c> leaves the cursor rewound past it.</remarks>
+    bool IsBareModifier(string keyword, string modifier) => false;
 }
 /// <summary>One lowering pass's carried state: the constants and templates in scope, where diagnostics and source
 /// spans go, and the document vocabulary answering the schema-specific questions.</summary>
@@ -38,6 +52,7 @@ public interface IDocumentVocabulary {
 /// <param name="diagnostics">The bag refusals are reported into; a fresh bag when null.</param>
 /// <param name="schema">The document's declared schema, or <see langword="null"/>.</param>
 /// <param name="currentPointer">The JSON pointer lowering is currently positioned at.</param>
+/// <param name="annotations">The arbitrary annotations carried across child scopes, or <see langword="null"/>.</param>
 public sealed class DocumentScope(
     IDocumentVocabulary vocabulary,
     string? basePath = null,
@@ -46,7 +61,8 @@ public sealed class DocumentScope(
     SourceMap? sourceMap = null,
     DiagnosticBag? diagnostics = null,
     string? schema = null,
-    string currentPointer = ""
+    string currentPointer = "",
+    Dictionary<string, object?>? annotations = null
 ) {
     /// <summary>Gets the document vocabulary being lowered against.</summary>
     public IDocumentVocabulary Vocabulary { get; } = vocabulary;
@@ -68,6 +84,8 @@ public sealed class DocumentScope(
     /// <remarks>Separate from <see cref="Constants"/> because a bound value is a JSON node, not an expression that
     /// could be lowered again; a local shadows a constant of the same name.</remarks>
     public Dictionary<string, JsonNode?> Locals { get; private init; } = [];
+    /// <summary>Gets schema-agnostic user annotations attached to this compilation scope.</summary>
+    public Dictionary<string, object?> Annotations { get; init; } = (annotations ?? new(comparer: StringComparer.Ordinal));
 
     private Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> m_values = [];
     private Dictionary<string, DocumentScope> m_arguments = new(comparer: StringComparer.Ordinal);
@@ -241,7 +259,8 @@ public sealed class DocumentScope(
         sourceMap: SourceMap,
         diagnostics: Diagnostics,
         schema: Schema,
-        currentPointer: CurrentPointer
+        currentPointer: CurrentPointer,
+        annotations: Annotations
     ) {
         m_arguments = new(
         m_arguments,
@@ -262,7 +281,8 @@ public sealed class DocumentScope(
         sourceMap: SourceMap,
         diagnostics: Diagnostics,
         schema: Schema,
-        currentPointer: CurrentPointer
+        currentPointer: CurrentPointer,
+        annotations: Annotations
     ) {
         Budget = Budget,
         Locals = lambdaLocals,

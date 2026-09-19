@@ -1494,7 +1494,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
         // A wide operand is a bare read of a two-byte slot: that is the only shape the pair registers handle, and
         // the only shape validation admits where a pair is read.
-        bool WideOperand(ValueExpression? expression) => ((Bare(expression: expression) is { } name) && widths.TryGetValue(
+        bool WideOperand(ExpressionProgram? expression) => ((Bare(expression: expression) is { } name) && widths.TryGetValue(
             key: name,
             value: out var width
         ) && (width == 2));
@@ -1504,15 +1504,15 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             value: out var width
         ) && (width == 2));
 
-        static string? Bare(ValueExpression? expression) =>
-            ((expression?.Tokens is [ValueToken.State { Key: null } state])
+        static string? Bare(ExpressionProgram? expression) =>
+            ((expression?.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])
                 ? state.Name
                 : null
             );
 
         // Reads an operand as sixteen bits into the given pair. A narrow operand zero-extends, so a wide slot and a
         // byte compare and combine on the same terms.
-        void LoadWide(ValueExpression expression, Reg16 pair, bool guard = false) {
+        void LoadWide(ExpressionProgram expression, Reg16 pair, bool guard = false) {
             var low = ((pair == Reg16.Hl)
                 ? Reg8.L
                 : Reg8.E
@@ -1601,21 +1601,21 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         // Leaves the expression's value in the accumulator. Operands still in flight live on the machine stack, which
         // is what the validated depth bounds; B and C are scratch and carry nothing across a call. Inside a gate every
         // read of the declared scene answers from the frame's snapshot rather than live state, at any nesting.
-        void Load(ValueExpression expression, bool guard = false) {
+        void Load(ExpressionProgram expression, bool guard = false) {
             var depth = 0;
 
-            foreach (var token in expression.Tokens) {
-                if (token is ValueToken.Constant or ValueToken.State) {
+            foreach (var token in expression.Instructions) {
+                if (token.Payload is InstructionPayload.Constant or InstructionPayload.State) {
                     if (depth > 0) {
                         emitter.Push(pair: StackPair.Af);
                     }
 
-                    if (token is ValueToken.Constant constant) {
+                    if (token.Payload is InstructionPayload.Constant constant) {
                         emitter.LoadAImmediate(value: ((byte)((int)constant.Value)));
                     } else {
                         Read(
                             guard: guard,
-                            state: ((ValueToken.State)token)
+                            state: ((InstructionPayload.State)token.Payload!)
                         );
                     }
 
@@ -1624,7 +1624,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     continue;
                 }
 
-                var operation = ExpressionVocabulary.Operation(token: token)!.Value;
+                var operation = ExpressionVocabulary.Operation(instruction: token)!.Value;
                 var arity = ExpressionVocabulary.Arity(operation: operation);
 
                 switch (arity) {
@@ -1637,7 +1637,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             }
         }
 
-        void Read(ValueToken.State state, bool guard) {
+        void Read(InstructionPayload.State state, bool guard) {
             if (CartridgeExpressions.TryKey(
                 name: state.Name,
                 button: out var button,
@@ -1936,7 +1936,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         }
 
         // Leaves HL at the addressed element, or at the zeroed discard sink when the index is past the declared length.
-        void Element(string array, ValueExpression index, bool guard = false) {
+        void Element(string array, ExpressionProgram index, bool guard = false) {
             var length = lengths[key: array];
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();

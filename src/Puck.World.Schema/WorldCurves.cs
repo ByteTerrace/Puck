@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
@@ -95,21 +96,57 @@ public sealed record WorldCurveRow(
     // equality-compared surface for the same reason that precedent gives: a lazily-populated field would make two
     // otherwise-identical rows compare unequal purely because one had been read from and the other had not.
     private static readonly ConditionalWeakTable<WorldCurveRow, StrongBox<CompiledCurvatureSpline>> CompiledCache = new();
+    // The derivation is exact (rational root isolation) and costs whole seconds per document, and every instance
+    // that loads the same document parses its own row instances, so the compile itself is shared by SHAPE — the
+    // knots' fixed-point values and closure — across rows and instances; a compiled spline is immutable, so one
+    // instance serves every row of that shape.
+    private static readonly ConcurrentDictionary<CurveShape, CompiledCurvatureSpline> CompiledByShape = new();
 
     /// <summary>Gets this row's compiled, curvature-continuous spline — the SAME derivation
     /// <see cref="WorldDefinitionValidator"/> runs at the door, so a validated row always compiles here too. Derived
-    /// once per row instance and cached.</summary>
+    /// once per distinct shape and cached.</summary>
     /// <exception cref="CurvatureSplineException">The row does not compile. Reachable only for an UNVALIDATED row (a
     /// hand-built candidate that skipped <see cref="WorldDefinitionValidator"/>) — the validator itself runs this
     /// same derivation and refuses by name before a validated row can be read here.</exception>
     [JsonIgnore]
     public CompiledCurvatureSpline Compiled => CompiledCache.GetValue(
         key: this,
-        createValueCallback: static row => new StrongBox<CompiledCurvatureSpline>(value: CurvatureSpline.Compile(
-            knots: row.ToSplineKnots(),
-            closed: row.Closed
+        createValueCallback: static row => new StrongBox<CompiledCurvatureSpline>(value: CompiledByShape.GetOrAdd(
+            key: new CurveShape(
+                closed: row.Closed,
+                knots: row.ToSplineKnots()
+            ),
+            valueFactory: static shape => CurvatureSpline.Compile(
+                knots: shape.Knots,
+                closed: shape.Closed
+            )
         ))
     ).Value!; // the callback always constructs a non-null StrongBox.Value; StrongBox<T>.Value is merely MaybeNull-annotated.
+
+    private sealed class CurveShape : IEquatable<CurveShape> {
+        public CurveShape(bool closed, CurvatureSplineKnot[] knots) {
+            Closed = closed;
+            Knots = knots;
+        }
+
+        public bool Closed { get; }
+        public CurvatureSplineKnot[] Knots { get; }
+
+        public bool Equals(CurveShape? other) =>
+            ((other is not null) && (other.Closed == Closed) && other.Knots.AsSpan().SequenceEqual(other: Knots));
+        public override bool Equals(object? obj) => Equals(other: (obj as CurveShape));
+        public override int GetHashCode() {
+            var hash = new HashCode();
+
+            hash.Add(value: Closed);
+
+            foreach (var knot in Knots) {
+                hash.Add(value: knot);
+            }
+
+            return hash.ToHashCode();
+        }
+    }
 
     private CurvatureSplineKnot[] ToSplineKnots() {
         var knots = Knots;

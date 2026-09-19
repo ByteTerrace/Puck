@@ -12,7 +12,7 @@ public sealed partial class WorldServer {
     /// <param name="correlationId">The envelope correlation, retained for future operation narration.</param>
     /// <returns>A typed provider outcome. Preparation and commit remain host-owned so replacement admission is not
     /// confused with live runtime application.</returns>
-    private MachineOperationResult ApplyMachineOperation(
+    public MachineOperationResult ApplyMachineOperation(
         WorldMachineOperation operation,
         WorldPrincipal principal,
         int connectionId,
@@ -80,7 +80,7 @@ public sealed partial class WorldServer {
         // Ownership starts before any candidate check: replacement plans own a newly constructed runtime and must
         // be disposed on every validation or commit refusal.
         using (plan) {
-            var currentMachines = m_definition.Machines;
+            var currentMachines = m_document.Definition.Machines;
             var candidateMachines = currentMachines.ToArray();
             var candidateIndex = -1;
 
@@ -108,7 +108,7 @@ public sealed partial class WorldServer {
             }
 
             candidateMachines[candidateIndex] = plan.Candidate;
-            var candidateDefinition = m_definition with { MachinesRaw = candidateMachines };
+            var candidateDefinition = m_document.Definition with { MachinesRaw = candidateMachines };
 
             if (!WorldDefinitionValidator.TryValidateLocally(
                 definition: candidateDefinition,
@@ -132,8 +132,8 @@ public sealed partial class WorldServer {
 
             // The host has crossed its runtime barrier. Candidate validation happened before commit, so this is only
             // a declaration adoption and delivery flag; no unrelated fallible install or second reconstruction runs.
-            m_definition = candidateDefinition;
-            m_pendingDefinitionDelivery = true;
+            m_document.AdoptDefinition(definition: candidateDefinition);
+            m_document.PendingDefinitionDelivery = true;
             return result;
         }
     }

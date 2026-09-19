@@ -81,7 +81,7 @@ public sealed class BoardEnforcementLawTests {
                     Kind: CellKind.Int,
                     Cells: [new StateCell(
                             Key: StateRow.SlotKey,
-                            Value: 1
+                            Value: CellValue.Int(value: 1L)
                         )]
                 ),
                     new WorldStateRow(
@@ -89,7 +89,7 @@ public sealed class BoardEnforcementLawTests {
                     Kind: CellKind.Int,
                     Cells: [new StateCell(
                             Key: StateRow.SlotKey,
-                            Value: 0
+                            Value: CellValue.Int(value: 0L)
                         )]
                 ),
                     new WorldStateRow(
@@ -100,11 +100,11 @@ public sealed class BoardEnforcementLawTests {
                     Cells: [
                             new StateCell(
                             Key: CellName.Parse(candidate: "from"),
-                            Value: -1
+                            Value: CellValue.Int(value: -1L)
                         ),
                             new StateCell(
                             Key: CellName.Parse(candidate: "to"),
-                            Value: -1
+                            Value: CellValue.Int(value: -1L)
                         ),
                         ]
                 ),
@@ -117,7 +117,7 @@ public sealed class BoardEnforcementLawTests {
                 Effects: [
                         new ActionEffect.SetState(
                         State: VerdictRowName,
-                        Expression: ValueExpression.Parse(text: $"(move[to] == {ForbiddenCell}) ? 0 : 1")
+                        Expression: ExpressionProgram.Parse(text: $"(move[to] == {ForbiddenCell}) ? 0 : 1")
                     ),
                     ]
             ),

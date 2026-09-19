@@ -1013,10 +1013,25 @@ public sealed partial class WorldPopulation {
             verticalVelocity: verticalVelocity
         );
         if (actionContinuity is not null) {
+            // The list is allocated only when something can read the line: a register this world's closed set
+            // refuses is a silent authored disagreement between two worlds otherwise.
+            var settled = ((NarrationHub is { HasNarrationSink: true })
+                ? new List<string>()
+                : null
+            );
+
             body.ApplyTransferActionContinuity(
                 channels: m_channels,
-                continuity: actionContinuity
+                continuity: actionContinuity,
+                settledToInitial: settled
             );
+
+            if (settled is { Count: > 0 }) {
+                NarrationHub!.Narrate(
+                    channel: "body.arrival",
+                    text: $"[body.arrival: body {slot} settled {string.Join(separator: ", ", values: settled)} to the authored initial — this world's closed set does not admit the carried value]"
+                );
+            }
         }
         if (continuum is { } trajectory) {
             body.ApplyContinuumTrajectory(
@@ -1099,19 +1114,25 @@ public sealed partial class WorldPopulation {
         var definitions = m_kits[ResolveKitIndex(index: slot)].ActionState;
         var count = Math.Min(
             val1: definitions.Length,
-            val2: Math.Min(
-                val1: state.ActionStateValues.Length,
-                val2: state.ActionStateTimers.Length
-            )
+            val2: state.ActionState.Length
         );
         var registers = new WorldTransferActionRegister[count];
 
         for (var index = 0; (index < count); index++) {
+            var raw = state.ActionState[index];
+
             registers[index] = new WorldTransferActionRegister(
                 Name: definitions[index].Name,
                 Kind: definitions[index].Kind,
-                Value: state.ActionStateValues[index],
-                TimerTicks: state.ActionStateTimers[index]
+                Value: ((definitions[index].Kind == ActionStateKind.Counter)
+                ? FixedQ4816.FromRawBits(value: raw)
+                : FixedQ4816.Zero),
+                TimerTicks: ((definitions[index].Kind == ActionStateKind.Timer)
+                ? unchecked((ulong)Math.Max(
+                    val1: 0L,
+                    val2: raw
+                ))
+                : 0UL)
             );
         }
 

@@ -24,9 +24,10 @@ public sealed class CurveFollowLawTests {
     // Fixtures.BuildKits' own remarks), so commanded planar velocity snaps to it exactly — no spring/damper
     // settling lag to account for in the tracking-tolerance derivation below.
     private const float MoveSpeed = 4f;
-    // Matches Fixtures' own WorldSimulationDefaults.RateHz (240) — every fixed-tick-count loop in this file already
-    // assumes it (the "2 s" remarks below); named here only for the elapsed-seconds arithmetic the tracking law adds.
-    private const float SimulationRateHz = 240f;
+    // The rate the tracking laws here author by name (Fixtures.RecordedTraceRateHz) and whose elapsed-seconds
+    // arithmetic the tracking-tolerance derivation below rests on. A law that counts ticks to mean elapsed TIME
+    // instead authors the default rate and says so at its call site.
+    private const float SimulationRateHz = Fixtures.RecordedTraceRateHz;
 
     private static WorldCurveRow LoopPath => new(
         Name: LoopCurveRowName,
@@ -221,11 +222,14 @@ public sealed class CurveFollowLawTests {
     // World-frame bug this law exists to catch) drifts unboundedly over the window instead and blows through this
     // bound by orders of magnitude, so it stays fully discriminating.
     private static float TrackingTolerance(float standoffRadius) => (standoffRadius + (MoveSpeed / SimulationRateHz));
-    private static WorldDefinition WithFollower(float rate) => WithFollowerOn(
+    // rateHz defaults to the rate SimulationRateHz and every tracking tolerance below are written against; a law
+    // whose loop counts ticks to mean elapsed TIME names its own.
+    private static WorldDefinition WithFollower(float rate, int rateHz = Fixtures.RecordedTraceRateHz) => WithFollowerOn(
         curve: StraightPath,
         programName: FollowProgramName,
         rate: rate,
-        orbit: 0f
+        orbit: 0f,
+        rateHz: rateHz
     );
     // Splices one curves row and a matching Producer-kind program (SenseNearestInCone + FaceSensorTarget +
     // ProduceSteeringIntent) onto Fixtures.BuildDocument() — the shared shape every test below boots from. The kit's
@@ -233,8 +237,8 @@ public sealed class CurveFollowLawTests {
     // bearing every tick; FaceSensorTarget's Turn write only ever reaches the drawn attitude under World, never the
     // translation basis (WorldBody.Step's ResolveYawAttitudeAndPlanarFrame). A body only actually runs the program
     // once its own intent source names it (see JoinFollower); the control tests in this file never do.
-    private static WorldDefinition WithFollowerOn(WorldCurveRow curve, string programName, float rate, float orbit) {
-        var document = (Fixtures.BuildDocument() with { CurvesRaw = [curve] });
+    private static WorldDefinition WithFollowerOn(WorldCurveRow curve, string programName, float rate, float orbit, int rateHz) {
+        var document = (Fixtures.BuildDocumentAtRate(rateHz: rateHz) with { CurvesRaw = [curve] });
         var kit = document.Kits[0];
         var followProgram = new BodyMotionProgram(
             Name: programName,
@@ -256,11 +260,12 @@ public sealed class CurveFollowLawTests {
             }],
         });
     }
-    private static WorldDefinition WithLoopFollower(float rate, float orbit = 0f) => WithFollowerOn(
+    private static WorldDefinition WithLoopFollower(float rate, float orbit = 0f, int rateHz = Fixtures.RecordedTraceRateHz) => WithFollowerOn(
         curve: LoopPath,
         programName: FollowProgramName,
         rate: rate,
-        orbit: orbit
+        orbit: orbit,
+        rateHz: rateHz
     );
     private static float WrapToPi(float angle) {
         const float TwoPi = (2f * MathF.PI);
@@ -339,7 +344,7 @@ public sealed class CurveFollowLawTests {
     }
     [Fact]
     public void CurveFollowProducer_DrivesTheBodyOffSpawn_WhileANoProducerControlStaysPut() {
-        using var followFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f));
+        using var followFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f, rateHz: Fixtures.DefaultRateHz));
         var followBody = JoinFollower(fixture: followFixture);
         var followSpawn = followBody.FixedPosition;
 
@@ -360,7 +365,7 @@ public sealed class CurveFollowLawTests {
         // THE CONTROL: the identical document, but JoinBody alone (no SetIntentSource) leaves the seat's default
         // Live source with nothing ever submitted — WorldBody.Step's merge resolves that to a zero intent every
         // tick, so a body that never selects the curve-follow producer must not move at all.
-        using var controlFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f));
+        using var controlFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f, rateHz: Fixtures.DefaultRateHz));
         var controlBody = JoinBody(fixture: controlFixture);
         var controlSpawn = controlBody.FixedPosition;
 

@@ -21,7 +21,7 @@ public sealed class CrossDocumentIdentityBehaviorWriteLawTests {
         ),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0
+                Value: CellValue.Fixed(rawBits: 0)
             )]
     );
     private static WorldStateRow PlainRow() => new(
@@ -29,7 +29,7 @@ public sealed class CrossDocumentIdentityBehaviorWriteLawTests {
         Kind: CellKind.Fixed,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0
+                Value: CellValue.Fixed(rawBits: 0)
             )]
     );
     private static WorldGrant WriteGrant(string slot) => new(
@@ -77,7 +77,7 @@ public sealed class CrossDocumentIdentityBehaviorWriteLawTests {
         ));
         Assert.Equal(
             expected: 0L,
-            actual: untouchedRow!.Cells!.Single().Value
+            actual: untouchedRow!.Cells!.Single().Value.Raw
         );
 
         var accepted = fixture.Server.Profiles.Submit(submission: new WorldDocumentSubmission(
@@ -100,7 +100,7 @@ public sealed class CrossDocumentIdentityBehaviorWriteLawTests {
         ));
         Assert.Equal(
             expected: 42L,
-            actual: writtenRow!.Cells!.Single().Value
+            actual: writtenRow!.Cells!.Single().Value.Raw
         );
     }
 }

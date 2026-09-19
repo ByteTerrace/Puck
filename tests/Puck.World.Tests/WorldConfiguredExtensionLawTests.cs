@@ -129,7 +129,7 @@ public sealed class WorldConfiguredExtensionLawTests {
         Cells: (request
         ? [new(
                     CellName.Parse(candidate: "incarnation-1"),
-                    Text: "{}"
+                    CellValue.Text(value: "{}")
                 )]
         : []),
         Visibility: new()
@@ -145,7 +145,7 @@ public sealed class WorldConfiguredExtensionLawTests {
         keyOf: type => type.Type
     );
     private static long? Value(WorldServer server, string row) => server.Definition.State.First(predicate: r => (r.Name.Value == row))
-        .Cells?.FirstOrDefault(predicate: cell => (cell.Key.Value == "incarnation-1"))?.Value;
+        .Cells?.FirstOrDefault(predicate: cell => (cell.Key.Value == "incarnation-1"))?.Value.AsInt;
 
     [Fact]
     public async Task ChangedRequestKeyRefusesWithoutBlockingAnotherConnection() {

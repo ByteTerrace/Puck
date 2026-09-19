@@ -1,0 +1,140 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/spider.world.json",
+  "host": {
+    "kind": "spliced",
+    "stateRows": [
+      {
+        "name": "solitaire",
+        "kind": "int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 2
+          }
+        ]
+      }
+    ]
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "action",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "from",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "to",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "card",
+        "value": -1
+      }
+    },
+    {
+      "add": {
+        "row": "solitaireSpider",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 400
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "action",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "from",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "to",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "card",
+        "value": -1
+      }
+    },
+    {
+      "add": {
+        "row": "solitaireSpider",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 200
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "action",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "from",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "to",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireSpider",
+        "key": "card",
+        "value": -1
+      }
+    },
+    {
+      "add": {
+        "row": "solitaireSpider",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 200
+    }
+  ]
+}

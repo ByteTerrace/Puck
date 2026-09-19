@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 public sealed class WorldDealAndRevealLawTests {
     private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 transform,
                 WorldPrincipal.World,
@@ -22,9 +22,9 @@ public sealed class WorldDealAndRevealLawTests {
         );
         return candidate!;
     }
-    private static StateCell Cell(string key, long value = 1) => new(
+    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
         Name(value: key),
-        value
+        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0L)) : CellValue.Int(value: value))
     );
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(World: rows),
@@ -44,7 +44,7 @@ public sealed class WorldDealAndRevealLawTests {
         CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                value
+                CellValue.Int(value: value)
             )]
     );
 
@@ -62,7 +62,7 @@ public sealed class WorldDealAndRevealLawTests {
                     Name(value: "deck"),
                     CellKind.Bool,
                     Capacity: 6,
-                    Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")],
+                    Cells: [Cell("c1", kind: CellKind.Bool), Cell("c2", kind: CellKind.Bool), Cell("c3", kind: CellKind.Bool), Cell("c4", kind: CellKind.Bool), Cell("c5", kind: CellKind.Bool), Cell("c6", kind: CellKind.Bool)],
                     Domain: new StateDomain.KeysOf(
                         CellName.Parse(candidate: "cards"),
                         Ordered: true
@@ -106,7 +106,7 @@ public sealed class WorldDealAndRevealLawTests {
             )
         );
 
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             dealt,
             new StateTransform.Transfer(
                 "deck",
@@ -124,7 +124,7 @@ public sealed class WorldDealAndRevealLawTests {
             actualString: shortReason,
             expectedSubstring: "fewer than the 2"
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.Transfer(
                 "deck",
@@ -141,10 +141,11 @@ public sealed class WorldDealAndRevealLawTests {
         ));
         Assert.Contains(
             actualString: keyReason,
-            expectedSubstring: "exactly 1 for a key"
+            expectedSubstring: "exactly 1 by key or slice"
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: definition with { Rules = [new WorldRule(
+            definition: definition with {
+                Rules = [new WorldRule(
                     Name(value: "bad"),
                     [new ActionEffect.TransformState(Transform: new StateTransform.Transfer(
                             "deck",
@@ -152,7 +153,8 @@ public sealed class WorldDealAndRevealLawTests {
                             ZoneSelector.First,
                             Count: 0
                         ))]
-                )] },
+                )],
+            },
             reason: out var compileReason
         ));
         Assert.Contains(
@@ -185,8 +187,7 @@ public sealed class WorldDealAndRevealLawTests {
             Capacity: 4,
             Cells: [new StateCell(
                     Name(value: "a1"),
-                    0L,
-                    Text: ""
+                    CellValue.Text(value: "")
                 )]
         );
         var definition = Document(
@@ -212,7 +213,7 @@ public sealed class WorldDealAndRevealLawTests {
         ]
         );
 
-        Assert.Null(@object: WorldStateDisclosure.Compose(
+        Assert.Null(@object: Fixtures.Disclose(
             definition: definition,
             recipient: seat
         )?.FirstOrDefault(predicate: r => (r.Name == "hand")));
@@ -220,21 +221,25 @@ public sealed class WorldDealAndRevealLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         fixture.Step();
-        Assert.Null(@object: WorldStateDisclosure.Compose(
+        Assert.Null(@object: Fixtures.Disclose(
             definition: fixture.Server.Definition,
             recipient: seat
         )?.FirstOrDefault(predicate: r => (r.Name == "hand")));
 
-        var revealed = fixture.Server.Definition with { StateRaw = fixture.Server.Definition.StateRaw! with { World = [.. fixture.Server.Definition.State.Select(selector: r => ((r.Name.Value == "showdown")
+        var revealed = fixture.Server.Definition with {
+            StateRaw = fixture.Server.Definition.StateRaw! with {
+                World = [.. fixture.Server.Definition.State.Select(selector: r => ((r.Name.Value == "showdown")
             ? r with { Cells = [new StateCell(
                         WorldStateRow.SlotKey,
-                        1L
+                        CellValue.Int(value: 1L)
                     )] }
-            : r))] } };
+            : r))],
+            },
+        };
         using var shown = Fixtures.FreshServer(definition: revealed);
 
         shown.Step();
-        var observed = WorldStateDisclosure.Compose(
+        var observed = Fixtures.Disclose(
             definition: shown.Server.Definition,
             recipient: seat
         )?.FirstOrDefault(predicate: r => (r.Name == "hand"));
@@ -244,7 +249,7 @@ public sealed class WorldDealAndRevealLawTests {
             2,
             observed!.Cells.Count
         );
-        Assert.Null(@object: WorldStateDisclosure.Compose(
+        Assert.Null(@object: Fixtures.Disclose(
             definition: shown.Server.Definition,
             recipient: WorldPrincipal.Seat(slot: 2)
         )?.FirstOrDefault(predicate: r => (r.Name == "hand")));
@@ -318,11 +323,10 @@ public sealed class WorldDealAndRevealLawTests {
                     Effects: [new ActionEffect.SetState(
                             State: "doubled",
                             Key: "$each",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(
-                                    Key: "$each",
-                                    Name: "rank"
-                                ), new ValueToken.Constant(Value: 2m), new ValueToken.Multiply(),
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(key: "$each",
+                                    name: "rank"
+                                ), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.Multiply),
             ])
                         )]
                 ),
@@ -343,21 +347,21 @@ public sealed class WorldDealAndRevealLawTests {
             StateRows.FindCell(
                 cells: doubled,
                 key: Name(value: "c1")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             18L,
             StateRows.FindCell(
                 cells: doubled,
                 key: Name(value: "c2")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             4L,
             StateRows.FindCell(
                 cells: doubled,
                 key: Name(value: "c3")
-            )!.Value
+            )!.Value.AsInt
         );
     }
 }

@@ -1,0 +1,1385 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 635,
+  "engineTick": 1066800,
+  "hashes": {
+    "authoritative": "a6d4c92b27370fcf",
+    "capture": "83382c23ef783107",
+    "pose": "a15bb6ab9ecf9e89",
+    "world": "33aca70761cd44fa"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "snakeBoard",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 2
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 1
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 0
+          },
+          {
+            "key": "49",
+            "value": 0
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 1
+          },
+          {
+            "key": "52",
+            "value": 1
+          },
+          {
+            "key": "53",
+            "value": 0
+          },
+          {
+            "key": "54",
+            "value": 0
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 0
+          },
+          {
+            "key": "57",
+            "value": 0
+          },
+          {
+            "key": "58",
+            "value": 0
+          },
+          {
+            "key": "59",
+            "value": 1
+          },
+          {
+            "key": "60",
+            "value": 1
+          },
+          {
+            "key": "61",
+            "value": 0
+          },
+          {
+            "key": "62",
+            "value": 0
+          },
+          {
+            "key": "63",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "snakeBoard"
+        }
+      },
+      {
+        "name": "snakeTrail",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 61
+          },
+          {
+            "key": "1",
+            "value": 53
+          },
+          {
+            "key": "2",
+            "value": 25
+          },
+          {
+            "key": "3",
+            "value": 26
+          },
+          {
+            "key": "4",
+            "value": 27
+          },
+          {
+            "key": "5",
+            "value": 28
+          },
+          {
+            "key": "6",
+            "value": 36
+          },
+          {
+            "key": "7",
+            "value": 35
+          },
+          {
+            "key": "8",
+            "value": 43
+          },
+          {
+            "key": "9",
+            "value": 51
+          },
+          {
+            "key": "10",
+            "value": 52
+          },
+          {
+            "key": "11",
+            "value": 60
+          },
+          {
+            "key": "12",
+            "value": 59
+          },
+          {
+            "key": "13",
+            "value": 46
+          },
+          {
+            "key": "14",
+            "value": 54
+          },
+          {
+            "key": "15",
+            "value": 62
+          }
+        ],
+        "historyCursor": 29,
+        "domain": {
+          "$type": "ring",
+          "capacity": 16,
+          "empty": -1
+        }
+      },
+      {
+        "name": "snakeHeadingLog",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 0
+          }
+        ],
+        "historyCursor": 15,
+        "domain": {
+          "$type": "ring",
+          "capacity": 4,
+          "empty": -1
+        }
+      },
+      {
+        "name": "snakeMeals",
+        "kind": "Int",
+        "capacity": 2,
+        "evicts": true,
+        "cells": [
+          {
+            "key": "35",
+            "value": 4
+          },
+          {
+            "key": "52",
+            "value": 5
+          }
+        ]
+      },
+      {
+        "name": "snakeTempo",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "slow",
+            "value": 0,
+            "cycle": {
+              "power": 1,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "fast",
+            "value": 0,
+            "cycle": {
+              "power": 2,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          }
+        ]
+      },
+      {
+        "name": "snakePace",
+        "kind": "Int",
+        "min": 0,
+        "max": 60,
+        "value": 0,
+        "clock": {
+          "epochTick": 630,
+          "epochEngineTick": 1058400
+        },
+        "advance": {
+          "perSecondNumerator": 1,
+          "perSecondDenominator": 1
+        }
+      },
+      {
+        "name": "snakeFoodDraw",
+        "kind": "Int",
+        "min": 0,
+        "max": 63,
+        "value": 18,
+        "draw": {
+          "generator": {
+            "source": "UniformRange",
+            "bound": 1,
+            "mode": "WithReplacement",
+            "rangeMin": 0,
+            "rangeMax": 63
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 7
+      },
+      {
+        "name": "snakeAlive",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "snakeHead",
+        "kind": "Int",
+        "min": 0,
+        "max": 63,
+        "value": 59
+      },
+      {
+        "name": "snakeHeading",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 3
+      },
+      {
+        "name": "snakeNextCell",
+        "kind": "Int",
+        "min": 0,
+        "max": 63,
+        "value": 51
+      },
+      {
+        "name": "snakeLength",
+        "kind": "Int",
+        "min": 0,
+        "max": 6,
+        "value": 5
+      },
+      {
+        "name": "snakeScore",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 20
+      },
+      {
+        "name": "snakeDeaths",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 2
+      },
+      {
+        "name": "snakeRespawn",
+        "kind": "Int",
+        "min": 0,
+        "max": 504000,
+        "value": 40320
+      },
+      {
+        "name": "snakeFoodCell",
+        "kind": "Int",
+        "min": 0,
+        "max": 63,
+        "value": 18
+      },
+      {
+        "name": "snakeFoodPlaced",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "snakeTurnRequest",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 3
+      },
+      {
+        "name": "snakeTurnSerial",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 14
+      },
+      {
+        "name": "snakeTurnApplied",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 14
+      },
+      {
+        "name": "snakeIllegalTurns",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 1
+      },
+      {
+        "name": "snakeStepSerial",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 25
+      },
+      {
+        "name": "snakeStepApplied",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 25
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "grid",
+        "width": 8,
+        "depth": 8,
+        "wrap": "Both",
+        "band": 0,
+        "name": "snakeBoard",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "snakeBoard",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeTrail",
+      "cells": [
+        {
+          "key": "0",
+          "value": 61,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 53,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 25,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 27,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 28,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 35,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 43,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 51,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 52,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 60,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 59,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 46,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 54,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 62,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeHeadingLog",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeMeals",
+      "cells": [
+        {
+          "key": "35",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 5,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeTempo",
+      "cells": [
+        {
+          "key": "slow",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "fast",
+          "value": 10,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakePace",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeFoodDraw",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 18,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeAlive",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeHead",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 59,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeHeading",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeNextCell",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 51,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeLength",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 5,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeScore",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 20,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeDeaths",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeRespawn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 40320,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeFoodCell",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 18,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeFoodPlaced",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeTurnRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeTurnSerial",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 14,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeTurnApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 14,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeIllegalTurns",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeStepSerial",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 25,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "snakeStepApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 25,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

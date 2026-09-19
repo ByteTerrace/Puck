@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// leaves the other untouched.
 /// </summary>
 public sealed class ModuleAliasImportLawTests {
-    private static long Cell(WorldStateRow row, string key) => (row.Cells?.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value
+    private static long Cell(WorldStateRow row, string key) => (row.Cells?.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value.AsInt
         ?? ((row.EffectiveDomain is StateDomain.CellsOf board)
         ? board.Empty
         : throw new InvalidOperationException(message: $"missing {row.Name}[{key}]")));
@@ -346,11 +346,11 @@ public sealed class ModuleAliasImportLawTests {
 
         Assert.Equal(
             expected: "$board:mask:b_tttBoard:1:1",
-            actual: maskEffect.Expression!.Text
+            actual: ExpressionSpelling.Print(program: maskEffect.Expression!)
         );
         Assert.Contains(
             expectedSubstring: "boardShift(b_tttMaskX, b_tttCube, L0)",
-            actualString: winCheck.Effects.OfType<ActionEffect.SetState>().First(predicate: static effect => (effect.State == "b_tttXWin")).Expression!.Text!
+            actualString: ExpressionSpelling.Print(program: winCheck.Effects.OfType<ActionEffect.SetState>().First(predicate: static effect => (effect.State == "b_tttXWin")).Expression!)
         );
     }
     [Fact]

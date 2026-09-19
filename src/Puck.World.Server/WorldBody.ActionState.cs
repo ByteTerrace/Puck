@@ -6,8 +6,21 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
-    // The action-state portion of WorldRuntimeStateHash's authoritative boundary. Definition order is the compiled
-    // register order, so no sort or temporary collection is needed.
+    /// <summary>Binds the arena slot lanes this body's named action state is stored in, at its entity index.</summary>
+    /// <param name="lane">The server's slot-lane binding.</param>
+    /// <param name="ordinal">This body's entity index.</param>
+    /// <remarks>Binding is an address, not an admission: the ordinal is admitted and born by the entity table's own
+    /// occupancy flag (<c>WorldPopulation.Entry.Active</c>), so a body reads and writes nothing until its slot is
+    /// marked occupied.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="lane"/> is <see langword="null"/>.</exception>
+    public void BindActionStateLane(WorldActionStateLane lane, int ordinal) {
+        ArgumentNullException.ThrowIfNull(argument: lane);
+
+        m_stateLane = lane;
+        m_stateOrdinal = ordinal;
+    }
+    // The action-state portion of WorldStateHashComposition's authoritative boundary: the declaration and the
+    // per-lane trigger runtime. The stored values are the arena's own, folded by the Arena component.
     internal void AppendActionStateHash(ref Fnv1aHash hash) {
         hash.Add(value: ((uint)m_actionStateDefinitions.Length));
 
@@ -17,8 +30,6 @@ public sealed partial class WorldBody {
             hash.Add(value: Fnv1aHash.Compute(values: definition.Name.AsSpan()));
             hash.Add(value: ((byte)definition.Kind));
             hash.Add(value: ((byte)definition.Lifetime));
-            hash.Add(value: m_actionStateValues[slot].Value);
-            hash.Add(value: m_actionStateTimers[slot]);
         }
 
         hash.Add(value: ((uint)m_laneActions.Length));
@@ -54,11 +65,11 @@ public sealed partial class WorldBody {
         for (var slot = 0; (slot < values.Length); slot++) {
             var definition = m_actionStateDefinitions[slot];
             var value = ((definition.Kind == ActionStateKind.Counter)
-                ? ((double)m_actionStateValues[slot]).ToString(
+                ? ((double)StateCounter(slot: slot)).ToString(
                     format: "0.####",
                     provider: CultureInfo.InvariantCulture
                 )
-                : m_actionStateTimers[slot].ToString(provider: CultureInfo.InvariantCulture)
+                : StateTimer(slot: slot).ToString(provider: CultureInfo.InvariantCulture)
             );
             var requested = DescribeRaw(
                 definition: in definition,
@@ -81,8 +92,10 @@ public sealed partial class WorldBody {
     internal void ResetDurableState() {
         for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
             if (m_actionStateDefinitions[slot].Lifetime == ActionStateLifetime.Durable) {
-                m_actionStateValues[slot] = m_actionStateDefinitions[slot].InitialValue;
-                m_actionStateTimers[slot] = m_actionStateDefinitions[slot].InitialTicks;
+                WriteStateRaw(
+                    raw: InitialRaw(definition: in m_actionStateDefinitions[slot]),
+                    slot: slot
+                );
                 m_actionStateRequested[slot] = InitialRaw(definition: in m_actionStateDefinitions[slot]);
                 m_actionStateLastWriter[slot] = "author";
                 m_actionStateLastReason[slot] = "identity reset";
@@ -124,8 +137,8 @@ public sealed partial class WorldBody {
                     Name: m_actionStateDefinitions[slot].Name,
                     Value: ((m_actionStateDirtyKind[slot] == WorldDocumentWriteKind.Add)
                 ? m_actionStateDirtyOperand[slot]
-                : m_actionStateValues[slot]),
-                    TimerTicks: m_actionStateTimers[slot]
+                : StateCounter(slot: slot)),
+                    TimerTicks: StateTimer(slot: slot)
                 ),
                 Kind: m_actionStateDirtyKind[slot],
                 StorageKind: m_actionStateDefinitions[slot].Kind
@@ -158,7 +171,7 @@ public sealed partial class WorldBody {
             value = default;
             return false;
         }
-        value = m_actionStateValues[slot];
+        value = StateCounter(slot: slot);
         return true;
     }
     /// <summary>Stages durable values for one explicit simulation tick. Repeated inputs in that tick compose by
@@ -237,16 +250,22 @@ public sealed partial class WorldBody {
                 (definition.ResetFact is { } reset) &&
                 FactHolds(fact: reset)
             ) {
-                m_actionStateValues[slot] = definition.InitialValue;
-                m_actionStateTimers[slot] = definition.InitialTicks;
+                WriteStateRaw(
+                    raw: InitialRaw(definition: in definition),
+                    slot: slot
+                );
             } else if (definition.Kind == ActionStateKind.Timer) {
-                var previous = m_actionStateTimers[slot];
-
-                m_actionStateTimers[slot] = SubtractSaturating(
+                var previous = StateTimer(slot: slot);
+                var next = SubtractSaturating(
                     amount: stepTicks,
                     value: previous
                 );
-                if (m_actionStateTimers[slot] != previous) {
+
+                if (next != previous) {
+                    WriteStateRaw(
+                        raw: unchecked((long)next),
+                        slot: slot
+                    );
                     MarkDurableDirty(slot: slot);
                 }
             }
@@ -292,14 +311,15 @@ public sealed partial class WorldBody {
         ) ?? requested);
 
         m_actionStateRequested[slot] = requested;
-        if (definition.Kind == ActionStateKind.Counter) {
-            m_actionStateValues[slot] = FixedQ4816.FromRawBits(value: effective);
-        } else {
-            m_actionStateTimers[slot] = checked((ulong)Math.Max(
+        WriteStateRaw(
+            raw: ((definition.Kind == ActionStateKind.Counter)
+            ? effective
+            : Math.Max(
                 val1: 0L,
                 val2: effective
-            ));
-        }
+            )),
+            slot: slot
+        );
         m_actionStateLastWriter[slot] = writer;
         m_actionStateLastReason[slot] = ((effective == requested)
             ? reason
@@ -374,10 +394,10 @@ public sealed partial class WorldBody {
         m_transferHeldChannels = default;
         m_hasTransferHeldChannels = false;
     }
+    // The stored values are not re-seeded here: a re-declared register file carries them across by name inside the
+    // arena's own relayout, so only the read-back register (what was requested, who wrote it, why) is rebuilt.
     private void CompileActionState(CompiledActionStateSlot[]? state) {
         var previousDefinitions = m_actionStateDefinitions;
-        var previousValues = m_actionStateValues;
-        var previousTimers = m_actionStateTimers;
         var previousRequested = m_actionStateRequested;
         var previousWriters = m_actionStateLastWriter;
         var previousReasons = m_actionStateLastReason;
@@ -386,8 +406,6 @@ public sealed partial class WorldBody {
             ? []
             : [.. state]
         );
-        m_actionStateValues = new FixedQ4816[m_actionStateDefinitions.Length];
-        m_actionStateTimers = new ulong[m_actionStateDefinitions.Length];
         m_actionStateRequested = new long[m_actionStateDefinitions.Length];
         m_actionStateLastWriter = new string[m_actionStateDefinitions.Length];
         m_actionStateLastReason = new string[m_actionStateDefinitions.Length];
@@ -421,14 +439,6 @@ public sealed partial class WorldBody {
                 }
             }
 
-            m_actionStateValues[slot] = ((preserved >= 0)
-                ? previousValues[preserved]
-                : definition.InitialValue
-            );
-            m_actionStateTimers[slot] = ((preserved >= 0)
-                ? previousTimers[preserved]
-                : definition.InitialTicks
-            );
             m_actionStateRequested[slot] = ((preserved >= 0)
                 ? previousRequested[preserved]
                 : InitialRaw(definition: in definition)
@@ -497,20 +507,6 @@ public sealed partial class WorldBody {
     }
     // The All/Any reduction both postfix gate evaluators (the action gate and the shaping gate) apply: pops the
     // group's arity of operands and pushes their conjunction/disjunction — one fold, so the two gates cannot drift.
-    private static void FoldGroup(in CompiledPredicate predicate, Span<bool> stack, ref int top) {
-        var start = (top - predicate.Arity);
-        var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
-
-        for (var index = start; (index < top); index++) {
-            holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
-                ? (holdsGroup && stack[index])
-                : (holdsGroup || stack[index])
-            );
-        }
-
-        top = start;
-        stack[top++] = holdsGroup;
-    }
     private bool GateOpen(CompiledPredicate[] gate, in LaneActionRuntime state) {
         if (gate.Length == 0) {
             return true;
@@ -521,12 +517,16 @@ public sealed partial class WorldBody {
 
         foreach (var predicate in gate) {
             if (predicate.Kind == CompiledPredicateKind.Not) {
-                stack[(top - 1)] = !stack[(top - 1)];
+                GateProgramEvaluator.Invert(
+                    stack: stack,
+                    top: top
+                );
                 continue;
             }
             if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
-                FoldGroup(
-                    predicate: in predicate,
+                GateProgramEvaluator.FoldGroup(
+                    arity: predicate.Arity,
+                    isAll: (predicate.Kind == CompiledPredicateKind.All),
                     stack: stack,
                     top: ref top
                 );
@@ -537,10 +537,10 @@ public sealed partial class WorldBody {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (state.Recency![predicate.RecencySlot] > 0),
                 CompiledPredicateKind.CompareState => predicate.Comparison.Holds(
-                value: m_actionStateValues[predicate.StateSlot],
+                value: StateCounter(slot: predicate.StateSlot),
                 expected: predicate.Value
             ),
-                _ => (m_actionStateTimers[predicate.StateSlot] == 0),
+                _ => (StateTimer(slot: predicate.StateSlot) == 0),
             };
 
             stack[top++] = holds;
@@ -551,9 +551,25 @@ public sealed partial class WorldBody {
             stack[0]
         );
     }
-    private static long InitialRaw(in CompiledActionStateSlot definition) => ((definition.Kind == ActionStateKind.Counter)
-        ? definition.InitialValue.Value
-        : checked((long)definition.InitialTicks)
+    private static long InitialRaw(in CompiledActionStateSlot definition) => WorldActionStateLane.InitialRaw(definition: in definition);
+    private FixedQ4816 StateCounter(int slot) => ((m_stateLane is { } lane)
+        ? lane.Counter(
+            ordinal: m_stateOrdinal,
+            slot: slot
+        )
+        : FixedQ4816.Zero
+    );
+    private ulong StateTimer(int slot) => ((m_stateLane is { } lane)
+        ? lane.Timer(
+            ordinal: m_stateOrdinal,
+            slot: slot
+        )
+        : 0UL
+    );
+    private void WriteStateRaw(int slot, long raw) => m_stateLane?.Write(
+        ordinal: m_stateOrdinal,
+        raw: raw,
+        slot: slot
     );
     private void MarkDurableDirty(int slot, WorldDocumentWriteKind kind = WorldDocumentWriteKind.Set, FixedQ4816 operand = default) {
         if (
@@ -623,12 +639,16 @@ public sealed partial class WorldBody {
 
         foreach (var predicate in gate) {
             if (predicate.Kind == CompiledPredicateKind.Not) {
-                stack[(top - 1)] = !stack[(top - 1)];
+                GateProgramEvaluator.Invert(
+                    stack: stack,
+                    top: top
+                );
                 continue;
             }
             if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
-                FoldGroup(
-                    predicate: in predicate,
+                GateProgramEvaluator.FoldGroup(
+                    arity: predicate.Arity,
+                    isAll: (predicate.Kind == CompiledPredicateKind.All),
                     stack: stack,
                     top: ref top
                 );
@@ -798,8 +818,8 @@ public sealed partial class WorldBody {
         kind = m_actionStateDefinitions[slot].Kind;
         lifetime = m_actionStateDefinitions[slot].Lifetime;
         playerWritable = m_actionStateDefinitions[slot].PlayerWritable;
-        value = m_actionStateValues[slot];
-        timerTicks = m_actionStateTimers[slot];
+        value = StateCounter(slot: slot);
+        timerTicks = StateTimer(slot: slot);
         return true;
     }
 

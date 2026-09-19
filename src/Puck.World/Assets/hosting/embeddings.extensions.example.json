@@ -1,0 +1,58 @@
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "embeddings-runtime",
+  "scanEveryTicks": 30,
+  "lineage": "b3e945c2-12af-4a92-9118-2e0f49c5e311",
+  "providers": [
+    {
+      "name": "fixture",
+      "type": "embedding.fixture",
+      "settings": {
+        "model": "puck-fixture",
+        "revision": "1",
+        "dimensions": 256
+      }
+    }
+  ],
+  "operations": [],
+  "clients": [
+    {
+      "principal": "console",
+      "operations": [],
+      "requests": [
+        {
+          "capability": "observe",
+          "subject": "state:said"
+        },
+        {
+          "capability": "observe",
+          "subject": "state:saidVectors"
+        },
+        {
+          "capability": "observe",
+          "subject": "state:saidStatus"
+        },
+        {
+          "capability": "mutate",
+          "subject": "section:state"
+        }
+      ]
+    }
+  ],
+  "connections": [],
+  "embeddings": [
+    {
+      "name": "said-embeddings",
+      "provider": "fixture",
+      "client": "console",
+      "space": "lore",
+      "requests": "said",
+      "results": "saidVectors",
+      "status": "saidStatus",
+      "maximumItems": 16,
+      "batchSize": 16,
+      "retryTicks": 120,
+      "cacheEntries": 512
+    }
+  ]
+}

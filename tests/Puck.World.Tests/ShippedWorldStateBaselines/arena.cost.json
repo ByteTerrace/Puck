@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/arena.world.json",
+  "simulationRateHz": 30,
+  "ticks": 224,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 16,
+      "interactionRows": 1,
+      "evaluationSlots": 28,
+      "workUnitsPerTick": 45645,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 16,
+      "interactionRows": 1,
+      "evaluationSlots": 28,
+      "workUnitsPerTick": 45645,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

@@ -1,9 +1,9 @@
+replay.record fourcorners
 world.wait 90
 wire.errors reset
 world.adjacencies
 world.wait 30
 world.adjacencies
-replay.record fourcorners
 body.pose 61 0 -99 0 0 0 0
 body.fly 0 1 0 0 0 0 4 0
 world.wait 120

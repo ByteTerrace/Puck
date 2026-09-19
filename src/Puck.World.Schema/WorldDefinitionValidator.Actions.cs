@@ -386,7 +386,7 @@ public static partial class WorldDefinitionValidator {
 
         // setState/addState's live copy source ('fromState'/'fromKey') addresses a WORLD state row or reserved
         // channel — a per-body action-state slot has neither, so it is refused here on the same terms RefuseKey
-        // already refuses a per-body 'key' (legitimate only in a world rule, via WorldRuleCompiler).
+        // already refuses a per-body 'key' (legitimate only in a world rule, via WorldFactsCompiler).
         void RefuseFromOperand(string? fromState, string? fromKey, string verb) {
             if (
                 (fromState is not null) ||
@@ -405,7 +405,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        void RefuseExpression(ValueExpression? expression, string verb) {
+        void RefuseExpression(ExpressionProgram? expression, string verb) {
             if (expression is not null) {
                 errors.Add(item: $"{path}.expression is refused at body scope — '{verb}' writes one per-body action-state slot from a literal; expressions address world state rows and are legitimate only in a world rule.");
             }
@@ -445,7 +445,7 @@ public static partial class WorldDefinitionValidator {
         };
     }
     /// <summary>Returns the one <c>generate</c>-effect name check, shared by both scopes that can author one: a kit action
-    /// (here, through <c>ValidateEffect</c>) and a world rule (through <see cref="WorldRuleCompiler"/>, which refuses
+    /// (here, through <c>ValidateEffect</c>) and a world rule (through <see cref="WorldFactsCompiler"/>, which refuses
     /// by throwing). One rule, two callers — never two readings of the same requirement.</summary>
     private static void ValidateGenerateEffect(string row, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
         if (!stateRows.TryGetValue(

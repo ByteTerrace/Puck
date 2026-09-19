@@ -1,0 +1,1270 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action betAction1, betAction2, table
+export binding bets, phase, stack
+export read bets, community, hand1, hand2, phase, stack, table
+
+rule "poker-transition" {
+  when phase[street] != phase[next]
+  mode: "Level"
+  setState(fromKey: "next", fromState: "phase", key: "street", state: "phase")
+}
+
+rule "poker-deal" {
+  when phase[street] == 0 and table[dealRequest] == 1 and (minimum(stack[1], stack[2]) >= house[bigBlind] : Int)
+  local button: Int = 3 - table[button]
+  local blind: Int = table[button]
+  mode: "Edge"
+  transaction {
+    transform transfer(count: 2, draw: "cardStream", from: "deck", selector: "Random", to: "hand1")
+    transform transfer(count: 2, draw: "cardStream", from: "deck", selector: "Random", to: "hand2")
+    table[dealRequest] = 0
+    setState(expression: "$local:button", key: "button", state: "table")
+    setState(expression: "$local:button", key: "bettor", state: "table")
+    streetBet[($local:button)] = house[smallBlind]
+    streetBet[($local:blind)] = house[bigBlind]
+    stack[($local:button)] += 0 - house[smallBlind]
+    stack[($local:blind)] += 0 - house[bigBlind]
+    table[pot] = house[smallBlind] + house[bigBlind]
+    table[acted] = 0
+    table[raises] = 0
+    table[winner] = 0
+    table[boardMask] = 0
+    private1[hole] = 0
+    private2[hole] = 0
+    private1[strength] = 0
+    private2[strength] = 0
+    table[evalPending] = 1
+    phase[next] = 1
+  }
+  audience1[0] = "seat1"
+  audience2[0] = "seat2"
+}
+
+rule "poker-see-hand1" {
+  when table[evalPending] == 1
+  mode: "Level"
+  forEach: "hand1"
+  private1[hole] = private1[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))
+}
+
+rule "poker-see-hand2" {
+  when table[evalPending] == 1
+  mode: "Level"
+  forEach: "hand2"
+  private2[hole] = private2[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))
+}
+
+rule "poker-see-board" {
+  when table[evalPending] == 1
+  mode: "Level"
+  forEach: "community"
+  table[boardMask] = table[boardMask] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))
+}
+
+rule "poker-evaluate-1" {
+  when table[evalPending] == 1
+  local s: Int = private1[hole] | table[boardMask]
+  local l0: Int = bitField($local:s, 0, 16)
+  local l1: Int = bitField($local:s, 16, 16)
+  local l2: Int = bitField($local:s, 32, 16)
+  local l3: Int = bitField($local:s, 48, 16)
+  local ranks: Int = $local:l0 | $local:l1 | $local:l2 | $local:l3
+  local pairs: Int = ($local:l0 & $local:l1) | ($local:l0 & $local:l2) | ($local:l0 & $local:l3) | ($local:l1 & $local:l2) | ($local:l1 & $local:l3) | ($local:l2 & $local:l3)
+  local trips: Int = ($local:l0 & $local:l1 & $local:l2) | ($local:l0 & $local:l1 & $local:l3) | ($local:l0 & $local:l2 & $local:l3) | ($local:l1 & $local:l2 & $local:l3)
+  local sf: Int = ($local:s | (($local:s >> 13) & repeatBits(1, 16))) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 1) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 2) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 3) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 4)
+  local st: Int = ($local:ranks | (($local:ranks >> 13) & 1)) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 1) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 2) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 3) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 4)
+  local fl: Int = setBitCount($local:l0) >= 5 ? $local:l0 : setBitCount($local:l1) >= 5 ? $local:l1 : setBitCount($local:l2) >= 5 ? $local:l2 : setBitCount($local:l3) >= 5 ? $local:l3 : 0
+  local top2p: Int = setBitCount($local:pairs) > 2 ? clearLowestSetBit($local:pairs) : $local:pairs
+  local cat: Int = $local:sf != 0 ? 8 : ($local:l0 & $local:l1 & $local:l2 & $local:l3) != 0 ? 7 : ($local:trips != 0) & (setBitCount($local:pairs) >= 2) ? 6 : $local:fl != 0 ? 5 : $local:st != 0 ? 4 : $local:trips != 0 ? 3 : setBitCount($local:pairs) >= 2 ? 2 : $local:pairs != 0 ? 1 : 0
+  local high: Int = $local:cat == 8 ? 63 - leadingZeroCount(($local:sf | ($local:sf >> 16) | ($local:sf >> 32) | ($local:sf >> 48)) & 16383) : $local:cat == 7 ? $local:l0 & $local:l1 & $local:l2 & $local:l3 : $local:cat == 6 ? 63 - leadingZeroCount($local:trips) : $local:fl ^ parallelBitDeposit((1 << maximum(setBitCount($local:fl) - 5, 0)) - 1, $local:fl)
+  local low: Int = $local:cat == 4 ? 63 - leadingZeroCount($local:st) : $local:cat == 3 ? $local:trips : $local:cat == 2 ? $local:top2p : $local:cat == 1 ? $local:pairs : clearLowestSetBit(clearLowestSetBit($local:ranks))
+  local secondary: Int = $local:cat == 7 ? 63 - leadingZeroCount($local:ranks ^ ($local:l0 & $local:l1 & $local:l2 & $local:l3)) : $local:cat == 6 ? 63 - leadingZeroCount($local:pairs ^ (1 << maximum(63 - leadingZeroCount($local:trips), 0))) : $local:cat == 3 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:trips)) : $local:cat == 2 ? 63 - leadingZeroCount($local:ranks ^ $local:top2p) : $local:cat == 1 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:pairs)) : 0
+  mode: "Level"
+  private1[strength] = ($local:cat << 28) | (($local:cat >= 5 ? $local:high : $local:low) << 14) | $local:secondary
+}
+
+rule "poker-evaluate-2" {
+  when table[evalPending] == 1
+  local s: Int = private2[hole] | table[boardMask]
+  local l0: Int = bitField($local:s, 0, 16)
+  local l1: Int = bitField($local:s, 16, 16)
+  local l2: Int = bitField($local:s, 32, 16)
+  local l3: Int = bitField($local:s, 48, 16)
+  local ranks: Int = $local:l0 | $local:l1 | $local:l2 | $local:l3
+  local pairs: Int = ($local:l0 & $local:l1) | ($local:l0 & $local:l2) | ($local:l0 & $local:l3) | ($local:l1 & $local:l2) | ($local:l1 & $local:l3) | ($local:l2 & $local:l3)
+  local trips: Int = ($local:l0 & $local:l1 & $local:l2) | ($local:l0 & $local:l1 & $local:l3) | ($local:l0 & $local:l2 & $local:l3) | ($local:l1 & $local:l2 & $local:l3)
+  local sf: Int = ($local:s | (($local:s >> 13) & repeatBits(1, 16))) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 1) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 2) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 3) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 4)
+  local st: Int = ($local:ranks | (($local:ranks >> 13) & 1)) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 1) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 2) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 3) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 4)
+  local fl: Int = setBitCount($local:l0) >= 5 ? $local:l0 : setBitCount($local:l1) >= 5 ? $local:l1 : setBitCount($local:l2) >= 5 ? $local:l2 : setBitCount($local:l3) >= 5 ? $local:l3 : 0
+  local top2p: Int = setBitCount($local:pairs) > 2 ? clearLowestSetBit($local:pairs) : $local:pairs
+  local cat: Int = $local:sf != 0 ? 8 : ($local:l0 & $local:l1 & $local:l2 & $local:l3) != 0 ? 7 : ($local:trips != 0) & (setBitCount($local:pairs) >= 2) ? 6 : $local:fl != 0 ? 5 : $local:st != 0 ? 4 : $local:trips != 0 ? 3 : setBitCount($local:pairs) >= 2 ? 2 : $local:pairs != 0 ? 1 : 0
+  local high: Int = $local:cat == 8 ? 63 - leadingZeroCount(($local:sf | ($local:sf >> 16) | ($local:sf >> 32) | ($local:sf >> 48)) & 16383) : $local:cat == 7 ? $local:l0 & $local:l1 & $local:l2 & $local:l3 : $local:cat == 6 ? 63 - leadingZeroCount($local:trips) : $local:fl ^ parallelBitDeposit((1 << maximum(setBitCount($local:fl) - 5, 0)) - 1, $local:fl)
+  local low: Int = $local:cat == 4 ? 63 - leadingZeroCount($local:st) : $local:cat == 3 ? $local:trips : $local:cat == 2 ? $local:top2p : $local:cat == 1 ? $local:pairs : clearLowestSetBit(clearLowestSetBit($local:ranks))
+  local secondary: Int = $local:cat == 7 ? 63 - leadingZeroCount($local:ranks ^ ($local:l0 & $local:l1 & $local:l2 & $local:l3)) : $local:cat == 6 ? 63 - leadingZeroCount($local:pairs ^ (1 << maximum(63 - leadingZeroCount($local:trips), 0))) : $local:cat == 3 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:trips)) : $local:cat == 2 ? 63 - leadingZeroCount($local:ranks ^ $local:top2p) : $local:cat == 1 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:pairs)) : 0
+  mode: "Level"
+  private2[strength] = ($local:cat << 28) | (($local:cat >= 5 ? $local:high : $local:low) << 14) | $local:secondary
+  table[evalPending] = 0
+}
+
+rule "poker-check-call" {
+  gate: all(predicates: [
+    compareState(comparison: "GreaterOrEqual", key: "street", state: "phase", value: 1)
+    compareState(comparison: "LessOrEqual", key: "street", state: "phase", value: 4)
+    compareValue(comparison: "Equal", kind: "Int", left: "(table[bettor] == 1 ? betAction1[act] : betAction2[act])", right: "0")
+    compareValue(comparison: "GreaterOrEqual", kind: "Int", left: "stack[(table[bettor])]", right: "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]")
+  ]
+  )
+  local toCall: Int = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]
+  mode: "Level"
+  push bets = phase[street] * 100 + table[bettor] * 10 + 0
+  transaction {
+    addState(expression: "0 - $local:toCall", key: "$expr:table[bettor]", state: "stack")
+    addState(expression: "$local:toCall", key: "pot", state: "table")
+    setState(expression: "streetBet[(3 - table[bettor])]", key: "$expr:table[bettor]", state: "streetBet")
+    table[acted] += 1
+    betAction1[act] = -1
+    betAction2[act] = -1
+    table[bettor] = 3 - table[bettor]
+  }
+}
+
+rule "poker-raise" {
+  gate: all(predicates: [
+    compareState(comparison: "GreaterOrEqual", key: "street", state: "phase", value: 1)
+    compareState(comparison: "LessOrEqual", key: "street", state: "phase", value: 4)
+    compareValue(comparison: "Equal", kind: "Int", left: "(table[bettor] == 1 ? betAction1[act] : betAction2[act])", right: "1")
+    compareState(comparandKey: "maxRaises", comparandState: "house", comparison: "Less", key: "raises", state: "table")
+    compareValue(comparison: "GreaterOrEqual", kind: "Int", left: "stack[(table[bettor])]", right: "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)")
+  ]
+  )
+  local pay: Int = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
+  local bet: Int = house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
+  mode: "Level"
+  push bets = phase[street] * 100 + table[bettor] * 10 + 1
+  transaction {
+    addState(expression: "0 - $local:pay", key: "$expr:table[bettor]", state: "stack")
+    addState(expression: "$local:pay", key: "pot", state: "table")
+    setState(expression: "streetBet[(3 - table[bettor])] + $local:bet", key: "$expr:table[bettor]", state: "streetBet")
+    table[acted] = 1
+    table[raises] += 1
+    betAction1[act] = -1
+    betAction2[act] = -1
+    table[bettor] = 3 - table[bettor]
+  }
+}
+
+rule "poker-fold" {
+  gate: all(predicates: [
+    compareState(comparison: "GreaterOrEqual", key: "street", state: "phase", value: 1)
+    compareState(comparison: "LessOrEqual", key: "street", state: "phase", value: 4)
+    compareValue(comparison: "Equal", kind: "Int", left: "(table[bettor] == 1 ? betAction1[act] : betAction2[act])", right: "2")
+  ]
+  )
+  mode: "Level"
+  push bets = phase[street] * 100 + table[bettor] * 10 + 2
+  transaction {
+    table[winner] = 3 - table[bettor]
+    stack[3 - table[bettor]] += table[pot]
+    table[pot] = 0
+    table[hands] += 1
+    betAction1[act] = -1
+    betAction2[act] = -1
+    phase[next] = 6
+  }
+}
+
+rule "poker-street-complete" {
+  when phase[street] >= 1 and phase[street] <= 4 and table[acted] >= 2 and streetBet[1] == streetBet[2]
+  mode: "Edge"
+  transaction {
+    phase[next] = phase[street] + 1
+    table[acted] = 0
+    table[raises] = 0
+    streetBet[1] = 0
+    streetBet[2] = 0
+    table[bettor] = 3 - table[button]
+  }
+}
+
+rule "poker-flop" {
+  when phase[street] == 2 and $reduce:count:community == 0
+  mode: "Edge"
+  transaction {
+    transform transfer(count: 3, draw: "cardStream", from: "deck", selector: "Random", to: "community")
+    table[evalPending] = 1
+  }
+}
+
+rule "poker-turn" {
+  when phase[street] == 3 and $reduce:count:community == 3
+  mode: "Edge"
+  transaction {
+    transform transfer(count: 1, draw: "cardStream", from: "deck", selector: "Random", to: "community")
+    table[evalPending] = 1
+  }
+}
+
+rule "poker-river" {
+  when phase[street] == 4 and $reduce:count:community == 4
+  mode: "Edge"
+  transaction {
+    transform transfer(count: 1, draw: "cardStream", from: "deck", selector: "Random", to: "community")
+    table[evalPending] = 1
+  }
+}
+
+rule "poker-showdown" {
+  when phase[street] == 5 and table[evalPending] == 0
+  local winner: Int = private1[strength] > private2[strength] ? 1 : private2[strength] > private1[strength] ? 2 : 0
+  local half: Int = table[pot] >> 1
+  local odd: Int = table[pot] & 1
+  mode: "Edge"
+  audience1[0] = "seat2"
+  audience2[0] = "seat1"
+  transaction {
+    setState(expression: "$local:winner", key: "winner", state: "table")
+    stack[1] += $local:winner == 1 ? table[pot] : $local:winner == 2 ? 0 : $local:half + $local:odd * (table[button] == 1)
+    stack[2] += $local:winner == 2 ? table[pot] : $local:winner == 1 ? 0 : $local:half + $local:odd * (table[button] == 2)
+    table[pot] = 0
+    table[hands] += 1
+    phase[next] = 6
+  }
+}
+
+rule "poker-collect-board" {
+  when phase[street] == 6 and $reduce:count:community > 0
+  mode: "Level"
+  deal 1 from community to deck
+}
+
+rule "poker-collect-hand1" {
+  when phase[street] == 6 and $reduce:count:hand1 > 0
+  mode: "Level"
+  deal 1 from hand1 to deck
+}
+
+rule "poker-collect-hand2" {
+  when phase[street] == 6 and $reduce:count:hand2 > 0
+  mode: "Level"
+  deal 1 from hand2 to deck
+}
+
+rule "poker-hand-over" {
+  when phase[street] == 6 and $reduce:count:community == 0 and $reduce:count:hand1 == 0 and $reduce:count:hand2 == 0
+  mode: "Edge"
+  transaction {
+    table[acted] = 0
+    table[raises] = 0
+    streetBet[1] = 0
+    streetBet[2] = 0
+    table[dealRequest] = house[autoDeal]
+    phase[next] = 0
+  }
+}
+
+rule "poker-card-conservation" {
+  when ($reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community != $reduce:count:cards : Int)
+  mode: "Edge"
+  table[leak] = 1
+}
+
+rule "poker-discard" {
+  when (maximum(betAction1[act], betAction2[act]) != -1 : Int)
+  mode: "Level"
+  betAction1[act] = -1
+  betAction2[act] = -1
+  table[refused] += 1
+}
+
+state {
+  world {
+    table cards: Int capacity(52) {
+      "2C" = 0
+      "2D" = 0
+      "2H" = 0
+      "2S" = 0
+      "3C" = 0
+      "3D" = 0
+      "3H" = 0
+      "3S" = 0
+      "4C" = 0
+      "4D" = 0
+      "4H" = 0
+      "4S" = 0
+      "5C" = 0
+      "5D" = 0
+      "5H" = 0
+      "5S" = 0
+      "6C" = 0
+      "6D" = 0
+      "6H" = 0
+      "6S" = 0
+      "7C" = 0
+      "7D" = 0
+      "7H" = 0
+      "7S" = 0
+      "8C" = 0
+      "8D" = 0
+      "8H" = 0
+      "8S" = 0
+      "9C" = 0
+      "9D" = 0
+      "9H" = 0
+      "9S" = 0
+      TC = 0
+      TD = 0
+      TH = 0
+      TS = 0
+      JC = 0
+      JD = 0
+      JH = 0
+      JS = 0
+      QC = 0
+      QD = 0
+      QH = 0
+      QS = 0
+      KC = 0
+      KD = 0
+      KH = 0
+      KS = 0
+      AC = 0
+      AD = 0
+      AH = 0
+      AS = 0
+    }
+
+    row {
+      capacity: 52
+      cells [
+        {
+          key: "2C"
+          value: 2
+        }
+        {
+          key: "2D"
+          value: 2
+        }
+        {
+          key: "2H"
+          value: 2
+        }
+        {
+          key: "2S"
+          value: 2
+        }
+        {
+          key: "3C"
+          value: 3
+        }
+        {
+          key: "3D"
+          value: 3
+        }
+        {
+          key: "3H"
+          value: 3
+        }
+        {
+          key: "3S"
+          value: 3
+        }
+        {
+          key: "4C"
+          value: 4
+        }
+        {
+          key: "4D"
+          value: 4
+        }
+        {
+          key: "4H"
+          value: 4
+        }
+        {
+          key: "4S"
+          value: 4
+        }
+        {
+          key: "5C"
+          value: 5
+        }
+        {
+          key: "5D"
+          value: 5
+        }
+        {
+          key: "5H"
+          value: 5
+        }
+        {
+          key: "5S"
+          value: 5
+        }
+        {
+          key: "6C"
+          value: 6
+        }
+        {
+          key: "6D"
+          value: 6
+        }
+        {
+          key: "6H"
+          value: 6
+        }
+        {
+          key: "6S"
+          value: 6
+        }
+        {
+          key: "7C"
+          value: 7
+        }
+        {
+          key: "7D"
+          value: 7
+        }
+        {
+          key: "7H"
+          value: 7
+        }
+        {
+          key: "7S"
+          value: 7
+        }
+        {
+          key: "8C"
+          value: 8
+        }
+        {
+          key: "8D"
+          value: 8
+        }
+        {
+          key: "8H"
+          value: 8
+        }
+        {
+          key: "8S"
+          value: 8
+        }
+        {
+          key: "9C"
+          value: 9
+        }
+        {
+          key: "9D"
+          value: 9
+        }
+        {
+          key: "9H"
+          value: 9
+        }
+        {
+          key: "9S"
+          value: 9
+        }
+        {
+          key: "TC"
+          value: 10
+        }
+        {
+          key: "TD"
+          value: 10
+        }
+        {
+          key: "TH"
+          value: 10
+        }
+        {
+          key: "TS"
+          value: 10
+        }
+        {
+          key: "JC"
+          value: 11
+        }
+        {
+          key: "JD"
+          value: 11
+        }
+        {
+          key: "JH"
+          value: 11
+        }
+        {
+          key: "JS"
+          value: 11
+        }
+        {
+          key: "QC"
+          value: 12
+        }
+        {
+          key: "QD"
+          value: 12
+        }
+        {
+          key: "QH"
+          value: 12
+        }
+        {
+          key: "QS"
+          value: 12
+        }
+        {
+          key: "KC"
+          value: 13
+        }
+        {
+          key: "KD"
+          value: 13
+        }
+        {
+          key: "KH"
+          value: 13
+        }
+        {
+          key: "KS"
+          value: 13
+        }
+        {
+          key: "AC"
+          value: 14
+        }
+        {
+          key: "AD"
+          value: 14
+        }
+        {
+          key: "AH"
+          value: 14
+        }
+        {
+          key: "AS"
+          value: 14
+        }
+      ]
+      domain: keysOf(row: "cards")
+      kind: "Int"
+      name: "rank"
+      visibility {
+        hidden: "Placeholder"
+      }
+    }
+
+    row {
+      capacity: 52
+      cells [
+        {
+          key: "2C"
+          value: 1
+        }
+        {
+          key: "2D"
+          value: 2
+        }
+        {
+          key: "2H"
+          value: 3
+        }
+        {
+          key: "2S"
+          value: 4
+        }
+        {
+          key: "3C"
+          value: 1
+        }
+        {
+          key: "3D"
+          value: 2
+        }
+        {
+          key: "3H"
+          value: 3
+        }
+        {
+          key: "3S"
+          value: 4
+        }
+        {
+          key: "4C"
+          value: 1
+        }
+        {
+          key: "4D"
+          value: 2
+        }
+        {
+          key: "4H"
+          value: 3
+        }
+        {
+          key: "4S"
+          value: 4
+        }
+        {
+          key: "5C"
+          value: 1
+        }
+        {
+          key: "5D"
+          value: 2
+        }
+        {
+          key: "5H"
+          value: 3
+        }
+        {
+          key: "5S"
+          value: 4
+        }
+        {
+          key: "6C"
+          value: 1
+        }
+        {
+          key: "6D"
+          value: 2
+        }
+        {
+          key: "6H"
+          value: 3
+        }
+        {
+          key: "6S"
+          value: 4
+        }
+        {
+          key: "7C"
+          value: 1
+        }
+        {
+          key: "7D"
+          value: 2
+        }
+        {
+          key: "7H"
+          value: 3
+        }
+        {
+          key: "7S"
+          value: 4
+        }
+        {
+          key: "8C"
+          value: 1
+        }
+        {
+          key: "8D"
+          value: 2
+        }
+        {
+          key: "8H"
+          value: 3
+        }
+        {
+          key: "8S"
+          value: 4
+        }
+        {
+          key: "9C"
+          value: 1
+        }
+        {
+          key: "9D"
+          value: 2
+        }
+        {
+          key: "9H"
+          value: 3
+        }
+        {
+          key: "9S"
+          value: 4
+        }
+        {
+          key: "TC"
+          value: 1
+        }
+        {
+          key: "TD"
+          value: 2
+        }
+        {
+          key: "TH"
+          value: 3
+        }
+        {
+          key: "TS"
+          value: 4
+        }
+        {
+          key: "JC"
+          value: 1
+        }
+        {
+          key: "JD"
+          value: 2
+        }
+        {
+          key: "JH"
+          value: 3
+        }
+        {
+          key: "JS"
+          value: 4
+        }
+        {
+          key: "QC"
+          value: 1
+        }
+        {
+          key: "QD"
+          value: 2
+        }
+        {
+          key: "QH"
+          value: 3
+        }
+        {
+          key: "QS"
+          value: 4
+        }
+        {
+          key: "KC"
+          value: 1
+        }
+        {
+          key: "KD"
+          value: 2
+        }
+        {
+          key: "KH"
+          value: 3
+        }
+        {
+          key: "KS"
+          value: 4
+        }
+        {
+          key: "AC"
+          value: 1
+        }
+        {
+          key: "AD"
+          value: 2
+        }
+        {
+          key: "AH"
+          value: 3
+        }
+        {
+          key: "AS"
+          value: 4
+        }
+      ]
+      domain: keysOf(row: "cards")
+      kind: "Int"
+      name: "suit"
+      visibility {
+        hidden: "Placeholder"
+      }
+    }
+
+    row {
+      capacity: 52
+      cells [
+        {
+          key: "2C"
+          value: true
+        }
+        {
+          key: "2D"
+          value: true
+        }
+        {
+          key: "2H"
+          value: true
+        }
+        {
+          key: "2S"
+          value: true
+        }
+        {
+          key: "3C"
+          value: true
+        }
+        {
+          key: "3D"
+          value: true
+        }
+        {
+          key: "3H"
+          value: true
+        }
+        {
+          key: "3S"
+          value: true
+        }
+        {
+          key: "4C"
+          value: true
+        }
+        {
+          key: "4D"
+          value: true
+        }
+        {
+          key: "4H"
+          value: true
+        }
+        {
+          key: "4S"
+          value: true
+        }
+        {
+          key: "5C"
+          value: true
+        }
+        {
+          key: "5D"
+          value: true
+        }
+        {
+          key: "5H"
+          value: true
+        }
+        {
+          key: "5S"
+          value: true
+        }
+        {
+          key: "6C"
+          value: true
+        }
+        {
+          key: "6D"
+          value: true
+        }
+        {
+          key: "6H"
+          value: true
+        }
+        {
+          key: "6S"
+          value: true
+        }
+        {
+          key: "7C"
+          value: true
+        }
+        {
+          key: "7D"
+          value: true
+        }
+        {
+          key: "7H"
+          value: true
+        }
+        {
+          key: "7S"
+          value: true
+        }
+        {
+          key: "8C"
+          value: true
+        }
+        {
+          key: "8D"
+          value: true
+        }
+        {
+          key: "8H"
+          value: true
+        }
+        {
+          key: "8S"
+          value: true
+        }
+        {
+          key: "9C"
+          value: true
+        }
+        {
+          key: "9D"
+          value: true
+        }
+        {
+          key: "9H"
+          value: true
+        }
+        {
+          key: "9S"
+          value: true
+        }
+        {
+          key: "TC"
+          value: true
+        }
+        {
+          key: "TD"
+          value: true
+        }
+        {
+          key: "TH"
+          value: true
+        }
+        {
+          key: "TS"
+          value: true
+        }
+        {
+          key: "JC"
+          value: true
+        }
+        {
+          key: "JD"
+          value: true
+        }
+        {
+          key: "JH"
+          value: true
+        }
+        {
+          key: "JS"
+          value: true
+        }
+        {
+          key: "QC"
+          value: true
+        }
+        {
+          key: "QD"
+          value: true
+        }
+        {
+          key: "QH"
+          value: true
+        }
+        {
+          key: "QS"
+          value: true
+        }
+        {
+          key: "KC"
+          value: true
+        }
+        {
+          key: "KD"
+          value: true
+        }
+        {
+          key: "KH"
+          value: true
+        }
+        {
+          key: "KS"
+          value: true
+        }
+        {
+          key: "AC"
+          value: true
+        }
+        {
+          key: "AD"
+          value: true
+        }
+        {
+          key: "AH"
+          value: true
+        }
+        {
+          key: "AS"
+          value: true
+        }
+      ]
+      domain: keysOf(ordered: true, row: "cards")
+      kind: "Bool"
+      name: "deck"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      capacity: 2
+      domain: keysOf(ordered: true, row: "cards")
+      kind: "Bool"
+      name: "hand1"
+      visibility {
+        readers [
+          "seat1"
+        ]
+        readersFrom: "audience1"
+      }
+    }
+
+    row {
+      capacity: 2
+      domain: keysOf(ordered: true, row: "cards")
+      kind: "Bool"
+      name: "hand2"
+      visibility {
+        readers [
+          "seat2"
+        ]
+        readersFrom: "audience2"
+      }
+    }
+
+    row {
+      capacity: 5
+      domain: keysOf(ordered: true, row: "cards")
+      kind: "Bool"
+      name: "community"
+      visibility {}
+    }
+
+    row {
+      draw {
+        generator {
+          source: "StreamDraw"
+        }
+        timing: "Event"
+      }
+      kind: "Int"
+      name: "cardStream"
+    }
+
+    table audience1: Text capacity(2) {
+      "0" = ""
+    }
+
+    table audience2: Text capacity(2) {
+      "0" = ""
+    }
+
+    row {
+      capacity: 2
+      cells [
+        {
+          key: "street"
+          value: 0
+        }
+        {
+          key: "next"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "phase"
+      visibility {}
+    }
+
+    row {
+      capacity: 16
+      cells [
+        {
+          key: "button"
+          value: 2
+        }
+        {
+          key: "bettor"
+          value: 0
+        }
+        {
+          key: "pot"
+          value: 0
+        }
+        {
+          key: "acted"
+          value: 0
+        }
+        {
+          key: "raises"
+          value: 0
+        }
+        {
+          key: "winner"
+          value: 0
+        }
+        {
+          key: "hands"
+          value: 0
+        }
+        {
+          key: "dealRequest"
+          value: 0
+        }
+        {
+          key: "evalPending"
+          value: 0
+        }
+        {
+          key: "boardMask"
+          value: 0
+        }
+        {
+          key: "refused"
+          value: 0
+        }
+        {
+          key: "leak"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "table"
+      visibility {}
+    }
+
+    row {
+      capacity: 4
+      cells [
+        {
+          key: "smallBlind"
+          value: 10
+        }
+        {
+          key: "bigBlind"
+          value: 20
+        }
+        {
+          key: "maxRaises"
+          value: 4
+        }
+        {
+          key: "autoDeal"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "house"
+      visibility {}
+    }
+
+    row {
+      capacity: 2
+      cells [
+        {
+          key: "1"
+          value: 1000
+        }
+        {
+          key: "2"
+          value: 1000
+        }
+      ]
+      kind: "Int"
+      min: 0
+      name: "stack"
+      visibility {}
+    }
+
+    row {
+      capacity: 2
+      cells [
+        {
+          key: "1"
+          value: 0
+        }
+        {
+          key: "2"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      min: 0
+      name: "streetBet"
+      visibility {}
+    }
+
+    row {
+      capacity: 1
+      cells [
+        {
+          key: "act"
+          value: -1
+        }
+      ]
+      kind: "Int"
+      max: 2
+      min: -1
+      name: "betAction1"
+      visibility {}
+    }
+
+    row {
+      capacity: 1
+      cells [
+        {
+          key: "act"
+          value: -1
+        }
+      ]
+      kind: "Int"
+      max: 2
+      min: -1
+      name: "betAction2"
+      visibility {}
+    }
+
+    row {
+      domain: ring(capacity: 16, empty: -1)
+      kind: "Int"
+      name: "bets"
+      visibility {}
+    }
+
+    row {
+      capacity: 2
+      cells [
+        {
+          key: "hole"
+          value: 0
+        }
+        {
+          key: "strength"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "private1"
+      visibility {
+        readers [
+          "seat1"
+        ]
+        readersFrom: "audience1"
+      }
+    }
+
+    row {
+      capacity: 2
+      cells [
+        {
+          key: "hole"
+          value: 0
+        }
+        {
+          key: "strength"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "private2"
+      visibility {
+        readers [
+          "seat2"
+        ]
+        readersFrom: "audience2"
+      }
+    }
+  }
+}

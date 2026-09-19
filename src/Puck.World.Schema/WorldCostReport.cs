@@ -1,3 +1,4 @@
+using RuleWorkContributor = Puck.State.Rules.RuleWorkContributor;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -44,8 +45,8 @@ public sealed record WorldCostReport(
         var stepPeriodTicks = profile.StepPeriodEngineTicks(rateHz: rateHz);
         var allowanceCycles = profile.AuthoredBudgetCycles(rateHz: rateHz);
 
-        var compiledRules = WorldRuleCompiler.CompileAll(definition: definition);
-        var compiledInteractions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
+        var compiledRules = WorldFactsCompiler.CompileAll(definition: definition);
+        var compiledInteractions = WorldFactsCompiler.CompileAllInteractions(definition: definition);
         var contributors = WorldRuleWorkBudget.Contributors(
             definition: definition,
             interactions: compiledInteractions,
@@ -71,7 +72,8 @@ public sealed record WorldCostReport(
                 judge: out _,
                 plans: out _,
                 reason: out var searchReason,
-                rules: compiledRules
+                rules: compiledRules,
+                scores: out _
             )) {
                 issues.Add(item: $"Search planning issue: {searchReason}");
             }

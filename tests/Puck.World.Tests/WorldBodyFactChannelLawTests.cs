@@ -20,7 +20,7 @@ public sealed class WorldBodyFactChannelLawTests {
     private const string GroundedRow = "grounded";
 
     private static long Cell(WorldFixture fixture, string row) =>
-        fixture.Server.Definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single().Value.Raw;
     // The platform floor a walker settles on (the same floor BodyScaleLawTests grounds its bodies on).
     private static WorldDefinition FactDocument(string? airborneChannel = null) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
@@ -122,7 +122,7 @@ public sealed class WorldBodyFactChannelLawTests {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 0L
+                Value: CellValue.Int(value: 0L)
             )]
     );
 

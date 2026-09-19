@@ -1,19 +1,17 @@
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
 using Xunit;
-using static Puck.World.Tests.SolitaireFixtures;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins <see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>: a state mutation is refused
-/// for exactly the row-local and cross-row reasons the whole-document walk would refuse it for, checking only the
-/// rows it touched, and a real deal allocates a small, bounded amount per rule-written cell rather than the whole
-/// document's worth.</summary>
-[Collection(AllocationCollection.Name)]
-public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
+/// <summary>Pins the two doors a state mutation is refused at: the arena its cell write composes through, which
+/// decides the row's own envelope, capacity and addresses, and
+/// <see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>, which refuses the cross-row reasons the
+/// whole-document walk would refuse for, checking only the rows the mutation touched.</summary>
+public sealed class StateMutationValidationLawTests {
     [Fact]
     public void AKeysOfZoneRefusesAKeyOutsideItsTokenDomain() {
-        // A Transfer can never produce this shape (WorldStateTransforms refuses two zones over different domains
+        // A Transfer can never produce this shape (the transform compiler refuses two zones over different domains
         // outright), so the live door a state mutation actually reaches this through is a direct cell upsert — the
         // one write compose never checks against the zone's own domain.
         var domain = new WorldStateRow(
@@ -77,7 +75,8 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             ),
             Cells: [Cell(
                     key: "c1",
-                    value: 1
+                    value: 1,
+                    kind: CellKind.Bool
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: Document([domain, zone]));
@@ -112,7 +111,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             CellKind.Bool,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    0
+                    CellValue.Bool(value: false)
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: Document([flag]));
@@ -134,7 +133,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             collection: refusals,
             filter: reason => reason.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "must be 0 or 1"
+                value: "would leave the row's envelope"
             )
         );
         Assert.Equal(
@@ -172,7 +171,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             collection: refusals,
             filter: reason => reason.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "exceeds its capacity"
+                value: "would mint past capacity"
             )
         );
         Assert.Equal(
@@ -219,7 +218,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             collection: refusals,
             filter: reason => reason.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "canonical topology keys"
+                value: "row 'board' holds no cell '9'; a write never mints a key"
             )
         );
         Assert.Equal(
@@ -234,8 +233,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             CellKind.Text,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    0,
-                    Text: ""
+                    CellValue.Text(value: "")
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: Document([notes]));
@@ -261,7 +259,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             collection: refusals,
             filter: reason => reason.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "exceeds the maximum of"
+                value: $"row 'notes' cell '{WorldStateRow.SlotKey.Value}' would store {(StateCapacity.MaxTextValueLength + 1)} characters, past the {StateCapacity.MaxTextValueLength}-character limit"
             )
         );
         Assert.Equal(
@@ -271,7 +269,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
     }
     [Fact]
     public void ADuplicateKeyInAnOrderedZoneIsRefusedTheSameWayByBothWalks() {
-        // Compose never mints this shape (an upsert always replaces an existing key in place — StateCellWriter),
+        // Compose never mints this shape (an upsert always replaces an existing key in place),
         // so this targets TryValidateTouchedStateRows directly with a candidate a state mutation could never
         // legitimately compose, proving it refuses the same malformed row the whole-document walk refuses.
         var domain = new WorldStateRow(
@@ -289,10 +287,12 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             ),
             Cells: [Cell(
                     key: "c1",
-                    value: 1
+                    value: 1,
+                    kind: CellKind.Bool
                 ), Cell(
                     key: "c1",
-                    value: 1
+                    value: 1,
+                    kind: CellKind.Bool
                 )]
         );
         var definition = Document([domain, zone]);
@@ -315,195 +315,44 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             expectedSubstring: "is duplicated"
         );
     }
-    // Charges the calling thread only: the suite runs tests in parallel, so a process-wide counter would fold a
-    // sibling test into this window. The denominator is rule-written cells, not journal entries, so a tick that
-    // folds many effects into one entry does not divide by a shrinking count and hide what this law pins. Klondike's
-    // own authored rules never queue more than one cross-row write per tick (a deal spends most of its ticks on one
-    // or two cells apiece), so this bound is dominated by the once-per-tick install pipeline's own fixed cost for a
-    // document this size, not by how many members one cross-row replay composes — ManyCrossRowWritesInOneTickShareOneWorkspaceCopy
-    // below isolates that cost directly, and CellsFoldIntoOneInstallWithBoundedPerCellCost isolates the batch
-    // compose's own cost on a tick that writes many frame-fast cells at once.
     [Fact]
-    public void KlondikeDealAllocatesFarLessThanWholeDocumentValidation() {
-        using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
-
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
-            Row: "solitaireKlondike",
-            Key: "option",
-            Value: 1,
-            Kind: WorldDocumentWriteKind.Set
-        ));
-        fixture.Step();
-
-        var cells = 0;
-
-        fixture.Server.MutationJournalTap = (_, _, mutation) => cells += CountCells(mutation: mutation);
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        Request(
-            f: fixture,
-            game: "solitaireKlondike",
-            action: 1
-        );
-        var after = GC.GetAllocatedBytesForCurrentThread();
-
-        Assert.Equal(
-            expected: 1,
-            actual: Value(
-                f: fixture,
-                game: "solitaireKlondike",
-                key: "result"
-            )
-        );
-        Assert.True(
-            condition: (cells > 0),
-            userMessage: "the deal must apply at least one rule-written cell to measure a per-cell average"
+    public void AddonVectorWrite_RefusedByName() {
+        var payload = System.Text.Encoding.UTF8.GetBytes(s: """{"name":"memories","kind":"vector","value":"AQID"}""");
+        var decoded = Puck.World.Addons.WorldAddonMutationDecoder.TryDecode(
+            kindOrdinal: 46,
+            section: WorldSection.State,
+            payload: payload,
+            principal: WorldPrincipal.Addon(name: "guest"),
+            mutation: out var mutation,
+            error: out var error
         );
 
-        var allocated = (after - before);
-        var perCell = (allocated / ((double)cells));
-
-        output.WriteLine(message: $"solitaireKlondike deal: {cells} rule-written cells, {allocated} bytes allocated, {perCell:F0} bytes/cell");
-
-        Assert.True(
-            condition: (perCell < (20 * 1024)),
-            userMessage: $"expected under 20 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells"
+        Assert.False(condition: decoded);
+        Assert.Null(@object: mutation);
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            expectedSubstring: "vector"
         );
     }
-    // A tick whose rule writes many independent cells through separate top-level effects (never a transaction —
-    // proving the fold applies to ordinary standalone effects too) folds into one install: one admission, one
-    // touched-row validation, one journal entry, one delivery, and one batch compose that copies the row list and
-    // the definition once and walks the document graph once for the rows anything is bound to. The bound holds
-    // the whole tick — rule evaluation, the frame, the fold, validation, journal, echo — to under 4 KiB per cell.
     [Fact]
-    public void CellsFoldIntoOneInstallWithBoundedPerCellCost() {
-        const int RowCount = 32;
-        var rows = new WorldStateRow[RowCount];
-        var effects = new ActionEffect[RowCount];
-
-        for (var index = 0; (index < RowCount); index++) {
-            rows[index] = new WorldStateRow(
-                Name(value: $"counter{index}"),
-                CellKind.Int,
-                Min: 0,
-                Max: 1_000_000,
-                Cells: [new StateCell(
-                        WorldStateRow.SlotKey,
-                        0
-                    )]
-            );
-            effects[index] = new ActionEffect.SetState(
-                State: $"counter{index}",
-                Expression: new ValueExpression(Tokens: [new ValueToken.Constant(Value: 1m)])
-            );
-        }
-
-        var definition = Document(rows) with { Rules = [new WorldRule(
-                Name(value: "advance"),
-                effects,
-                Mode: ActionTriggerMode.Level
-            )] };
-        using var fixture = Fixtures.FreshServer(definition: definition);
-
-        var installs = 0;
-        var cells = 0;
-
-        fixture.Server.MutationJournalTap = (_, _, mutation) => { installs++; cells += CountCells(mutation: mutation); };
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        fixture.Step();
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        Assert.Equal(
-            actual: installs,
-            expected: 1
-        );
-        Assert.Equal(
-            actual: cells,
-            expected: RowCount
+    public void AddonVectorKeyedWrite_RefusedByName() {
+        var payload = System.Text.Encoding.UTF8.GetBytes(s: """{"name":"memories","kind":"vector","cells":[{"key":"v1","value":"AQID"}]}""");
+        var decoded = Puck.World.Addons.WorldAddonMutationDecoder.TryDecode(
+            kindOrdinal: 46,
+            section: WorldSection.State,
+            payload: payload,
+            principal: WorldPrincipal.Addon(name: "guest"),
+            mutation: out var mutation,
+            error: out var error
         );
 
-        var perCell = (allocated / ((double)cells));
-
-        output.WriteLine(message: $"{RowCount} independent cells, one tick: {installs} install, {allocated} bytes allocated, {perCell:F0} bytes/cell");
-
-        Assert.True(
-            condition: (perCell < (4 * 1024)),
-            userMessage: $"expected under 4 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells"
-        );
-    }
-    // The shape KlondikeDealAllocatesFarLessThanWholeDocumentValidation's own comment describes but does not itself
-    // reach: many cross-row writes (text, so each mints through TryApplyCrossRowStateMutation rather than the
-    // frame's numeric array) queued in the same tick. Before routing that replay through the batch workspace, the
-    // Nth cross-row write recomposed the whole document once per already-queued member — quadratic in the tick's own
-    // cross-row count; the workspace makes it one shared row-list copy per replay instead.
-    [Fact]
-    public void ManyCrossRowWritesInOneTickShareOneWorkspaceCopy() {
-        const int RowCount = 32;
-        var rows = new WorldStateRow[RowCount];
-        var effects = new ActionEffect[RowCount];
-
-        for (var index = 0; (index < RowCount); index++) {
-            rows[index] = new WorldStateRow(
-                Name(value: $"text{index}"),
-                CellKind.Text,
-                Cells: [new StateCell(
-                        WorldStateRow.SlotKey,
-                        0,
-                        Text: ""
-                    )]
-            );
-            effects[index] = new ActionEffect.SetState(
-                State: $"text{index}",
-                Text: "written"
-            );
-        }
-
-        var definition = Document(rows) with { Rules = [new WorldRule(
-                Name(value: "advance"),
-                effects,
-                Mode: ActionTriggerMode.Level
-            )] };
-        using var fixture = Fixtures.FreshServer(definition: definition);
-
-        var installs = 0;
-        var cells = 0;
-
-        fixture.Server.MutationJournalTap = (_, _, mutation) => { installs++; cells += CountCells(mutation: mutation); };
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        fixture.Step();
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        Assert.Equal(
-            actual: installs,
-            expected: 1
-        );
-        Assert.Equal(
-            actual: cells,
-            expected: RowCount
-        );
-        for (var index = 0; (index < RowCount); index++) {
-            Assert.Equal(
-                expected: "written",
-                actual: Row(
-                    f: fixture,
-                    name: $"text{index}"
-                ).Cells!.Single().Text
-            );
-        }
-
-        var perCell = (allocated / ((double)cells));
-
-        output.WriteLine(message: $"{RowCount} cross-row text cells, one tick: {installs} install, {allocated} bytes allocated, {perCell:F0} bytes/cell");
-
-        Assert.True(
-            condition: (perCell < (80 * 1024)),
-            userMessage: $"expected under 80 KiB per cross-row cell; measured {perCell:F0} bytes/cell over {cells} cells"
+        Assert.False(condition: decoded);
+        Assert.Null(@object: mutation);
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            expectedSubstring: "vector"
         );
     }
 
@@ -512,10 +361,123 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         : 1
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static StateCell Cell(string key, long value = 1) => new(
+    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
         Key: Name(value: key),
-        Value: value
+        Value: ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0L)) : CellValue.Int(value: value))
     );
+    // A submitted row declaration composes through an arena over the document it declares, and reaches it before
+    // any validator has seen it. A board over a topology the document does not declare is a section the arena cannot
+    // lay out at all, so the apply door names the row rather than throwing out of the tick.
+    [Fact]
+    public void AWholeRowDeclarationTheArenaCannotLayOutIsRefusedByName() {
+        using var fixture = Fixtures.FreshServer(definition: Document([new WorldStateRow(
+                Name(value: "keep"),
+                CellKind.Int,
+                Cells: [new StateCell(
+                        WorldStateRow.SlotKey,
+                        CellValue.Int(value: 0)
+                    )]
+            )]));
+        var before = fixture.DefinitionBytes();
+        var refusals = new List<string>();
+
+        fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
+            Principal: WorldPrincipal.Console,
+            Row: new WorldStateRow(
+                Name(value: "board"),
+                CellKind.Int,
+                Domain: new StateDomain.CellsOf(
+                    "absent",
+                    Empty: -1
+                )
+            )
+        ));
+        fixture.Step();
+
+        Assert.Contains(
+            collection: refusals,
+            filter: reason => reason.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "which the section does not declare"
+            )
+        );
+        Assert.Equal(
+            expected: before,
+            actual: fixture.DefinitionBytes()
+        );
+    }
+    /// <summary>A lattice row's cells are its topology's, so removing one is refused by name on the host rather than
+    /// leaving the board a position short. CONTROL: the same removal against a keyed row applies.</summary>
+    [Fact]
+    public void RemovingACellFromALatticeRowIsRefusedByName() {
+        var board = new WorldStateRow(
+            Name(value: "board"),
+            CellKind.Int,
+            Domain: new StateDomain.CellsOf("map"),
+            Cells: [new StateCell(
+                    Key: Name(value: "0"),
+                    Value: CellValue.Int(value: 0L)
+                )]
+        );
+        var pile = new WorldStateRow(
+            Name(value: "pile"),
+            CellKind.Int,
+            Domain: new StateDomain.Keys(),
+            Capacity: 4,
+            Cells: [new StateCell(
+                    Key: Name(value: "a"),
+                    Value: CellValue.Int(value: 0L)
+                )]
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: Document(
+            [board, pile],
+            lattices: [new LatticeTopology.Grid(
+                    "map",
+                    new DocumentVector3(
+                        x: 0,
+                        y: 0,
+                        z: 0
+                    ),
+                    1,
+                    2,
+                    2
+                )]
+        ));
+        var refusals = new List<string>();
+
+        fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
+            Principal: WorldPrincipal.Console,
+            Row: "board",
+            Key: "0"
+        ));
+        fixture.Step();
+
+        Assert.Contains(
+            collection: refusals,
+            filter: static reason => reason.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "row 'board' is not a keyed or ordered row"
+            )
+        );
+
+        // The control: the same mutation against a keyed row is admitted, so the refusal is about the row's shape.
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
+            Principal: WorldPrincipal.Console,
+            Row: "pile",
+            Key: "a"
+        ));
+        fixture.Step();
+
+        Assert.Empty(collection: (WorldDefinitionRows.FindStateRow(
+            rows: fixture.Server.Definition.State,
+            name: "pile"
+        )!.Cells ?? []));
+    }
     private static WorldDefinition Document(WorldStateRow[] rows, LatticeTopology[]? lattices = null) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(
         World: rows,

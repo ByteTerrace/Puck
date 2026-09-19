@@ -1,0 +1,30 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/backgammon.world.json",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 30
+    },
+    {
+      "set": {
+        "row": "dice",
+        "key": "d1",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "dice",
+        "key": "d2",
+        "value": 1
+      }
+    },
+    {
+      "advance": 600
+    }
+  ]
+}

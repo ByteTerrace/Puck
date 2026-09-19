@@ -189,7 +189,7 @@ public sealed partial class NavigationLawTests {
         };
     }
     private static WorldDefinition NavigationDocument(WorldNavigationDomain domain, bool withMedium = false) {
-        var document = Fixtures.BuildDocument();
+        var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
         var channels = document.Channels.ToList();
 
         channels.Add(item: new WorldChannel(
@@ -423,7 +423,7 @@ public sealed partial class NavigationLawTests {
 
             for (var tick = 0; (tick < trace.Length); tick++) {
                 fixture.Step();
-                trace[tick] = WorldRuntimeStateHash.HashAuthoritative(
+                trace[tick] = WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: ((ulong)(tick + 1))
                 );
@@ -553,7 +553,7 @@ public sealed partial class NavigationLawTests {
 
         for (var tick = 0; (tick < expected.Length); tick++) {
             fixture.Step();
-            expected[tick] = WorldRuntimeStateHash.HashAuthoritative(
+            expected[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: ((ulong)(tick + 2))
             );
@@ -563,7 +563,7 @@ public sealed partial class NavigationLawTests {
 
         for (var tick = 0; (tick < actual.Length); tick++) {
             fixture.Step();
-            actual[tick] = WorldRuntimeStateHash.HashAuthoritative(
+            actual[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: ((ulong)(tick + 2))
             );
@@ -579,11 +579,13 @@ public sealed partial class NavigationLawTests {
     public void ASolidRebuildRetainsAnUnroutedDomainButRebuildsARestoredRoutesChangedDomain() {
         var floored = WithFloor(definition: NavigationDocument(domain: VolumeDomain()));
         var definition = floored with {
-            PlacementsRaw = floored.PlacementsRaw! with { Rows = [floored.Placements[0] with { Position = new Vector3(
+            PlacementsRaw = floored.PlacementsRaw! with {
+                Rows = [floored.Placements[0] with { Position = new Vector3(
                 x: 0f,
                 y: -20f,
                 z: 0f
-            ) }] },
+            ) }],
+            },
         };
 
         static void RaiseFloor(WorldFixture fixture) {
@@ -591,11 +593,13 @@ public sealed partial class NavigationLawTests {
 
             fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
                 WorldPrincipal.Console,
-                floor with { Position = new Vector3(
+                floor with {
+                    Position = new Vector3(
                     x: 0f,
                     y: 2f,
                     z: 0f
-                ) }
+                ),
+                }
             ));
             fixture.Step();
             Assert.Equal(
@@ -960,23 +964,27 @@ public sealed partial class NavigationLawTests {
             to with { X = FixedQ4816.MaxValue },
             clearance
         ));
-        for (var index = 0; (index < 100); index++) { Assert.True(condition: fields.IsSegmentInsideMedium(
+        for (var index = 0; (index < 100); index++) {
+            Assert.True(condition: fields.IsSegmentInsideMedium(
             clearance: clearance,
             field: 0,
             from: from,
             maximumSubdivisions: 32,
             to: to
-        )); }
+        ));
+        }
         var allocated = GC.GetAllocatedBytesForCurrentThread();
         var allWet = true;
 
-        for (var index = 0; (index < 4096); index++) { allWet &= fields.IsSegmentInsideMedium(
+        for (var index = 0; (index < 4096); index++) {
+            allWet &= fields.IsSegmentInsideMedium(
             clearance: clearance,
             field: 0,
             from: from,
             maximumSubdivisions: 32,
             to: to
-        ); }
+        );
+        }
         var bytes = (GC.GetAllocatedBytesForCurrentThread() - allocated);
 
         Assert.True(condition: allWet);
@@ -1267,7 +1275,7 @@ public sealed partial class NavigationLawTests {
             : row)).ToArray(),
             },
         };
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 1
         );
@@ -1281,7 +1289,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             expected: before,
-            actual: WorldRuntimeStateHash.HashAuthoritative(
+            actual: WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 1
             )
@@ -1296,7 +1304,7 @@ public sealed partial class NavigationLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             )]),
             Rules = [new WorldRule(
@@ -1327,7 +1335,7 @@ public sealed partial class NavigationLawTests {
 
         Assert.Equal(
             expected: 1L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == observed)).Cells![0].Value
+            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == observed)).Cells![0].Value.Raw
         );
     }
     // The island authors a dozen navigation domains; a construction that eagerly sweeps every one of their

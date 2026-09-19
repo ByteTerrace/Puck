@@ -1,0 +1,1676 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action hexBoard, hexMove, hexStoneCell
+export binding hexTurn, hexVerdict
+export read hexBoard, hexLinesBoard, hexMove, hexStoneCell, hexTurn, hexVerdict
+
+kits {
+  rows [
+    {
+      bodyContact: "Solid"
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.06, 0.024, 0.06], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: "Free"
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: "Gravity"
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "hexStone"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.5
+        linearDamping: 0.05
+        mass: 0.05
+        restitution: 0.1
+        rollingFriction: 0.15
+      }
+    }
+  ]
+}
+
+looks {
+  rows [
+    {
+      motion {
+        cues []
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+      }
+      name: "hexStoneLight"
+      scale: 1
+      source: creation(prototypeId: "hexStoneLight")
+    }
+    {
+      motion {
+        cues []
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+      }
+      name: "hexStoneDark"
+      scale: 1
+      source: creation(prototypeId: "hexStoneDark")
+    }
+  ]
+}
+
+placements {
+  placement "hexTable" {
+    prototype: "hexTable"
+    position [-16, -0.5, 5]
+    board {
+      topology: "hexLinesBoard"
+      occupancy: "hexBoard"
+      turn: "hexTurn"
+      verdict: "hexVerdict"
+      move: "hexMove"
+    }
+    solid
+  }
+
+  placement "hexTrayLight" {
+    prototype: "hexStoneTray"
+    parent: "hexTable"
+    position [0, 1.3, -1.12]
+    solid
+  }
+
+  placement "hexTrayDark" {
+    prototype: "hexStoneTray"
+    parent: "hexTable"
+    position [0, 1.3, 1.12]
+    solid
+  }
+
+  placement "hexStoneLight-0" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [-0.36, 0.15, -0.14]
+  }
+
+  placement "hexStoneLight-1" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [-0.18, 0.15, -0.14]
+  }
+
+  placement "hexStoneLight-2" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0, 0.15, -0.14]
+  }
+
+  placement "hexStoneLight-3" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0.18, 0.15, -0.14]
+  }
+
+  placement "hexStoneLight-4" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0.36, 0.15, -0.14]
+  }
+
+  placement "hexStoneLight-5" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [-0.36, 0.15, 0]
+  }
+
+  placement "hexStoneLight-6" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [-0.18, 0.15, 0]
+  }
+
+  placement "hexStoneLight-7" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0, 0.15, 0]
+  }
+
+  placement "hexStoneLight-8" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0.18, 0.15, 0]
+  }
+
+  placement "hexStoneLight-9" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0.36, 0.15, 0]
+  }
+
+  placement "hexStoneLight-10" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [-0.36, 0.15, 0.14]
+  }
+
+  placement "hexStoneLight-11" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [-0.18, 0.15, 0.14]
+  }
+
+  placement "hexStoneLight-12" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0, 0.15, 0.14]
+  }
+
+  placement "hexStoneLight-13" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0.18, 0.15, 0.14]
+  }
+
+  placement "hexStoneLight-14" {
+    prototype: "hexStoneLight"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneLight"
+      source: "Idle"
+    }
+    parent: "hexTrayLight"
+    position [0.36, 0.15, 0.14]
+  }
+
+  placement "hexStoneDark-0" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [-0.36, 0.15, -0.14]
+  }
+
+  placement "hexStoneDark-1" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [-0.18, 0.15, -0.14]
+  }
+
+  placement "hexStoneDark-2" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0, 0.15, -0.14]
+  }
+
+  placement "hexStoneDark-3" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0.18, 0.15, -0.14]
+  }
+
+  placement "hexStoneDark-4" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0.36, 0.15, -0.14]
+  }
+
+  placement "hexStoneDark-5" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [-0.36, 0.15, 0]
+  }
+
+  placement "hexStoneDark-6" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [-0.18, 0.15, 0]
+  }
+
+  placement "hexStoneDark-7" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0, 0.15, 0]
+  }
+
+  placement "hexStoneDark-8" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0.18, 0.15, 0]
+  }
+
+  placement "hexStoneDark-9" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0.36, 0.15, 0]
+  }
+
+  placement "hexStoneDark-10" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [-0.36, 0.15, 0.14]
+  }
+
+  placement "hexStoneDark-11" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [-0.18, 0.15, 0.14]
+  }
+
+  placement "hexStoneDark-12" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0, 0.15, 0.14]
+  }
+
+  placement "hexStoneDark-13" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0.18, 0.15, 0.14]
+  }
+
+  placement "hexStoneDark-14" {
+    prototype: "hexStoneDark"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "hexStone"
+      look: "hexStoneDark"
+      source: "Idle"
+    }
+    parent: "hexTrayDark"
+    position [0.36, 0.15, 0.14]
+  }
+
+  placement "hexTile-0" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0, 1.305, 0]
+  }
+
+  placement "hexTile-1" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.2, 1.305, 0]
+  }
+
+  placement "hexTile-2" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.1, 1.305, 0.173205]
+  }
+
+  placement "hexTile-3" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.1, 1.305, 0.173205]
+  }
+
+  placement "hexTile-4" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.2, 1.305, 0]
+  }
+
+  placement "hexTile-5" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.1, 1.305, -0.173205]
+  }
+
+  placement "hexTile-6" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.1, 1.305, -0.173205]
+  }
+
+  placement "hexTile-7" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.3, 1.305, -0.173205]
+  }
+
+  placement "hexTile-8" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.4, 1.305, 0]
+  }
+
+  placement "hexTile-9" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.3, 1.305, 0.173205]
+  }
+
+  placement "hexTile-10" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.2, 1.305, 0.34641]
+  }
+
+  placement "hexTile-11" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0, 1.305, 0.34641]
+  }
+
+  placement "hexTile-12" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.2, 1.305, 0.34641]
+  }
+
+  placement "hexTile-13" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.3, 1.305, 0.173205]
+  }
+
+  placement "hexTile-14" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.4, 1.305, 0]
+  }
+
+  placement "hexTile-15" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.3, 1.305, -0.173205]
+  }
+
+  placement "hexTile-16" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.2, 1.305, -0.34641]
+  }
+
+  placement "hexTile-17" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0, 1.305, -0.34641]
+  }
+
+  placement "hexTile-18" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.2, 1.305, -0.34641]
+  }
+
+  placement "hexTile-19" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.4, 1.305, -0.34641]
+  }
+
+  placement "hexTile-20" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.5, 1.305, -0.173205]
+  }
+
+  placement "hexTile-21" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.6, 1.305, 0]
+  }
+
+  placement "hexTile-22" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.5, 1.305, 0.173205]
+  }
+
+  placement "hexTile-23" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.4, 1.305, 0.34641]
+  }
+
+  placement "hexTile-24" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.3, 1.305, 0.519615]
+  }
+
+  placement "hexTile-25" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.1, 1.305, 0.519615]
+  }
+
+  placement "hexTile-26" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.1, 1.305, 0.519615]
+  }
+
+  placement "hexTile-27" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.3, 1.305, 0.519615]
+  }
+
+  placement "hexTile-28" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.4, 1.305, 0.34641]
+  }
+
+  placement "hexTile-29" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.5, 1.305, 0.173205]
+  }
+
+  placement "hexTile-30" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.6, 1.305, 0]
+  }
+
+  placement "hexTile-31" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.5, 1.305, -0.173205]
+  }
+
+  placement "hexTile-32" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.4, 1.305, -0.34641]
+  }
+
+  placement "hexTile-33" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.3, 1.305, -0.519615]
+  }
+
+  placement "hexTile-34" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.1, 1.305, -0.519615]
+  }
+
+  placement "hexTile-35" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.1, 1.305, -0.519615]
+  }
+
+  placement "hexTile-36" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.3, 1.305, -0.519615]
+  }
+
+  placement "hexTile-37" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.5, 1.305, -0.519615]
+  }
+
+  placement "hexTile-38" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.6, 1.305, -0.34641]
+  }
+
+  placement "hexTile-39" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.7, 1.305, -0.173205]
+  }
+
+  placement "hexTile-40" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.8, 1.305, 0]
+  }
+
+  placement "hexTile-41" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.7, 1.305, 0.173205]
+  }
+
+  placement "hexTile-42" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0.6, 1.305, 0.34641]
+  }
+
+  placement "hexTile-43" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.5, 1.305, 0.519615]
+  }
+
+  placement "hexTile-44" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.4, 1.305, 0.69282]
+  }
+
+  placement "hexTile-45" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.2, 1.305, 0.69282]
+  }
+
+  placement "hexTile-46" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0, 1.305, 0.69282]
+  }
+
+  placement "hexTile-47" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.2, 1.305, 0.69282]
+  }
+
+  placement "hexTile-48" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.4, 1.305, 0.69282]
+  }
+
+  placement "hexTile-49" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.5, 1.305, 0.519615]
+  }
+
+  placement "hexTile-50" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.6, 1.305, 0.34641]
+  }
+
+  placement "hexTile-51" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.7, 1.305, 0.173205]
+  }
+
+  placement "hexTile-52" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.8, 1.305, 0]
+  }
+
+  placement "hexTile-53" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.7, 1.305, -0.173205]
+  }
+
+  placement "hexTile-54" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [-0.6, 1.305, -0.34641]
+  }
+
+  placement "hexTile-55" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.5, 1.305, -0.519615]
+  }
+
+  placement "hexTile-56" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [-0.4, 1.305, -0.69282]
+  }
+
+  placement "hexTile-57" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [-0.2, 1.305, -0.69282]
+  }
+
+  placement "hexTile-58" {
+    prototype: "hexTileA"
+    parent: "hexTable"
+    position [0, 1.305, -0.69282]
+  }
+
+  placement "hexTile-59" {
+    prototype: "hexTileB"
+    parent: "hexTable"
+    position [0.2, 1.305, -0.69282]
+  }
+
+  placement "hexTile-60" {
+    prototype: "hexTileC"
+    parent: "hexTable"
+    position [0.4, 1.305, -0.69282]
+  }
+}
+
+prototypes {
+  prototype "hexTable" {
+    document {
+      name: "hexTable"
+      palette [
+        {
+          color: "state.hexTableColors.wood"
+          roughness: 0.802
+          specular: 0.08
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top0" {
+        material: 0
+        position [0, 1.25, 0]
+        rotation: "state.transforms.identity"
+        scale [1.71, 0.05, 1.47224]
+      }
+
+      shape Box "top1" {
+        blend: "Intersection"
+        material: 0
+        position [0, 1.25, 0]
+        rotation [0, 0.5, 0, 0.866025]
+        scale [1.71, 0.05, 1.47224]
+      }
+
+      shape Box "top2" {
+        blend: "Intersection"
+        material: 0
+        position [0, 1.25, 0]
+        rotation [0, 0.866025, 0, 0.5]
+        scale [1.71, 0.05, 1.47224]
+      }
+
+      shape Cylinder "plinth" {
+        material: 0
+        position [0, 0.6, 0]
+        rotation: "state.transforms.identity"
+        scale [0.35, 0.6, 0.35]
+      }
+
+      shape Cylinder "foot" {
+        material: 0
+        position [0, 0.04, 0]
+        rotation: "state.transforms.identity"
+        scale [0.85, 0.04, 0.85]
+      }
+    }
+  }
+
+  prototype "hexTileA" {
+    document {
+      name: "hexTileA"
+      palette [
+        {
+          color: "state.hexTileColors.a"
+          roughness: 0.846
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "tile0" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.0948038, 0.005, 0.11947]
+      }
+
+      shape Box "tile1" {
+        blend: "Intersection"
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0.5, 0, 0.866025]
+        scale [0.0948038, 0.005, 0.11947]
+      }
+
+      shape Box "tile2" {
+        blend: "Intersection"
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0.866025, 0, 0.5]
+        scale [0.0948038, 0.005, 0.11947]
+      }
+    }
+  }
+
+  prototype "hexTileB" {
+    document {
+      name: "hexTileB"
+      palette [
+        {
+          color: "state.hexTileColors.b"
+          roughness: 0.846
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "tile0" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.0948038, 0.005, 0.11947]
+      }
+
+      shape Box "tile1" {
+        blend: "Intersection"
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0.5, 0, 0.866025]
+        scale [0.0948038, 0.005, 0.11947]
+      }
+
+      shape Box "tile2" {
+        blend: "Intersection"
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0.866025, 0, 0.5]
+        scale [0.0948038, 0.005, 0.11947]
+      }
+    }
+  }
+
+  prototype "hexTileC" {
+    document {
+      name: "hexTileC"
+      palette [
+        {
+          color: "state.hexTileColors.c"
+          roughness: 0.846
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "tile0" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.0948038, 0.005, 0.11947]
+      }
+
+      shape Box "tile1" {
+        blend: "Intersection"
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0.5, 0, 0.866025]
+        scale [0.0948038, 0.005, 0.11947]
+      }
+
+      shape Box "tile2" {
+        blend: "Intersection"
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0.866025, 0, 0.5]
+        scale [0.0948038, 0.005, 0.11947]
+      }
+    }
+  }
+
+  prototype "hexStoneLight" {
+    document {
+      name: "hexStoneLight"
+      palette [
+        {
+          color: "state.hexStoneColors.light"
+          roughness: 0.613
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Ellipsoid "lens" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.066, 0.024, 0.066]
+      }
+
+      shape Cylinder "core" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.056, 0.014, 0.056]
+      }
+    }
+  }
+
+  prototype "hexStoneDark" {
+    document {
+      name: "hexStoneDark"
+      palette [
+        {
+          color: "state.hexStoneColors.dark"
+          roughness: 0.613
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Ellipsoid "lens" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.066, 0.024, 0.066]
+      }
+
+      shape Cylinder "core" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.056, 0.014, 0.056]
+      }
+    }
+  }
+
+  prototype "hexStoneTray" {
+    document {
+      name: "hexStoneTray"
+      palette [
+        {
+          color: "state.hexTableColors.tray"
+          roughness: 0.823
+          specular: 0.06
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "shell" {
+        material: 0
+        position [0, 0.04, 0]
+        rotation: "state.transforms.identity"
+        scale [0.55, 0.04, 0.25]
+      }
+
+      shape Box "well" {
+        blend: "Subtraction"
+        material: 0
+        position [0, 0.06, 0]
+        rotation: "state.transforms.identity"
+        scale [0.52, 0.04, 0.22]
+      }
+    }
+  }
+}
+
+state {
+  lattices [
+    hex(cellSize: 0.2, name: "hexLinesBoard", origin: [0, 1.3, 0], radius: 4)
+  ]
+
+  world {
+    row {
+      cells [
+        {
+          key: "0"
+          value: 0
+        }
+        {
+          key: "1"
+          value: 0
+        }
+        {
+          key: "2"
+          value: 0
+        }
+        {
+          key: "3"
+          value: 0
+        }
+        {
+          key: "4"
+          value: 0
+        }
+        {
+          key: "5"
+          value: 0
+        }
+        {
+          key: "6"
+          value: 0
+        }
+        {
+          key: "7"
+          value: 0
+        }
+        {
+          key: "8"
+          value: 0
+        }
+        {
+          key: "9"
+          value: 0
+        }
+        {
+          key: "10"
+          value: 0
+        }
+        {
+          key: "11"
+          value: 0
+        }
+        {
+          key: "12"
+          value: 0
+        }
+        {
+          key: "13"
+          value: 0
+        }
+        {
+          key: "14"
+          value: 0
+        }
+        {
+          key: "15"
+          value: 0
+        }
+        {
+          key: "16"
+          value: 0
+        }
+        {
+          key: "17"
+          value: 0
+        }
+        {
+          key: "18"
+          value: 0
+        }
+        {
+          key: "19"
+          value: 0
+        }
+        {
+          key: "20"
+          value: 0
+        }
+        {
+          key: "21"
+          value: 0
+        }
+        {
+          key: "22"
+          value: 0
+        }
+        {
+          key: "23"
+          value: 0
+        }
+        {
+          key: "24"
+          value: 0
+        }
+        {
+          key: "25"
+          value: 0
+        }
+        {
+          key: "26"
+          value: 0
+        }
+        {
+          key: "27"
+          value: 0
+        }
+        {
+          key: "28"
+          value: 0
+        }
+        {
+          key: "29"
+          value: 0
+        }
+        {
+          key: "30"
+          value: 0
+        }
+        {
+          key: "31"
+          value: 0
+        }
+        {
+          key: "32"
+          value: 0
+        }
+        {
+          key: "33"
+          value: 0
+        }
+        {
+          key: "34"
+          value: 0
+        }
+        {
+          key: "35"
+          value: 0
+        }
+        {
+          key: "36"
+          value: 0
+        }
+        {
+          key: "37"
+          value: 0
+        }
+        {
+          key: "38"
+          value: 0
+        }
+        {
+          key: "39"
+          value: 0
+        }
+        {
+          key: "40"
+          value: 0
+        }
+        {
+          key: "41"
+          value: 0
+        }
+        {
+          key: "42"
+          value: 0
+        }
+        {
+          key: "43"
+          value: 0
+        }
+        {
+          key: "44"
+          value: 0
+        }
+        {
+          key: "45"
+          value: 0
+        }
+        {
+          key: "46"
+          value: 0
+        }
+        {
+          key: "47"
+          value: 0
+        }
+        {
+          key: "48"
+          value: 0
+        }
+        {
+          key: "49"
+          value: 0
+        }
+        {
+          key: "50"
+          value: 0
+        }
+        {
+          key: "51"
+          value: 0
+        }
+        {
+          key: "52"
+          value: 0
+        }
+        {
+          key: "53"
+          value: 0
+        }
+        {
+          key: "54"
+          value: 0
+        }
+        {
+          key: "55"
+          value: 0
+        }
+        {
+          key: "56"
+          value: 0
+        }
+        {
+          key: "57"
+          value: 0
+        }
+        {
+          key: "58"
+          value: 0
+        }
+        {
+          key: "59"
+          value: 0
+        }
+        {
+          key: "60"
+          value: 0
+        }
+      ]
+      domain: cellsOf(topology: "hexLinesBoard")
+      kind: "Int"
+      max: 1
+      min: -1
+      name: "hexBoard"
+    }
+
+    slot hexTurn: Int = 1 bounds(minimum: 0, maximum: 1)
+
+    slot hexVerdict: Int = 1 bounds(minimum: 0, maximum: 1)
+
+    table hexMove: Int capacity(5) bounds(minimum: -1, maximum: 60) {
+      captured = 0
+      from = -1
+      kind = 0
+      mover = 0
+      to = -1
+    }
+
+    table hexStoneCell: Int capacity(30) bounds(minimum: -1, maximum: 60) {
+      "hexStoneLight-0" = -1
+      "hexStoneLight-1" = -1
+      "hexStoneLight-2" = -1
+      "hexStoneLight-3" = -1
+      "hexStoneLight-4" = -1
+      "hexStoneLight-5" = -1
+      "hexStoneLight-6" = -1
+      "hexStoneLight-7" = -1
+      "hexStoneLight-8" = -1
+      "hexStoneLight-9" = -1
+      "hexStoneLight-10" = -1
+      "hexStoneLight-11" = -1
+      "hexStoneLight-12" = -1
+      "hexStoneLight-13" = -1
+      "hexStoneLight-14" = -1
+      "hexStoneDark-0" = -1
+      "hexStoneDark-1" = -1
+      "hexStoneDark-2" = -1
+      "hexStoneDark-3" = -1
+      "hexStoneDark-4" = -1
+      "hexStoneDark-5" = -1
+      "hexStoneDark-6" = -1
+      "hexStoneDark-7" = -1
+      "hexStoneDark-8" = -1
+      "hexStoneDark-9" = -1
+      "hexStoneDark-10" = -1
+      "hexStoneDark-11" = -1
+      "hexStoneDark-12" = -1
+      "hexStoneDark-13" = -1
+      "hexStoneDark-14" = -1
+    }
+
+    table hexStoneCode: Int capacity(30) bounds(minimum: -1, maximum: 1) {
+      "hexStoneLight-0" = 1
+      "hexStoneLight-1" = 1
+      "hexStoneLight-2" = 1
+      "hexStoneLight-3" = 1
+      "hexStoneLight-4" = 1
+      "hexStoneLight-5" = 1
+      "hexStoneLight-6" = 1
+      "hexStoneLight-7" = 1
+      "hexStoneLight-8" = 1
+      "hexStoneLight-9" = 1
+      "hexStoneLight-10" = 1
+      "hexStoneLight-11" = 1
+      "hexStoneLight-12" = 1
+      "hexStoneLight-13" = 1
+      "hexStoneLight-14" = 1
+      "hexStoneDark-0" = -1
+      "hexStoneDark-1" = -1
+      "hexStoneDark-2" = -1
+      "hexStoneDark-3" = -1
+      "hexStoneDark-4" = -1
+      "hexStoneDark-5" = -1
+      "hexStoneDark-6" = -1
+      "hexStoneDark-7" = -1
+      "hexStoneDark-8" = -1
+      "hexStoneDark-9" = -1
+      "hexStoneDark-10" = -1
+      "hexStoneDark-11" = -1
+      "hexStoneDark-12" = -1
+      "hexStoneDark-13" = -1
+      "hexStoneDark-14" = -1
+    }
+
+    table hexTileColors: Text {
+      a = "#D9B98A"
+      b = "#B98A5C"
+      c = "#8C5E3C"
+    }
+
+    table hexStoneColors: Text {
+      light = "#F2EFE6"
+      dark = "#2B2B30"
+    }
+
+    table hexTableColors: Text {
+      wood = "#6F4E37"
+      tray = "#4A3728"
+    }
+  }
+}

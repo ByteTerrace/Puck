@@ -62,11 +62,13 @@ public sealed class WorldRigidDynamicsLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            GravityRaw = source.Gravity with {
+                Uniform = new DocumentVector3(value: new Vector3(
             x: 0f,
             y: -9.8f,
             z: 0f
-        )) },
+        )),
+            },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Box(
@@ -149,11 +151,13 @@ public sealed class WorldRigidDynamicsLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            GravityRaw = source.Gravity with {
+                Uniform = new DocumentVector3(value: new Vector3(
             x: 0f,
             y: -9.8f,
             z: 0f
-        )) },
+        )),
+            },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Sphere(Radius: 0.4f),
@@ -258,11 +262,13 @@ public sealed class WorldRigidDynamicsLawTests {
         const float Drop = 5f;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
-            Placement: (floor with { Position = (floor.Position - new Vector3(
+            Placement: (floor with {
+                Position = (floor.Position - new Vector3(
                 x: 0f,
                 y: Drop,
                 z: 0f
-            )) }),
+            )),
+            }),
             Principal: WorldPrincipal.Console
         ));
         fixture.Step();
@@ -617,7 +623,7 @@ public sealed class WorldRigidDynamicsLawTests {
             condition: (ball.RigidAngularVelocity.LengthSquared > FixedQ4816.Zero),
             userMessage: "the ball never picked up any spin — the residue this test exercises would be vacuous"
         );
-        var expected = WorldRuntimeStateHash.HashAuthoritative(
+        var expected = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0UL
         );
@@ -629,7 +635,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         Assert.Equal(
             expected: expected,
-            actual: WorldRuntimeStateHash.HashAuthoritative(
+            actual: WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0UL
             )

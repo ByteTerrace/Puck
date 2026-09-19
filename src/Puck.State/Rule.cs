@@ -30,7 +30,7 @@ namespace Puck.State;
 /// <param name="Name">The rule's stable name — unique within the section. A <see cref="CellName"/>, the same
 /// validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set,
 /// refused by name at the JSON converter. The reserved <c>$</c> prefix is refused on top of that, by
-/// <see cref="RuleCompiler.CompileAll"/> — exactly as it is for a state row name, and for the same reason: <c>$</c>
+/// <c>RuleCompiler.CompileAll</c> — exactly as it is for a state row name, and for the same reason: <c>$</c>
 /// marks what the engine mints, and nothing mints a rule.</param>
 /// <param name="Effects">The effects applied in order when the rule fires.</param>
 /// <param name="Gate">The predicate that must hold, or <see langword="null"/> for always.</param>
@@ -44,12 +44,12 @@ namespace Puck.State;
 /// carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the <c>each</c>
 /// participant reference; a non-integer key binds <c>$each</c> alone. The latch is kept per key, by the key's value
 /// when it is an integer and by its position in the row otherwise.</param>
-/// <param name="Bindings">The values bound once per evaluation, in declared order, read as <c>$bind:&lt;name&gt;</c>.</param>
+/// <param name="Locals">The values computed once per evaluation, in declared order, read as <c>$local:&lt;name&gt;</c>.</param>
 /// <param name="Zones">The rule's zone table, or <see langword="null"/>: ordered zones over one token domain, in
 /// index order, an empty entry holding an index no zone answers. Every row position in the rule — a
 /// <c>compareState</c>'s <c>state</c>, a <c>$reduce:</c>/<c>$match:</c> row, a <c>$zone:</c> endpoint's zone, a
 /// transfer's <c>from</c>/<c>to</c>, an expression's row — may spell <c>$zones[&lt;index&gt;]</c> to select an entry
-/// live, the index being an infix cell key (<c>game[from]</c>, <c>$each</c>, <c>$bind:&lt;name&gt;</c>, or any
+/// live, the index being an infix cell key (<c>game[from]</c>, <c>$each</c>, <c>$local:&lt;name&gt;</c>, or any
 /// expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects
 /// an entry — an index outside the table, or at an empty entry, reads the gate closed, so a table's gaps are the
 /// rule's own statement of which piles it is for. <c>forEach: "$zones"</c> iterates the table's own non-empty
@@ -61,18 +61,18 @@ public record Rule(
     [property: JsonPropertyOrder(2)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonPropertyOrder(3)] ActionTriggerMode Mode = ActionTriggerMode.Level,
     [property: JsonPropertyOrder(4)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null,
-    [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleBinding>? Bindings = null,
+    [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleLocal>? Locals = null,
     [property: JsonPropertyOrder(7)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null
 );
-/// <summary>A value bound once per evaluation of the rule that declares it, after the forEach key and before the
-/// gate, in declared order — a later binding, the gate, and every effect read it as
-/// <c>$bind:&lt;name&gt;</c>; an earlier binding cannot. The value is never stored: it lives on the evaluation and is
+/// <summary>A value computed once per evaluation of the rule that declares it, after the forEach key and before the
+/// gate, in declared order — a later local, the gate, and every effect read it as
+/// <c>$local:&lt;name&gt;</c>; an earlier local cannot. The value is never stored: it lives on the evaluation and is
 /// recomputed at the next one.</summary>
-/// <param name="Name">The binding's name — the token after <see cref="RuleFacts.BindPrefix"/>.</param>
+/// <param name="Name">The local's name — the token after <see cref="RuleFacts.LocalPrefix"/>.</param>
 /// <param name="Kind">The value's cell kind, <see cref="CellKind.Int"/> or <see cref="CellKind.Fixed"/>.</param>
 /// <param name="Expression">The postfix expression, evaluated in that kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record RuleBinding(CellName Name, CellKind Kind, ValueExpression Expression);
+public sealed record RuleLocal(CellName Name, CellKind Kind, ExpressionProgram Expression);
 /// <summary>A name bound during one evaluation of a rule — the participant index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a participant-reference token <c>each</c>/<c>left</c>/<c>right</c>
 /// reads, or the cell key a <c>$token</c> reads.</summary>
@@ -184,21 +184,25 @@ public enum MatchFacet : byte {
 }
 /// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
 public static class RuleCapacity {
-    /// <summary>The most bound values one rule may declare — the width of the per-evaluation scratch every evaluator
+    /// <summary>The most local values one rule may declare — the width of the per-evaluation scratch every evaluator
     /// carries for them.</summary>
-    public const int MaxBindingsPerRule = 16;
+    public const int MaxLocalsPerRule = 16;
     /// <summary>The most top-level effects one rule may carry.</summary>
     public const int MaxEffectsPerRule = 64;
     /// <summary>The most postfix tokens in one numeric expression.</summary>
     public const int MaxExpressionTokens = 64;
+    /// <summary>The most shared subprograms one expression program may carry. The call graph is acyclic, so this
+    /// also bounds how deep a call chain nests at evaluation.</summary>
+    public const int MaxSubprograms = 16;
     /// <summary>The most postfix tokens in one Boolean gate.</summary>
     public const int MaxPredicateTokens = 256;
     /// <summary>The most effects in one atomic transaction branch.</summary>
     public const int MaxTransactionEffects = 64;
     /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
     /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
-    /// rule sweep is one of several passes a tick pays for; reserving roughly a tenth of the tick (~3.3 ms) as its
+    /// rule sweep is one of several passes a tick pays for; reserving roughly a fifth of the tick (~6.7 ms) as its
     /// worst-case share and pricing one work unit at ~1.7 ns — a plausible cost for the fixed-point compare, read,
-    /// or write every rule/effect cost is built from — yields this ceiling.</summary>
-    public const long MaxWorkUnitsPerTick = 2_000_000L;
+    /// or write every rule/effect cost is built from — yields this ceiling. It bounds what an author may express
+    /// and never what a shipped world already does: the highest shipped sheet sits comfortably under it.</summary>
+    public const long MaxWorkUnitsPerTick = 4_000_000L;
 }

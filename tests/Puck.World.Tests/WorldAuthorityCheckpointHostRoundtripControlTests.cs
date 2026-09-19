@@ -105,7 +105,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         // TRIMMED copy of the template document that drops State, so a rule gated on a custom state row refuses at
         // load for the identity catalog even though the live server accepts it fine — $population needs no row at
         // all and can never exceed the signed integer carrier's maximum, so this gate is provably always false.
-        var definition = Fixtures.BuildDocument() with {
+        var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             Rules = [
                 new WorldRule(
                 Name: ruleName,
@@ -130,14 +130,22 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             hostRow: EmptyHostRow(),
             reason: out _
         ));
+        var held = new WorldRuleLatchEntry(
+            Held: true,
+            Key: string.Empty,
+            Left: -1,
+            Right: -1,
+            Rule: ruleName.Value
+        );
+
         Assert.DoesNotContain(
-            expected: (ruleName.Value, true),
+            expected: held,
             collection: checkpoint!.Server.RuleGateHeld
         );
 
         var corrupted = checkpoint with {
             Server = checkpoint.Server with {
-                RuleGateHeld = [.. checkpoint.Server.RuleGateHeld, (ruleName.Value, true)],
+                RuleGateHeld = [.. checkpoint.Server.RuleGateHeld, held],
             },
         };
 
@@ -211,8 +219,8 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     // check, only covers slot &lt; LocalSeatCount).
     [Fact]
     public void Control_UnparkedRemoteHumanPeerEntry_ReadsRed() {
-        var document = Fixtures.BuildDocument() with {
-            PopulationRaw = Fixtures.BuildDocument().Population with {
+        var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
+            PopulationRaw = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz).Population with {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
                 NetworkPlayers = 1,
             },
@@ -275,8 +283,8 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     // preservation, not motion.)
     [Fact]
     public void ReconnectingPeer_ResumesTheSameBody_ControlAFreshAdmissionMintsADuplicate() {
-        var document = Fixtures.BuildDocument() with {
-            PopulationRaw = Fixtures.BuildDocument().Population with {
+        var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
+            PopulationRaw = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz).Population with {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
@@ -450,7 +458,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         for (var tick = 0; (tick < 200); tick++) {
             restoredHost.DrainPendingTransfers();
-            restoredHost.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+            restoredHost.StepInstances(masterDeltaTicks: Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz));
         }
 
         Assert.False(condition: restoredA.Server.Population.IsActive(index: 0));

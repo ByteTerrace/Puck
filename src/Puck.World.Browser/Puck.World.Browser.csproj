@@ -60,6 +60,7 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="..\Puck.State.Rules\Puck.State.Rules.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
     <ItemGroup>

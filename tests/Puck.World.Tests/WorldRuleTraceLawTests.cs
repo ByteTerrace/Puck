@@ -3,6 +3,8 @@ using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
+using RuleEvaluator = Puck.State.Rules.RuleEvaluator;
+
 namespace Puck.World.Tests;
 
 /// <summary>An armed rule trace captures each evaluation's bindings, every gate conjunct with the values it
@@ -35,7 +37,7 @@ public sealed class WorldRuleTraceLawTests {
             [
                 new ActionEffect.AddState(
                     State: "hp",
-                    Expression: Expr(text: "-$bind:dealt")
+                    Expression: Expr(text: "-$local:dealt")
                 ),
                 new ActionEffect.AddState(
                     State: "hits",
@@ -47,21 +49,21 @@ public sealed class WorldRuleTraceLawTests {
                 Comparison: ActionStateComparison.GreaterOrEqual,
                 Value: 0m
             ),
-            Bindings: [new RuleBinding(
+            Locals: [new RuleLocal(
                     CellName.Parse(candidate: "dealt"),
                     CellKind.Int,
                     Expr(text: "minimum(damage, hp)")
                 )]
         )],
     };
-    private static ValueExpression Expr(string text) => ValueExpression.Parse(text: text);
+    private static ExpressionProgram Expr(string text) => ExpressionProgram.Parse(text: text);
     private static WorldStateRow Slot(string name, long value) =>
         new(
             CellName.Parse(candidate: name),
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    value
+                    CellValue.Int(value: value)
                 )]
         );
     private static long Value(WorldFixture fixture, string row) =>
@@ -71,7 +73,7 @@ public sealed class WorldRuleTraceLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [Fact]
     public void ACaptureRecordsBindingsConjunctsAndEffectOutcomesAndStopsAtItsCount() {
@@ -101,7 +103,7 @@ public sealed class WorldRuleTraceLawTests {
             lines[0]
         );
         Assert.Contains(
-            "bind [dealt=20]",
+            "local [dealt=20]",
             lines[1],
             StringComparison.Ordinal
         );
@@ -121,7 +123,7 @@ public sealed class WorldRuleTraceLawTests {
             StringComparison.Ordinal
         );
         Assert.Contains(
-            "bind [dealt=0]",
+            "local [dealt=0]",
             lines[2],
             StringComparison.Ordinal
         );
@@ -195,7 +197,7 @@ public sealed class WorldRuleTraceLawTests {
                 value: 0L
             )]),
             Rules = [Document().Rules![0] with {
-                Bindings = [new RuleBinding(
+                Locals = [new RuleLocal(
                     CellName.Parse(candidate: "dealt"),
                     CellKind.Int,
                     Expr(text: "damage / zero")
@@ -211,7 +213,7 @@ public sealed class WorldRuleTraceLawTests {
         ));
         refused.Step();
         Assert.Contains(
-            "bind [dealt=refused] gate=closed",
+            "local [dealt=refused] gate=closed",
             refused.Server.DescribeRuleTrace(),
             StringComparison.Ordinal
         );
@@ -318,12 +320,12 @@ public sealed class WorldRuleTraceLawTests {
             control.Step();
         }
         Assert.Equal(
-            WorldRuntimeStateHash.Hash(
+            WorldStateHashComposition.Hash(
                 scope: WorldStateHashScope.Authoritative,
                 server: control.Server,
                 tick: control.Server.CompletedEngineTicks
             ),
-            WorldRuntimeStateHash.Hash(
+            WorldStateHashComposition.Hash(
                 scope: WorldStateHashScope.Authoritative,
                 server: traced.Server,
                 tick: traced.Server.CompletedEngineTicks

@@ -155,7 +155,7 @@ public sealed class StrictParseLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0,
+                        Value: CellValue.Fixed(rawBits: 0),
                         Clock: new StateCellClock(
                             EpochTick: 42,
                             V0: v0,

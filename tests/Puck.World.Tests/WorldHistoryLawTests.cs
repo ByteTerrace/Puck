@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldHistoryLawTests {
     private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 transform,
                 WorldPrincipal.World,
@@ -25,7 +25,7 @@ public sealed class WorldHistoryLawTests {
     }
     private static StateCell Cell(string key, long value = 1) => new(
         Name(value: key),
-        value
+        CellValue.Int(value: value)
     );
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, PatternRow[]? patterns = null) => Fixtures.BuildDocument() with {
         StateRaw = new(
@@ -55,7 +55,7 @@ public sealed class WorldHistoryLawTests {
         CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                value
+                CellValue.Int(value: value)
             )]
     );
     private static long Value(WorldFixture fixture, string row) =>
@@ -65,7 +65,7 @@ public sealed class WorldHistoryLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.AsInt;
 
     [Fact]
     public void APatternReadsTheRingOldestFirstAndTheEffectPushesLikeAWrite() {
@@ -182,8 +182,8 @@ public sealed class WorldHistoryLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.PushState(
                             State: "taps",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "source"), new ValueToken.Constant(Value: 3m), new ValueToken.Multiply(),
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "source"), Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.Multiply),
             ])
                         )]
                 ),
@@ -214,21 +214,21 @@ public sealed class WorldHistoryLawTests {
             StateRows.FindCell(
                 cells: after.Cells,
                 key: Name(value: "0")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             2L,
             StateRows.FindCell(
                 cells: after.Cells,
                 key: Name(value: "1")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             6L,
             StateRows.FindCell(
                 cells: after.Cells,
                 key: Name(value: "2")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             6L,
@@ -293,21 +293,21 @@ public sealed class WorldHistoryLawTests {
             StateRows.FindCell(
                 cells: row.Cells,
                 key: Name(value: "0")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             20L,
             StateRows.FindCell(
                 cells: row.Cells,
                 key: Name(value: "1")
-            )!.Value
+            )!.Value.AsInt
         );
         Assert.Equal(
             30L,
             StateRows.FindCell(
                 cells: row.Cells,
                 key: Name(value: "2")
-            )!.Value
+            )!.Value.AsInt
         );
 
         using var fixture = Fixtures.FreshServer(definition: pushed);
@@ -526,7 +526,7 @@ public sealed class WorldHistoryLawTests {
             actualString: traitReason,
             expectedSubstring: "no other storage"
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             Document(
                 [Slot("plain")],
                 []

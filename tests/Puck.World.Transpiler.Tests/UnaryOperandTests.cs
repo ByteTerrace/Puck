@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Formatting;
-using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 using Xunit;
@@ -12,7 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 // A sign in front of something that is not a number. Before this, only a NUMERIC LITERAL could carry one, so a
 // mirrored pair had to be written as two constants (`leftX`/`rightX`) instead of one `spread` and its negation.
 public class UnaryOperandTests {
-    private static JsonObject LowerSource(string source) => WorldDocumentEmitter.Lower(PuckParser.ParseDocument(source));
+    private static JsonObject LowerSource(string source) => WorldCompiler.Compile(source: source).RequireJson();
     private static JsonArray LoweredOrigin(string source) {
         var placements = Assert.IsType<JsonArray>(@object: LowerSource(source: source)["screens"]);
 
@@ -36,7 +34,7 @@ public class UnaryOperandTests {
     }
     [Fact]
     public void TestFormatterKeepsTheSignAttachedToItsOperand() {
-        var formatted = PuckFormatter.Format("""
+        var formatted = PuckFormat.Format("""
             schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [

@@ -1,0 +1,326 @@
+// Snake — the arcade rule set Gremlin's Blockade (1976) fixed and Nokia's 1997 handheld
+// made universal: https://en.wikipedia.org/wiki/Snake_(video_game_genre)
+//
+// A single snake crawls one cell per beat on an 8x8 wrapping field. The player may turn
+// left, right, up or down but may never reverse straight back into the neck; eating the
+// food grows the snake by one segment and places a new food; running into the snake's own
+// body ends the run, and a countdown restarts it.
+//
+// This is a module: a host supplies the seat, the channels the four turn presses arrive on,
+// and the population. tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json is the
+// smallest one that completes it.
+//
+// Deliberate reductions, stated rather than left to be discovered: the field wraps instead
+// of carrying walls (the 'Snake' half of the genre rather than the 'Blockade' half), the
+// snake is capped at six segments so the vacated-tail cell is addressable by a bounded
+// chain of history ages, and the cell the tail is about to vacate counts as solid.
+
+// --- The four turn doors -------------------------------------------------------------
+// A press on the seat's own movement channels and an ordered console submission reach the
+// same request pair (snakeTurnRequest, snakeTurnSerial); the four rules below judge it.
+
+rule "snake-press-east" {
+  when $channel:1:strafe >= 0.5
+  mode: "Edge"
+  snakeTurnRequest = 0
+  snakeTurnSerial += 1
+}
+
+rule "snake-press-west" {
+  when $channel:1:strafe <= -0.5
+  mode: "Edge"
+  snakeTurnRequest = 2
+  snakeTurnSerial += 1
+}
+
+rule "snake-press-north" {
+  when $channel:1:forward >= 0.5
+  mode: "Edge"
+  snakeTurnRequest = 3
+  snakeTurnSerial += 1
+}
+
+rule "snake-press-south" {
+  when $channel:1:forward <= -0.5
+  mode: "Edge"
+  snakeTurnRequest = 1
+  snakeTurnSerial += 1
+}
+
+// A turn is refused by the game's own rule when it reverses straight into the neck. The
+// accepted heading is pushed onto the heading ring, so $history:snakeHeadingLog:<age>
+// answers the last four headings the snake actually took, age 0 being the newest.
+
+rule "snake-turn-east" {
+  when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 0
+  mode: "Level"
+  snakeTurnApplied = snakeTurnSerial
+  if snakeHeading != 2 {
+    snakeHeading = 0
+    transform push(row: "snakeHeadingLog", value: 0)
+  } else {
+    snakeIllegalTurns += 1
+  }
+}
+
+rule "snake-turn-south" {
+  when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 1
+  mode: "Level"
+  snakeTurnApplied = snakeTurnSerial
+  if snakeHeading != 3 {
+    snakeHeading = 1
+    transform push(row: "snakeHeadingLog", value: 1)
+  } else {
+    snakeIllegalTurns += 1
+  }
+}
+
+rule "snake-turn-west" {
+  when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 2
+  mode: "Level"
+  snakeTurnApplied = snakeTurnSerial
+  if snakeHeading != 0 {
+    snakeHeading = 2
+    transform push(row: "snakeHeadingLog", value: 2)
+  } else {
+    snakeIllegalTurns += 1
+  }
+}
+
+rule "snake-turn-north" {
+  when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 3
+  mode: "Level"
+  snakeTurnApplied = snakeTurnSerial
+  if snakeHeading != 1 {
+    snakeHeading = 3
+    transform push(row: "snakeHeadingLog", value: 3)
+  } else {
+    snakeIllegalTurns += 1
+  }
+}
+
+// --- The beat ------------------------------------------------------------------------
+// snakeTempo carries two tick-indexed rotations over the same thirty-step lattice cycle:
+// 'slow' turns one step a tick and reads zero once every thirty ticks, 'fast' turns two
+// and reads zero once every fifteen. snakePace accumulates one a second from the last
+// spawn, so the beat halves its period once the run has been going long enough. Only a
+// spawn or a death rebases it.
+
+rule "snake-step" {
+  when snakeAlive == 1 and ((snakePace >= 8 and snakeTempo[fast] == 0) or (snakePace < 8 and snakeTempo[slow] == 0))
+  local col: Int = snakeHead % 8
+  local rw: Int = snakeHead / 8
+  mode: "Edge"
+  snakeNextCell = (snakeHeading == 0) ? ($local:rw * 8 + ($local:col + 1) % 8) : ((snakeHeading == 1) ? ((($local:rw + 1) % 8) * 8 + $local:col) : ((snakeHeading == 2) ? ($local:rw * 8 + ($local:col + 7) % 8) : ((($local:rw + 7) % 8) * 8 + $local:col)))
+  snakeStepSerial += 1
+}
+
+rule "snake-die" {
+  when snakeStepSerial != snakeStepApplied and snakeBoard[snakeNextCell[$value]] == 1
+  mode: "Level"
+  snakeStepApplied = snakeStepSerial
+  snakeAlive = 0
+  snakeDeaths += 1
+  snakeRespawn = 50400
+  snakePace = 0
+}
+
+rule "snake-eat" {
+  when snakeStepSerial != snakeStepApplied and snakeBoard[snakeNextCell[$value]] == 2
+  mode: "Level"
+  snakeStepApplied = snakeStepSerial
+  snakeBoard[snakeNextCell[$value]] = 1
+  push snakeTrail = snakeNextCell
+  snakeHead = snakeNextCell
+  if snakeLength < 6 {
+    snakeLength += 1
+  }
+  snakeScore += 10
+  setState(fromState: "snakeLength", key: "$cell:snakeNextCell:$value", state: "snakeMeals")
+  snakeFoodPlaced = 0
+  generate(row: "snakeFoodDraw")
+  snakeFoodCell = snakeFoodDraw
+}
+
+// An ordinary step: the head takes the new cell and the tail leaves the one it stood on.
+// Bindings are read before the gate, so these four ages are the trail as it stood BEFORE
+// this step's own push: the departing tail is age snakeLength - 1.
+rule "snake-move" {
+  when snakeStepSerial != snakeStepApplied and snakeBoard[snakeNextCell[$value]] == 0
+  local tail2: Int = $history:snakeTrail:2
+  local tail3: Int = $history:snakeTrail:3
+  local tail4: Int = $history:snakeTrail:4
+  local tail5: Int = $history:snakeTrail:5
+  mode: "Level"
+  snakeStepApplied = snakeStepSerial
+  snakeBoard[snakeNextCell[$value]] = 1
+  push snakeTrail = snakeNextCell
+  snakeHead = snakeNextCell
+  if snakeLength == 3 {
+    setState(key: "$local:tail2", state: "snakeBoard", value: 0)
+  } else if snakeLength == 4 {
+    setState(key: "$local:tail3", state: "snakeBoard", value: 0)
+  } else if snakeLength == 5 {
+    setState(key: "$local:tail4", state: "snakeBoard", value: 0)
+  } else {
+    setState(key: "$local:tail5", state: "snakeBoard", value: 0)
+  }
+}
+
+// --- Death, the countdown, and the next run -------------------------------------------
+
+rule "snake-countdown" {
+  when snakeAlive == 0 and snakeRespawn > 0
+  mode: "Level"
+  countdown snakeRespawn
+}
+
+rule "snake-spawn" {
+  when snakeAlive == 0 and snakeRespawn == 0
+  mode: "Edge"
+  transform boardCombine(operation: "Clear", row: "snakeBoard")
+  push snakeTrail = 25
+  push snakeTrail = 26
+  push snakeTrail = 27
+  setState(key: "25", state: "snakeBoard", value: 1)
+  setState(key: "26", state: "snakeBoard", value: 1)
+  setState(key: "27", state: "snakeBoard", value: 1)
+  snakeHead = 27
+  snakeHeading = 0
+  snakeLength = 3
+  snakeScore = 0
+  snakePace = 0
+  snakeAlive = 1
+  transform push(row: "snakeHeadingLog", value: 0)
+  snakeTurnApplied = snakeTurnSerial
+  snakeTurnRequest = 0
+  snakeFoodPlaced = 0
+  generate(row: "snakeFoodDraw")
+  snakeFoodCell = snakeFoodDraw
+}
+
+// The draw is a plain uniform cell of the field; a cell the snake already occupies is
+// redrawn rather than dropped on top of it.
+
+rule "snake-food-reroll" {
+  when snakeFoodPlaced == 0 and snakeBoard[snakeFoodCell[$value]] != 0
+  mode: "Level"
+  generate(row: "snakeFoodDraw")
+  snakeFoodCell = snakeFoodDraw
+}
+
+rule "snake-food-place" {
+  when snakeFoodPlaced == 0 and snakeBoard[snakeFoodCell[$value]] == 0
+  mode: "Level"
+  snakeBoard[snakeFoodCell[$value]] = 2
+  snakeFoodPlaced = 1
+}
+
+state {
+  world {
+    grid snakeBoard: Int dimensions(width: 8, depth: 8) wrap(Both) cellSize(1) origin(0, 0, 0)
+
+    row {
+      domain: ring(capacity: 16, empty: -1)
+      kind: "Int"
+      name: "snakeTrail"
+    }
+
+    row {
+      domain: ring(capacity: 4, empty: -1)
+      kind: "Int"
+      name: "snakeHeadingLog"
+    }
+
+    table snakeMeals: Int capacity(2) evicts
+
+    row {
+      cells [
+        {
+          cycle {
+            power: 1
+            output: "Step"
+            ticksPerStep: 1
+          }
+          key: "slow"
+          value: 0
+        }
+        {
+          cycle {
+            power: 2
+            output: "Step"
+            ticksPerStep: 1
+          }
+          key: "fast"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "snakeTempo"
+    }
+
+    row {
+      advance {
+        perSecondNumerator: 1
+        perSecondDenominator: 1
+      }
+      kind: "Int"
+      max: 60
+      min: 0
+      name: "snakePace"
+      value: 0
+    }
+
+    row {
+      draw {
+        generator {
+          source: "UniformRange"
+          rangeMin: 0
+          rangeMax: 63
+        }
+        timing: "Event"
+      }
+      kind: "Int"
+      max: 63
+      min: 0
+      name: "snakeFoodDraw"
+      value: 21
+    }
+
+    slot snakeAlive: Int = 0 bounds(minimum: 0, maximum: 1)
+
+    slot snakeHead: Int = 27 bounds(minimum: 0, maximum: 63)
+
+    slot snakeHeading: Int = 0 bounds(minimum: 0, maximum: 3)
+
+    slot snakeNextCell: Int = 27 bounds(minimum: 0, maximum: 63)
+
+    slot snakeLength: Int = 0 bounds(minimum: 0, maximum: 6)
+
+    slot snakeScore: Int = 0 bounds(minimum: 0, maximum: 9999)
+
+    slot snakeDeaths: Int = 0 bounds(minimum: 0, maximum: 9999)
+
+    slot snakeRespawn: Int = 0 bounds(minimum: 0, maximum: 504000)
+
+    slot snakeFoodCell: Int = 21 bounds(minimum: 0, maximum: 63)
+
+    slot snakeFoodPlaced: Int = 1 bounds(minimum: 0, maximum: 1)
+
+    slot snakeTurnRequest: Int = 0 bounds(minimum: 0, maximum: 3)
+
+    slot snakeTurnSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+
+    slot snakeTurnApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+
+    slot snakeIllegalTurns: Int = 0 bounds(minimum: 0, maximum: 9999)
+
+    slot snakeStepSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+
+    slot snakeStepApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+  }
+}
+
+export action snakeTurnRequest, snakeTurnSerial
+export binding snakeAlive, snakeLength, snakeScore
+export read snakeAlive, snakeBoard, snakeDeaths, snakeFoodCell, snakeHead, snakeHeading, snakeHeadingLog, snakeIllegalTurns, snakeLength, snakeMeals, snakePace, snakeRespawn, snakeScore, snakeTrail

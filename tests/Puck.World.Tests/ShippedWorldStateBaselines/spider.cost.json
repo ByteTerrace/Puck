@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/spider.world.json",
+  "simulationRateHz": 30,
+  "ticks": 810,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 22,
+      "interactionRows": 0,
+      "evaluationSlots": 31,
+      "workUnitsPerTick": 127094,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 22,
+      "interactionRows": 0,
+      "evaluationSlots": 31,
+      "workUnitsPerTick": 127094,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

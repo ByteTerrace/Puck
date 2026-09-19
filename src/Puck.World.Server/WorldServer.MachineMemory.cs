@@ -25,9 +25,9 @@ public sealed partial class WorldServer {
     private readonly Dictionary<(int Screen, int Address), long> m_machineMemoryReadObserved = [];
     private readonly Dictionary<(int Screen, int Address), long> m_machineMemoryWriteObserved = [];
 
-    private void SyncMachineMemory(ulong tick) {
+    public void SyncMachineMemory(ulong tick) {
         SyncNamedMachineMemory(tick: tick);
-        var screens = m_definition.Screens;
+        var screens = m_document.Definition.Screens;
 
         for (var index = 0; (index < screens.Count); index++) {
             var screen = screens[index];
@@ -58,7 +58,7 @@ public sealed partial class WorldServer {
     private void SyncMachineMemoryWrite(int screen, WorldScreenMemory binding, ulong tick) {
         if (
             !WorldStateReader.TryRead(
-            definition: m_definition,
+            definition: m_document.Definition,
             rowName: binding.Row,
             key: binding.Key,
             tick: tick,
@@ -165,7 +165,7 @@ public sealed partial class WorldServer {
         }
 
         m_machineMemoryReadObserved[key] = value;
-        m_output.DeliverState(definition: m_definition);
+        m_output.DeliverState(definition: m_document.Definition);
     }
 
     /// <summary>Returns the last value a <c>screens[].memory</c> binding at <paramref name="address"/> observed in

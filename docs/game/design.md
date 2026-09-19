@@ -5,7 +5,7 @@ places and authored rules. It is Puck's first official game and a demanding
 example of the expressive model described in the [worlds manual](../architecture/worlds.md),
 with evidence that the underlying primitives work together. Engine work can
 have its own purpose and entry points, while game-specific requirements belong
-here and in the [game development plan](../plans/game-development.md).
+here and in the [play programme](../plans/play.md).
 
 Use this page when you need the reference game's design decisions. Use the
 [manual](../README.md) for engine concepts and current contracts, and use the
@@ -17,7 +17,7 @@ For the main character's visual implementation, use the
 chunky anime armor direction into proposed art defaults, staged work, and rendered
 acceptance evidence; it does not change the campaign's world model.
 
-For the cooperative group-finder work, use the [groups and matchmaking design](../plans/group-finder.md).
+For the cooperative group-finder work, use the [play programme](../plans/play.md#the-finders-foundation).
 It plans portable membership, recoverable group operations and the complete in-world finder over
 the existing authority, storage and transfer systems. This is requested work, not shipped behavior;
 engine prerequisites precede the cooperative experience, with other activity types sharing its foundation.
@@ -220,4 +220,4 @@ The campaign execution is structured into five sequential engineering tracks wit
 - **Track 4: Playability & feel** — Seat-lifetime view state, dual-stick motion/look, owner feel sitting, touch-triggered win slices, and navigation.
 - **Track 5: Ownership, membership & combat** — Entity-addressable rules, elemental interactions, and charter content proofs.
 
-> **Detailed Work Plan & Gated Ladder**: For the exhaustive engineering breakdown of each track, slice definitions (A–G), creature collective laws, rigid dynamics, tabletop primitives, poker hold'em logic, future wave architecture, the gated ladder, and open technical questions, see the [Campaign Work Plan](../plans/game-development.md).
+> **Detailed work plan and gated ladder**: for the engineering breakdown of each track, creature collective laws, rigid dynamics, tabletop primitives, poker hold'em logic, the waves, the gated ladder, and the open technical questions, see [Play](../plans/play.md).

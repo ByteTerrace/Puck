@@ -12,7 +12,12 @@ const topLevelExportNames = (generated.match(/^export (?:type|interface) (\w+)/g
 
 test('worldDefinition.generated.ts carries a GENERATED header naming the source bundle', () => {
   assert.match(generated, /^\/\/ GENERATED FILE — do not hand-edit\.$/m);
-  assert.match(generated, /Source bundle: schemaVersion=puck\.world\.def\.v1 generator=\S+/);
+  // Read the live schema id from the bundle itself rather than a hand-typed copy of it, so this
+  // law tracks whatever schemaVersion the generator actually stamped the header with.
+  const schemaVersion = bundle['x-puck']?.schemaVersion;
+  assert.ok(typeof schemaVersion === 'string' && schemaVersion.length > 0, 'expected the schema bundle to carry x-puck.schemaVersion');
+  const escapedSchemaVersion = schemaVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(generated, new RegExp(`Source bundle: schemaVersion=${escapedSchemaVersion} generator=\\S+`));
 });
 
 test('worldDefinition.generated.ts exports the top-level WorldDefinition type', () => {
@@ -67,14 +72,24 @@ test('no exported name carries an unexplained numeric disambiguation suffix', ()
   assert.deepEqual(unexpected, [], `unexpected numeric-suffixed export(s): ${unexpected.join(', ')}`);
 });
 
-test('a state row declares kind as the PascalCase union Int | Fixed | Bool | Text', () => {
-  assert.match(generated, /kind: "Int" \| "Fixed" \| "Bool" \| "Text";/);
+test('a state row declares kind as the PascalCase union of its declared enum values', () => {
+  // Read the closed kind set off the bundle's own WorldStateRow.kind enum rather than a
+  // hand-typed copy of it, so this law tracks whatever cases the schema actually declares (it
+  // added Vector alongside Int | Fixed | Bool | Text without this law noticing).
+  const kindEnum = bundle['$defs']?.WorldStateRow?.properties?.kind?.enum;
+  assert.ok(Array.isArray(kindEnum) && kindEnum.length > 0, 'expected WorldStateRow.kind to declare a non-empty enum');
+  const union = kindEnum.map(value => `"${value}"`).join(' \\| ');
+  assert.match(generated, new RegExp(`kind: ${union};`));
 });
 
-test('a state row\'s cells[].key is a plain string and cells[].value is the named ShapeNonNullable union', () => {
-  const cellsBlockMatch = generated.match(/cells\?:\s*\{\s*key: string;\s*value: ShapeNonNullable;/);
-  assert.ok(cellsBlockMatch, 'expected a cells entry shaped { key: string; value: ShapeNonNullable; ... }');
-  assert.match(generated, /^export type ShapeNonNullable = number \| string \| boolean;/m);
+test('a state row\'s cells[].key is a plain string and cells[].value is a named union of number | string | boolean', () => {
+  // Capture whichever name the generator actually gave the cell-value union rather than a
+  // hand-typed copy of it — json-schema-to-typescript's duplicate-naming disambiguation can shift
+  // that name (e.g. ShapeNonNullable -> ShapeNonNullable16) as unrelated $defs collide elsewhere.
+  const cellsBlockMatch = generated.match(/cells\?:\s*\{\s*key: string;\s*value: (\w+);/);
+  assert.ok(cellsBlockMatch, 'expected a cells entry shaped { key: string; value: <Named>; ... }');
+  const valueTypeName = cellsBlockMatch[1];
+  assert.match(generated, new RegExp(`^export type ${valueTypeName} = number \\| string \\| boolean;`, 'm'));
 });
 
 test('the generated file parses as valid TypeScript with no syntax errors (full semantic checking happens in "npm run build"\'s tsc -b)', () => {

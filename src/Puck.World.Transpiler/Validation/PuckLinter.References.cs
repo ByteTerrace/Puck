@@ -12,7 +12,8 @@ namespace Puck.World.Transpiler.Validation;
 // best-effort `$`-prefix typo check and a shape-parent check, each Information severity except shape-parent
 // (Warning). Zero false positives is the bar: a `$`-prefixed name is never checked against a declared-row set. A
 // dotted "row.key" read is checked on its row half like any bracketed read — ExpressionSpelling already split it
-// by the time a token reaches this pass.
+// by the time a token reaches this pass. The state-row family reads a `StateTransform` arm's own row-naming fields
+// too, per arm, since an effect's own node carries only the arm.
 //
 // A document naming a `basis` or `imports` composes its whole graph through PuckDocumentComposer — the same
 // composition the game boot path and `compile --validate` run — so a name only a basis or import supplies resolves
@@ -26,12 +27,35 @@ namespace Puck.World.Transpiler.Validation;
 // the SAME shapes array, a purely local scope no basis or importer could ever change, so it always runs and always
 // reports.
 public static partial class PuckLinter {
+    // The pointer segment a `StateTransform` arm always sits under, which is what makes the arm table below safe to
+    // key on a `$type` alone: no other union's arm is the value of a `transform` key.
+    private const string TransformSegment = "/transform";
+
+    // The state rows each `StateTransform` arm names, keyed by the arm's own discriminator. A field whose value is
+    // a cell key, a slot or cell spelling, a literal, or a row of another vocabulary is absent: resolving one
+    // against the state catalog would report a name that is not a row name.
+    private static readonly Dictionary<string, string[]> TransformRowFields = new(comparer: StringComparer.Ordinal) {
+        ["arrange"] = ["row", "from"],
+        ["boardCombine"] = ["row", "left", "right"],
+        ["clearEnclosed"] = ["row"],
+        ["mean"] = ["from", "where"],
+        ["nearest"] = ["from", "where"],
+        ["observe"] = ["row"],
+        ["push"] = ["row"],
+        ["remember"] = ["into"],
+        ["setRay"] = ["row"],
+        ["shuffle"] = ["row", "draw"],
+        ["sortKeyed"] = ["row"],
+        ["sortZone"] = ["row"],
+        ["transfer"] = ["from", "to", "draw"],
+        ["writeSet"] = ["row", "set"],
+    };
     // Read from RuleFacts' own constants, trimmed of their trailing ':'/'[' separator, so a channel added there is
     // known here without a second edit.
     private static readonly string[] KnownChannelPrefixes = [
         .. new[] {
             RuleFacts.MatchPrefix, RuleFacts.HistoryPrefix, RuleFacts.CellKeyPrefix, RuleFacts.ZoneKeyPrefix,
-            RuleFacts.LiveZonePrefix, RuleFacts.ForEachZones, RuleFacts.ExpressionKeyPrefix, RuleFacts.BindPrefix,
+            RuleFacts.LiveZonePrefix, RuleFacts.ForEachZones, RuleFacts.ExpressionKeyPrefix, RuleFacts.LocalPrefix,
             RuleFacts.TablePrefix, RuleFacts.ReducePrefix, RuleFacts.SymmetryPrefix, RuleFacts.Tick,
         }.Select(selector: static prefix => prefix.TrimEnd(
             ':',
@@ -348,19 +372,18 @@ public static partial class PuckLinter {
             sourceMap: sourceMap
         );
 
-        // ValueExpression-typed fields carry their author's verbatim infix text — every State token inside gets the
-        // same check. "left"/"right" are ValueExpression text ONLY on a compareValue predicate (WorldNameRegistry's
+        // ExpressionProgram-typed fields carry the IR — every state read inside gets the same check.
+        // "left"/"right" are programs ONLY on a compareValue predicate (WorldNameRegistry's
         // one Expression-role entry for that pair) — every other left/right pair in the document model (e.g. an
         // interaction row's property/placement-id pair) is a different name kind entirely and must not be walked
         // as an expression.
-        if (
-            TryGetString(
+        var isArm = TryGetString(
             field: "$type",
             obj: obj,
             value: out var discriminator
-        ) &&
-            (discriminator == "compareValue")
-        ) {
+        );
+
+        if (isArm && (discriminator == "compareValue")) {
             CheckOperandField(
                 catalog: catalog,
                 diagnostics: diagnostics,
@@ -379,6 +402,29 @@ public static partial class PuckLinter {
                 resolveGlobalReferences: resolveGlobalReferences,
                 sourceMap: sourceMap
             );
+        }
+        if (
+            isArm &&
+            pointer.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: TransformSegment
+        ) &&
+            TransformRowFields.TryGetValue(
+            key: discriminator,
+            value: out var armFields
+        )
+        ) {
+            foreach (var field in armFields) {
+                CheckStateField(
+                    catalog: catalog,
+                    diagnostics: diagnostics,
+                    field: field,
+                    obj: obj,
+                    pointer: pointer,
+                    resolveGlobalReferences: resolveGlobalReferences,
+                    sourceMap: sourceMap
+                );
+            }
         }
         CheckOperandField(
             catalog: catalog,
@@ -460,31 +506,56 @@ public static partial class PuckLinter {
         );
     }
     private static void CheckOperandField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
-        if (
-            !TryGetString(
-            field: field,
-            obj: obj,
-            value: out var text
-        ) ||
-            !ExpressionSpelling.TryParse(
-            error: out _,
-            text: text,
-            tokens: out var tokens
-        )
-        ) {
+        if (obj[field] is not JsonObject program) {
+            return;
+        }
+
+        ExpressionProgram parsed;
+
+        try {
+            parsed = ExpressionProgramJsonConverter.FromNode(node: program);
+        } catch (System.Text.Json.JsonException) {
             return;
         }
         var fieldPointer = $"{pointer}/{field}";
 
-        foreach (var token in tokens) {
-            if (token is not ValueToken.State state) {
+        CheckInstructions(
+            catalog: catalog,
+            diagnostics: diagnostics,
+            fieldPointer: fieldPointer,
+            instructions: parsed.Instructions,
+            resolveGlobalReferences: resolveGlobalReferences,
+            sourceMap: sourceMap
+        );
+        // A fold body and a shared function body read rows of their own, so the subprogram table is checked on the
+        // same terms as the top-level instruction list.
+        foreach (var subprogram in parsed.Subprograms) {
+            CheckInstructions(
+                catalog: catalog,
+                diagnostics: diagnostics,
+                fieldPointer: fieldPointer,
+                instructions: subprogram.Instructions,
+                resolveGlobalReferences: resolveGlobalReferences,
+                sourceMap: sourceMap
+            );
+        }
+    }
+    private static void CheckInstructions(IReadOnlyList<Instruction> instructions, string fieldPointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
+        foreach (var token in instructions) {
+            var name = (token.Payload switch {
+                InstructionPayload.State state => state.Name,
+                InstructionPayload.Fold fold => fold.Family,
+                _ => null,
+            });
+
+            if (name is null) {
                 continue;
             }
-            if (IsSkippableName(name: state.Name)) {
+            if (IsSkippableName(name: name)) {
                 // The channel-prefix typo check is purely local (a fixed known-prefix list, never the document's
                 // own catalog), so it runs whether or not this document declares a basis.
                 CheckChannelPrefixTypo(
-                    state.Name,
+                    name,
                     fieldPointer,
                     sourceMap,
                     diagnostics
@@ -493,7 +564,7 @@ public static partial class PuckLinter {
             }
             if (
                 resolveGlobalReferences &&
-                !catalog.State.Contains(item: state.Name)
+                !catalog.State.Contains(item: name)
             ) {
                 Report(
                     sourceMap,
@@ -501,7 +572,7 @@ public static partial class PuckLinter {
                     fieldPointer,
                     PuckDiagnosticCodes.LintUnresolvedState,
                     DiagnosticSeverity.Information,
-                    $"Unresolved state row '{state.Name}'."
+                    $"Unresolved state row '{name}'."
                 );
             }
         }
@@ -584,13 +655,39 @@ public static partial class PuckLinter {
         }
         return true;
     }
-    private static void Report(SourceMap? sourceMap, DiagnosticBag diagnostics, string pointer, string code, DiagnosticSeverity severity, string message) {
-        var span = SourceSpan.None;
+    // The map registers the nodes the emitter lowered, which are rarely the leaf field a finding names, so the
+    // pointer is walked back up to the nearest enclosing node that does carry a span.
+    private static SourceSpan SpanOf(SourceMap? sourceMap, string pointer) {
+        if (sourceMap is null) {
+            return SourceSpan.None;
+        }
 
-        sourceMap?.TryGetSpan(
-            jsonPointer: pointer,
-            span: out span
+        var candidate = pointer;
+
+        while (candidate.Length > 1) {
+            if (sourceMap.TryGetSpan(
+                jsonPointer: candidate,
+                span: out var span
+            )) {
+                return span;
+            }
+
+            var lastSegment = candidate.LastIndexOf(value: '/');
+
+            if (lastSegment <= 0) {
+                break;
+            }
+            candidate = candidate[..lastSegment];
+        }
+
+        return SourceSpan.None;
+    }
+    private static void Report(SourceMap? sourceMap, DiagnosticBag diagnostics, string pointer, string code, DiagnosticSeverity severity, string message) {
+        var span = SpanOf(
+            pointer: pointer,
+            sourceMap: sourceMap
         );
+
         if (severity == DiagnosticSeverity.Warning) {
             diagnostics.ReportWarning(
                 code: code,

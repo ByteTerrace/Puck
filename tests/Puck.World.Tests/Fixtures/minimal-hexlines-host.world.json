@@ -85,6 +85,21 @@
       }
     ]
   },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:hexBoard:placement:$each",
+          "key": "$each",
+          "state": "hexStoneCell"
+        }
+      ],
+      "forEach": "hexStoneCell",
+      "mode": "Level",
+      "name": "hex-derive-stone-cell"
+    }
+  ],
   "schema": "puck.world.definition.v1",
   "simulation": {
     "rateHz": 30

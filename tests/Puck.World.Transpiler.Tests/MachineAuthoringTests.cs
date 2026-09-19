@@ -1,6 +1,4 @@
 using System.Text.Json.Nodes;
-using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -25,7 +23,10 @@ public sealed class MachineAuthoringTests {
                 }
             ]
             """;
-        var lowered = WorldDocumentEmitter.Lower(PuckParser.ParseDocument(Source));
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: Source
+        ).RequireJson();
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: lowered.ToJsonString()));
         var machine = Assert.Single(collection: definition.Machines);
 

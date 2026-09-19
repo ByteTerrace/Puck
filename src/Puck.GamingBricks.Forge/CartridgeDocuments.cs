@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
+using Puck.State;
 
 using Puck.Maths;
 
@@ -11,8 +12,13 @@ public static class CartridgeDocuments {
     /// <summary>The bounded source size accepted by the editor and parser, in UTF-8 bytes.</summary>
     public const int MaximumSourceBytes = 1_048_576;
 
+    // puck.cartridge.v1 spells every expression program as infix text, including the ones inside the shared
+    // ActionPredicate/ActionEffect vocabulary a rule's gate carries, so the same converter rides both the parse
+    // options and the canonical writer's.
+    private static readonly JsonSerializerOptions Canonical = DocumentJsonOptions.With(new ExpressionSpellingJsonConverter());
     private static readonly JsonSerializerOptions Json = new() {
         AllowDuplicateProperties = false,
+        Converters = { new ExpressionSpellingJsonConverter() },
         MaxDepth = 32,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
@@ -42,10 +48,13 @@ public static class CartridgeDocuments {
             errors: Validate(document: document),
             source: null
         );
-        return DocumentCanonicalizer.Canonicalize(document: document with {
-            Title = document.Title.ToUpperInvariant(),
-            Tiles = document.Tiles.Select(selector: tile => tile with { Pixels = tile.Pixels.Select(selector: static row => row.ToUpperInvariant()).ToArray() }).ToArray(),
-        });
+        return DocumentCanonicalizer.Canonicalize(
+            document: document with {
+                Title = document.Title.ToUpperInvariant(),
+                Tiles = document.Tiles.Select(selector: tile => tile with { Pixels = tile.Pixels.Select(selector: static row => row.ToUpperInvariant()).ToArray() }).ToArray(),
+            },
+            options: Canonical
+        );
     }
     /// <summary>Creates an empty, editable cartridge whose defaults are explicit source data.</summary>
     /// <param name="target">cgb or agb.</param>

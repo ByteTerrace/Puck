@@ -26,7 +26,7 @@ let diagonal = 0.7071068 // sin/cos of 45 degrees, the quarter-turn quaternion c
 let braidTwist = 0.247404 // sin of the braid's half-angle
 let braidUntwist = 0.9689124 // cos of the same
 
-let braid0Parent = [
+let braidParent = [
   "braid-root-0"
   "braid-root-0"
   "braid-root-0"
@@ -58,32 +58,17 @@ let braid0Position = [
 
 let braid0Rotation = [
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
-]
-
-let braid1Parent = [
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-1"
-  "braid-root-1"
-  "braid-root-1"
-  "braid-root-1"
-  "braid-root-2"
-  "braid-root-2"
-  "braid-root-2"
-  "braid-root-2"
+  [0, 0, -braidTwist, braidUntwist]
 ]
 
 let braid1Position = [
@@ -102,21 +87,21 @@ let braid1Position = [
 ]
 
 let braid1Rotation = [
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -0.247404, braidUntwist]
+  [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
 ]
 
-let fringe0Blend = [
+let fringeBlend = [
   "Union"
   "SmoothUnion"
   "SmoothUnion"
@@ -155,19 +140,6 @@ let fringe0Scale = [
   [0.00616, 0.01144, 0.0020323]
 ]
 
-let fringe1Blend = [
-  "Union"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-]
-
 let fringe1Position = [
   [0.0396, 1.9407, 0.1287]
   [0.0589383, 1.9329864, 0.1506333]
@@ -192,19 +164,6 @@ let fringe1Scale = [
   [0.0172413, 0.0225213, 0.0056881]
   [0.0089774, 0.0142574, 0.0029618]
   [0.00616, 0.01144, 0.0020323]
-]
-
-let fringe2Blend = [
-  "Union"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
 ]
 
 let fringe2Position = [
@@ -233,19 +192,6 @@ let fringe2Scale = [
   [0.00616, 0.01144, 0.0020323]
 ]
 
-let fringe3Blend = [
-  "Union"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-]
-
 let fringe3Position = [
   [0.1562, 1.8307, 0.1035]
   [0.1622459, 1.8141321, 0.1112222]
@@ -271,6 +217,57 @@ let fringe3Scale = [
   [0.0083051, 0.0135851, 0.0027399]
   [0.00616, 0.01144, 0.0020323]
 ]
+
+template cameraLayout(name) {
+  layout name {
+    seatCount: 0
+    slots [
+      {
+        camera: name
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+}
+
+template fringeChain(chainIdx, baseId, groupIdx, positions, scales) {
+  for i in range(0, 10) {
+    shape Superellipsoid $"fringe-{chainIdx}-{i}" {
+      id: baseId + i
+      blend: fringeBlend[i]
+      exponent: softness
+      group: groupIdx
+      material: ink
+      parent: "helmet"
+      position: positions[i]
+      rotation [0, 0, 0, 1]
+      scale: scales[i]
+      smooth: 0.008
+    }
+  }
+}
+
+template braidChain(chainIdx, baseId, positions, rotations) {
+  for i in range(0, 12) {
+    shape Superellipsoid $"braid-{chainIdx}-{i}" {
+      id: baseId + i
+      blend: "Union"
+      exponent: softness
+      material: ink
+      parent: braidParent[i]
+      position: positions[i]
+      rotation: rotations[i]
+      scale [0.014, 0.026, 0.016]
+      secondary: false
+      smooth: 0
+    }
+  }
+}
 
 documentId: "moth-flight-studio"
 
@@ -1573,54 +1570,16 @@ prototypes {
         exponent: 3
       }
 
-      shape Superellipsoid "spineJoint0" {
-        id: 15
-        position [0, 1.204, -0.172]
-        scale [0.019, 0.012, 0.01]
-        material: charcoal
-        parent: "torso"
-        exponent: 3
-        secondary: false
-      }
-
-      shape Superellipsoid "spineJoint1" {
-        id: 16
-        position [0, 1.2715, -0.172]
-        scale [0.019, 0.012, 0.01]
-        material: charcoal
-        parent: "torso"
-        exponent: 3
-        secondary: false
-      }
-
-      shape Superellipsoid "spineJoint2" {
-        id: 17
-        position [0, 1.339, -0.172]
-        scale [0.019, 0.012, 0.01]
-        material: charcoal
-        parent: "torso"
-        exponent: 3
-        secondary: false
-      }
-
-      shape Superellipsoid "spineJoint3" {
-        id: 18
-        position [0, 1.4065, -0.172]
-        scale [0.019, 0.012, 0.01]
-        material: charcoal
-        parent: "torso"
-        exponent: 3
-        secondary: false
-      }
-
-      shape Superellipsoid "spineJoint4" {
-        id: 19
-        position [0, 1.474, -0.172]
-        scale [0.019, 0.012, 0.01]
-        material: charcoal
-        parent: "torso"
-        exponent: 3
-        secondary: false
+      for i in range(0, 5) {
+        shape Superellipsoid $"spineJoint{i}" {
+          id: 15 + i
+          position [0, 1.204 + i * 0.0675, -0.172]
+          scale [0.019, 0.012, 0.01]
+          material: charcoal
+          parent: "torso"
+          exponent: 3
+          secondary: false
+        }
       }
 
       shape Prism "collar" {
@@ -2354,65 +2313,10 @@ prototypes {
         parent: "helmet"
       }
 
-      for i in range(0, 10) {
-        shape Superellipsoid $"fringe-0-{i}" {
-          id: 79 + i
-          blend: fringe0Blend[i]
-          exponent: softness
-          group: 10
-          material: ink
-          parent: "helmet"
-          position: fringe0Position[i]
-          rotation [0, 0, 0, 1]
-          scale: fringe0Scale[i]
-          smooth: 0.008
-        }
-      }
-
-      for i in range(0, 10) {
-        shape Superellipsoid $"fringe-1-{i}" {
-          id: 89 + i
-          blend: fringe1Blend[i]
-          exponent: softness
-          group: 11
-          material: ink
-          parent: "helmet"
-          position: fringe1Position[i]
-          rotation [0, 0, 0, 1]
-          scale: fringe1Scale[i]
-          smooth: 0.008
-        }
-      }
-
-      for i in range(0, 10) {
-        shape Superellipsoid $"fringe-2-{i}" {
-          id: 99 + i
-          blend: fringe2Blend[i]
-          exponent: softness
-          group: 12
-          material: ink
-          parent: "helmet"
-          position: fringe2Position[i]
-          rotation [0, 0, 0, 1]
-          scale: fringe2Scale[i]
-          smooth: 0.008
-        }
-      }
-
-      for i in range(0, 10) {
-        shape Superellipsoid $"fringe-3-{i}" {
-          id: 109 + i
-          blend: fringe3Blend[i]
-          exponent: softness
-          group: 13
-          material: ink
-          parent: "helmet"
-          position: fringe3Position[i]
-          rotation [0, 0, 0, 1]
-          scale: fringe3Scale[i]
-          smooth: 0.008
-        }
-      }
+      fringeChain(0, 79, 10, fringe0Position, fringe0Scale)
+      fringeChain(1, 89, 11, fringe1Position, fringe1Scale)
+      fringeChain(2, 99, 12, fringe2Position, fringe2Scale)
+      fringeChain(3, 109, 13, fringe3Position, fringe3Scale)
 
       shape Sweep "braid-root-0" {
         id: 119
@@ -2456,35 +2360,8 @@ prototypes {
         }
       }
 
-      for i in range(0, 12) {
-        shape Superellipsoid $"braid-0-{i}" {
-          id: 122 + i
-          blend: "Union"
-          exponent: softness
-          material: ink
-          parent: braid0Parent[i]
-          position: braid0Position[i]
-          rotation: braid0Rotation[i]
-          scale [0.014, 0.026, 0.016]
-          secondary: false
-          smooth: 0
-        }
-      }
-
-      for i in range(0, 12) {
-        shape Superellipsoid $"braid-1-{i}" {
-          id: 134 + i
-          blend: "Union"
-          exponent: softness
-          material: ink
-          parent: braid1Parent[i]
-          position: braid1Position[i]
-          rotation: braid1Rotation[i]
-          scale [0.014, 0.026, 0.016]
-          secondary: false
-          smooth: 0
-        }
-      }
+      braidChain(0, 122, braid0Position, braid0Rotation)
+      braidChain(1, 134, braid1Position, braid1Rotation)
 
       shape Cylinder "braidTie" {
         id: 146
@@ -4467,7 +4344,7 @@ prototypes {
           name: "stride"
           cadence: 5.8
           signal: "planarTravel"
-          when [
+          "when" [
             "Grounded"
             "moving"
           ]
@@ -4476,7 +4353,7 @@ prototypes {
           name: "breath"
           cadence: 1.7
           signal: "time"
-          when [
+          "when" [
             "still"
           ]
         }
@@ -4484,7 +4361,7 @@ prototypes {
           name: "flight"
           cadence: 1
           signal: "state.airPose.$body"
-          when [
+          "when" [
             "always"
           ]
         }
@@ -4492,7 +4369,7 @@ prototypes {
           name: "wings"
           cadence: 1
           signal: "state.airWings.$body"
-          when [
+          "when" [
             "always"
           ]
         }
@@ -4500,7 +4377,7 @@ prototypes {
           name: "bank"
           cadence: 0.26
           signal: "turnRate"
-          when [
+          "when" [
             "Airborne"
           ]
         }
@@ -4508,7 +4385,7 @@ prototypes {
           name: "cruise"
           cadence: 0.18
           signal: "speed"
-          when [
+          "when" [
             "Airborne"
             "moving"
           ]
@@ -4594,7 +4471,7 @@ prototypes {
             "shin-left"
           ]
           tip: "boot-left"
-          when [
+          "when" [
             "Grounded"
           ]
           target {
@@ -4616,7 +4493,7 @@ prototypes {
             "shin-right"
           ]
           tip: "boot-right"
-          when [
+          "when" [
             "Grounded"
           ]
           target {
@@ -4676,7 +4553,8 @@ render {
           color: "#F4EFF2"
           elevation: 1
         }
-      ])
+      ]
+      )
       fog(density: 0.012)
     ]
   }
@@ -4708,41 +4586,35 @@ render {
 
 rule "airborne-on" {
   when $fact:each:Airborne == 1
-  mode: "Edge"
+  mode: Edge
   forEach: "airPose"
-  setState(key: "$each", state: "airPose", target: "Self", value: 1)
-  setState(key: "$each", state: "airWings", target: "Self", value: 1)
+  airPose[$each] = 1
+  airWings[$each] = 1
 }
 
 rule "airborne-off" {
   when $fact:each:Airborne == 0
-  mode: "Edge"
+  mode: Edge
   forEach: "airPose"
-  setState(key: "$each", state: "airPose", target: "Self", value: 0)
-  setState(key: "$each", state: "airWings", target: "Self", value: 0)
+  airPose[$each] = 0
+  airWings[$each] = 0
 }
 
 rule "blink-close" {
-  gate: all(predicates: [
-    compareState(comparison: "Equal", key: "$each", state: "blink", value: 0)
-    compareState(comparandKey: "$each", comparandState: "blinkAt", comparison: "GreaterOrEqual", state: "$tick")
-  ])
-  mode: "Level"
+  when blink[$each] == 0 and $tick >= blinkAt[$each]
+  mode: Level
   forEach: "blink"
-  setState(key: "$each", state: "blink", target: "Self", value: 1)
+  blink[$each] = 1
   schedule blinkAt[$each] in 0.12s
 }
 
 rule "blink-open" {
-  gate: all(predicates: [
-    compareState(comparison: "Equal", key: "$each", state: "blink", value: 1)
-    compareState(comparandKey: "$each", comparandState: "blinkAt", comparison: "GreaterOrEqual", state: "$tick")
-  ])
-  mode: "Level"
+  when blink[$each] == 1 and $tick >= blinkAt[$each]
+  mode: Level
   forEach: "blink"
-  setState(key: "$each", state: "blink", target: "Self", value: 0)
+  blink[$each] = 0
   generate(row: "blinkRest")
-  setState(expression: "$tick + blinkRest", key: "$each", state: "blinkAt", target: "Self")
+  blinkAt[$each] = $tick + blinkRest
 }
 
 simulation {
@@ -4758,8 +4630,8 @@ spawnPoints [
 ]
 
 state {
-  world [
-    {
+  world {
+    row {
       cells [
         {
           dynamics {
@@ -4772,7 +4644,7 @@ state {
       kind: "Fixed"
       name: "airPose"
     }
-    {
+    row {
       cells [
         {
           dynamics {
@@ -4785,27 +4657,13 @@ state {
       kind: "Fixed"
       name: "airWings"
     }
-    {
-      cells [
-        {
-          key: "0"
-          value: 0
-        }
-      ]
-      kind: "Int"
-      name: "blink"
+    table blink: Int {
+      "0" = 0
     }
-    {
-      cells [
-        {
-          key: "0"
-          value: 90
-        }
-      ]
-      kind: "Int"
-      name: "blinkAt"
+    table blinkAt: Int {
+      "0" = 90
     }
-    {
+    row {
       draw {
         generator {
           bound: 1
@@ -4821,69 +4679,14 @@ state {
       name: "blinkRest"
       value: 90
     }
-  ]
+  }
 }
 
 views {
-  layout "three-quarter" {
-    seatCount: 0
-    slots [
-      {
-        camera: "three-quarter"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "front" {
-    seatCount: 0
-    slots [
-      {
-        camera: "front"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "rear" {
-    seatCount: 0
-    slots [
-      {
-        camera: "rear"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "flight-stage" {
-    seatCount: 0
-    slots [
-      {
-        camera: "flight-stage"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
+  cameraLayout("three-quarter")
+  cameraLayout("front")
+  cameraLayout("rear")
+  cameraLayout("flight-stage")
 
   layout "play" {
     seatCount: 0
@@ -4899,140 +4702,15 @@ views {
     transitionSeconds: 0
   }
 
-  layout "head" {
-    seatCount: 0
-    slots [
-      {
-        camera: "head"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "face" {
-    seatCount: 0
-    slots [
-      {
-        camera: "face"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "face-side" {
-    seatCount: 0
-    slots [
-      {
-        camera: "face-side"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "shoulder" {
-    seatCount: 0
-    slots [
-      {
-        camera: "shoulder"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "back-close" {
-    seatCount: 0
-    slots [
-      {
-        camera: "back-close"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "shoulder-top" {
-    seatCount: 0
-    slots [
-      {
-        camera: "shoulder-top"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "boots" {
-    seatCount: 0
-    slots [
-      {
-        camera: "boots"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "boots-side" {
-    seatCount: 0
-    slots [
-      {
-        camera: "boots-side"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-
-  layout "boots-rear" {
-    seatCount: 0
-    slots [
-      {
-        camera: "boots-rear"
-        height: 1
-        width: 1
-        x: 0
-        y: 0
-      }
-    ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
+  cameraLayout("head")
+  cameraLayout("face")
+  cameraLayout("face-side")
+  cameraLayout("shoulder")
+  cameraLayout("back-close")
+  cameraLayout("shoulder-top")
+  cameraLayout("boots")
+  cameraLayout("boots-side")
+  cameraLayout("boots-rear")
 
   layout "pipeline" {
     seatCount: 0

@@ -1,0 +1,81 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One authored rule group: the members it claims, its shape, its pass ceiling, and the gate that arms it.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The group\u0027s stable name \u2014 unique within the section, and never a rule\u0027s name.",
+        "title": "CellName",
+        "type": "string"
+      },
+      "shape": {
+        "description": "Fixpoint or staged.",
+        "enum": [
+          "Fixpoint",
+          "Staged"
+        ],
+        "title": "RuleGroupShape"
+      },
+      "steps": {
+        "description": "The members, in authored order; for a staged group this is the step sequence, and the last step is terminal.",
+        "type": "array",
+        "items": {
+          "description": "One step of a staged group: the rule it runs and what a refusal does to the cursor.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "rule": {
+              "description": "The member rule\u0027s name.",
+              "title": "CellName",
+              "type": "string"
+            },
+            "onRefusal": {
+              "description": "What a refusal does to the cursor.",
+              "enum": [
+                "Stall",
+                "Skip"
+              ],
+              "default": "Stall",
+              "title": "RuleGroupStepPolicy"
+            }
+          },
+          "required": [
+            "rule"
+          ],
+          "additionalProperties": false,
+          "title": "RuleGroupStep"
+        }
+      },
+      "passes": {
+        "description": "The pass ceiling a fixpoint group breaches into a counted refusal, or null for DefaultPasses.",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "default": null
+      },
+      "trigger": {
+        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
+        "description": "The gate that arms the group, or null for always.",
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "shape",
+      "steps"
+    ],
+    "additionalProperties": false,
+    "title": "RuleGroupDeclaration"
+  },
+  "default": null
+}

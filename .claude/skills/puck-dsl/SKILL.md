@@ -1,6 +1,6 @@
 ---
 name: puck-dsl
-description: "Covers the `.puck` authoring language's core: the one-spelling grammar (PUCK040), `let`/`template`/`import`/`export`, the units table, compile-time `for` and the collection builtins (`map`/`filter`/`reduce`/`range`/lambdas, PUCK041/042), string/indexing forms, the `Puck.State`-delegated expression vocabulary, and the `puck compile`/`decompile`/`lint`/`fmt`/`lsp` CLI verbs and PUCKnnn diagnostic family. Use whenever writing or editing any `.puck` file, running those verbs, diagnosing a PUCKnnn error, or converting a hand-written JSON world/cartridge document into idiomatic DSL. Does not teach vocabulary-specific semantics: world-document sugar (`rule`/`decision`/`shape`/`placements`/`prototypes`, world refusals, booting `--world`) belongs to `puck-world`; SDF shape/prototype/creation authoring belongs to `sdf-authoring`; the cartridge vocabulary and forge compile/play loop belong to `rom-forge`; emulator hardware behavior belongs to `gaming-bricks`."
+description: "Covers the `.puck` authoring language's core: the one-spelling grammar (PUCK040), `let`/`template`/`import`/`export`, the units table, compile-time `for` and the collection builtins (`map`/`filter`/`reduce`/`range`/lambdas, PUCK041/042), string/indexing forms, the `Puck.State`-delegated expression vocabulary, and the `puck compile`/`decompile`/`lint`/`fmt`/`lsp`/`migrate` CLI verbs and PUCKnnn diagnostic family. Use whenever writing or editing any `.puck` file, running those verbs, diagnosing a PUCKnnn error, or converting a hand-written JSON world/cartridge document into idiomatic DSL. Does not teach vocabulary-specific semantics: world-document sugar (`rule`/`decision`/`shape`/`placements`/`prototypes`, world refusals, booting `--world`) belongs to `puck-world`; SDF shape/prototype/creation authoring belongs to `sdf-authoring`; the cartridge vocabulary and forge compile/play loop belong to `rom-forge`; emulator hardware behavior belongs to `gaming-bricks`."
 ---
 
 # The `.puck` authoring language
@@ -87,8 +87,11 @@ command" without saying which.
 | `puck compile <path>` | `-o/--output`, `-w/--watch`, `--strict`, `--validate`, `--bundle` | Parses, resolves/bundles imports, lowers via the vocabulary the parsed `schema:` names, optionally validates the engine schema, writes `<source>.cartridge.json`/`.world.json` by default. `--validate` self-installs the machine catalog first — no separate registration step. `--watch` recompiles on `*.puck` changes (250 ms debounce). |
 | `puck decompile <path>` | `-o/--output`, `--overwrite` | Reads `schema` from the JSON, routes to the matching decompiler. **One-way**: `let`/`template`/`for` never reproduced; output opens with a one-time-import header comment. |
 | `puck lint <path-or-dir>` | `-s/--strict` | Recurses `*.puck` for a directory. Runs cartridge diagnosis first, then `PuckLinter.Lint` (syntax), lowers, then (root documents only) semantic validation and reference-resolution lint. Self-installs the machine catalog like `compile --validate`. |
-| `puck fmt <path-or-dir>` | `-c/--check` | Recurses `*.puck`. Meaning-preserving by construction and by round-trip tests: never changes what a document compiles to. |
+| `puck fmt <path-or-dir>` | `-c/--check` | Recurses `*.puck`. Parses and prints the tree. Reader and printer share one escape grammar (`PuckStrings`), so the printer writes only what the reader reads back and what a document compiles to cannot move. What is the author's and survives: every comment, wherever the grammar admits one; a blank-line run's length; the line breaks inside an array, object or argument list; a `,` at a line end; a numeric literal's base; a raw fence; and a name's bare-or-quoted spelling. The one comment that moves is one written inside a construct's header, between its first word and its `{`: a `//` there prints above the statement, because in place it would swallow the brace, and a `/* */` written after the header's name prints right after the first word. A source it cannot parse is refused by name and left alone — exit 2, in directory mode as well; `--check` exits 1 for a file that merely needs formatting. |
+| `puck migrate <name> <path>` | `-c/--check` | Applies one registered rewrite — a `PuckMigration` over `Puck.Transpiler.Rewriting.PuckSyntaxRewriter` — to every `*.puck` under the path (or to one file) and prints each through `PuckPrinter`. Two verdicts per changed source: its two compiled documents must be equal excluding the members the migration declares in `ReshapedMembers` (`/`-separated paths, `*` matching one key or index, a path covering everything beneath it), and its comments in reading order must be unchanged unless the migration declares `ReshapesComments` (trivia never reaches the document, so the member declaration cannot speak for it). Blank-line runs and the compile-time layer surviving rest on the printer `fmt` is gated on, not on a verdict of the run's own. All-or-nothing: every source is parsed, rewritten and printed before anything is written. A source the migration leaves alone is neither compiled nor written. A difference outside the declared members, an undeclared comment change, a source that does not parse, one whose migrated text does not parse back, one it would change that does not compile, or one it would change that cannot be opened for writing refuses the whole run (exit 2, nothing written); `--check` exits 1 for work outstanding. Each write stages a sibling `.migrate-tmp` and moves it over the destination, so no file is ever left truncated; the one thing not atomic is the *set* — a move failing after earlier moves leaves those destinations migrated and the refusal names them. The registry carries only whatever reshape is mid-flight — a migration lands with the reshape it serves and is deleted once it has run — and an unknown name lists what is registered. |
 | `puck lsp` | none | `PuckLanguageServer` over stdio: completion, hover, `documentSymbol`. |
+| `puck test <path-or-dir>` | `--host`, `--world-artifact`, `--keep <dir>` | Compiles a `.puck` source, generates one test world per `test` block (`<stem>--<slug>`), boots each through the real `Puck.World` executable headless twice, refuses a world whose two exports or manifests differ, and prints one line per verdict (name, pass/fail, the gate as written, the values it read, the firing tick). A `*.world.json` document runs as it stands; a directory contributes both and skips a source with no test block. Exit 0 all passed, 1 a failing verdict or an unexpected step outcome, 2 usage. The construct: [Testing a world](../../../docs/authoring/testing-a-world.md). |
+| `puck vocabulary` | `-c/--check` | Writes [the world vocabulary](../../../docs/reference/world-vocabulary.md) from `Puck.World.Transpiler`'s construct table — every `puck.world.def.v1` construct's keyword, members, the document member it lowers to, and what the printer requires before it prints a node back as that construct. `--check` exits non-zero and names the first differing line when the page disagrees with the table. The cartridge vocabulary has no such page. |
 
 Without `--output`, `compile` writes `<source>.cartridge.json` for a cartridge
 document and `<source>.world.json` otherwise, selected by the parsed `schema:`.
@@ -107,6 +110,14 @@ is **PUCK024**, an inadmissible unit is **PUCK025**). A comparison yields `1`
 or `0`, never a JSON boolean. Strings come in four forms: plain `"..."`
 (never interpolates), interpolated `$"...{expr}..."`, raw `"""..."""` (no
 escapes), and raw+interpolated `$"""..."""`.
+
+A world's own behaviour is written beside it, as `test "name" { given { } when { }
+expect { } }` at the document's root: `given` writes boot cells, `when` lays
+`ticks n` and `seat<n>: <command line>` steps on a tick grid, and `expect`
+carries one rule-gate expression per line. Each block lowers to a generated test
+world and the enclosing document carries no trace of it. `with module(arguments)`
+is refused by name until `use` exists. Refusals are **PUCK104** (the
+declaration's shape) and **PUCK105** (a line a generated world cannot carry).
 
 `for i in range(0, n) { ... }` and `for (item, index) in [...] { }` expand at
 compile time — the document carries the rows they produce, never the loop
@@ -138,7 +149,7 @@ there and PUCK037 still fires for them. Cartridge rules support all three —
 | Trap | Status |
 |---|---|
 | `puck compile --validate` needing a separate engine-registration step | Not real. `CliWorldVocabulary.EnsureInstalled()` runs inside `compile --validate` and `lint` themselves. |
-| `fmt` mutating what a document compiles to | Not real. `FormatterRoundTripTests` proves format-then-compile equals the original, over every shipped world. |
+| `fmt` mutating what a document compiles to | Not real. `StringGrammarTests` pins reader and printer to one escape grammar over a generated value corpus, and `ProjectionLawTests`/`FormatProjectionLawTests` prove format-then-compile equals the original over every shipped source in both vocabularies. |
 | Lint skipping a name only a `basis`/import supplies | Fixed. `PuckLinter.References` composes the whole basis/import graph before building its name catalog. A *module* (no `schema`/`basis` of its own) still never gets such names reported missing — a fragment cannot know what an unknown root will supply, and that is by design, not a bug. |
 | A `let` referenced only inside a `when`/effect operand | Reported as unused by **PUCK_LINT_001** anyway. Operand text is opaque to the usage scan (it is handed whole to `Puck.State.ExpressionSpelling`), so a constant used only there looks unreferenced to the linter even though it is live. Verified by compiling a `let` used solely in a `when` gate. |
 | A `: Kind`/`as Kind` comparison-kind suffix beside `and`/`or` | Binds only to the ONE comparison it follows, never the enclosing chain, though it prints as if it scoped the whole thing. Wrap the annotated comparison in its own parens. |
@@ -148,7 +159,7 @@ there and PUCK037 still fires for them. Cartridge rules support all three —
 
 Every code is declared exactly once, in
 [`PuckDiagnosticCodes.cs`](../../../src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs)
-(`PUCK001`–`PUCK048`, `PUCK_LINT_001`–`PUCK_LINT_009`), with the meaning as its
+(`PUCK001`–`PUCK098`, `PUCK_LINT_001`–`PUCK_LINT_010`), with the meaning as its
 XML doc comment. The two vocabulary READMEs narrate the same codes with
 examples: [`Puck.Transpiler/README.md`](../../../src/Puck.Transpiler/README.md)
 for core codes, [`Puck.World.Transpiler/README.md`](../../../src/Puck.World.Transpiler/README.md)

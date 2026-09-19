@@ -36,9 +36,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
             if (index > 0) {
                 _ = text.Append(value: ',');
             }
-            _ = text.Append(value: cell.Key.Value).Append(value: ':').Append(value: ((row.Kind == CellKind.Text)
-                ? (cell.Text ?? "")
-                : cell.Value.ToString(provider: CultureInfo.InvariantCulture)));
+            _ = text.Append(value: cell.Key.Value).Append(value: ':').Append(value: StateSpelling.Value(value: cell.Value));
         }
         _ = text.Append(value: '}');
     }

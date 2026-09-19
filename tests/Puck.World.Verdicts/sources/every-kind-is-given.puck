@@ -1,0 +1,42 @@
+// A row of every scalar kind, each given a boot value by a test and expected on. The verdict row a test generates
+// is an Int row, so it records what its gate read of an Int row and leaves the rest to the gate's own text.
+
+schema: "puck.world.definition.v1"
+documentId: "every-kind-is-given"
+
+state {
+  world {
+    slot speed: Fixed = 1.5
+    slot open: Bool = true
+    slot hp: Int = 3
+    slot label: Text = "a"
+  }
+}
+
+test "a fixed row is given and expected on" {
+  given {
+    speed = 2.25
+  }
+  expect {
+    speed > 2.0
+    hp == 3
+  }
+}
+
+test "a bool row is given and expected on" {
+  given {
+    open = false
+  }
+  expect {
+    open == 0
+  }
+}
+
+test "a text row is given" {
+  given {
+    label = "b"
+  }
+  expect {
+    hp == 3
+  }
+}

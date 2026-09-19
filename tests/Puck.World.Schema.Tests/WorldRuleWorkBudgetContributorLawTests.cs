@@ -25,7 +25,7 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             Capacity: capacity,
             Cells: [new StateCell(
                     CellName.Parse(candidate: "0"),
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
     private static ActionPredicate PhaseIs(long value) =>
@@ -72,6 +72,19 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             Scale: 1f,
             Region: new WorldPlacementRegion(Radius: radius)
         );
+    // A forEach rule whose effect list is long enough to put the sheet over the ceiling on its own.
+    private static WorldRule Heavy(string name, int effects) =>
+        new(
+            CellName.Parse(candidate: name),
+            Enumerable.Range(
+                count: effects,
+                start: 0
+            ).Select(selector: static _ => ((ActionEffect)new ActionEffect.AddState(
+                State: "count",
+                Value: 1m
+            ))).ToArray(),
+            ForEach: "more"
+        );
     private static WorldRule Rule(string name, string? forEach, ActionPredicate? gate = null) =>
         new(
             CellName.Parse(candidate: name),
@@ -88,7 +101,7 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
     private static WorldKit SolidKit(string name, float radius) => new(
@@ -180,9 +193,9 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
     [Fact]
     public void AnOverBudgetRefusalNamesTheCostliestLines() {
         var document = Document(
-            Rule(
-                "heavy",
-                "more"
+            Heavy(
+                effects: 3,
+                name: "heavy"
             ),
             Rule(
                 "light",
@@ -247,11 +260,11 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         );
         Assert.Equal(
             [$"phase.{WorldStateRow.SlotKey}=0"],
-            lines[1].Discriminators.Select(selector: pinned => pinned.Describe())
+            lines[1].Discriminators.Select(selector: pinned => pinned.Describe(catalog: document.StateCatalog))
         );
         Assert.Equal(
             [$"phase.{WorldStateRow.SlotKey}=1"],
-            lines[2].Discriminators.Select(selector: pinned => pinned.Describe())
+            lines[2].Discriminators.Select(selector: pinned => pinned.Describe(catalog: document.StateCatalog))
         );
         Assert.Empty(collection: lines[0].Discriminators);
 

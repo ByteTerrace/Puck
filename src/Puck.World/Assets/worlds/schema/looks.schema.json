@@ -176,7 +176,8 @@
                   "null"
                 ],
                 "items": {
-                  "$ref": "./common.schema.json#/$defs/ValueExpression"
+                  "$ref": "./common.schema.json#/$defs/ExpressionProgram",
+                  "description": "A postfix expression program: \u0027instructions\u0027 in evaluation order, each an object whose \u0027op\u0027 names an operation and whose remaining members are that operation\u0027s payload, plus the optional shared \u0027subprograms\u0027 a fold or call indexes into."
                 }
               }
             },

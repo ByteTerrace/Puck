@@ -59,6 +59,10 @@ var captureDirOption = new Option<string?>(name: "--capture-dir") {
     DefaultValueFactory = static _ => null,
     Description = "Override the world document's captures.directory. A developer/deployment override, the --state-dir pattern: a cross-backend parity run needs the two legs' captures kept apart.",
 };
+var scheduleDirOption = new Option<string?>(name: "--schedule-dir") {
+    DefaultValueFactory = static _ => null,
+    Description = "Arms the world document's schedule section and overrides its schedule.directory — where the run writes its state export and submission manifest. Absent, a document carrying a schedule submits no row and writes no export, and the boot says so once: a published world travels, and a section that submits commands runs only where the operator asked for it. Also the --capture-dir pattern for output: puck test runs the same world twice and needs the two exports kept apart to compare them.",
+};
 // A DEVELOPER REFLECTION of the document's host.presentation field, not a separate product (the unification
 // contract): absent lets the document decide; a bare --headless (or --headless true) forces host.presentation=none
 // for this run only (no window, no GPU device, no swapchain, no audio device); --headless false forces windowed.
@@ -106,6 +110,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     federationKeyFileOption,
     authenticationConfigFileOption,
     captureDirOption,
+    scheduleDirOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -150,6 +155,9 @@ if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
 }
 if (parseResult.GetValue(option: captureDirOption) is { } captureDirOverride) {
     WorldCaptureRoot.Override(path: captureDirOverride);
+}
+if (parseResult.GetValue(option: scheduleDirOption) is { } scheduleDirOverride) {
+    WorldScheduleRoot.Override(path: scheduleDirOverride);
 }
 // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
 // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).

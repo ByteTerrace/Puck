@@ -1,5 +1,5 @@
 // GENERATED FILE — do not hand-edit.
-// Produced by scripts/generateWorldTypes.mjs from a puck.world.def.v1 schema bundle
+// Produced by scripts/generateWorldTypes.mjs from a puck.world.definition.v1 schema bundle
 // (`puck.exe schema --bundle <path>` produces the bundle; this script never fetches it itself).
 // Regenerate: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 //             ./src/Puck.Cli/publish/puck.exe schema --bundle <bundle.json>
@@ -64,12 +64,15 @@ export type WorldDefinition = {
   seatModes?: (WorldSeatModeFamily | null)[] | null;
   probes?: (WorldProbe | null)[] | null;
   captures?: WorldCapturesSection | null;
+  schedule?: WorldScheduleSection | null;
   curves?: (WorldCurveRow | null)[] | null;
   navigation?: WorldNavigationSection | null;
   patterns?: (PatternRow | null)[] | null;
   tables?: (TableRow | null)[] | null;
   search?: WorldSearchSection | null;
   machines?: (WorldMachine | null)[] | null;
+  ruleGroups?: (RuleGroupDeclaration | null)[] | null;
+  sets?: (CellSetRow | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -489,140 +492,152 @@ export type ActionPredicateNullable2 =
   | (WorldPredicateTimerElapsed | null)
   | (WorldPredicateHeld | null);
 /**
- * A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored either as an infix string (ExpressionSpelling, "min(damage, hp) * 2") or as the postfix { "tokens": [...] } object; both parse to the same tokens and each writes back in its own spelling.
- *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueExpression".
+ * via the `definition` "ShapeNonNullable14".
  */
-export type ValueExpression = string | ValueExpressionTokens;
+export type ShapeNonNullable14 =
+  | (ShapeNonNullable2 | null)
+  | (ShapeNonNullable3 | null)
+  | (ShapeNonNullable4 | null)
+  | (ShapeNonNullable5 | null)
+  | (ShapeNonNullable6 | null)
+  | (ShapeNonNullable7 | null)
+  | (ShapeNonNullable8 | null)
+  | (ShapeNonNullable13 | null);
 /**
- * One authored token in a ValueExpression.
- *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueToken".
+ * via the `definition` "ShapeNonNullable".
  */
-export type ValueToken =
-  | (ValueTokenConstant | null)
-  | (ValueTokenState | null)
-  | (ValueTokenAdd | null)
-  | (ValueTokenSubtract | null)
-  | (ValueTokenMultiply | null)
-  | (ValueTokenDivide | null)
-  | (ValueTokenMin | null)
-  | (ValueTokenMax | null)
-  | (ValueTokenClamp | null)
-  | (ValueTokenModulo | null)
-  | (ValueTokenBitAnd | null)
-  | (ValueTokenBitOr | null)
-  | (ValueTokenBitXor | null)
-  | (ValueTokenBitNot | null)
-  | (ValueTokenShiftLeft | null)
-  | (ValueTokenShiftRight | null)
-  | (ValueTokenShiftRightLogical | null)
-  | (ValueTokenEqual | null)
-  | (ValueTokenNotEqual | null)
-  | (ValueTokenLess | null)
-  | (ValueTokenLessOrEqual | null)
-  | (ValueTokenGreater | null)
-  | (ValueTokenGreaterOrEqual | null)
-  | (ValueTokenSelect | null)
-  | (ValueTokenPopCount | null)
-  | (ValueTokenLeadingZeroCount | null)
-  | (ValueTokenTrailingZeroCount | null)
-  | (ValueTokenLowestSetBit | null)
-  | (ValueTokenClearLowestSetBit | null)
-  | (ValueTokenRotateLeft | null)
-  | (ValueTokenRotateRight | null)
-  | (ValueTokenByteSwap | null)
-  | (ValueTokenBitReverse | null)
-  | (ValueTokenReplicationMask | null)
-  | (ValueTokenRepeatBits | null)
-  | (ValueTokenNegate | null)
-  | (ValueTokenAbs | null)
-  | (ValueTokenSign | null)
-  | (ValueTokenParallelBitExtract | null)
-  | (ValueTokenParallelBitDeposit | null)
-  | (ValueTokenBitField | null)
-  | (ValueTokenBitInsert | null)
-  | (ValueTokenBoardShift | null)
-  | (ValueTokenBoardFill | null)
-  | (ValueTokenBoardImage | null)
-  | (ValueTokenPair | null)
-  | (ValueTokenPairX | null)
-  | (ValueTokenPairY | null)
-  | (ValueTokenPairSwap | null)
-  | (ValueTokenPairMax | null)
-  | (ValueTokenPairMin | null)
-  | (ValueTokenPairSum | null)
-  | (ValueTokenPairDifference | null)
-  | (ValueTokenPairTranslate | null)
-  | (ValueTokenPairScale | null)
-  | (ValueTokenMorton | null)
-  | (ValueTokenMortonX | null)
-  | (ValueTokenMortonY | null)
-  | (ValueTokenHilbert | null)
-  | (ValueTokenHilbertX | null)
-  | (ValueTokenHilbertY | null)
-  | (ValueTokenHexIndex | null)
-  | (ValueTokenHexQ | null)
-  | (ValueTokenHexR | null)
-  | (ValueTokenHexRadius | null)
-  | (ValueTokenHexEuclideanSquared | null)
-  | (ValueTokenHexDistance | null)
-  | (ValueTokenHexNeighbor | null)
-  | (ValueTokenHexRotate | null)
-  | (ValueTokenHexMirror | null)
-  | (ValueTokenHexSwap | null)
-  | (ValueTokenHexAdd | null)
-  | (ValueTokenHexSubtract | null)
-  | (ValueTokenHexMultiply | null)
-  | (ValueTokenHexScale | null)
-  | (ValueTokenHexTranslate | null)
-  | (ValueTokenLayer | null)
-  | (ValueTokenLayerOffset | null)
-  | (ValueTokenLayerStart | null)
-  | (ValueTokenLayerSize | null)
-  | (ValueTokenSquareRoot | null)
-  | (ValueTokenSine | null)
-  | (ValueTokenCosine | null)
-  | (ValueTokenSquareIndex | null)
-  | (ValueTokenSquareX | null)
-  | (ValueTokenSquareY | null)
-  | (ValueTokenSquareRadius | null)
-  | (ValueTokenSquareLength | null)
-  | (ValueTokenSquareEuclideanSquared | null)
-  | (ValueTokenSquareDistance | null)
-  | (ValueTokenSquareChebyshev | null)
-  | (ValueTokenSquareNeighbor | null)
-  | (ValueTokenSquareRotate | null)
-  | (ValueTokenSquareMirror | null)
-  | (ValueTokenSquareSwap | null)
-  | (ValueTokenSquareAdd | null)
-  | (ValueTokenSquareSubtract | null)
-  | (ValueTokenSquareMultiply | null)
-  | (ValueTokenSquareScale | null)
-  | (ValueTokenSquareTranslate | null)
-  | (ValueTokenGreatestCommonDivisor | null)
-  | (ValueTokenLeastCommonMultiple | null)
-  | (ValueTokenFloorModulo | null)
-  | (ValueTokenCycleForward | null)
-  | (ValueTokenCycleDistance | null)
-  | (ValueTokenSmallestMissing | null)
-  | (ValueTokenIsPrime | null)
-  | (ValueTokenPrime | null)
-  | (ValueTokenChoose | null)
-  | (ValueTokenFactorial | null)
-  | (ValueTokenSubsetRank | null)
-  | (ValueTokenSubsetAt | null)
-  | (ValueTokenSubsetMember | null)
-  | (ValueTokenArrangementRank | null)
-  | (ValueTokenArrangementAt | null)
-  | (ValueTokenArrangementMember | null);
+export type ShapeNonNullable =
+  | "Add"
+  | "Subtract"
+  | "Multiply"
+  | "Divide"
+  | "Minimum"
+  | "Maximum"
+  | "Clamp"
+  | "Modulo"
+  | "BitAnd"
+  | "BitOr"
+  | "BitXor"
+  | "BitNot"
+  | "ShiftLeft"
+  | "ShiftRight"
+  | "ShiftRightLogical"
+  | "Equal"
+  | "NotEqual"
+  | "Less"
+  | "LessOrEqual"
+  | "Greater"
+  | "GreaterOrEqual"
+  | "Select"
+  | "PopCount"
+  | "LeadingZeroCount"
+  | "TrailingZeroCount"
+  | "LowestSetBit"
+  | "ClearLowestSetBit"
+  | "RotateLeft"
+  | "RotateRight"
+  | "ByteSwap"
+  | "BitReverse"
+  | "Negate"
+  | "Abs"
+  | "ParallelBitExtract"
+  | "ParallelBitDeposit"
+  | "BitField"
+  | "BitInsert"
+  | "Sign"
+  | "Pair"
+  | "PairX"
+  | "PairY"
+  | "PairSwap"
+  | "PairMax"
+  | "PairMin"
+  | "PairSum"
+  | "PairDifference"
+  | "PairTranslate"
+  | "PairScale"
+  | "Morton"
+  | "MortonX"
+  | "MortonY"
+  | "Hilbert"
+  | "HilbertX"
+  | "HilbertY"
+  | "HexIndex"
+  | "HexQ"
+  | "HexR"
+  | "HexRadius"
+  | "HexEuclideanSquared"
+  | "HexDistance"
+  | "HexNeighbor"
+  | "HexRotate"
+  | "HexMirror"
+  | "HexSwap"
+  | "HexAdd"
+  | "HexSubtract"
+  | "HexMultiply"
+  | "HexScale"
+  | "HexTranslate"
+  | "Layer"
+  | "LayerOffset"
+  | "LayerStart"
+  | "LayerSize"
+  | "SquareRoot"
+  | "Sine"
+  | "Cosine"
+  | "SquareIndex"
+  | "SquareX"
+  | "SquareY"
+  | "SquareRadius"
+  | "SquareLength"
+  | "SquareEuclideanSquared"
+  | "SquareDistance"
+  | "SquareChebyshev"
+  | "SquareNeighbor"
+  | "SquareRotate"
+  | "SquareMirror"
+  | "SquareSwap"
+  | "SquareAdd"
+  | "SquareSubtract"
+  | "SquareMultiply"
+  | "SquareScale"
+  | "SquareTranslate"
+  | "GreatestCommonDivisor"
+  | "LeastCommonMultiple"
+  | "FloorModulo"
+  | "CycleForward"
+  | "CycleDistance"
+  | "SmallestMissing"
+  | "IsPrime"
+  | "Prime"
+  | "Choose"
+  | "Factorial"
+  | "SubsetRank"
+  | "SubsetAt"
+  | "SubsetMember"
+  | "ArrangementRank"
+  | "ArrangementAt"
+  | "ArrangementMember"
+  | "Floor"
+  | "Ceiling"
+  | "Round"
+  | "ReplicationMask"
+  | "RepeatBits"
+  | "IsAbsent"
+  | "Coalesce"
+  | "Member";
 /**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable12".
+ */
+export type ShapeNonNullable12 = (ShapeNonNullable9 | null) | (ShapeNonNullable10 | null) | (ShapeNonNullable11 | null);
+/**
+ * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
+ *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "CellKind".
  */
-export type CellKind = "Int" | "Fixed" | "Bool" | "Text";
+export type CellKind = "Int" | "Fixed" | "Bool" | "Text" | "Vector";
 /**
  * A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.
  *
@@ -765,7 +780,11 @@ export type StateTransform =
   | (StateTransformArrange | null)
   | (StateTransformPush | null)
   | (StateTransformClearEnclosed | null)
-  | (StateTransformObserve | null);
+  | (StateTransformObserve | null)
+  | (StateTransformMix | null)
+  | (StateTransformMean | null)
+  | (StateTransformNearest | null)
+  | (StateTransformRemember | null);
 /**
  * Selection of a single token from a zone.
  *
@@ -2486,9 +2505,9 @@ export type WorldHudCursorRole = "TextPrimary" | "TextDim" | "Accent" | "Phospho
 export type WorldStateRow = WorldStateRow1;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ShapeNonNullable".
+ * via the `definition` "ShapeNonNullable16".
  */
-export type ShapeNonNullable = number | string | boolean;
+export type ShapeNonNullable16 = number | string | boolean;
 /**
  * What a StateCycle cell reads: the rotation as a step count, a fraction of a turn or a unit-rotation component, or the rotation carried along a symmetry-lattice orbit as a node index, its ring or a projected coordinate. The integer outputs belong to Int cells and the fixed outputs to Fixed cells.
  *
@@ -2693,6 +2712,11 @@ export type WorldProbeParameterTarget =
   (WorldProbeParameterTargetExtension | null) | (WorldProbeParameterTargetProbe | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldScheduleExpectation".
+ */
+export type WorldScheduleExpectation = "Submitted" | "Refused";
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldNavigationKind".
  */
 export type WorldNavigationKind = "Surface" | "Volume" | "Medium";
@@ -2772,6 +2796,56 @@ export type SearchMethod = "Negamax" | "Tree";
  * via the `definition` "WorldMachineMemoryDirection".
  */
 export type WorldMachineMemoryDirection = "Read" | "Write";
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "RuleGroupShape".
+ */
+export type RuleGroupShape = "Fixpoint" | "Staged";
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "RuleGroupStepPolicy".
+ */
+export type RuleGroupStepPolicy = "Stall" | "Skip";
+/**
+ * The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one ClosedBitset256.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpression".
+ */
+export type CellSetExpression =
+  | (CellSetExpressionBoard | null)
+  | (CellSetExpressionFamily | null)
+  | (CellSetExpressionZone | null)
+  | (CellSetExpressionEverything | null)
+  | (CellSetExpressionNothing | null)
+  | (CellSetExpressionAny | null)
+  | (CellSetExpressionBoth | null)
+  | (CellSetExpressionComplement | null);
+/**
+ * The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one ClosedBitset256.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionNullable".
+ */
+export type CellSetExpressionNullable =
+  | (CellSetExpressionBoard | null)
+  | (CellSetExpressionFamily | null)
+  | (CellSetExpressionZone | null)
+  | (CellSetExpressionEverything | null)
+  | (CellSetExpressionNothing | null)
+  | (CellSetExpressionAny | null)
+  | (CellSetExpressionBoth | null)
+  | (CellSetExpressionComplement | null);
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionList".
+ */
+export type CellSetExpressionList = (CellSetExpressionNullable | null)[];
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionListNonNullable".
+ */
+export type CellSetExpressionListNonNullable = (CellSetExpressionNullable | null)[];
 
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -5357,7 +5431,7 @@ export interface ActionPredicateCompareValue {
   /**
    * Left numeric expression.
    */
-  left: ValueExpression;
+  left: ExpressionProgram;
   /**
    * The comparison operation.
    */
@@ -5365,1103 +5439,135 @@ export interface ActionPredicateCompareValue {
   /**
    * Right numeric expression.
    */
-  right: ValueExpression;
+  right: ExpressionProgram;
   /**
    * The common Int or Fixed domain; no implicit conversion is performed.
    */
   kind?: CellKind;
 }
 /**
- * The postfix object spelling of a ValueExpression: { "tokens": [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.
+ * The one expression IR: a bounded postfix program a world rule, decision, cartridge step, or flock affinity evaluates. Each instruction either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueExpressionTokens".
+ * via the `definition` "ExpressionProgram".
  */
-export interface ValueExpressionTokens {
+export interface ExpressionProgram {
   /**
-   * The postfix tokens, in evaluation order.
+   * The postfix instructions, in evaluation order.
+   *
+   * Items: One postfix instruction: 'op' names the operation and the remaining members are that operation's payload.
    */
-  tokens: ValueToken[];
+  instructions: ShapeNonNullable14[];
+  /**
+   * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
+   */
+  subprograms?: ShapeNonNullable15[];
 }
 /**
- * An exact authored decimal, converted to the destination row's numeric kind at compile time.
- *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenConstant".
+ * via the `definition` "ShapeNonNullable2".
  */
-export interface ValueTokenConstant {
-  $type?: "constant";
-  /**
-   * The exact decimal literal.
-   */
+export interface ShapeNonNullable2 {
+  op: ShapeNonNullable;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable3".
+ */
+export interface ShapeNonNullable3 {
+  op: "Argument";
+  index: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable4".
+ */
+export interface ShapeNonNullable4 {
+  op: "BoardShift" | "BoardFill" | "BoardImage";
+  topology: string;
+  index: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable5".
+ */
+export interface ShapeNonNullable5 {
+  op: "Call";
+  subprogram: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable6".
+ */
+export interface ShapeNonNullable6 {
+  op: "Constant";
   value: number;
 }
 /**
- * A live state cell or reserved world-rule channel.
- *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenState".
+ * via the `definition` "ShapeNonNullable7".
  */
-export interface ValueTokenState {
-  $type?: "state";
-  /**
-   * The state row or reserved-channel name.
-   */
+export interface ShapeNonNullable7 {
+  op: "All" | "Any" | "Count" | "Sum";
+  family: string;
+  binder: string;
+  subprogram: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable8".
+ */
+export interface ShapeNonNullable8 {
+  op: "Operand";
   name: string;
+  key?: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable13".
+ */
+export interface ShapeNonNullable13 {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable12;
+  right: ShapeNonNullable12;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable9".
+ */
+export interface ShapeNonNullable9 {
+  $type: "cell";
+  name: string;
+  key?: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable10".
+ */
+export interface ShapeNonNullable10 {
+  $type: "literal";
+  value: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable11".
+ */
+export interface ShapeNonNullable11 {
+  $type: "embed";
+  text: string;
+  space?: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable15".
+ */
+export interface ShapeNonNullable15 {
+  name?: string;
+  arity?: number;
   /**
-   * The optional keyed-row cell.
+   * Items: One postfix instruction: 'op' names the operation and the remaining members are that operation's payload.
    */
-  key?: string | null;
-}
-/**
- * Consumes two values and pushes their sum.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenAdd".
- */
-export interface ValueTokenAdd {
-  $type?: "add";
-}
-/**
- * Consumes two values and pushes left minus right.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSubtract".
- */
-export interface ValueTokenSubtract {
-  $type?: "subtract";
-}
-/**
- * Consumes two values and pushes their product in the destination row's numeric domain.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenMultiply".
- */
-export interface ValueTokenMultiply {
-  $type?: "multiply";
-}
-/**
- * Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenDivide".
- */
-export interface ValueTokenDivide {
-  $type?: "divide";
-}
-/**
- * Consumes two values and pushes the lesser.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenMin".
- */
-export interface ValueTokenMin {
-  $type?: "min";
-}
-/**
- * Consumes two values and pushes the greater.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenMax".
- */
-export interface ValueTokenMax {
-  $type?: "max";
-}
-/**
- * Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenClamp".
- */
-export interface ValueTokenClamp {
-  $type?: "clamp";
-}
-/**
- * Consumes two values and pushes the remainder of left divided by right, truncating toward zero (Int: 37 % 40 = 37; Fixed: the raw remainder, so 2.5 % 1 = 0.5). A zero divisor fails evaluation; a divisor of -1 yields zero.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenModulo".
- */
-export interface ValueTokenModulo {
-  $type?: "modulo";
-}
-/**
- * Consumes two Int values and pushes their bitwise AND. Int expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitAnd".
- */
-export interface ValueTokenBitAnd {
-  $type?: "bitAnd";
-}
-/**
- * Consumes two Int values and pushes their bitwise OR. Int expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitOr".
- */
-export interface ValueTokenBitOr {
-  $type?: "bitOr";
-}
-/**
- * Consumes two Int values and pushes their bitwise XOR. Int expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitXor".
- */
-export interface ValueTokenBitXor {
-  $type?: "bitXor";
-}
-/**
- * Consumes one Int value and pushes its bitwise complement. Int expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitNot".
- */
-export interface ValueTokenBitNot {
-  $type?: "bitNot";
-}
-/**
- * Consumes value, count and pushes value shifted left by count bits; bits leave the top without refusal, so 1 shiftLeft 63 is the sign bit. A count outside 0..63 fails evaluation. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenShiftLeft".
- */
-export interface ValueTokenShiftLeft {
-  $type?: "shiftLeft";
-}
-/**
- * Consumes value, count and pushes the arithmetic (sign-propagating) right shift. A count outside 0..63 fails evaluation. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenShiftRight".
- */
-export interface ValueTokenShiftRight {
-  $type?: "shiftRight";
-}
-/**
- * Consumes value, count and pushes the logical (zero-filling) right shift, the bitboard walk. A count outside 0..63 fails evaluation. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenShiftRightLogical".
- */
-export interface ValueTokenShiftRightLogical {
-  $type?: "shiftRightLogical";
-}
-/**
- * Consumes two same-kind values and pushes Int 1 when equal, else 0.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenEqual".
- */
-export interface ValueTokenEqual {
-  $type?: "equal";
-}
-/**
- * Consumes two same-kind values and pushes Int 1 when unequal, else 0.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenNotEqual".
- */
-export interface ValueTokenNotEqual {
-  $type?: "notEqual";
-}
-/**
- * Consumes two same-kind values and pushes Int 1 when left is less than right, else 0.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLess".
- */
-export interface ValueTokenLess {
-  $type?: "less";
-}
-/**
- * Consumes two same-kind values and pushes Int 1 when left is at most right, else 0.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLessOrEqual".
- */
-export interface ValueTokenLessOrEqual {
-  $type?: "lessOrEqual";
-}
-/**
- * Consumes two same-kind values and pushes Int 1 when left is greater than right, else 0.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenGreater".
- */
-export interface ValueTokenGreater {
-  $type?: "greater";
-}
-/**
- * Consumes two same-kind values and pushes Int 1 when left is at least right, else 0.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenGreaterOrEqual".
- */
-export interface ValueTokenGreaterOrEqual {
-  $type?: "greaterOrEqual";
-}
-/**
- * Consumes condition, whenTrue, whenFalse (in that authored order) and pushes whenTrue when the Int condition is nonzero, else whenFalse. The two branches must share a kind; the result takes it.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSelect".
- */
-export interface ValueTokenSelect {
-  $type?: "select";
-}
-/**
- * Consumes one Int value and pushes the number of set bits (0..64): a bitboard's piece count. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPopCount".
- */
-export interface ValueTokenPopCount {
-  $type?: "popCount";
-}
-/**
- * Consumes one Int value and pushes the count of zero bits above the highest set bit (64 for zero): 63 - leadingZeroCount is the highest set square, the integer log2. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLeadingZeroCount".
- */
-export interface ValueTokenLeadingZeroCount {
-  $type?: "leadingZeroCount";
-}
-/**
- * Consumes one Int value and pushes the count of zero bits below the lowest set bit (64 for zero): the lowest occupied square's index. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenTrailingZeroCount".
- */
-export interface ValueTokenTrailingZeroCount {
-  $type?: "trailingZeroCount";
-}
-/**
- * Consumes one Int value and pushes its lowest set bit alone (x & -x; zero for zero): the next piece to visit. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLowestSetBit".
- */
-export interface ValueTokenLowestSetBit {
-  $type?: "lowestSetBit";
-}
-/**
- * Consumes one Int value and pushes it with its lowest set bit cleared (x & (x - 1)): the remaining pieces after a visit. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenClearLowestSetBit".
- */
-export interface ValueTokenClearLowestSetBit {
-  $type?: "clearLowestSetBit";
-}
-/**
- * Consumes value, count and pushes the 64-bit left rotation; a count outside 0..63 fails evaluation. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenRotateLeft".
- */
-export interface ValueTokenRotateLeft {
-  $type?: "rotateLeft";
-}
-/**
- * Consumes value, count and pushes the 64-bit right rotation; a count outside 0..63 fails evaluation. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenRotateRight".
- */
-export interface ValueTokenRotateRight {
-  $type?: "rotateRight";
-}
-/**
- * Consumes one Int value and pushes its eight bytes in reverse order: on an 8x8 bitboard, the board flipped rank for rank (a vertical mirror). Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenByteSwap".
- */
-export interface ValueTokenByteSwap {
-  $type?: "byteSwap";
-}
-/**
- * Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated a half turn. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitReverse".
- */
-export interface ValueTokenBitReverse {
-  $type?: "bitReverse";
-}
-/**
- * Consumes an Int block width and pushes a 64-bit mask with one bit at each block's bottom. Widths are 1, 2, 4, 8, 16, 32, or 64; other widths fail evaluation. Int expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenReplicationMask".
- */
-export interface ValueTokenReplicationMask {
-  $type?: "replicationMask";
-}
-/**
- * Consumes an Int pattern and block width, in that order, and repeats the pattern across 64 bits. The width must divide 64 and the pattern must have no set bits outside its block; otherwise evaluation fails. Width 64 accepts every bit pattern unchanged. Int expressions only; the result may be negative.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenRepeatBits".
- */
-export interface ValueTokenRepeatBits {
-  $type?: "repeatBits";
-}
-/**
- * Consumes one value and pushes its negation in the same kind; the carrier's minimum fails evaluation.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenNegate".
- */
-export interface ValueTokenNegate {
-  $type?: "negate";
-}
-/**
- * Consumes one value and pushes its magnitude in the same kind; the carrier's minimum fails evaluation.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenAbs".
- */
-export interface ValueTokenAbs {
-  $type?: "abs";
-}
-/**
- * Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSign".
- */
-export interface ValueTokenSign {
-  $type?: "sign";
-}
-/**
- * Consumes value, mask and pushes the bits of value at the mask's set positions, packed toward bit 0 in order (pext): a bitboard's occupancy along a chosen set of squares as a dense index. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenParallelBitExtract".
- */
-export interface ValueTokenParallelBitExtract {
-  $type?: "parallelBitExtract";
-}
-/**
- * Consumes value, mask and pushes the low bits of value scattered to the mask's set positions in order (pdep): a dense index back onto its squares. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenParallelBitDeposit".
- */
-export interface ValueTokenParallelBitDeposit {
-  $type?: "parallelBitDeposit";
-}
-/**
- * Consumes value, offset, width and pushes the unsigned field of width bits starting at bit offset; width outside 1..64 or offset + width above 64 fails evaluation. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitField".
- */
-export interface ValueTokenBitField {
-  $type?: "bitField";
-}
-/**
- * Consumes value, field, offset, width and pushes value with the width bits at offset replaced by the low bits of field; the same bounds as BitField. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBitInsert".
- */
-export interface ValueTokenBitInsert {
-  $type?: "bitInsert";
-}
-/**
- * Consumes one Int mask over the named topology's cells (bit c is cell ordinal c, at most 64 cells) and pushes it with every set bit moved to that cell's neighbour in the named direction; a cell with no neighbour that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBoardShift".
- */
-export interface ValueTokenBoardShift {
-  $type?: "boardShift";
-  /**
-   * A discrete topology of state.lattices with at most 64 cells.
-   */
-  topology: string;
-  /**
-   * A direction of that topology.
-   */
-  direction: string;
-}
-/**
- * Consumes one Int mask over the named topology's cells and pushes the union of that mask and every repeated shift of it in the named direction until no bit has a neighbour that way — a whole file, rank, or diagonal from one seed bit (boardFill(1, board, N)), so no author hand-writes a wrap constant. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBoardFill".
- */
-export interface ValueTokenBoardFill {
-  $type?: "boardFill";
-  /**
-   * A discrete topology of state.lattices with at most 64 cells.
-   */
-  topology: string;
-  /**
-   * A direction of that topology.
-   */
-  direction: string;
-}
-/**
- * Consumes one Int mask over the named topology's cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side's view reads the other side's board through the half turn. Int only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenBoardImage".
- */
-export interface ValueTokenBoardImage {
-  $type?: "boardImage";
-  /**
-   * A discrete topology of state.lattices with at most 64 cells.
-   */
-  topology: string;
-  /**
-   * An element name world.topology lists for that topology.
-   */
-  element: string;
-}
-/**
- * Szudzik's pairing of two non-negative integers into one; pairX/pairY invert it.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPair".
- */
-export interface ValueTokenPair {
-  $type?: "pair";
-}
-/**
- * The first component of a paired value.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairX".
- */
-export interface ValueTokenPairX {
-  $type?: "pairX";
-}
-/**
- * The second component of a paired value.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairY".
- */
-export interface ValueTokenPairY {
-  $type?: "pairY";
-}
-/**
- * The pair with its components exchanged, computed without unpairing.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairSwap".
- */
-export interface ValueTokenPairSwap {
-  $type?: "pairSwap";
-}
-/**
- * The larger component of a paired value.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairMax".
- */
-export interface ValueTokenPairMax {
-  $type?: "pairMax";
-}
-/**
- * The smaller component of a paired value.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairMin".
- */
-export interface ValueTokenPairMin {
-  $type?: "pairMin";
-}
-/**
- * The sum of a paired value's components.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairSum".
- */
-export interface ValueTokenPairSum {
-  $type?: "pairSum";
-}
-/**
- * The absolute difference of a paired value's components.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairDifference".
- */
-export interface ValueTokenPairDifference {
-  $type?: "pairDifference";
-}
-/**
- * The pair with both components moved by the second argument.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairTranslate".
- */
-export interface ValueTokenPairTranslate {
-  $type?: "pairTranslate";
-}
-/**
- * The pair with both components multiplied by the second argument.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPairScale".
- */
-export interface ValueTokenPairScale {
-  $type?: "pairScale";
-}
-/**
- * Bit-interleaves two non-negative integers below 2^31 (x on the even bits); mortonX/mortonY invert it.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenMorton".
- */
-export interface ValueTokenMorton {
-  $type?: "morton";
-}
-/**
- * The even-bit component of a Morton code.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenMortonX".
- */
-export interface ValueTokenMortonX {
-  $type?: "mortonX";
-}
-/**
- * The odd-bit component of a Morton code.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenMortonY".
- */
-export interface ValueTokenMortonY {
-  $type?: "mortonY";
-}
-/**
- * The distance along the Hilbert curve of the given order (1..31) to (x, y); hilbertX/hilbertY invert it.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHilbert".
- */
-export interface ValueTokenHilbert {
-  $type?: "hilbert";
-}
-/**
- * The x of the point at a Hilbert distance for the given order.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHilbertX".
- */
-export interface ValueTokenHilbertX {
-  $type?: "hilbertX";
-}
-/**
- * The y of the point at a Hilbert distance for the given order.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHilbertY".
- */
-export interface ValueTokenHilbertY {
-  $type?: "hilbertY";
-}
-/**
- * The ring-ordered index of the hex cell at Eisenstein coordinates (q, r); hexQ/hexR invert it.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexIndex".
- */
-export interface ValueTokenHexIndex {
-  $type?: "hex";
-}
-/**
- * The q coordinate of a hex index.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexQ".
- */
-export interface ValueTokenHexQ {
-  $type?: "hexQ";
-}
-/**
- * The r coordinate of a hex index.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexR".
- */
-export interface ValueTokenHexR {
-  $type?: "hexR";
-}
-/**
- * The ring a hex index lies on.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexRadius".
- */
-export interface ValueTokenHexRadius {
-  $type?: "hexRadius";
-}
-/**
- * The Eisenstein squared straight-line distance from the origin q² − q·r + r² of a hex index.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexEuclideanSquared".
- */
-export interface ValueTokenHexEuclideanSquared {
-  $type?: "hexEuclideanSquared";
-}
-/**
- * The step distance between two hex indices.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexDistance".
- */
-export interface ValueTokenHexDistance {
-  $type?: "hexDistance";
-}
-/**
- * The hex index one step away in direction 0..5 (counterclockwise from +q; any integer, taken modulo 6).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexNeighbor".
- */
-export interface ValueTokenHexNeighbor {
-  $type?: "hexNeighbor";
-}
-/**
- * The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexRotate".
- */
-export interface ValueTokenHexRotate {
-  $type?: "hexRotate";
-}
-/**
- * The hex index reflected across the q axis.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexMirror".
- */
-export interface ValueTokenHexMirror {
-  $type?: "hexMirror";
-}
-/**
- * The hex index with q and r exchanged.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexSwap".
- */
-export interface ValueTokenHexSwap {
-  $type?: "hexSwap";
-}
-/**
- * The hex index of the coordinate sum.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexAdd".
- */
-export interface ValueTokenHexAdd {
-  $type?: "hexAdd";
-}
-/**
- * The hex index of the coordinate difference.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexSubtract".
- */
-export interface ValueTokenHexSubtract {
-  $type?: "hexSubtract";
-}
-/**
- * The hex index of the Eisenstein product.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexMultiply".
- */
-export interface ValueTokenHexMultiply {
-  $type?: "hexMultiply";
-}
-/**
- * The hex index scaled by an integer.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexScale".
- */
-export interface ValueTokenHexScale {
-  $type?: "hexScale";
-}
-/**
- * The hex index moved by (q, r).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenHexTranslate".
- */
-export interface ValueTokenHexTranslate {
-  $type?: "hexTranslate";
-}
-/**
- * The layer holding an index in a layer sequence (index, start, step, seed): a core of seed indices wrapped by layers of start, start+step, … indices.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLayer".
- */
-export interface ValueTokenLayer {
-  $type?: "layer";
-}
-/**
- * The position of an index within its layer, for the same (index, start, step, seed) sequence.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLayerOffset".
- */
-export interface ValueTokenLayerOffset {
-  $type?: "layerOffset";
-}
-/**
- * The first index of a layer, for a (layer, start, step, seed) sequence.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLayerStart".
- */
-export interface ValueTokenLayerStart {
-  $type?: "layerStart";
-}
-/**
- * The index count of a layer, for a (layer, start, step, seed) sequence.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLayerSize".
- */
-export interface ValueTokenLayerSize {
-  $type?: "layerSize";
-}
-/**
- * The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareRoot".
- */
-export interface ValueTokenSquareRoot {
-  $type?: "sqrt";
-}
-/**
- * The sine of a fixed-point angle in radians; fixed expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSine".
- */
-export interface ValueTokenSine {
-  $type?: "sin";
-}
-/**
- * The cosine of a fixed-point angle in radians; fixed expressions only.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenCosine".
- */
-export interface ValueTokenCosine {
-  $type?: "cos";
-}
-/**
- * The shell-ordered index of the square cell at Gaussian coordinates (x, y); squareX/squareY invert it.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareIndex".
- */
-export interface ValueTokenSquareIndex {
-  $type?: "square";
-}
-/**
- * The x coordinate of a square index.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareX".
- */
-export interface ValueTokenSquareX {
-  $type?: "squareX";
-}
-/**
- * The y coordinate of a square index.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareY".
- */
-export interface ValueTokenSquareY {
-  $type?: "squareY";
-}
-/**
- * The shell a square index lies on: its Chebyshev distance from the origin.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareRadius".
- */
-export interface ValueTokenSquareRadius {
-  $type?: "squareRadius";
-}
-/**
- * The Manhattan distance of a square index from the origin.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareLength".
- */
-export interface ValueTokenSquareLength {
-  $type?: "squareLength";
-}
-/**
- * The Gaussian squared straight-line distance from the origin x² + y² of a square index.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareEuclideanSquared".
- */
-export interface ValueTokenSquareEuclideanSquared {
-  $type?: "squareEuclideanSquared";
-}
-/**
- * The Manhattan (rook-step) distance between two square indices.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareDistance".
- */
-export interface ValueTokenSquareDistance {
-  $type?: "squareDistance";
-}
-/**
- * The Chebyshev (king-step) distance between two square indices.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareChebyshev".
- */
-export interface ValueTokenSquareChebyshev {
-  $type?: "squareChebyshev";
-}
-/**
- * The square index one step away in direction 0..3 (east, north, west, south; any integer, taken modulo 4).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareNeighbor".
- */
-export interface ValueTokenSquareNeighbor {
-  $type?: "squareNeighbor";
-}
-/**
- * The square index rotated about the origin by quarter turns (any integer, taken modulo 4).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareRotate".
- */
-export interface ValueTokenSquareRotate {
-  $type?: "squareRotate";
-}
-/**
- * The square index reflected across the x axis.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareMirror".
- */
-export interface ValueTokenSquareMirror {
-  $type?: "squareMirror";
-}
-/**
- * The square index with x and y exchanged.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareSwap".
- */
-export interface ValueTokenSquareSwap {
-  $type?: "squareSwap";
-}
-/**
- * The square index of the coordinate sum.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareAdd".
- */
-export interface ValueTokenSquareAdd {
-  $type?: "squareAdd";
-}
-/**
- * The square index of the coordinate difference.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareSubtract".
- */
-export interface ValueTokenSquareSubtract {
-  $type?: "squareSubtract";
-}
-/**
- * The square index of the Gaussian product.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareMultiply".
- */
-export interface ValueTokenSquareMultiply {
-  $type?: "squareMultiply";
-}
-/**
- * The square index scaled by an integer.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareScale".
- */
-export interface ValueTokenSquareScale {
-  $type?: "squareScale";
-}
-/**
- * The square index moved by (x, y).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSquareTranslate".
- */
-export interface ValueTokenSquareTranslate {
-  $type?: "squareTranslate";
-}
-/**
- * The greatest common divisor of two integers' magnitudes; gcd(dx, dy) == 1 is a lattice line with no interior point.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenGreatestCommonDivisor".
- */
-export interface ValueTokenGreatestCommonDivisor {
-  $type?: "gcd";
-}
-/**
- * The least common multiple of two integers' magnitudes.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenLeastCommonMultiple".
- */
-export interface ValueTokenLeastCommonMultiple {
-  $type?: "lcm";
-}
-/**
- * The floored remainder of a by m: for a positive m the value in [0, m) congruent to a, whatever a's sign.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenFloorModulo".
- */
-export interface ValueTokenFloorModulo {
-  $type?: "mod";
-}
-/**
- * The forward (clockwise) distance from a to b around an m-cycle: mod(b − a, m).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenCycleForward".
- */
-export interface ValueTokenCycleForward {
-  $type?: "cycleForward";
-}
-/**
- * The shortest distance between a and b around an m-cycle, in either direction.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenCycleDistance".
- */
-export interface ValueTokenCycleDistance {
-  $type?: "cycleDistance";
-}
-/**
- * The smallest non-negative integer missing from a 64-bit set — the lowest clear bit (the Sprague–Grundy value of a position whose options' values are the set).
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSmallestMissing".
- */
-export interface ValueTokenSmallestMissing {
-  $type?: "smallestMissing";
-}
-/**
- * Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenIsPrime".
- */
-export interface ValueTokenIsPrime {
-  $type?: "isPrime";
-}
-/**
- * The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenPrime".
- */
-export interface ValueTokenPrime {
-  $type?: "prime";
-}
-/**
- * n choose k, exact; zero when k exceeds n.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenChoose".
- */
-export interface ValueTokenChoose {
-  $type?: "choose";
-}
-/**
- * n! for n in 0..20.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenFactorial".
- */
-export interface ValueTokenFactorial {
-  $type?: "factorial";
-}
-/**
- * The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, choose(n, k)); n at most 64.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSubsetRank".
- */
-export interface ValueTokenSubsetRank {
-  $type?: "subsetRank";
-}
-/**
- * The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of subsetRank.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSubsetAt".
- */
-export interface ValueTokenSubsetAt {
-  $type?: "subsetAt";
-}
-/**
- * The i-th smallest element (i from 0) of the k-subset of 0..n−1 at a colexicographic rank, without building the subset.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenSubsetMember".
- */
-export interface ValueTokenSubsetMember {
-  $type?: "subsetMember";
-}
-/**
- * The lexicographic (Lehmer) rank of a permutation of 0..n−1 packed as nibbles — position i in bits 4i..4i+3 — in [0, n!); n at most 16.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenArrangementRank".
- */
-export interface ValueTokenArrangementRank {
-  $type?: "arrangementRank";
-}
-/**
- * The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of arrangementRank.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenArrangementAt".
- */
-export interface ValueTokenArrangementAt {
-  $type?: "arrangementAt";
-}
-/**
- * The element at position i of the permutation of 0..n−1 at a lexicographic rank.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ValueTokenArrangementMember".
- */
-export interface ValueTokenArrangementMember {
-  $type?: "arrangementMember";
+  instructions: ShapeNonNullable14[];
 }
 /**
  * Every inner predicate holds (conjunction).
@@ -6867,11 +5973,11 @@ export interface WorldFlockProfile {
   /**
    * Optional Fixed expression weighting each retained neighbor in the centroid. Left is the observer, right the neighbor. State-backed facts only; sampled at UpdateSeconds, clamped to [0,1], arithmetic failure reads zero, absent reads one. This does not filter separation or increase the candidate budget.
    */
-  cohesionAffinity?: ValueExpression;
+  cohesionAffinity?: ExpressionProgram;
   /**
    * Independent Fixed expression weighting each retained neighbor's heading, under the same contract as CohesionAffinity. Affinities select relative influence; the outer Alignment and Cohesion weights set term strength.
    */
-  alignmentAffinity?: ValueExpression;
+  alignmentAffinity?: ExpressionProgram;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -6954,7 +6060,11 @@ export interface ActionEffectSetState {
   /**
    * A bounded numeric expression evaluated in the destination row's integer or fixed-point domain. Exactly one source spelling is authored.
    */
-  expression?: ValueExpression;
+  expression?: ExpressionProgram;
+  /**
+   * The base64url-encoded vector literal a vector state row's cell takes.
+   */
+  vector?: string | null;
 }
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -6995,7 +6105,7 @@ export interface ActionEffectAddState {
   /**
    * See Expression.
    */
-  expression?: ValueExpression;
+  expression?: ExpressionProgram;
 }
 /**
  * Pushes one numeric value into a history row's ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.
@@ -7024,7 +6134,7 @@ export interface ActionEffectPushState {
   /**
    * A bounded numeric expression evaluated in the row's kind.
    */
-  expression?: ValueExpression;
+  expression?: ExpressionProgram;
 }
 /**
  * Applies a bounded state transform through the ordinary mutation pipeline.
@@ -7156,7 +6266,7 @@ export interface SortKey {
   descending?: boolean;
 }
 /**
- * Reorders a keyed numeric row by its own cell values, stably.
+ * Reorders a keyed or ordered numeric row by its own cell values, stably.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "StateTransformSortKeyed".
@@ -7164,7 +6274,7 @@ export interface SortKey {
 export interface StateTransformSortKeyed {
   $type?: "sortKeyed";
   /**
-   * The keyed numeric row.
+   * Any ordered zone or keyed numeric row.
    */
   row: string;
   /**
@@ -7256,7 +6366,7 @@ export interface StateTransformArrange {
   fromKey?: string | null;
 }
 /**
- * Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and advances its cursor by one.
+ * Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and advances its cursor by one. The value comes from the spellings PushState takes: the raw literal, a live cell, or an expression evaluated in the ring's kind.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "StateTransformPush".
@@ -7268,9 +6378,21 @@ export interface StateTransformPush {
    */
   row: string;
   /**
-   * The raw value pushed, in the row's kind.
+   * The raw value pushed, in the row's kind; read only when neither FromState nor Expression is named, and refused as ambiguous when a live source is named beside a non-zero literal.
    */
-  value: number;
+  value?: number;
+  /**
+   * A state row or reserved channel read live at every firing.
+   */
+  fromState?: string | null;
+  /**
+   * The cell of FromState, or null for its slot.
+   */
+  fromKey?: string | null;
+  /**
+   * A bounded numeric expression evaluated in the row's kind.
+   */
+  expression?: ExpressionProgram;
 }
 /**
  * Clears every group of cells valued Lower..Upper beside the cell From names that has no empty cell beside it, writing the board's empty value over their members. The write-path twin of $board:enclosedAt, applied after the value lands.
@@ -7306,6 +6428,126 @@ export interface StateTransformClearEnclosed {
 export interface StateTransformObserve {
   $type?: "observe";
   row: string;
+}
+/**
+ * Writes the normalized sum of 1 to 8 weighted vector terms.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateTransformMix".
+ */
+export interface StateTransformMix {
+  $type?: "mix";
+  /**
+   * The target vector cell or slot.
+   */
+  into: string;
+  /**
+   * The weighted vector terms.
+   */
+  terms: (VectorTerm | null)[];
+}
+/**
+ * One term of a Mix: a vector operand with an integer weight.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "VectorTerm".
+ */
+export interface VectorTerm {
+  /**
+   * The vector operand.
+   */
+  from: string;
+  /**
+   * The integer weight in [-1000, 1000] and non-zero.
+   */
+  weight: number;
+}
+/**
+ * Writes the normalized sum of every candidate cell of a table.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateTransformMean".
+ */
+export interface StateTransformMean {
+  $type?: "mean";
+  /**
+   * The source vector table.
+   */
+  from: string;
+  /**
+   * The target vector cell or slot.
+   */
+  into: string;
+  /**
+   * Optional boolean filter row.
+   */
+  where?: string | null;
+}
+/**
+ * Writes the closest cells of a table.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateTransformNearest".
+ */
+export interface StateTransformNearest {
+  $type?: "nearest";
+  /**
+   * The source vector table.
+   */
+  from: string;
+  /**
+   * The query vector cell, slot, or literal.
+   */
+  query: string;
+  /**
+   * The destination table or slot.
+   */
+  into: string;
+  /**
+   * How many nearest results to recall.
+   */
+  k: number;
+  /**
+   * Optional threshold score.
+   */
+  threshold?: string | null;
+  /**
+   * Optional boolean row filter.
+   */
+  where?: string | null;
+  /**
+   * Optional key to exclude from candidates.
+   */
+  exclude?: string | null;
+  /**
+   * Whether to rank lower scores first.
+   */
+  farthest?: boolean;
+}
+/**
+ * Stores a vector unless the table already holds a near-duplicate.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateTransformRemember".
+ */
+export interface StateTransformRemember {
+  $type?: "remember";
+  /**
+   * The destination vector table.
+   */
+  into: string;
+  /**
+   * The key to write.
+   */
+  key: string;
+  /**
+   * The source vector.
+   */
+  from: string;
+  /**
+   * Cosine similarity threshold in [0, 1].
+   */
+  unlessWithin: string;
 }
 /**
  * Decrements a state countdown by the current simulation step's engine-tick width, saturating at zero. The destination must be a kind=Int min=0 row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document's authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.
@@ -8349,7 +7591,7 @@ export interface WorldEffectSetIdentityFact {
   /**
    * A bounded integer expression evaluated at fire time.
    */
-  expression?: ValueExpression;
+  expression?: ExpressionProgram;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10000,7 +9242,7 @@ export interface WorldLookMotion {
   /**
    * Up to four optional expressions, in x/y/z/w order. Missing entries read zero. Expressions read eased state; each consumer defines its own numeric range.
    */
-  lanes?: ValueExpression[] | null;
+  lanes?: ExpressionProgram[] | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10255,6 +9497,18 @@ export interface WorldStateSection {
    * The lattice topologies the section's lattice-shaped rows lie over (see LatticeTopology; the document adds the physical WorldFieldTopology case).
    */
   lattices?: (LatticeTopology | null)[] | null;
+  /**
+   * The declared vector embedding spaces, or null for none.
+   */
+  spaces?: (StateSpace | null)[] | null;
+  /**
+   * The declared symbolic value domains a row may name, or null for none.
+   */
+  enums?: (StateEnum | null)[] | null;
+  /**
+   * The declared row families, or null for none.
+   */
+  families?: (StateFamily | null)[] | null;
 }
 export interface WorldStateRow1 {
   /**
@@ -10264,14 +9518,14 @@ export interface WorldStateRow1 {
   /**
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
-  kind: "Int" | "Fixed" | "Bool" | "Text";
-  value?: ShapeNonNullable;
+  kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
+  value?: ShapeNonNullable16;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable;
+    value: ShapeNonNullable16;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -10279,7 +9533,7 @@ export interface WorldStateRow1 {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable2;
+    clock?: ShapeNonNullable17;
     visibility?: StateVisibility;
     /**
      * When a stored knowledge value was last seen and whether the latest observation still sees it.
@@ -10409,7 +9663,15 @@ export interface WorldStateRow1 {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable2;
+  clock?: ShapeNonNullable17;
+  /**
+   * The vector space this row belongs to; required for Vector, refused for every other kind.
+   */
+  space?: string;
+  /**
+   * The StateEnum this row's integer values name, or null for a row whose values carry no symbolic domain. Legitimate only for Int cells, and only naming an enum the section declares.
+   */
+  enum?: CellName;
   /**
    * Whether this row is a drive-admission gate. When set, this must be a keyed row (IsKeyed) whose per-body cell — keyed by the body's 0-based entity index — is consulted before admitting a drive or action intent for that body: a nonzero cell refuses the body's intents until the cell reads zero again, checked fresh every tick. The engine does not interpret the row's name; several independently named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring Capacity, and only for Int/Fixed/ Bool. Default false.
    */
@@ -10447,6 +9709,19 @@ export interface WorldStateRow1 {
      */
     medium?: WorldLatticeMedium | null;
   };
+  /**
+   * The verdict trait on a state row: the row is a test expectation's answer. The row's own name is the verdict's name, Gate is the expectation in the author's words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status.
+   */
+  verdict?: {
+    /**
+     * The expectation, in the author's words — what a failing verdict names. Non-empty, at most MaxGateLength characters. A .puckexpect clause lowers its own source text here.
+     */
+    gate: string;
+    /**
+     * The cell key carrying the status code. Must be a declared cell of the same row.
+     */
+    status: CellName;
+  };
 }
 /**
  * A StateRow's continuous accumulation trait: the row's stored cell is a base value, and the read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was last explicitly set (EpochEngineTick). Used for regen, fractional accumulation, a day/night clock — anything that should move on its own between observations.
@@ -10465,7 +9740,7 @@ export interface StateAdvance {
   perSecondDenominator: number;
 }
 /**
- * A StateCell/StateRow's second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower's current sample from the carrying cell's own Y0/ V0 at its EpochTick, chasing the stored value as its target — the closed-form counterpart to StateAdvance's linear accumulation, no per-tick work either. An explicit write REBASES: the cell's clock Y0/V0 become the eased value and velocity computed AT the write's own tick, and EpochTick becomes that tick — the same rebase discipline StateAdvance's own write rule follows, so a retune never jumps.
+ * A StateCell/StateRow's second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower's current sample from the carrying cell's own Y0/ V0 at its EpochTick, chasing the stored value as its target — the closed-form counterpart to StateAdvance's linear accumulation, no per-tick work either. An explicit write REBASES: the cell's clock Y0/V0 become the eased value and velocity computed AT the write's own tick, and EpochTick becomes that tick — the same rebase discipline StateAdvance's own write rule follows, so a retune never jumps. A cell composed with this trait but no clock yet (never settled or explicitly written) reads its own stored value as the follower's position, at rest — see TryEvaluateDynamics.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "StateDynamics".
@@ -10502,9 +9777,9 @@ export interface StateCycle {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ShapeNonNullable2".
+ * via the `definition` "ShapeNonNullable17".
  */
-export interface ShapeNonNullable2 {
+export interface ShapeNonNullable17 {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
@@ -11405,6 +10680,64 @@ export interface WorldReactionFlow {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateSpace".
+ */
+export interface StateSpace {
+  /**
+   * The stable space name, unique within the section.
+   */
+  name: CellName;
+  /**
+   * The model name, non-empty and at most 128 characters.
+   */
+  model: string;
+  /**
+   * The model revision, non-empty and at most 128 characters.
+   */
+  revision: string;
+  /**
+   * The component dimension count, in [8, 1024].
+   */
+  dimensions: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateEnum".
+ */
+export interface StateEnum {
+  /**
+   * The enum's stable name, unique within the section.
+   */
+  name: CellName;
+  /**
+   * The member names in value order; member i is the value i.
+   */
+  members: CellName[];
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateFamily".
+ */
+export interface StateFamily {
+  /**
+   * The family's stable name; never a row name of its own.
+   */
+  name: CellName;
+  /**
+   * How many member rows the family holds, 1..MaxRows. When Indices or Members is declared, this is that list's length.
+   */
+  size: number;
+  /**
+   * The family index each member carries, in member order, or null when the members are indexed 0..Size-1 with no gaps. A family index is what <family>[i] selects on, so an index the list omits is a gap that selects no row.
+   */
+  indices?: number[] | null;
+  /**
+   * The member rows' own names, in member order, or null when the members are named by the <name><index> convention.
+   */
+  members?: CellName[] | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldInputHoldAuthoring".
  */
 export interface WorldInputHoldAuthoring {
@@ -11876,11 +11209,11 @@ export interface WorldRule {
    */
   decision?: WorldDecision | null;
   /**
-   * The values bound once per evaluation, in declared order, read as $bind:<name>.
+   * The values computed once per evaluation, in declared order, read as $local:<name>.
    */
-  bindings?: (RuleBinding | null)[] | null;
+  locals?: (RuleLocal | null)[] | null;
   /**
-   * The rule's zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule — a compareState's state, a $reduce:/$match: row, a $zone: endpoint's zone, a transfer's from/to, an expression's row — may spell $zones[<index>] to select an entry live, the index being an infix cell key (game[from], $each, $bind:<name>, or any expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects an entry — an index outside the table, or at an empty entry, reads the gate closed, so a table's gaps are the rule's own statement of which piles it is for. forEach: "$zones" iterates the table's own non-empty indices with $each bound to each.
+   * The rule's zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule — a compareState's state, a $reduce:/$match: row, a $zone: endpoint's zone, a transfer's from/to, an expression's row — may spell $zones[<index>] to select an entry live, the index being an infix cell key (game[from], $each, $local:<name>, or any expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects an entry — an index outside the table, or at an empty entry, reads the gate closed, so a table's gaps are the rule's own statement of which piles it is for. forEach: "$zones" iterates the table's own non-empty indices with $each bound to each.
    */
   zones?: (string | null)[] | null;
 }
@@ -11940,7 +11273,7 @@ export interface WorldDecisionOption {
   /**
    * A numeric expression in the decision's score kind. Arithmetic failure makes this option ineligible for that reconsideration.
    */
-  score: ValueExpression;
+  score: ExpressionProgram;
   /**
    * Effects fired when entering this option; may be empty for an inspection-only choice.
    */
@@ -11986,11 +11319,11 @@ export interface WorldDecisionNeighbors {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "RuleBinding".
+ * via the `definition` "RuleLocal".
  */
-export interface RuleBinding {
+export interface RuleLocal {
   /**
-   * The binding's name — the token after BindPrefix.
+   * The local's name — the token after LocalPrefix.
    */
   name: CellName;
   /**
@@ -12000,7 +11333,7 @@ export interface RuleBinding {
   /**
    * The postfix expression, evaluated in that kind.
    */
-  expression: ValueExpression;
+  expression: ExpressionProgram;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -13048,6 +12381,52 @@ export interface WorldCapturePaletteEntry {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldScheduleSection".
+ */
+export interface WorldScheduleSection {
+  /**
+   * The output directory this world's schedule writes into — the state export (ExportFileName) and the submission manifest (ManifestFileName). Relative to the process's current directory unless rooted, and only ever written when --schedule-dir armed the run, whose path replaces this one; two runs of the same document therefore target sibling directories without two document copies.
+   */
+  directory: string;
+  /**
+   * How many ticks the world keeps stepping past the last scheduled command's tick before the export is written: the settle margin a Simulation-routed command's apply, the mutation drain, and the rules reading its result need. At least 1 — a zero margin would export at the same tick the last command was submitted, before it could have applied — and at most MaxSettleTicks.
+   */
+  settleTicks: number;
+  /**
+   * The scheduled commands, ascending by tick. Rows may share a tick; they are then submitted in declaration order, which is the whole ordering contract. Capacity MaxRows. May be empty: a world whose expectations are decided by its rules alone still wants the export.
+   *
+   * Items: One tick-scheduled command: the exact simulation tick the host submits it at, the seat it acts as, and one command line in the console/ingress vocabulary the host already accepts. The line is handed to the parser a live stdin line reaches, under a session bound to Principal, so admission, grants, phase guards, and refusals behave as they do for a live actor.
+   */
+  rows: (WorldScheduleRow | null)[];
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldScheduleRow".
+ */
+export interface WorldScheduleRow {
+  /**
+   * The completed-tick coordinate — the same coordinate Ticks arms at — this command is submitted at. Submission is what the coordinate pins: an Immediate-routed verb runs inline in that submission; a Simulation-routed verb folds into the next tick's snapshot and applies during Tick + 1, as a live console line does. Tick 0 is refused — no step has completed there.
+   */
+  tick: number;
+  /**
+   * The acting identity, spelled as the engine's own principal label (Describe): seat1..seat4, parsed by TryParse so the seat ceiling here is the one the wire codec enforces. Every other label is refused, console included: the console principal is trusted at every gate (Puck.World.Server.WorldGrants.IsTrusted), so a step acting as it proves nothing about authority. The power a scheduled step needs is authored in the document's own grants.
+   */
+  principal: string;
+  /**
+   * The command line, verbatim: non-empty, one line, not a # comment, and opening with a verb WorldScheduleCommands admits. Argument shapes are not checked here — this project holds no command registry — so a malformed argument becomes a recorded refusal at its tick rather than a boot failure.
+   */
+  command: string;
+  /**
+   * What the ingress must answer for this row. Any other recorded outcome fails the world by name: a step whose outcome nobody declared is a step nobody measured.
+   */
+  expect?: WorldScheduleExpectation;
+  /**
+   * Text the recorded refusal detail must contain, or null to accept any refusal. Legitimate only beside Refused.
+   */
+  refusal?: string | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCurveRow".
  */
 export interface WorldCurveRow {
@@ -13231,7 +12610,7 @@ export interface PatternRow {
   /**
    * For a zone source, an expression in the pattern's kind evaluated once per token in pile order, where a state token keyed $token reads that token's cell of a row keyed over the zone's token domain: the word over a tuple of attributes (suit * 16 + rank) rather than one. Exclusive with Attribute.
    */
-  value?: ValueExpression;
+  value?: ExpressionProgram;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -13673,6 +13052,176 @@ export interface WorldMachineCable {
    * This machine's 0-based place in cable order — contiguous across the cable's ports (validated), and what decides the linking engine's deterministic player order.
    */
   position: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "RuleGroupDeclaration".
+ */
+export interface RuleGroupDeclaration {
+  /**
+   * The group's stable name — unique within the section, and never a rule's name.
+   */
+  name: CellName;
+  /**
+   * Fixpoint or staged.
+   */
+  shape: RuleGroupShape;
+  /**
+   * The members, in authored order; for a staged group this is the step sequence, and the last step is terminal.
+   *
+   * Items: One step of a staged group: the rule it runs and what a refusal does to the cursor.
+   */
+  steps: (RuleGroupStep | null)[];
+  /**
+   * The pass ceiling a fixpoint group breaches into a counted refusal, or null for DefaultPasses.
+   */
+  passes?: number | null;
+  /**
+   * The gate that arms the group, or null for always.
+   */
+  trigger?: ActionPredicateNullable2 | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "RuleGroupStep".
+ */
+export interface RuleGroupStep {
+  /**
+   * The member rule's name.
+   */
+  rule: CellName;
+  /**
+   * What a refusal does to the cursor.
+   */
+  onRefusal?: RuleGroupStepPolicy;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetRow".
+ */
+export interface CellSetRow {
+  /**
+   * The set's stable name — unique within the document.
+   */
+  name: CellName;
+  /**
+   * The expression the name stands for.
+   */
+  set: CellSetExpression;
+}
+/**
+ * The topology cells of a lattice row whose value falls in an inclusive range.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionBoard".
+ */
+export interface CellSetExpressionBoard {
+  $type?: "board";
+  /**
+   * The lattice row.
+   */
+  row: CellName;
+  /**
+   * The least value a member carries.
+   */
+  low: number;
+  /**
+   * The greatest value a member carries.
+   */
+  high: number;
+}
+/**
+ * The member rows of a family whose slot value falls in an inclusive range.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionFamily".
+ */
+export interface CellSetExpressionFamily {
+  $type?: "family";
+  /**
+   * The family.
+   */
+  name: CellName;
+  /**
+   * The least value a member carries.
+   */
+  low: number;
+  /**
+   * The greatest value a member carries.
+   */
+  high: number;
+}
+/**
+ * The pile positions of an ordered or keyed row whose value falls in an inclusive range.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionZone".
+ */
+export interface CellSetExpressionZone {
+  $type?: "zone";
+  /**
+   * The row.
+   */
+  row: CellName;
+  /**
+   * The least value a member carries.
+   */
+  low: number;
+  /**
+   * The greatest value a member carries.
+   */
+  high: number;
+}
+/**
+ * Every position of the carrier.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionEverything".
+ */
+export interface CellSetExpressionEverything {
+  $type?: "all";
+}
+/**
+ * No position at all.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionNothing".
+ */
+export interface CellSetExpressionNothing {
+  $type?: "none";
+}
+/**
+ * The union of the items.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionAny".
+ */
+export interface CellSetExpressionAny {
+  $type?: "any";
+  items: CellSetExpressionListNonNullable;
+}
+/**
+ * The intersection of the items.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionBoth".
+ */
+export interface CellSetExpressionBoth {
+  $type?: "both";
+  /**
+   * The items.
+   */
+  items: CellSetExpressionList;
+}
+/**
+ * Every position the item does not hold.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "CellSetExpressionComplement".
+ */
+export interface CellSetExpressionComplement {
+  $type?: "not";
+  item: CellSetExpression;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema

@@ -17,7 +17,7 @@ namespace Puck.World;
 /// integers) that presently carry the tag, with a nonzero value meaning "on". Reading, writing, journaling, undoing,
 /// and echoing a carrier's tag are therefore the ordinary <c>state</c> substrate (<c>world.state.cell.set</c>/
 /// <c>.remove</c>, <c>world.state</c>) — nothing new to build there.</para>
-/// <para><see cref="WorldInteraction"/>/<c>WorldRuleCompiler.CompileAllInteractions</c> validates an interaction's
+/// <para><see cref="WorldInteraction"/>/<c>WorldFactsCompiler.CompileAllInteractions</c> validates an interaction's
 /// <c>left</c>/<c>right</c> property reference against this list — refusing an unknown or typo'd name by name, at
 /// the type — rather than against the state section directly.</para>
 /// </remarks>

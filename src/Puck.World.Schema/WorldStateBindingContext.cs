@@ -92,6 +92,7 @@ public static class WorldStateBindingContext {
             : "false"),
             CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
             CellKind.Text => (text ?? string.Empty),
+            CellKind.Vector => string.Empty,
             _ => raw.ToString(provider: CultureInfo.InvariantCulture),
         };
     }
@@ -241,10 +242,16 @@ public static class WorldStateBindingContext {
                 continue;
             }
 
+            if (row.Kind == CellKind.Vector) {
+                errors.Add(item: $"contexts row {index} names family \"{context.Family}\", whose row is kind vector — vector rows cannot serve as control contexts");
+
+                continue;
+            }
+
             if (row.Kind == CellKind.Text) {
                 continue;
             }
-            if (!StateCellWriter.TryParseNumericToken(
+            if (!CellValue.TryParse(
                 kind: row.Kind,
                 token: context.State,
                 value: out var parsed,
@@ -256,7 +263,7 @@ public static class WorldStateBindingContext {
             }
 
             var canonical = FormatState(
-                rawValue: parsed,
+                rawValue: parsed.Raw,
                 row: row,
                 text: null
             );

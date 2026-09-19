@@ -1,6 +1,8 @@
 using Puck.State;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Lsp;
 
@@ -47,10 +49,14 @@ internal static class PuckHoverInfo {
                 $"Arguments: {function.Arity}. Value domain: {function.Domain}. Operation: {function.Operation}."
             );
         }
-        return null;
+        return PuckEmbeddingLsp.GetKeywordHoverCard(word: word);
     }
-    internal static string? Declaration(string source, string word, int offset) {
-        var document = PuckParser.ParseDocumentWithDiagnostics(source).Value;
+    internal static string? Declaration(string source, string word, int offset, DocumentVocabularyResolver? resolver = null) {
+        var vocabulary = (resolver?.Resolve(source) ?? WorldDocumentVocabulary.Instance);
+        var document = PuckParser.ParseDocumentWithDiagnostics(
+            source: source,
+            vocabulary: vocabulary
+        ).Value;
 
         if (document is null) {
             return null;
@@ -72,6 +78,20 @@ internal static class PuckHoverInfo {
         }
         for (var index = (path.Count - 1); (index >= 0); --index) {
             switch (path[index]) {
+                case EmbeddedBlockNode eb when string.Equals(
+                    a: eb.Language,
+                    b: "sql",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ):
+                    if (PuckSqlLsp.GetSqlHoverCard(
+                        offset: offset,
+                        resolver: resolver,
+                        text: source,
+                        word: word
+                    ) is { } sqlCard) {
+                        return sqlCard;
+                    }
+                    break;
                 case LambdaExpressionNode lambda when lambda.Parameters.Contains(value: word):
                     return Card(
                         $"{word} — lambda parameter",
@@ -122,12 +142,12 @@ internal static class PuckHoverInfo {
                         "Runs from zero to count minus one."
                     );
                 case RuleBlockNode rule:
-                    var binding = rule.Statements.OfType<BindStatementNode>().FirstOrDefault(predicate: item => (item.Name == word));
-                    if (binding is not null) {
+                    var local = rule.Statements.OfType<LocalStatementNode>().FirstOrDefault(predicate: item => (item.Name == word));
+                    if (local is not null) {
                         return Describe(
                             source,
-                            binding,
-                            $"{word} — rule binding ({binding.Kind})"
+                            local,
+                            $"{word} — rule local ({local.Kind})"
                         );
                     }
                     break;
@@ -214,6 +234,7 @@ internal static class PuckHoverInfo {
         OnNoChoiceBlockNode fallback => fallback.Effects,
         TransactionStatementNode transaction => [.. transaction.MainEffects, .. (transaction.OnFailureEffects ?? [])],
         IfStatementNode branch => [.. branch.Then, .. (branch.Else ?? [])],
+        TransformStatementNode transform => [transform.Transform],
         CallExpressionNode call => call.Arguments,
         ArgumentNode argument => [argument.Value],
         StateTableDeclarationNode table => [.. table.Modifiers, .. table.Cells],

@@ -31,14 +31,14 @@ public sealed class WorldExpressionAuthoringLawTests {
                 CellKind.Int,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        5L
+                        CellValue.Int(value: 5L)
                     )]
             )]),
             Rules = [new WorldRule(
                 CellName.Parse(candidate: "r"),
                 [new ActionEffect.SetState(
                         State: "hp",
-                        Expression: ValueExpression.Parse(text: "maximum(hp - 1, 0)")
+                        Expression: ExpressionProgram.Parse(text: "maximum(hp - 1, 0)")
                     )]
             )],
         };
@@ -47,8 +47,8 @@ public sealed class WorldExpressionAuthoringLawTests {
                 CellName.Parse(candidate: "r"),
                 [new ActionEffect.SetState(
                         State: "hp",
-                        Expression: new ValueExpression(Tokens: [
-                new ValueToken.State("hp"), new ValueToken.Constant(Value: 1m), new ValueToken.Subtract(), new ValueToken.Constant(Value: 0m), new ValueToken.Max(),
+                        Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "hp"), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.Subtract), Instruction.Constant(value: 0m), Instruction.Of(operation: ExpressionOp.Maximum),
             ])
                     )]
             )],
@@ -57,11 +57,11 @@ public sealed class WorldExpressionAuthoringLawTests {
         var fromTokens = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: tokens));
 
         Assert.Equal(
-            WorldRuleCompiler.CompileAll(definition: fromTokens)[0].Effects[0].Describe,
-            WorldRuleCompiler.CompileAll(definition: fromInfix)[0].Effects[0].Describe
+            WorldFactsCompiler.CompileAll(definition: fromTokens)[0].Effects[0].Describe,
+            WorldFactsCompiler.CompileAll(definition: fromInfix)[0].Effects[0].Describe
         );
         Assert.Contains(
-            "\"expression\": \"maximum(hp - 1, 0)\"",
+            "\"instructions\"",
             System.Text.Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: fromInfix)),
             StringComparison.Ordinal
         );
@@ -86,27 +86,24 @@ public sealed class WorldExpressionAuthoringLawTests {
         static void Walk(JsonNode node, ref int expressions) {
             switch (node) {
                 case JsonObject obj:
-                    if (
-                        (obj.Count == 1) &&
-                        (obj["tokens"] is JsonArray)
-                    ) {
-                        var tokens = JsonSerializer.Deserialize(
+                    if (obj["instructions"] is JsonArray) {
+                        var program = JsonSerializer.Deserialize(
                             json: obj.ToJsonString(),
-                            jsonTypeInfo: WorldJsonContext.Default.ValueExpressionTokens
-                        )!.Tokens;
-                        var printed = ExpressionSpelling.Print(tokens: tokens);
+                            jsonTypeInfo: WorldJsonContext.Default.ExpressionProgram
+                        )!;
+                        var printed = ExpressionSpelling.Print(program: program);
 
                         Assert.True(
                             condition: ExpressionSpelling.TryParse(
                                 error: out var error,
-                                text: printed,
-                                tokens: out var parsed
+                                program: out var parsed,
+                                text: printed
                             ),
                             userMessage: $"{printed}: {error}"
                         );
                         Assert.Equal(
-                            actual: parsed,
-                            expected: tokens
+                            actual: parsed.Instructions,
+                            expected: program.Instructions
                         );
                         expressions++;
                         return;

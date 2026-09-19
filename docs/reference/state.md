@@ -5,29 +5,40 @@ it. It can support a card game, a board-game judge, a turn-based resolver, or
 another deterministic application with its own host. Puck.World builds on these
 same contracts and adds world-specific concepts.
 
-Start with four ideas: **rows describe data**, **rules propose changes**,
-**a host accepts and installs changes**, and **frames let rules explore a
-candidate without changing installed state**.
+Start with four ideas:
+
+- **Rows describe data.** A row is a named collection of values of one kind,
+  and a cell is one value addressed by a key inside it.
+- **One arena holds every value.** `StateArena` is a columnar store: every row
+  and cell lives in a typed column, and every read and write on the tick path
+  addresses a column position rather than a name.
+- **Rules propose changes, and a firing is atomic.** One gate opening is one
+  journal scope on the arena. Either every reversible effect in it lands, or
+  the scope rewinds and none of them do.
+- **A host serves facets and owns what cannot be rewound.** The host supplies
+  the tick, answers the capabilities a rule declared it needs, and fires an
+  irreversible arm only after the scope has committed.
 
 ## See the whole system
 
 ```mermaid
 flowchart TB
     Author["Authored rows and rules"] --> Compile["Compile names, kinds, and operations"]
-    Compile --> Rules["Compiled rules"]
-    Rules --> Live["Continuing evaluation<br/>RuleEvaluator + RuleLatch"]
-    Rules --> Judge["Candidate evaluation<br/>FrameHost / Search"]
-    Input["Current state"] --> Live
-    Input --> Judge
-    Live --> Host["Host validates and installs mutations"]
-    Judge -- "result writes" --> Host
-    Host --> Next["State for the next step"]
+    Compile --> Rules["Compiled rules and rule groups"]
+    Rules --> Admit["Admission: does the host<br/>serve every facet the rule needs?"]
+    Admit --> Evaluate["Evaluation: gate, bindings,<br/>one journal scope per firing"]
+    Evaluate --> Arena["StateArena: columns, journal scopes,<br/>versions, hash"]
+    Arena -- "Export / Import" --> Document["StateRow list (serialization)"]
+    Evaluate -- "after commit" --> Outward["Irreversible arms:<br/>saves, cues, placements"]
+    Search["Search: candidates as scopes"] --> Arena
 ```
 
-**Compilation** resolves names and validates rule operations. **Evaluation**
-reads the current values and attempts the effects of rules whose conditions
-hold. **Installation** makes an accepted change authoritative: the host treats
-it as the current state, records it, and exposes the appropriate observations.
+**Compilation** resolves names and validates rule operations. **Admission**
+compares a rule's declared needs against what the host advertises, and
+refuses by facet name when the host cannot serve one. **Evaluation** reads
+the current values through the arena and attempts the effects of rules whose
+gates hold. **Export** turns the arena's columns back into the authored row
+list, which is how a document is saved and loaded.
 
 These are separate stages. Compiling a rule does not run it. Judging a candidate
 does not commit it. The host owns time, admission, persistence, and any concepts
@@ -39,8 +50,8 @@ outside the library's state vocabulary.
 |---|---|
 | [1. Rows, cells, and domains](state/data-model.md) | How do I represent a balance, a piece, a board, or a pile? |
 | [2. Reads and expressions](state/expressions.md) | How do I read live values and combine them into a question? |
-| [3. Rules and transactions](state/rules.md) | When does a rule fire, in what order, and which writes succeed together? |
-| [4. Frames and scheduling](state/frames.md) | How can I try a change privately, and when is a cached answer safe? |
+| [3. Rules, firing, and groups](state/rules.md) | When does a rule fire, which writes succeed together, and how do several rules run as one step? |
+| [4. The arena](state/frames.md) | Where do values live, how does a scope rewind, and when is a cached answer safe? |
 | [5. Generators and draw sites](state/generators.md) | How do random values remain reproducible and independently resumable? |
 | [6. Search](state/search.md) | How do rules judge legal moves and compare possible futures? |
 | [7. Hosting and extension](state/hosting.md) | What must my application implement, validate, and checkpoint? |
@@ -71,19 +82,20 @@ to the [data-model chapter](state/data-model.md).
 ## Evaluate a small rule
 
 This complete C# program adds one coin to an integer slot. Run it in a console
-project referencing Puck.State, or place it in a checkout project with a project
-reference to the library. The [getting-started guide](../getting-started.md)
-owns the repository setup.
+project referencing Puck.State and Puck.State.Rules, or place it in a checkout
+project with project references to both. The
+[getting-started guide](../getting-started.md) owns the repository setup.
 
 ```csharp
 using Puck.State;
+using Puck.State.Rules;
 
-StateRow[] rows = [new(
+StateRow[] rows = [new StateRow(
     Name: CellName.Parse("coins"),
     Kind: CellKind.Int,
-    Cells: [new StateCell(Key: StateRow.SlotKey, Value: 2)])];
+    Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(2L))])];
 var section = new StateSection(Rows: rows);
-var catalog = StateCatalog.Compile(section);
+var catalog = StateCatalog.Compile(section: section);
 var context = new RuleCompileContext(
     section: section, catalog: catalog, tables: null, patterns: null,
     generators: null, simulationRateHz: 60, vocabulary: RuleVocabulary.Core);
@@ -93,41 +105,73 @@ var rules = RuleCompiler.CompileAll(
         Effects: [new ActionEffect.AddState(State: "coins", Value: 1m)])],
     context: context);
 
-var layout = new FrameLayout(rows: rows, topology: static _ => null);
-var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
-host.Frame.Load(new RowStore(rows));
-host.Judge(rules, tick: 1UL);
-host.Frame.TryStored(rows[0], StateRow.SlotKey, out long coins, out _);
-Console.WriteLine(coins); // 3
-Console.WriteLine(rows[0].Cells![0].Value); // 2: the source row is unchanged
+var arena = new StateArena(catalog: catalog, section: section, time: ArenaTime.Origin);
+var host = new ArenaEffectHost(arena: arena);
+
+host.Advance(tick: 1UL, engineTick: 1UL);
+new RuleEvaluator(host: host).Evaluate(
+    rules: rules, latch: new RuleLatch(), stepTicks: 1UL);
+
+catalog.TryResolve(lane: StateLane.Document, name: "coins", handle: out var coinsHandle);
+catalog.Keys.TryResolve(name: StateRow.SlotKey, key: out var slotKey);
+host.Arena.TryRead(rowOrdinal: coinsHandle.Ordinal, key: slotKey, value: out var coins);
+Console.WriteLine(coins.AsInt);                 // 3
+Console.WriteLine(rows[0].Cells![0].Value.AsInt); // 2: the authored row is unchanged
 ```
 
 Read the program in three stages:
 
 1. Describe the row and rule, then build a catalog and compile context. The
    catalog resolves the name `coins`; its handles belong to that catalog.
-2. Build a layout and load the frame from a `RowStore`. This supplies the
-   candidate's starting value of two.
-3. Judge the rule and read the frame. The candidate now holds three, while
-   the original row still holds two. Loading it again from the unchanged
-   row store would reset the candidate to two.
+2. Build an arena over that catalog and seed it from the section. This supplies
+   the starting value of two.
+3. Evaluate the rule and read the arena. It now holds three, while the authored
+   row still holds two. Loading the section again would reset the arena to two.
 
 With no gate, the rule always fires. With no explicit mode, it uses Level and
 fires on every evaluation.
 
-A frame is useful for hypothetical evaluations and search. It supports existing
-numeric cells and the transforms listed under [The store and the
-frame](state/frames.md#the-store-and-the-frame); it refuses cell removal and generator draws,
-and skips host-specific effect arms. Restrict judge rules to the operations the
-frame can answer. Each `Judge` call clears its edge latch. A continuing simulation
-instead keeps a `RuleLatch` and calls `RuleEvaluator.Evaluate` through its host,
-retaining the latch between steps so Edge rules fire once per gate crossing.
+A journal scope on the arena is what a hypothetical evaluation and a search
+candidate use: a rewound scope leaves the arena byte-identical, a committed one
+does not. A caller that judges many independent positions calls
+`RuleLatch.Reset` before each judge, so every crossing is a first one; a
+continuing simulation retains the latch between steps so Edge rules fire once
+per gate crossing.
+
+## The six projects
+
+The state system is one layer split by concern. Every project declares
+`<PuckLayer>Engine services</PuckLayer>`, and its project references point only
+down this list.
+
+| Project | What it owns |
+|---|---|
+| `Puck.State` | The model — rows, cells, `CellValue`, the catalog, the arena, compiled lattice topology, authored randomness's document facet, the pattern algebra's authored tree, the expression IR, the authored rule vocabulary, and the fact and facet base types. |
+| `Puck.State.Topology` | The board-query and pattern layer over an arena: rays and board shapes through one span kernel, and the compiled pattern automaton's incremental resume over an arena-read word. |
+| `Puck.State.Generators` | The authored-randomness engine over an arena: drawing a site's next value, a generator's declared table data, and a seeded Penrose patch. |
+| `Puck.State.Vectors` | The vector half of the state graph: the typed view over a row's vector column, and the `mix`/`mean`/`nearest`/`remember` transforms over an arena. |
+| `Puck.State.Rules` | The rule compiler, the evaluator, rule groups, the latch, the transforms, and the work budget. |
+| `Puck.State.Search` | Negamax, tree search, and the candidate walk over arena journal scopes. |
+
+`Puck.State` references only `Puck.Abstractions`, `Puck.Assets`, and
+`Puck.Maths`; several of its own types — the compiled topology `ArenaLayout`
+lays a lattice row's columns out with, the pattern node `PatternSpelling`
+parses and prints, `Draw`/`StateGenerator` the document row schema types on —
+stay in core rather than in Topology or Generators because a core file
+consumes them directly, not because either satellite project is optional.
+Topology, Generators, and Vectors each reference `Puck.State`;
+`Puck.State.Rules` references those three; `Puck.State.Search` references
+`Puck.State.Rules`. [The project map](../project-map.md) owns the
+repository-wide layering, the gate that checks it, and each project's full
+responsibility.
 
 ## Choose your next step
 
-Use [Rules and transactions](state/rules.md) to add conditions and grouped effects.
-Read [Frames](state/frames.md) before using the judge for hypothetical moves,
-and [Hosting](state/hosting.md) before building a continuing simulation.
+Use [Compile and run rules](state/rules.md) to add conditions, grouped
+effects, and rule groups. Read
+[Evaluate a candidate and reuse a proven answer](state/frames.md) before using
+a judge for hypothetical moves, and [Hosting and extension](state/hosting.md)
+before building a continuing simulation.
 
 The [world schema](../../src/Puck.World.Schema/README.md) owns world-specific
 fields and authoring contracts. The [API reference](../api/index.md) owns member

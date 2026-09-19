@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Xunit;
 using Puck.Maths;
 
@@ -9,33 +8,33 @@ namespace Puck.State.Tests;
 /// they name: every inverse round-trips, every algebraic shortcut agrees with the long way, and a domain fault fails
 /// the expression instead of wrapping.</summary>
 public sealed class ExpressionFunctionLawTests {
-    private sealed class StubReader : IRuleReader {
-        public string? BoundEachKey => null;
-        public string? BoundPreviousKey { get; set; }
-        public string? BoundTokenKey { get; set; }
-        public StateCatalog Catalog { get; } = StateCatalog.Compile(section: null);
-        public Span<long> PatternWord => [];
-        public CompiledPatterns Patterns => CompiledPatterns.Empty;
-        public StateStore Store => RowStore.Empty;
-        public bool TableKeyMissing { get; set; }
-        public ulong Tick => 0UL;
+    private sealed class StubReader : IStateReader {
+        public StateArena Arena { get; } = new(
+            catalog: StateCatalog.Compile(section: null),
+            options: null,
+            section: null,
+            time: ArenaTime.Origin
+        );
+        public CellKey BoundEachKey { get; set; }
+        public CellKey BoundPreviousKey { get; set; }
+        public CellKey BoundTokenKey { get; set; }
         public ulong EngineTick => 0UL;
+        public Span<long> Locals => new long[RuleCapacity.MaxLocalsPerRule];
+        public Span<long> PatternWord => [];
+        public ulong Tick => 0UL;
 
-        public long BindingValue(int ordinal) => 0L;
         public Span<long> BoardScratch(int cells) => new long[cells];
         public int BoundIndex(BoundKey key) => -1;
-        public void ReportTableKeyMissing(string table, long key) => TableKeyMissing = true;
-        public CompiledTable Table(int ordinal) => throw new InvalidOperationException();
     }
 
-    private static readonly RuleCompileContext Context = new(
+    private static readonly Rules.RuleCompileContext Context = new(
         section: null,
         catalog: StateCatalog.Compile(section: null),
         tables: null,
         patterns: null,
         generators: null,
         simulationRateHz: 240,
-        vocabulary: RuleVocabulary.Core
+        vocabulary: Rules.RuleVocabulary.Core
     );
 
     internal static long EvalPublic(string text) => Eval(text: text);
@@ -44,17 +43,17 @@ public sealed class ExpressionFunctionLawTests {
         value: out _
     );
 
-    private static CompiledExpressionToken[] Compile(string text, CellKind kind) {
+    private static Rules.CompiledExpressionToken[] Compile(string text, CellKind kind) {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
                 text: text,
-                tokens: out var tokens
+                program: out var parsed
             ),
             userMessage: error
         );
-        return RuleCompiler.CompileExpression(
-            expression: new ValueExpression(Tokens: tokens),
+        return Rules.RuleCompiler.CompileExpression(
+            expression: parsed,
             kind: kind,
             ruleName: "law",
             verb: "law",
@@ -74,13 +73,14 @@ public sealed class ExpressionFunctionLawTests {
     }
     private static string Fixed(double value) => FixedQ4816.FromDouble(value: value).Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
     private static bool TryEval(string text, out long value, CellKind kind = CellKind.Int) =>
-        RuleEvaluation.TryEvaluateExpression(
-            reader: new StubReader(),
+        Rules.RuleExpressions.TryEvaluate(
+            fault: out _,
+            kind: kind,
             program: Compile(
                 kind: kind,
                 text: text
             ),
-            kind: kind,
+            reader: new StubReader(),
             value: out value
         );
 
@@ -132,28 +132,30 @@ public sealed class ExpressionFunctionLawTests {
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
                 text: text,
-                tokens: out var tokens
+                program: out var parsed
             ),
             userMessage: error
         );
         Assert.Equal(
             text,
-            ExpressionSpelling.Print(tokens: tokens)
+            ExpressionSpelling.Print(instructions: parsed.Instructions)
         );
     }
-    [InlineData("hexNeighbor", typeof(ValueToken.HexNeighbor))]
-    [InlineData("replicationMask", typeof(ValueToken.ReplicationMask))]
-    [InlineData("repeatBits", typeof(ValueToken.RepeatBits))]
-    [InlineData("pairSwap", typeof(ValueToken.PairSwap))]
-    [InlineData("layerStart", typeof(ValueToken.LayerStart))]
-    [InlineData("sqrt", typeof(ValueToken.SquareRoot))]
+    [InlineData("hexNeighbor", ExpressionOp.HexNeighbor)]
+    [InlineData("replicationMask", ExpressionOp.ReplicationMask)]
+    [InlineData("repeatBits", ExpressionOp.RepeatBits)]
+    [InlineData("pairSwap", ExpressionOp.PairSwap)]
+    [InlineData("layerStart", ExpressionOp.LayerStart)]
+    [InlineData("squareRoot", ExpressionOp.SquareRoot)]
     [Theory]
-    public void FunctionTokensCarryTheirCallNameAsDiscriminator(string discriminator, Type expected) {
-        var token = JsonSerializer.Deserialize<ValueToken>(json: $"{{\"$type\":\"{discriminator}\"}}");
-
-        Assert.IsType(
-            expectedType: expected,
-            @object: token
+    public void AFunctionSpellingNamesItsOperation(string spelling, ExpressionOp expected) {
+        Assert.True(condition: ExpressionVocabulary.TryFind(
+            function: out var function,
+            name: spelling
+        ));
+        Assert.Equal(
+            actual: function!.Operation,
+            expected: expected
         );
     }
     [InlineData(0, 0)]
@@ -475,17 +477,17 @@ public sealed class ExpressionFunctionLawTests {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,
             text: "replicationMask(8, 8)",
-            tokens: out _
+            program: out _
         ));
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,
             text: "repeatBits(1)",
-            tokens: out _
+            program: out _
         ));
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,
             text: "hilbertIndex(1, 2)",
-            tokens: out _
+            program: out _
         ));
     }
 }

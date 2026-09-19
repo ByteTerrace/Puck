@@ -12,7 +12,7 @@ public sealed class CartridgeMemoryTests {
         target: target,
         title: title
     );
-    private static ValueExpression Element(string array, ValueExpression index) => CartridgeExpressions.Of(
+    private static ExpressionProgram Element(string array, ExpressionProgram index) => CartridgeExpressions.Of(
         state: array,
         key: CartridgeExpressions.Key(index: index)
     );

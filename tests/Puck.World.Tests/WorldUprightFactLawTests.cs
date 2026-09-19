@@ -20,7 +20,7 @@ public sealed class WorldUprightFactLawTests {
     private const string UprightRow = "upright";
 
     private static long Cell(WorldFixture fixture, string row) =>
-        fixture.Server.Definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single().Value.Raw;
     // A flat floor plus a rigid-kit seat body — the same rigid shape TabletopBoardLawTests rides, trimmed to just
     // what an orientation read needs (no board, no tabletop rules): a body whose FixedOrientation persists exactly
     // as posed rather than being re-aligned to ground every tick the way a grounded walker's would.
@@ -95,7 +95,7 @@ public sealed class WorldUprightFactLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Fixed(rawBits: 0L)
                     )]
             ),
                 new WorldStateRow(
@@ -103,7 +103,7 @@ public sealed class WorldUprightFactLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Fixed(rawBits: 0L)
                     )]
             ),
             ]),

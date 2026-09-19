@@ -85,6 +85,14 @@ public static class DocumentScalars {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
 
+        if (call.Name is "dot" or "similarity" or "identical") {
+            return Refuse(
+                call: call,
+                message: $"the rule language evaluates '{call.Name}'; the document language does not fold it",
+                scope: scope
+            );
+        }
+
         var function = ExpressionVocabulary.Functions[call.Name];
 
         if (

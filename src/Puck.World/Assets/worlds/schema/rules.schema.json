@@ -4,14 +4,14 @@
     "null"
   ],
   "items": {
-    "description": "A world rule: a state-library Rule plus the optional choice policy only a world evaluates. Compiled by WorldRuleCompiler, which composes the library\u0027s own compile pieces with the world\u0027s registered vocabulary (WorldRuleVocabulary).",
+    "description": "A world rule: a state-library Rule plus the optional choice policy only a world evaluates. Compiled by WorldFactsCompiler, which composes the rule compiler\u0027s own pieces with the world\u0027s registered vocabulary (WorldFactsVocabulary).",
     "type": [
       "object",
       "null"
     ],
     "properties": {
       "name": {
-        "description": "The rule\u0027s stable name \u2014 unique within the section. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name at the JSON converter. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
+        "description": "The rule\u0027s stable name \u2014 unique within the section. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name at the JSON converter. The reserved $ prefix is refused on top of that, by RuleCompiler.CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
         "title": "CellName",
         "type": "string"
       },
@@ -67,7 +67,7 @@
                   "type": "string"
                 },
                 "score": {
-                  "$ref": "./common.schema.json#/$defs/ValueExpression",
+                  "$ref": "./common.schema.json#/$defs/ExpressionProgram",
                   "description": "A numeric expression in the decision\u0027s score kind. Arithmetic failure makes this option ineligible for that reconsideration."
                 },
                 "effects": {
@@ -150,15 +150,9 @@
             "title": "WorldDecisionMode"
           },
           "scoreKind": {
+            "$ref": "./common.schema.json#/$defs/CellKind",
             "description": "The common numeric kind, Int or Fixed; operands must match it.",
-            "enum": [
-              "Int",
-              "Fixed",
-              "Bool",
-              "Text"
-            ],
-            "default": "Fixed",
-            "title": "CellKind"
+            "default": "Fixed"
           },
           "commitmentSeconds": {
             "description": "Non-negative exact duration protecting a newly selected option from ordinary reconsideration.",
@@ -200,36 +194,30 @@
         "default": null,
         "title": "WorldDecision"
       },
-      "bindings": {
-        "description": "The values bound once per evaluation, in declared order, read as $bind:\u003Cname\u003E.",
+      "locals": {
+        "description": "The values computed once per evaluation, in declared order, read as $local:\u003Cname\u003E.",
         "type": [
           "array",
           "null"
         ],
         "items": {
-          "description": "A value bound once per evaluation of the rule that declares it, after the forEach key and before the gate, in declared order \u2014 a later binding, the gate, and every effect read it as $bind:\u003Cname\u003E; an earlier binding cannot. The value is never stored: it lives on the evaluation and is recomputed at the next one.",
+          "description": "A value computed once per evaluation of the rule that declares it, after the forEach key and before the gate, in declared order \u2014 a later local, the gate, and every effect read it as $local:\u003Cname\u003E; an earlier local cannot. The value is never stored: it lives on the evaluation and is recomputed at the next one.",
           "type": [
             "object",
             "null"
           ],
           "properties": {
             "name": {
-              "description": "The binding\u0027s name \u2014 the token after BindPrefix.",
+              "description": "The local\u0027s name \u2014 the token after LocalPrefix.",
               "title": "CellName",
               "type": "string"
             },
             "kind": {
-              "description": "The value\u0027s cell kind, Int or Fixed.",
-              "enum": [
-                "Int",
-                "Fixed",
-                "Bool",
-                "Text"
-              ],
-              "title": "CellKind"
+              "$ref": "./common.schema.json#/$defs/CellKind",
+              "description": "The value\u0027s cell kind, Int or Fixed."
             },
             "expression": {
-              "$ref": "./common.schema.json#/$defs/ValueExpression",
+              "$ref": "./common.schema.json#/$defs/ExpressionProgram",
               "description": "The postfix expression, evaluated in that kind."
             }
           },
@@ -239,12 +227,12 @@
             "expression"
           ],
           "additionalProperties": false,
-          "title": "RuleBinding"
+          "title": "RuleLocal"
         },
         "default": null
       },
       "zones": {
-        "description": "The rule\u0027s zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule \u2014 a compareState\u0027s state, a $reduce:/$match: row, a $zone: endpoint\u0027s zone, a transfer\u0027s from/to, an expression\u0027s row \u2014 may spell $zones[\u003Cindex\u003E] to select an entry live, the index being an infix cell key (game[from], $each, $bind:\u003Cname\u003E, or any expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects an entry \u2014 an index outside the table, or at an empty entry, reads the gate closed, so a table\u0027s gaps are the rule\u0027s own statement of which piles it is for. forEach: \u0022$zones\u0022 iterates the table\u0027s own non-empty indices with $each bound to each.",
+        "description": "The rule\u0027s zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule \u2014 a compareState\u0027s state, a $reduce:/$match: row, a $zone: endpoint\u0027s zone, a transfer\u0027s from/to, an expression\u0027s row \u2014 may spell $zones[\u003Cindex\u003E] to select an entry live, the index being an infix cell key (game[from], $each, $local:\u003Cname\u003E, or any expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects an entry \u2014 an index outside the table, or at an empty entry, reads the gate closed, so a table\u0027s gaps are the rule\u0027s own statement of which piles it is for. forEach: \u0022$zones\u0022 iterates the table\u0027s own non-empty indices with $each bound to each.",
         "type": [
           "array",
           "null"

@@ -33,7 +33,7 @@ public sealed class BindingBarAuthoringValidationLawTests {
             Capacity: 8,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "jump"),
-                    Text: "known.icon"
+                    Value: CellValue.Text(value: "known.icon")
                 )]
         ),
             new WorldStateRow(
@@ -46,7 +46,7 @@ public sealed class BindingBarAuthoringValidationLawTests {
             Kind: CellKind.Text,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: "known.icon"
+                    Value: CellValue.Text(value: "known.icon")
                 )]
         ),
         ]),

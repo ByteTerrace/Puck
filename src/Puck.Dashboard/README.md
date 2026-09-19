@@ -147,8 +147,9 @@ no props flow down from a page-level state.
   `useStudioGeometry()`, the engine's own `cells()` answer, never a
   TypeScript ordinal formula.
 - **State** (`StateMatrixView.tsx`) lists every authored `state.world[]`
-  row; while a preview session is running, a non-keyed row's live value is
-  editable in place through `PREVIEW_WRITE`.
+  row; while a preview session is running, a non-keyed row carrying a numeric
+  cell value is editable in place through `PREVIEW_WRITE`. A text, bool, or
+  vector row reads back but takes no register operand.
 - **Preview** compiles the document (`PREVIEW_START`), ticks it
   (`PREVIEW_TICK`), steps and jumps through its recorded snapshots
   (`PREVIEW_UNDO`/`PREVIEW_REDO`/`JUMP_TO_TICK`—the engine has no

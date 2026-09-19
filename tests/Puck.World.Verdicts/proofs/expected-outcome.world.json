@@ -1,0 +1,84 @@
+{
+  "basis": "../../../src/Puck.World/Assets/worlds/games/hearts.world.json",
+  "grants": [
+    {
+      "capability": "Mutate",
+      "principal": "seat1",
+      "subject": "section:state"
+    },
+    {
+      "capability": "Edit",
+      "principal": "seat1",
+      "subject": "all"
+    }
+  ],
+  "host": {
+    "exitAfterSeconds": 0,
+    "presentation": "None"
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "ok",
+          "state": "passPhaseStillZero",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "fromState": "$phase:heartsPassPhase",
+          "key": "generation",
+          "state": "passPhaseStillZero"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$phase:heartsPassPhase",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "verdict-pass-phase-still-zero"
+    }
+  ],
+  "schedule": {
+    "directory": "out",
+    "rows": [
+      {
+        "command": "body.press nosuchchannel",
+        "expect": "Refused",
+        "principal": "seat1",
+        "refusal": "nosuchchannel",
+        "tick": 3
+      }
+    ],
+    "settleTicks": 6
+  },
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "ok",
+            "value": 0
+          },
+          {
+            "key": "generation",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "passPhaseStillZero",
+        "verdict": {
+          "gate": "heartsPassPhase stands at 0 — true whatever the scheduled row did, so only the row's own outcome can fail this world",
+          "status": "ok"
+        }
+      }
+    ]
+  }
+}

@@ -207,17 +207,34 @@ at author time rather than in production.
 Ownership changes at the far side of a derived deadband, never at the authored plane, so an arrival
 starts that far inside its new writer and the reciprocal pair closes. The deadband is derived from
 whichever envelope the boundary's own geometry closes against—a wall against two body reaches plus
-contact skin, a floor or ceiling against one authority step of the vertical descent envelope plus
-contact skin, which is centimetre-scale and leaves ascent headroom intact. Neither is authored: a
-safety margin a world could set is a safety margin a world could set wrong. The floor case's
-separating property is that the deadband is larger than any descent nobody commanded and smaller
-than any descent somebody did, so a body settling onto ground just past a boundary stays put while a
-body flown back down still crosses.
+contact skin, a floor or ceiling against one authority step of the fastest vertical travel a kit's
+holds admit, gravity over a step or a hold's terminal speed, plus contact skin. Neither is authored:
+a safety margin a world could set is a safety margin a world could set wrong. The floor deadband is
+a hysteresis width. It grows as the authority rate falls, and at the default rate it is comparable
+to a body's height, so a destination needs that much clear space past the plane. A body settling or
+hovering under its holds never crosses back in one step, so it changes writer at most once; a body
+descending on purpose clears the deadband in a few steps, with the neighbour's field serving its
+contact meanwhile. Vertical motion no hold bounds, a full-lift row or a vertical-velocity effect,
+can pass the deadband in one step, and then the body is handed over once, because the sweep tests
+the whole step.
 
 Crossing maps a traveler through the pair's isometry, a distance-preserving
 transformation. The point where its swept segment intersects the boundary maps
 to the corresponding point on the other side. This preserves off-center arrival
 and continuous terrain without adding a separate crossing transform.
+
+That isometry is a rotation about world up — the validator refuses a pair whose map is anything else
+— and the turn it applies is `counterpartYaw - thisYaw - 180` degrees. Two faces pointing at each
+other are 180 degrees apart and map as the identity, so a body arrives at the same world point,
+keeping its heading and its velocity, and any other authored pair turns it by the remainder. A
+boundary's rectangle takes its right axis from its yaw whatever its pitch, so the formula holds
+unchanged for a boundary lying flat: there the yaw no longer contributes to the outward direction
+and becomes the rectangle's roll about the vertical, which means an untwisted floor seam authors its
+two yaws 180 degrees apart exactly as a wall pair does — pitch -90 above facing down, pitch +90 and
+the opposite yaw below facing up. A flat pair authored at one yaw on both sides is a seam with a
+half turn in it, and a body dropped off the rim arrives on the far side of the plane's centre facing
+backwards. `world.adjacencies` echoes the turn in force (`turn=`) beside the ownership threshold
+(`threshold=`) so an author can read a twisted seam off the console rather than off a body.
 The depth past the threshold carries through unchanged: a deliberate continuity property. Scanning
 is swept per actual step, so a high-speed body cannot tunnel through a face between samples, and a
 body crossing several faces in one step resolves to exactly one winner. The neighbour arrives over
@@ -413,6 +430,25 @@ alternatives are explicit alternatives. Acceptance derives the session's capabil
 limits together: permitted durability/scope combinations, capacity, quotas, generation rate,
 projection fidelity and backpressure. These are not fields forced into a per-tick grant budget and
 not a second trust list that can disagree with grants.
+
+Disclosure fidelity is authored on the `admission` row as one of three tiers, decided once at
+admission and read by every remote egress: `frames` (pixels only, no document), `presentation`
+(`puck.world.projection.v1` — the visitor's rendered and embodied-from state, with no member to
+carry the logic or authority sections), or `replica` (the whole world document, the sanctioned
+download). An absent tier resolves to `presentation`, so a world authored before the field existed
+hands out no replica. A traveler crossing a seam discloses an identity projection — appearance and
+the two motion rates — never its owned document. A counterpart proves a border with a signed
+attestation over the crossing rather than by handing over its world; assembling a derived corner from
+several such proofs ranks a resolved document over a verified attestation over a plain one,
+first-of-kind winning, so only the first two ever complete a corner. Snapshot delivery separately
+carries a per-observer disclosure policy applied at the output hub's sink boundary, defaulting to
+disclose-all.
+
+A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
+owner's storage container is never reachable from another's. A cross-owner reference resolves through
+an API counterpart resolver that fetches the named owner's published claim, verifies its chain against
+the reading world's own admission entries, and binds the verified subject to the reference's named
+owner before it can ever return a verified attestation.
 
 ## Observation and display
 

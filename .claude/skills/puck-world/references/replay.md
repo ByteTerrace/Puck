@@ -250,10 +250,13 @@ index order — per body the index, fixed position, all four orientation lanes,
 grounded-program yaw, rigid linear/angular velocity, rest hold and contact
 latches/miss streaks, and both carry-partner indices. This population digest is
 diagnostic; the replay verdict instead compares
-`RecordedAuthoritativeHashes` against `WorldRuntimeStateHash.HashAuthoritative`.
-That scope includes poses, stored/resolved world-state rows and traits, live
-field cells, rule/interaction latches, body action state, cached navigation and
-shared destination-tree/scheduler/pending-request state,
+`RecordedAuthoritativeHashes` against
+`WorldStateHashComposition.HashAuthoritative`. That scope is a declared list of
+named components (`WorldStateHashComposition.Authoritative`): poses, everything
+the state arena stores, the host-owned field cells, the state section's own
+declaration, the declared topologies, rule/interaction latches, rule-group
+progress, decision runtime, board enforcement, body action state, cached
+navigation and shared destination-tree/scheduler/pending-request state,
 flock perception/cadence/sample state (including the cached result of state
 affinity expressions), slot generations, and previous positions. Affinity programs
 are derived again from authored kit/producer names and current state handles on

@@ -22,7 +22,7 @@ public sealed class LinkLivenessLawTests {
     private const string LinkRow = "north";
 
     private static long AlarmCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value.AsInt;
     private static WorldDefinition GatedSeamDocument(float graceSeconds) {
         var definition = SeamDocument(graceSeconds: graceSeconds);
         var alarm = CellName.Parse(candidate: "alarm");
@@ -36,7 +36,7 @@ public sealed class LinkLivenessLawTests {
                 Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             )
             ]),
@@ -325,6 +325,9 @@ public sealed class LinkLivenessLawTests {
             Sequence: 1,
             CorrelationId: 1,
             Principal: peer,
+            // A mutation envelope is bound to its operation id at the ingress, and one without an id is refused
+            // there, before the tape's tap.
+            OperationId: new Guid(g: "6f1d2a3e-0000-4000-8000-000000000004"),
             Payload: new WorldSubmissionPayload.Mutation(Value: new WorldMutation.UpsertStateRow(
                 Principal: peer,
                 Row: new WorldStateRow(

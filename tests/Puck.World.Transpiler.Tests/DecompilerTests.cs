@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -50,11 +48,11 @@ public class DecompilerTests {
             expectedSubstring: "pipeline \"ink\" {"
         );
 
-        // 2. Parse .puck DSL -> AST
-        var ast = PuckParser.ParseDocument(decompiledPuck);
-
-        // 3. Lower AST -> JSON
-        var recompJsonObject = WorldDocumentEmitter.Lower(ast);
+        // 2. Recompile the printed source
+        var recompJsonObject = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: decompiledPuck
+        ).RequireJson();
 
         // 4. Assert round-trip equivalence
         Assert.Equal(
@@ -154,8 +152,10 @@ public class DecompilerTests {
         );
 
         // Recompile
-        var ast = PuckParser.ParseDocument(puck);
-        var recomp = WorldDocumentEmitter.Lower(ast);
+        var recomp = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: puck
+        ).RequireJson();
 
         // Verify imports and exports preserved
         var imports = Assert.IsType<JsonArray>(@object: recomp["imports"]);

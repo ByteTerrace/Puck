@@ -1,0 +1,39 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 600,
+  "engineTick": 1008000,
+  "hashes": {
+    "authoritative": "0d9648e95c560d85",
+    "capture": "b181dbb631e1704c",
+    "pose": "cbf29ce484222325",
+    "world": "58e5eba361c4423e"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "solitaire",
+        "kind": "Int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "solitaire",
+      "cells": [
+        {
+          "key": "table",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

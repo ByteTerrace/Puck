@@ -17,9 +17,11 @@ namespace Puck.World.Server;
 /// arrival uses, anchored at the two boundaries' own frames. The overlap serves every point near the boundary. Pure
 /// fixed-point throughout; no wall-clock, RNG, or float ever reaches this decision.</para>
 /// <para><b>Composition, not replacement.</b> This world's own field resolves first, exactly as it would with no
-/// adjacency at all — an overlap is consulted only when the body is not already grounded and its position
-/// falls inside one, so a world whose own geometry already reaches the border pays nothing extra and behaves
-/// identically to a world with no adjacency at all.</para>
+/// adjacency at all, and the neighbour then resolves from that answer. An overlap is consulted only for a position
+/// inside one, and then only when this world's own field found no ground or the position is outward of the
+/// boundary plane — where this world's terrain has ended and its field can only be answering with its own rim. A
+/// body standing inside its own world therefore pays nothing extra and behaves identically to one in a world with
+/// no adjacency at all.</para>
 /// <para><b>Replay boundary.</b> Neighbour poses presently arrive as presentation-float snapshot fields and are
 /// converted to fixed point below at delivery timing. Ground and dynamic-contact correction are therefore not yet
 /// replay-deterministic across network schedules. Track 3 replaces this input with tick-addressed taped neighbour
@@ -140,6 +142,13 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 : default
             );
             var localIsSolid = ((entityIndex >= 0) && (m_source.LocalBodyContact(index: entityIndex) == WorldBodyContactMode.Solid));
+            // The frozen record can predate a handoff committed after it was frozen, within the same tick, so the
+            // arrival asks for itself: the entity still shown at the slot it departed from is this body.
+            var departedFrom = default(Protocol.WorldEntityAddress);
+            var hasDeparted = (localIsSolid && m_source.TryLocalDepartedFrom(
+                departedFrom: out departedFrom,
+                index: entityIndex
+            ));
 
             for (var entity = 0; (localIsSolid && (entity < neighbour.EntityCapacity)); entity++) {
                 if (
@@ -156,11 +165,17 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                     continue;
                 }
 
+                if (hasDeparted && (neighbour.EntityAddress(index: entity) == departedFrom)) {
+                    continue;
+                }
+
+                var remotePosition = FixedVector3.FromVector3(value: neighbour.CurrentPosition(index: entity));
+
                 if (!FixedDynamicBodyContacts.TryCorrection(
                     leftPosition: neighbourPosition,
                     leftOrientation: neighbourOrientation,
                     leftVolumes: volumes,
-                    rightPosition: FixedVector3.FromVector3(value: neighbour.CurrentPosition(index: entity)),
+                    rightPosition: remotePosition,
                     rightOrientation: FixedQuaternion.FromQuaternion(value: neighbour.CurrentOrientation(index: entity)).Normalize(),
                     rightVolumes: neighbourCollider.Volumes,
                     tieBreaker: entity,
@@ -183,9 +198,19 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             }
 
             var neighbourResolution = default(ContactResolution);
+            // Outward of this world's own boundary plane its terrain has ended by construction, so ground its field
+            // still answers there is the rim of that terrain rather than the floor the seam continues — the
+            // neighbour's geometry is what decides the vertical (WorldAdjacencyBand.Contains' own outward contract).
+            // The local-most stage is the last one TryMapIntoNeighbour walks, so its source frame is the one this
+            // position is expressed against.
+            var localFrame = projection.Path[(projection.Path.Count - 1)].Source;
+            var outward = (FixedVector3.Dot(
+                left: (position - localFrame.Origin),
+                right: localFrame.Normal
+            ) > FixedQ4816.Zero);
 
             if (
-                !resolution.Grounded &&
+                (!resolution.Grounded || outward) &&
                 (neighbour is IWorldAdjacencyNeighbourContact contactNeighbour) &&
                 contactNeighbour.TryGetSolidField(
                 field: out var neighbourField,

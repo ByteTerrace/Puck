@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Transpiler.Lowering;
+using Puck.World.Transpiler.Embeddings;
+using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -8,8 +11,9 @@ namespace Puck.World.Transpiler.Decompiler;
 public static partial class WorldDecompiler {
     /// <summary>Decompiles a JSON text string into formatted Puck source code.</summary>
     /// <param name="jsonText">The raw or canonical JSON text.</param>
+    /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
-    public static string Decompile(string jsonText) {
+    public static string Decompile(string jsonText, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(jsonText);
 
         var node = JsonNode.Parse(jsonText);
@@ -21,12 +25,13 @@ public static partial class WorldDecompiler {
             );
         }
 
-        return Decompile(root: rootObj);
+        return Decompile(embeddings: embeddings, root: rootObj);
     }
     /// <summary>Decompiles a root <see cref="JsonObject"/> into formatted Puck source code.</summary>
     /// <param name="root">The root JSON object representing the world definition.</param>
+    /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
-    public static string Decompile(JsonObject root) {
+    public static string Decompile(JsonObject root, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(root);
 
         var sb = new StringBuilder();
@@ -187,8 +192,40 @@ public static partial class WorldDecompiler {
             "schema", "basis", "documentId", "imports", "exports",
         };
 
+        // A group and the rules it claims are one construct in source, so the claim is resolved once, before either
+        // section prints, and a claimed rule never prints on its own.
+        var groupedRules = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
+        var sugaredGroups = (
+            (root["ruleGroups"] is JsonArray declaredGroups) &&
+            (declaredGroups.Count > 0) &&
+            CanSugarRuleGroups(
+                claimed: out groupedRules,
+                groups: declaredGroups,
+                rules: (root["rules"] as JsonArray)
+            )
+        );
+
         foreach (var (key, value) in root) {
             if (knownRootKeys.Contains(item: key)) {
+                continue;
+            }
+            if (sugaredGroups && string.Equals(
+                a: key,
+                b: "ruleGroups",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                if (sb.Length > 0) {
+                    sb.AppendLine();
+                }
+
+                DecompileRuleGroupsBlock(
+                    claimed: groupedRules,
+                    groups: ((JsonArray)value!),
+                    indentLevel: 0,
+                    sb: sb
+                );
+                hasHeaders = true;
+
                 continue;
             }
 
@@ -206,113 +243,62 @@ public static partial class WorldDecompiler {
                 continue;
             }
 
-            if (
-                string.Equals(
-                a: key,
-                b: "state",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonObject stateObj)
-            ) {
-                DecompileStateBlock(
-                    indentLevel: 0,
+            // The table names which arm a root construct's section takes, read off the document key rather than
+            // off a keyword the printer does not have. An arm whose guard does not hold prints as an ordinary
+            // field, which is the fallback every row's description already names.
+            var printed = (WorldConstructs.Table.RootArmWriting(documentKey: key) ?? WorldRootArm.Field) switch {
+                WorldRootArm.Addons => TryDecompileAddons(
                     sb: sb,
-                    state: stateObj
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "views",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonObject viewsObj)
-            ) {
-                DecompileViewsBlock(
+                    value: value
+                ),
+                WorldRootArm.Materials => TryDecompileMaterials(
                     sb: sb,
-                    views: viewsObj
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "addons",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonArray addonsArr)
-            ) {
-                DecompileAddonsBlock(
-                    addons: addonsArr,
-                    sb: sb
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "shapes",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonArray shapesArr) &&
-                (shapesArr.Count > 0) &&
-                CanSugarShapes(shapes: shapesArr)
-            ) {
-                DecompileShapesBlock(
-                    sb,
-                    shapesArr,
-                    indentLevel: 0
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "materials",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonArray materialsArr)
-            ) {
-                DecompileMaterialsBlock(
-                    materials: materialsArr,
-                    sb: sb
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "rules",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonArray rulesArr) &&
-                CanSugarRules(rules: rulesArr)
-            ) {
-                DecompileRulesBlock(
-                    sb,
-                    rulesArr,
-                    indentLevel: 0
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "placements",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonObject placementsObj) &&
-                CanSugarPlacements(placements: placementsObj)
-            ) {
-                DecompilePlacementsBlock(
-                    sb,
-                    placementsObj,
-                    indentLevel: 0
-                );
-            } else if (
-                string.Equals(
-                a: key,
-                b: "prototypes",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            ) &&
-                (value is JsonArray prototypesArr) &&
-                CanSugarPrototypes(prototypes: prototypesArr)
-            ) {
-                DecompilePrototypesBlock(
-                    sb,
-                    prototypesArr,
-                    indentLevel: 0
-                );
-            } else {
+                    value: value
+                ),
+                WorldRootArm.Patterns => TryDecompilePatterns(
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.Placements => TryDecompilePlacements(
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.Prototypes => TryDecompilePrototypes(
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.Rules => TryDecompileRules(
+                    claimed: groupedRules,
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.Sets => TryDecompileCellSets(
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.Shapes => TryDecompileShapes(
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.State => TryDecompileState(
+                    embeddings: embeddings,
+                    sb: sb,
+                    value: value
+                ),
+                WorldRootArm.Views => TryDecompileViews(
+                    sb: sb,
+                    value: value
+                ),
+                // A `ruleGroups` array is resolved with the rules it claims before either section prints, above;
+                // unsugared, it prints as an ordinary field, which is also what `cartridge`, `host` and the
+                // compile-time layer take.
+                WorldRootArm.Cartridge or WorldRootArm.CompileTime or WorldRootArm.Field or WorldRootArm.RuleGroups => false,
+                // An arm added to the description with no printer here throws by name at the first document that
+                // takes it, which is what `ConstructRootArmLawTests` drives one probe per root construct to reach.
+                _ => throw new NotSupportedException(message: $"'{key}' takes a root arm this printer has no case for."),
+            };
+
+            if (!printed) {
                 EmitField(
                     sb,
                     key,
@@ -325,6 +311,148 @@ public static partial class WorldDecompiler {
         return (sb.ToString().TrimEnd() + "\n");
     }
 
+    // One printer per root arm. Each answers whether it printed the section as its construct: a node whose shape
+    // or sugar requirement does not hold prints as an ordinary field instead, which is the fallback the row's own
+    // description names.
+    private static bool TryDecompileAddons(StringBuilder sb, JsonNode? value) {
+        if (value is not JsonArray addons) {
+            return false;
+        }
+        DecompileAddonsBlock(
+            addons: addons,
+            sb: sb
+        );
+
+        return true;
+    }
+    private static bool TryDecompileCellSets(StringBuilder sb, JsonNode? value) {
+        if (
+            (value is not JsonArray sets) ||
+            !CanSugarCellSets(sets: sets)
+        ) {
+            return false;
+        }
+        DecompileCellSetsBlock(
+            indentLevel: 0,
+            sb: sb,
+            sets: sets
+        );
+
+        return true;
+    }
+    private static bool TryDecompileMaterials(StringBuilder sb, JsonNode? value) {
+        if (value is not JsonArray materials) {
+            return false;
+        }
+        DecompileMaterialsBlock(
+            materials: materials,
+            sb: sb
+        );
+
+        return true;
+    }
+    private static bool TryDecompilePatterns(StringBuilder sb, JsonNode? value) {
+        if (
+            (value is not JsonArray patterns) ||
+            !CanSugarPatterns(patterns: patterns)
+        ) {
+            return false;
+        }
+        DecompilePatternsBlock(
+            patterns: patterns,
+            sb: sb
+        );
+
+        return true;
+    }
+    private static bool TryDecompilePlacements(StringBuilder sb, JsonNode? value) {
+        if (
+            (value is not JsonObject placements) ||
+            !CanSugarPlacements(placements: placements)
+        ) {
+            return false;
+        }
+        DecompilePlacementsBlock(
+            sb,
+            placements,
+            indentLevel: 0
+        );
+
+        return true;
+    }
+    private static bool TryDecompilePrototypes(StringBuilder sb, JsonNode? value) {
+        if (
+            (value is not JsonArray prototypes) ||
+            !CanSugarPrototypes(prototypes: prototypes)
+        ) {
+            return false;
+        }
+        DecompilePrototypesBlock(
+            sb,
+            prototypes,
+            indentLevel: 0
+        );
+
+        return true;
+    }
+    private static bool TryDecompileRules(StringBuilder sb, JsonNode? value, IReadOnlyDictionary<string, JsonObject> claimed) {
+        if (
+            (value is not JsonArray rules) ||
+            !CanSugarRules(rules: rules)
+        ) {
+            return false;
+        }
+        DecompileRulesBlock(
+            sb,
+            Unclaimed(
+                claimed: claimed,
+                rules: rules
+            ),
+            indentLevel: 0
+        );
+
+        return true;
+    }
+    private static bool TryDecompileShapes(StringBuilder sb, JsonNode? value) {
+        if (
+            (value is not JsonArray shapes) ||
+            (shapes.Count == 0) ||
+            !CanSugarShapes(shapes: shapes)
+        ) {
+            return false;
+        }
+        DecompileShapesBlock(
+            sb,
+            shapes,
+            indentLevel: 0
+        );
+
+        return true;
+    }
+    private static bool TryDecompileState(StringBuilder sb, JsonNode? value, EmbeddingLock? embeddings) {
+        if (value is not JsonObject state) {
+            return false;
+        }
+        DecompileStateBlock(
+            embeddings: embeddings,
+            indentLevel: 0,
+            sb: sb,
+            state: state
+        );
+
+        return true;
+    }
+    private static bool TryDecompileViews(StringBuilder sb, JsonNode? value) {
+        if (value is not JsonObject views) {
+            return false;
+        }
+        DecompileViewsBlock(
+            sb: sb,
+            views: views
+        );
+
+        return true;
+    }
     private static void EmitExportFacet(StringBuilder sb, JsonObject exportsObj, string facetKey, string keyword) {
         if (
             exportsObj.TryGetPropertyValue(
@@ -672,9 +800,31 @@ public static partial class WorldDecompiler {
         JsonObject obj => ((obj["$type"] is not JsonValue typeVal) || !typeVal.TryGetValue<string>(value: out _)),
         _ => false,
     };
-
     // The separator a field writes before its value: none in front of a container, ": " in front of a leaf. The
     // colon is what tells a reader "this is a leaf", so it never appears in front of a '{' or a '['.
+    // The rules no group claims, in document order. A group prints its own members inside its block.
+    private static JsonArray Unclaimed(JsonArray rules, IReadOnlyDictionary<string, JsonObject> claimed) {
+        if (claimed.Count == 0) {
+            return rules;
+        }
+
+        var kept = new JsonArray();
+
+        foreach (var item in rules) {
+            if (
+                (item is JsonObject rule) &&
+                (rule["name"]?.ToString() is { } name) &&
+                claimed.ContainsKey(key: name)
+            ) {
+                continue;
+            }
+
+            kept.AppendNode(item: item?.DeepClone());
+        }
+
+        return kept;
+    }
+
     internal static string FieldSeparator(JsonNode? value) => (RendersAsContainer(value: value)
         ? " "
         : ": "
@@ -916,7 +1066,7 @@ public static partial class WorldDecompiler {
             )) {
                 continue;
             }
-            args.Add(item: $"{k}: {FormatValue(
+            args.Add(item: $"{k}: {FormatArgument(
                 indentLevel: indentLevel,
                 node: v
             )}");
@@ -926,6 +1076,17 @@ public static partial class WorldDecompiler {
             values: args
         )})";
     }
+    // A call-form argument that is an expression program is spelled as its infix text, never as the IR tree.
+    private static string FormatArgument(JsonNode? node, int indentLevel) => ((
+        (node is JsonObject { Count: > 0 } program) &&
+        (program["instructions"] is JsonArray) &&
+        (WorldExpressionJson.Text(node: node) is { Length: > 0 } spelling)
+    )
+        ? $"\"{EscapeString(s: spelling)}\""
+        : FormatValue(
+            indentLevel: indentLevel,
+            node: node
+        ));
     private static string EscapeString(string s) {
         return s.Replace(
             comparisonType: StringComparison.Ordinal,

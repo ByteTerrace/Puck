@@ -19,7 +19,11 @@ public sealed class WorldStateEnvelopeValidationLawTests {
         Overflow: overflow,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: (kind switch {
+                    CellKind.Fixed => CellValue.Fixed(rawBits: value),
+                    CellKind.Bool => CellValue.Bool(value: (value != 0L)),
+                    _ => CellValue.Int(value: value),
+                })
             )]
     );
     // The validator's one refusal string (empty for a valid document).
@@ -50,7 +54,7 @@ public sealed class WorldStateEnvelopeValidationLawTests {
         var definition = BuildDefinition(Row(
             kind: CellKind.Text,
             overflow: StateOverflow.Saturate
-        ) with { Cells = [new StateCell(Key: WorldStateRow.SlotKey, Text: "hi")] });
+        ) with { Cells = [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Text(value: "hi"))] });
 
         Assert.Contains(
             actualString: Validate(definition: definition),

@@ -4,8 +4,8 @@ namespace Puck.State;
 
 /// <summary>An authored effect row a rule fires when its gate holds. The arms declared here are the ones this
 /// library owns — every one addresses a state row and nothing else; a document project appends its own derived arms
-/// (a participant's kinematics, a presentation cue, a whole-row document upsert) through a
-/// <see cref="RuleVocabulary"/> (see <see cref="RuleVocabulary.ExtendJson"/>) rather than by editing this list.</summary>
+/// (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary
+/// (<c>RuleVocabulary.ExtendJson</c>) rather than by editing this list.</summary>
 [JsonDerivedType(typeof(ActionEffect.SetState), typeDiscriminator: "setState")]
 [JsonDerivedType(typeof(ActionEffect.AddState), typeDiscriminator: "addState")]
 [JsonDerivedType(typeof(ActionEffect.PushState), typeDiscriminator: "pushState")]
@@ -34,7 +34,7 @@ public abstract record ActionEffect {
         decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Writes a named state cell — a <c>state</c>-section row's cell at rule scope, a counter slot inside a
     /// host's per-participant action program.</summary>
@@ -71,6 +71,7 @@ public abstract record ActionEffect {
     /// document row names.</param>
     /// <param name="Expression">A bounded numeric expression evaluated in the destination row's integer or
     /// fixed-point domain. Exactly one source spelling is authored.</param>
+    /// <param name="Vector">The base64url-encoded vector literal a vector state row's cell takes.</param>
     public sealed record SetState(
         string State,
         decimal? Value = null,
@@ -80,7 +81,8 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Vector = null
     ) : ActionEffect;
     /// <summary>Adds to a named state cell — the same shape as <see cref="SetState"/>, here the source is the addend
     /// rather than the replacement.</summary>
@@ -103,7 +105,7 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Decrements a state countdown by the current simulation step's engine-tick width, saturating at zero.
     /// The destination must be a <c>kind=Int min=0</c> row. Unlike an authored <see cref="AddState"/>
@@ -136,7 +138,7 @@ public abstract record ActionEffect {
     ) : ActionEffect;
     /// <summary>Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and
     /// <paramref name="OnFailure"/> runs instead. The compiler refuses nested transactions and effects
-    /// a document project has not admitted through <see cref="EffectFamily.AllowsTransaction"/>.</summary>
+    /// a document project's own effect family has not admitted into a transaction.</summary>
     /// <param name="Effects">The main transaction branch.</param>
     /// <param name="OnFailure">The optional branch run after a main-branch refusal.</param>
     public sealed record Transaction(

@@ -52,11 +52,11 @@ public sealed class CartridgeExpressionTests {
         var parts = text.Split(separator: ' ');
 
         return CartridgeExpressions.Gate(
-            left: ValueExpression.Parse(text: parts[0]),
+            left: ExpressionProgram.Parse(text: parts[0]),
             comparison: ((parts[1] == "==")
             ? ActionStateComparison.Equal
             : ActionStateComparison.NotEqual),
-            right: ValueExpression.Parse(text: parts[2])
+            right: ExpressionProgram.Parse(text: parts[2])
         );
     }
     private static int Read(CartridgeCompilation result, string slot) {
@@ -70,7 +70,7 @@ public sealed class CartridgeExpressionTests {
         new(
             Kind: "set",
             Target: new CartridgeTarget(State: slot),
-            Value: ValueExpression.Parse(text: value)
+            Value: ExpressionProgram.Parse(text: value)
         );
 
     [InlineData("cgb")]
@@ -245,7 +245,7 @@ public sealed class CartridgeExpressionTests {
 
         for (var depth = 0; (depth <= CartridgeLimits.NarrowMaximum); ++depth) {
             deep = $"(1 + ({deep}))";
-            if (CartridgeExpressions.Depth(expression: ValueExpression.Parse(text: deep)) > CartridgeExpressions.MaxDepth) {
+            if (CartridgeExpressions.Depth(expression: ExpressionProgram.Parse(text: deep)) > CartridgeExpressions.MaxDepth) {
                 break;
             }
         }

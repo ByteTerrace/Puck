@@ -1,0 +1,192 @@
+{
+  "id": "rim-round-trip",
+  "title": "A body that falls through a flat seam and flies back up through it arrives on every leg exactly where it crossed",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 28,
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "corner.world.json"
+  ],
+  "binding": "The rim-drop pair with a jetpack on the kit: island.world.json owns the half-space above a flat seam at y=80 and corner.world.json owns everything below it, under real separate authorities colocated in one process. The script walks the body off the deck, lets it fall through the seam, flies it back up through the seam, and lets it fall through a second time, so the seam is crossed down, up, and down again. On each commit the neighbour's delivered record still shows the traveler at the slot it has just departed from, because that record was frozen before the handoff. The arrival carries that slot in its mobility identity (WorldMobilityIdentity.DepartedFrom), stamped by the source when it offers the traveler and installed before the arrival is placed, and the seam's contact declines the one entity whose address equals it: the traveler seen before its handoff. Every asserted position is engine-emitted inline in the transfer narration at the crossing tick, so a loaded host's catch-up burst cannot move a verdict. All three arrivals keep x=0.00 exactly. Depenetrating an arrival from its own record instead shoves it the sum of two collider radii along an invented axis, 0.70 m per leg, and the displacement accumulates across legs. The discriminating leg boots island-solo.world.json, the same island with its references, destinations and adjacencies removed, and runs the same script: no crossing fires and nothing arrives.",
+  "positive": {
+    "world": "tests/Puck.World.Canaries/rim-round-trip/island.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the first descent arrives beneath the point of fall",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "-> '6~global6~corner' seat 1 arrived (anonymous) - [body.where: body:0 pos=(0.00, 79.09, -13.54)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the ascent arrives above the point it rose through",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "-> 'boot' seat 1 arrived (anonymous) - [body.where: body:0 pos=(0.00, 80.69, -13.54)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the second descent arrives beneath the same point",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "transfer=1 'boot' seat 1 departed -> '6~global6~corner' seat 1 arrived (anonymous) - [body.where: body:0 pos=(0.00, 79.16, -13.54)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no leg displaces the arrival sideways",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.70,",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "the displacement does not accumulate",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(1.40,",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/rim-round-trip/island-solo.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the control body starts on the same deck",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.00, 120.03, 0.00)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no crossing can fire without a seam",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.adjacency:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "nothing arrives anywhere",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "seat 1 arrived",
+        "present": false
+      }
+    ]
+  }
+}

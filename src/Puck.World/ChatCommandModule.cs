@@ -172,7 +172,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
 
         return string.Join(
             separator: ",",
-            values: cells.Select(selector: cell => $"{cell.Key}:'{cell.Text}'")
+            values: cells.Select(selector: cell => $"{cell.Key}:'{cell.Value.AsText}'")
         );
     }
     private CommandResult Inbox(CommandContext context, WireArgs args) {

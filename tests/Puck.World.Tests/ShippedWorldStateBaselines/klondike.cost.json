@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/klondike.world.json",
+  "simulationRateHz": 30,
+  "ticks": 680,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 27,
+      "interactionRows": 0,
+      "evaluationSlots": 85,
+      "workUnitsPerTick": 129710,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 27,
+      "interactionRows": 0,
+      "evaluationSlots": 85,
+      "workUnitsPerTick": 129710,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

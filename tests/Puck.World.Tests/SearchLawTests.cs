@@ -44,9 +44,9 @@ public sealed class SearchLawTests {
     }
 
     private static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: name)!;
-    private static long Cell(WorldFixture fixture, string row, string key) => Row(fixture, row).Cells!.Single(c => c.Key.Value == key).Value;
+    private static long Cell(WorldFixture fixture, string row, string key) => Row(fixture, row).Cells!.Single(c => c.Key.Value == key).Value.Raw;
 
-    private static SearchStatus Settle(WorldFixture fixture) {
+    private static ArenaSearchStatus Settle(WorldFixture fixture) {
         // Pieces drop from spawn and settle; the judge only speaks once settleHold reaches its margin.
         for (var tick = 0; tick < 400; tick++) {
             fixture.Step();
@@ -69,16 +69,16 @@ public sealed class SearchLawTests {
         var status = Settle(fixture);
 
         Assert.True(status.Done, $"the job did not finish: {status}");
-        Assert.True(status.NodesPerTick >= 1, status.ToString());
+        Assert.True(status.NodesPerStep >= 1, status.ToString());
         Assert.Equal(20L, status.Count);
-        Assert.Equal(20L, Row(fixture, "counts").Cells!.Sum(c => c.Value));
+        Assert.Equal(20L, Row(fixture, "counts").Cells!.Sum(c => c.Value.Raw));
 
         var codes = Row(fixture, "pieceCode").Cells!;
         var total = 0;
 
         foreach (var code in codes) {
             var mask = Cell(fixture, "legal", code.Key.Value);
-            var expected = code.Value switch {
+            var expected = code.Value.Raw switch {
                 1L => 2, // a white pawn steps one or two
                 2L => 2, // a white knight has two squares
                 _ => 0,  // every other white piece is blocked; black is not to move
@@ -149,10 +149,10 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), tokenA), new StateCell(CellName.Parse("b"), tokenB)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), 0L), new StateCell(CellName.Parse("to"), 0L), new StateCell(CellName.Parse("score"), 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: tokenA)), new StateCell(CellName.Parse("b"), CellValue.Int(value: tokenB))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("score"), CellValue.Int(value: 0L))]),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
         );
@@ -161,7 +161,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -176,7 +176,7 @@ public sealed class SearchLawTests {
 
     // An independent oracle over the SAME declared rule ("any token to any other cell, evicting whoever stood
     // there, always accepted, turn always flips") rather than a second reading of the runtime's own code: plain
-    // recursion over a two-element array, token-major/target-ascending enumeration (matching SearchRuntime's
+    // recursion over a two-element array, token-major/target-ascending enumeration (matching ArenaSearch's
     // own walk order) so a tie resolves to the same candidate.
     private static (long Value, int Token, int Target) ReferenceNegamax(long[] cells, int boardCells, int plies) {
         var best = -SearchCapacity.MateScore;
@@ -187,7 +187,7 @@ public sealed class SearchLawTests {
             var from = cells[token];
 
             // A token off the board (any value that is no cell — here, the eviction sentinel -1) is left alone,
-            // exactly as SearchRuntime.Walk's own off-board guard leaves it.
+            // exactly as ArenaSearch's own off-board guard leaves it.
             if ((from < 0L) || (from >= boardCells)) {
                 continue;
             }
@@ -219,7 +219,7 @@ public sealed class SearchLawTests {
         return (best, bestToken, bestTarget);
     }
 
-    private static SearchStatus RunToCompletion(WorldFixture fixture, int maxTicks = 4000) {
+    private static ArenaSearchStatus RunToCompletion(WorldFixture fixture, int maxTicks = 4000) {
         var status = fixture.Server.SearchStatus()[0];
 
         for (var tick = 0; (tick < maxTicks) && !status.Done; tick++) {
@@ -313,7 +313,7 @@ public sealed class SearchLawTests {
     }
 
     private static long BoardCellOrEmpty(WorldFixture fixture, string row, int cell) =>
-        (Row(fixture, row).Cells?.FirstOrDefault(c => c.Key.Value == cell.ToString(System.Globalization.CultureInfo.InvariantCulture))?.Value ?? 0L);
+        (Row(fixture, row).Cells?.FirstOrDefault(c => c.Key.Value == cell.ToString(System.Globalization.CultureInfo.InvariantCulture))?.Value.Raw ?? 0L);
 
     // Drop fixture: a 1x4 strip, one token "a" off the board (value -1) and one token "b" standing on cell 2. A
     // drop candidate is a cell no token occupies, so "a" should own every cell but 2 — the rule accepts every
@@ -338,10 +338,10 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L)]),
-                new WorldStateRow(CellName.Parse("pieceCode"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 1L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("pieceCode"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 1L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
@@ -351,8 +351,8 @@ public sealed class SearchLawTests {
             StateRaw = state,
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
-                    new ActionEffect.SetState(State: "verdict", Expression: ValueExpression.Parse("pieceCode[a] == 3 ? 1 : 0")),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "verdict", Expression: ExpressionProgram.Parse("pieceCode[a] == 3 ? 1 : 0")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -386,9 +386,9 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("pile"), CellKind.Int, Domain: new StateDomain.CellsOf("zones")),
-                new WorldStateRow(CellName.Parse("cardZone"), CellKind.Int, Cells: [new StateCell(CellName.Parse("x"), 0L), new StateCell(CellName.Parse("y"), 1L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("cardZone"), CellKind.Int, Cells: [new StateCell(CellName.Parse("x"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("y"), CellValue.Int(value: 1L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
             ],
@@ -399,7 +399,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -432,10 +432,10 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), 0L), new StateCell(CellName.Parse("to"), 0L), new StateCell(CellName.Parse("score"), 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("score"), CellValue.Int(value: 0L))]),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
         );
@@ -444,7 +444,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -528,9 +528,9 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), -1L), new StateCell(CellName.Parse("b"), 2L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: -1L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 2L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
@@ -541,7 +541,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -575,9 +575,9 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), 1L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 1L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
@@ -588,10 +588,10 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(
                     Name: CellName.Parse("accept"),
-                    Gate: new ActionPredicate.CompareValue(Left: ValueExpression.Parse("pieceCell[b]"), Comparison: ActionStateComparison.Less, Right: ValueExpression.Parse("0"), Kind: CellKind.Int),
+                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse("pieceCell[b]"), Comparison: ActionStateComparison.Less, Right: ExpressionProgram.Parse("0"), Kind: CellKind.Int),
                     Effects: [
                         new ActionEffect.SetState(State: "verdict", Value: 1),
-                        new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                     ]
                 ),
             ],
@@ -625,9 +625,9 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), 2L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 2L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
@@ -638,10 +638,10 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(
                     Name: CellName.Parse("accept"),
-                    Gate: new ActionPredicate.CompareValue(Left: ValueExpression.Parse("pieceCell[a]"), Comparison: ActionStateComparison.Equal, Right: ValueExpression.Parse("pieceCell[b]"), Kind: CellKind.Int),
+                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse("pieceCell[a]"), Comparison: ActionStateComparison.Equal, Right: ExpressionProgram.Parse("pieceCell[b]"), Kind: CellKind.Int),
                     Effects: [
                         new ActionEffect.SetState(State: "verdict", Value: 1),
-                        new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                     ]
                 ),
             ],
@@ -683,11 +683,11 @@ public sealed class SearchLawTests {
     private static WorldDefinition WideBoardWorld(bool withLegal) {
         var rows = new List<WorldStateRow> {
             new(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-            new(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), 50L)]),
-            new(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-            new(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            new(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 50L))]),
+            new(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+            new(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
             new(CellName.Parse("reach"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-            new(CellName.Parse("held"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            new(CellName.Parse("held"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
             new(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
         };
 
@@ -702,7 +702,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -741,9 +741,9 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), -1L)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: -1L))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
@@ -754,7 +754,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -818,9 +818,9 @@ public sealed class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf(topology.Name)),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), a), new StateCell(CellName.Parse("b"), b)]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: a)), new StateCell(CellName.Parse("b"), CellValue.Int(value: b))]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
@@ -831,7 +831,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -888,19 +888,19 @@ public sealed class SearchLawTests {
     // also counts the hand through the frame. Pile order is the zones' own: only the deck's end card may move.
     private static WorldDefinition PileWorld(ZoneSelector selector = ZoneSelector.Last, bool best = false, WorldSearchShape? shape = null) {
         var zone = new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true);
-        StateCell[] Members(string keys) => [.. keys.Select(static key => new StateCell(CellName.Parse(key.ToString()), 1L))];
+        StateCell[] Members(string keys) => [.. keys.Select(static key => new StateCell(CellName.Parse(key.ToString()), CellValue.Bool(value: true)))];
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse("cards"), CellKind.Bool, Capacity: 3, Cells: Members("abc")),
                 new WorldStateRow(CellName.Parse("deck"), CellKind.Bool, Capacity: 3, Domain: zone, Cells: Members("abc")),
                 new WorldStateRow(CellName.Parse("hand"), CellKind.Bool, Capacity: 3, Domain: zone),
                 new WorldStateRow(CellName.Parse("discard"), CellKind.Bool, Capacity: 3, Domain: zone),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
-                new WorldStateRow(CellName.Parse("handCount"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse("handCount"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cards"))),
                 new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cards"))),
-                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), 0L), new StateCell(CellName.Parse("to"), 0L), new StateCell(CellName.Parse("score"), 0L)]),
+                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("score"), CellValue.Int(value: 0L))]),
             ]
         );
         var definition = Fixtures.BuildDocument() with {
@@ -909,7 +909,7 @@ public sealed class SearchLawTests {
                 new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "handCount", FromState: "$reduce:count:hand"),
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [

@@ -1,3 +1,5 @@
+using Puck.Transpiler.Diagnostics;
+
 namespace Puck.Transpiler.Ast;
 
 /// <summary>A structural reference to a state row, optionally keyed: <c>name</c> or <c>name[key]</c>. The parser
@@ -194,7 +196,7 @@ public sealed record RemoveCellStatementNode(
     Column
 );
 /// <summary><c>schedule row in Ns</c> — a <c>scheduleState</c> effect. The <c>s</c> suffix is required (PUCK010
-/// otherwise); <c>DelaySeconds</c> is a plain decimal on the wire, never a <c>ValueExpression</c>.</summary>
+/// otherwise); <c>DelaySeconds</c> is a plain decimal on the wire, never a <c>ExpressionProgram</c>.</summary>
 public sealed record ScheduleStatementNode(
     RowRefNode Target,
     decimal DelaySeconds,
@@ -208,11 +210,10 @@ public sealed record ScheduleStatementNode(
     Line,
     Column
 );
-/// <summary><c>transform row = call(...)</c> — wraps <c>ActionEffect.TransformState</c> around whatever
-/// <c>StateTransform</c> call-form value follows; <see cref="RowName"/> is the transform's own local destination
-/// name (the transform's real target row travels inside <see cref="Transform"/>'s own arguments).</summary>
+/// <summary><c>transform call(...)</c> — wraps <c>ActionEffect.TransformState</c> around whatever
+/// <c>StateTransform</c> call-form value follows. The destination is the call's own argument, so the statement
+/// carries no result name of its own.</summary>
 public sealed record TransformStatementNode(
-    string RowName,
     CallExpressionNode Transform,
     int Offset = 0,
     int Length = 0,
@@ -244,7 +245,11 @@ public sealed record TransactionStatementNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets the span of the <c>onFailure</c> keyword itself, so a refusal drawn about that block reports
+    /// on its own line rather than on the <c>transaction</c> that carries it.</summary>
+    public SourceSpan? OnFailureSpan { get; init; }
+}
 /// <summary><c>if Gate { ... } [else { ... }]</c>, and the <c>else if</c> chain an <c>Else</c> holding a single
 /// nested <see cref="IfStatementNode"/> spells. General control flow: the language parses it for every document
 /// vocabulary, and each one decides whether its rule shape can carry a branch at all —
@@ -314,3 +319,47 @@ public sealed record BreakStatementNode(
     Line,
     Column
 );
+/// <summary><c>draw from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count 1.</summary>
+public sealed record DrawStatementNode(
+    string From,
+    string To,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>deal Count [from] from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count <paramref name="Count"/>.</summary>
+public sealed record DealStatementNode(
+    int Count,
+    string From,
+    string To,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>shuffle pile [with] draw</c> — syntactic sugar lowering to <c>StateTransform.Shuffle</c>.</summary>
+public sealed record ShuffleStatementNode(
+    string Row,
+    string Draw,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+

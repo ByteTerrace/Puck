@@ -201,76 +201,45 @@ internal static class ParityCommand {
         return 0;
     }
     private static bool TryBuildWorld(string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string artifact) {
-        var worldProject = Path.Combine(
-            path1: repositoryRoot,
-            path2: "src",
-            path3: "Puck.World",
-            path4: "Puck.World.csproj"
+        var built = WorldArtifactBuild.TryBuild(
+            artifact: out artifact,
+            build: out var build,
+            error: out var buildError,
+            outputDirectory: Path.Combine(
+                path1: runDirectory,
+                path2: "build"
+            ),
+            repositoryRoot: repositoryRoot,
+            timeout: CliProcess.RemainingBudget(
+                budget: SuiteBudget,
+                clock: suiteClock
+            ),
+            verb: "parity"
         );
 
-        var buildDirectory = Path.Combine(
-            path1: runDirectory,
-            path2: "build"
-        );
-
-        artifact = Path.Combine(
-            path1: buildDirectory,
-            path2: "Puck.World.dll"
-        );
-
-        Console.WriteLine(value: "parity: building Puck.World once (Release).");
-
-        CliProcessResult build;
-
-        try {
-            build = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false", "--output", buildDirectory],
-                input: string.Empty,
-                timeout: CliProcess.RemainingBudget(
-                    budget: SuiteBudget,
-                    clock: suiteClock
-                )
+        if (build is not null) {
+            File.WriteAllText(
+                Path.Combine(
+                    path1: runDirectory,
+                    path2: "build-stdout.log"
+                ),
+                build.Stdout,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
             );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            Console.Error.WriteLine(value: $"ERROR: could not start the Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-
-            return false;
+            File.WriteAllText(
+                Path.Combine(
+                    path1: runDirectory,
+                    path2: "build-stderr.log"
+                ),
+                build.Stderr,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+            );
+        }
+        if (!built) {
+            Console.Error.WriteLine(value: $"ERROR: {buildError}");
         }
 
-        File.WriteAllText(
-            Path.Combine(
-                path1: runDirectory,
-                path2: "build-stdout.log"
-            ),
-            build.Stdout,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-        File.WriteAllText(
-            Path.Combine(
-                path1: runDirectory,
-                path2: "build-stderr.log"
-            ),
-            build.Stderr,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-        if (
-            build.TimedOut ||
-            (build.ExitCode != 0)
-        ) {
-            Console.Error.WriteLine(value: (build.TimedOut
-                ? $"ERROR: the Puck.World build exceeded the {SuiteBudget.TotalSeconds:0}-second whole-suite budget."
-                : $"ERROR: the Puck.World build exited {build.ExitCode}."));
-
-            return false;
-        }
-        if (!File.Exists(path: artifact)) {
-            Console.Error.WriteLine(value: $"ERROR: the Puck.World build exited 0 but did not produce the exact artifact {artifact}.");
-
-            return false;
-        }
-
-        return true;
+        return built;
     }
 
     public static Command Create() {

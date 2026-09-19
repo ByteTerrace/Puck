@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "spaces": {
+    "lore": {
+      "dimensions": 256,
+      "entries": {
+        "64b4b4fa314765fe84467f01b6706e39f0384b4c23394797dcb0f4de329b2c81": {
+          "text": "Have you heard anything strange lately?",
+          "vector": "AgD7DPb59P78Cf8N_gUN_AH_Bv_69vr8Bf4F9AP4_wYD9gr-BP769PP4-f_7Avz9BA0D9Qv_9ggJ__T_C_UJ_QX3AQcI9vMB9Pj3AgwJBQ0GBgoG-wb5DAzzAfcGAv71-vz58_n4A_8K_fUJ-wMF-v_6_wQAAvP19PoD9fMMCQYNCAz3DfX99AgIB_r0B_j6A_f39_QHBPX29AD9_fb4AQkEBf31AAr3_AwL9QEMBA0JAgYMBf759Qb6BQrzDPUDAAH0CQcACgX2BQUDCAP_BwL79P4K-PT08wEG_Pr59vUM_AUN_wr5Dff__AP-9_T7AAD69_3z_woADPoI_Q30-Q"
+        },
+        "7a139b82197cb005a927cfe18ea184c44836bb56c6ee37379ca3e4fc73e89306": {
+          "text": "Hand over your coin or else",
+          "vector": "Ag0C_gjyAgP3A_3_-w7_CPYCDQIKAQn1-fUFCw4AAAH8AATy_v34DAAHBQAK9P4NDggHAv_yCvjyDg0JBgz89fULAPX-8_j3_PoECAwDB_8NDfP7CwQL_wLz-vgIBfb6CAUJAPb9_vP79AoG9fIH8vsJ-fkJBvQLCwwC_An7DfcBAAQO-__y-AcCBQcH__8HAvT7BwD7AwkJ_AH9BQrz_AsL__8FAQT49QvzDPYFA_oCAf8DDgkK-vwEAfcIA_z9B_kF_Aj7DPfzBQIKDAn_CwIA-fj7BPj8APX48wkJDPX-8gz5_wMDBAz6AgIC_fkCAwEO_wP68gYFBfz0-wD3-A"
+        },
+        "a5e1d9ef15f591cc88c251de31a6eaf27252b7d4c4ce4719834f6cdb5a894b53": {
+          "text": "Where is the road north?",
+          "vector": "9v379wcD-_kABfYHCA4A-AsHAv__BAMM-Qz4Ag75-fv9B_wL-_kGBw0LC_gLBvT29Pr1DAT6DQkFCvfyA_4NAgHzAgsH_w0LDAUBBQPz8wgBDP7_-Qz2CAgA_w0ECfwFCfwF9w3_Af4I_vQDCAwG_wj5-A0CCAcA_vz1AwYKDQoMCv_7_wLzDvj-9PwBBvf6CAr4CPUDBwz8-wr7_v4HDQvzCgIGBQXz-QMB-fQH8vv6-wINCPkG_gIGBPMH9QH5-QT5Af8EAAT-DfsKCg7z_vkOCfQJDQkCB_oIA_L__f318vn9AwP4_foB-PcI8_8CAwoI-QIE_PcM-Pz--Qf9BA"
+        }
+      },
+      "model": "puck-fixture",
+      "revision": "1"
+    }
+  }
+}

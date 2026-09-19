@@ -18,11 +18,14 @@ An invisible boundary needs three document rows:
 `WorldAdjacencyUnavailable.Closed` is the only failure treatment today, and it
 covers every terminal outcome, not just an unresolvable destination row: an
 unreachable neighbour, a full border, a refused admission, a refused leave, a
-commit abort, and a reservation the destination no longer has all clamp the body
-one raw fixed-point unit inside the boundary, clear its pending continuum, press
-`onUnavailable` once, and name the refusal on stderr. Clamping is what makes a
-refusal terminal — the sweep answers `Crossed` for a body already beyond the
-threshold, so a refusal that leaves the body outside is a refusal per tick. Only
+commit abort, and a reservation the destination no longer has all clear the
+body's pending continuum, press `onUnavailable` once, and name the refusal on
+stderr. At a yaw-only boundary the body is also clamped one raw fixed-point unit
+inside it, which makes the refusal terminal: the sweep answers `Crossed` for a
+body already beyond the threshold. At a pitched boundary (a floor or ceiling)
+the body is NOT clamped — it keeps pose and velocity and goes on under the local
+authority, because a clamp pins a falling body in mid-air at the plane — so
+there a refusal repeats every tick the body stays beyond the threshold. Only
 a capacity refusal under `full: retry` re-queues, bounded by a retry ceiling
 carried on the transfer. `onUnavailable` may name a declared channel for authored
 sound, animation, state, or other feedback; safety never depends on the binding.
@@ -190,18 +193,18 @@ the pair closes. The boundary's geometry selects which deadband
   by the same threshold; otherwise two perpendicular faces leave an unowned
   threshold-by-threshold square at their corner and a diagonal traveler can
   escape both writers. The authored vertical aperture remains exact.
-- A **floor/ceiling** boundary cannot carry that much: one body radius of delayed
-  ownership would consume ascent headroom and can place handoff after solid
-  destination terrain. It carries `TryVerticalSettleDeadband` instead — derived
-  per document from each kit's downward envelope (gravity over one authority
-  step, capped by terminal fall or sink speed) carried over one more step, plus
-  the contact skin, plus one raw unit, every quotient rounded outward. It is a
-  centimetre-scale distance, not a body radius. The separating invariant: larger
-  than any uncommanded descent, smaller than any commanded one — a settling
-  arrival never re-crosses its own reciprocal edge under gravity alone, and a
-  body driven or already falling downward clears the deadband inside one step
-  and transfers. A zero threshold there reads a settle as a departure and
-  oscillates the traveler across the seam.
+- A **floor/ceiling** boundary carries `TryVerticalOwnershipDeadband` — derived
+  per document as the max over kits of the fastest vertical travel the kit's
+  holds admit (the greater of gravity over one authority step and the fastest
+  authored terminal speed) carried over one more step, plus the contact skin,
+  plus one raw unit, every quotient rounded outward. It is a hysteresis width,
+  rate-dependent (about 0.69 m for a 40 u/s kit at 60 Hz, roughly double at
+  30 Hz), so a destination needs that much clear space past the plane. It bounds
+  only hold-driven travel: a full-lift row (which may author no envelope), a
+  vertical-velocity effect, Pull momentum and rigid impulses are outside it, and
+  a body they drive past it in one step is handed over once per crossing because
+  the sweep tests the whole step's segment. A zero threshold there reads a
+  settle as a departure and oscillates the traveler across the seam.
 
 `TryDeriveOverlap` covers whichever threshold is larger, and
 `WorldAdjacencyBand` derives its aperture from the same numbers the ownership
@@ -267,6 +270,14 @@ maps the body through every path stage, resolves neighbour terrain and eligible
 generation-addressed dynamic bodies, then maps the answer back through the
 inverse path. Querying only authored direct edges leaves a physical hole at the
 literal corner even when the rendered diagonal floor is present.
+
+Outward of a boundary plane the neighbour's geometry decides the vertical. This
+world's own terrain has ended there by construction, so ground its field still
+reports is the rim of that terrain rather than the floor the seam continues, and
+the wrapper consults the neighbour even when the local answer already says
+grounded — a body walking the strip keeps the mirrored floor's height instead of
+dipping over its own rim for the crossing tick. Inward of the plane the local
+field decides alone and the neighbour is never asked.
 
 Contact integration calls `IContactField.ResolveSweep`. `WorldSolidField`
 subdivides a long step deterministically before applying its ordinary SDF

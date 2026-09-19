@@ -10,9 +10,11 @@ namespace Puck.World.Tests;
 public sealed class BatchComposeLawTests {
     private const string GroupReference = "state.bindingGroups.actionGroup";
 
-    private static StateCell Cell(string key, long value) => new(
+    private static StateCell Cell(string key, long value, CellKind kind = CellKind.Int) => new(
         Key: Name(value: key),
-        Value: value
+        Value: ((kind == CellKind.Bool)
+            ? CellValue.Bool(value: (value != 0))
+            : CellValue.Int(value: value))
     );
     private static string ComposedGroup(WorldDefinition definition) => WorldBindingComposer.Compose(definition.BindingOverlays[0].Document).Chords[0].Group.Value;
     // The reference arm of a document identifier is the JSON converter's, so the fixture round-trips its bytes to
@@ -41,7 +43,7 @@ public sealed class BatchComposeLawTests {
                 Kind: CellKind.Text,
                 Cells: [new StateCell(
                         Key: Name(value: "actionGroup"),
-                        Text: "alpha"
+                        Value: CellValue.Text(value: "alpha")
                     )]
             ),
                 new WorldStateRow(
@@ -51,7 +53,7 @@ public sealed class BatchComposeLawTests {
                 Max: 1_000,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        0
+                        CellValue.Int(value: 0)
                     )]
             ),
                 new WorldStateRow(
@@ -91,16 +93,20 @@ public sealed class BatchComposeLawTests {
                 Capacity: 4,
                 Cells: [Cell(
                         key: "c0",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     ), Cell(
                         key: "c1",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     ), Cell(
                         key: "c2",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     ), Cell(
                         key: "c3",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     )]
             ),
                 new WorldStateRow(
@@ -122,16 +128,20 @@ public sealed class BatchComposeLawTests {
                 Capacity: 4,
                 Cells: [Cell(
                         key: "c4",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     ), Cell(
                         key: "c5",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     ), Cell(
                         key: "c6",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     ), Cell(
                         key: "c7",
-                        value: 1
+                        value: 1,
+                        kind: CellKind.Bool
                     )]
             ),
                 new WorldStateRow(
@@ -161,10 +171,10 @@ public sealed class BatchComposeLawTests {
             row: row
         ).Cells!.Select(selector: cell => cell.Key.Value)];
     // A cell write that reads the value an earlier member wrote, a text write to the row the chord group is bound
-    // to, and a write after it that opens a fresh workspace over the rehydrated document — the deal's own cell
-    // writes and its one text write. A shuffle and a random transfer (over "deck"/"randomPile") and a slice transfer
-    // (over "run"/"slicePile") close out the members TryComposeBatch cannot answer from its workspace alone (the
-    // "default" arm below): each still must compose exactly as it would applied on its own.
+    // to, and a write after it that composes against the rehydrated document — the deal's own cell writes and its
+    // one text write. A shuffle and a random transfer (over "deck"/"randomPile") and a slice transfer (over
+    // "run"/"slicePile") close out the members TryComposeBatch cannot answer from its arena alone (the "default"
+    // arm below): each still must compose exactly as it would applied on its own.
     private static WorldMutation[] Members() => [
         new WorldMutation.UpsertStateCell(
             Principal: WorldPrincipal.Console,
@@ -231,7 +241,7 @@ public sealed class BatchComposeLawTests {
     private static long Slot(WorldDefinition definition, string row) => Row(
         definition: definition,
         row: row
-    ).Cells!.Single(predicate: cell => (cell.Key == WorldStateRow.SlotKey)).Value;
+    ).Cells!.Single(predicate: cell => (cell.Key == WorldStateRow.SlotKey)).Value.Raw;
 
     [Fact]
     public void ABatchInstallsTheDocumentItsMembersReachOneByOne() {
@@ -308,9 +318,9 @@ public sealed class BatchComposeLawTests {
             actual: batched.DefinitionBytes()
         );
     }
-    // A batch of many independent cell writes over the same workspace copy composes byte-identically to applying
-    // each write on its own — the shared-workspace fast path (TryComposeBatch's OpenWorkspace/PlaceRow) can never
-    // diverge from the one-by-one door it exists only to avoid repeating.
+    // A batch of many independent cell writes through the batch's one arena composes byte-identically to applying
+    // each write on its own — the shared store can never diverge from the one-by-one door it exists only to avoid
+    // repeating.
     [Fact]
     public void ABatchOfManyCrossRowWritesComposesTheIdenticalDocumentToOneByOne() {
         const int RowCount = 24;
@@ -325,7 +335,7 @@ public sealed class BatchComposeLawTests {
                 Max: 1_000,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        index
+                        CellValue.Int(value: index)
                     )]
             );
             members[index] = new WorldMutation.UpsertStateCell(
@@ -404,6 +414,44 @@ public sealed class BatchComposeLawTests {
             filter: reason => reason.Contains(
                 comparisonType: StringComparison.Ordinal,
                 value: "no state row named 'absent'"
+            )
+        );
+        Assert.Equal(
+            expected: before,
+            actual: fixture.DefinitionBytes()
+        );
+    }
+    // A batch's cell members apply through the batch's own arena, so the arena's admission is what refuses one:
+    // "bag" declares four cells and does not evict, so its fifth key is refused where a rule's own write would be
+    // refused, at the apply door and by the row's capacity, rather than composing and being caught by the
+    // whole-document walk behind it.
+    [Fact]
+    public void ABatchCellWriteIsRefusedByTheArenasOwnAdmission() {
+        using var fixture = Fixtures.FreshServer(definition: Document());
+        var before = fixture.DefinitionBytes();
+        var refusals = new List<string>();
+
+        fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
+            Principal: WorldPrincipal.Console,
+            Mutations: [
+            .. new[] { "d", "e" }.Select(selector: key => new WorldMutation.UpsertStateCell(
+                    Principal: WorldPrincipal.Console,
+                    Row: "bag",
+                    Key: key,
+                    Value: 9,
+                    Kind: WorldDocumentWriteKind.Set
+                )),
+        ]
+        ));
+        fixture.Step();
+
+        Assert.Contains(
+            collection: refusals,
+            filter: reason => reason.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "would mint past capacity"
             )
         );
         Assert.Equal(

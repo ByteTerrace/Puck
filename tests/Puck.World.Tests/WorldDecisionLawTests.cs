@@ -15,10 +15,10 @@ public sealed class WorldDecisionLawTests {
         CellKind.Int,
         Cells: [new(
                 WorldStateRow.SlotKey,
-                value
+                CellValue.Int(value: value)
             )]
     );
-    private static ValueExpression Score(decimal value) => new(Tokens: [new ValueToken.Constant(Value: value)]);
+    private static ExpressionProgram Score(decimal value) => new(Instructions: [Instruction.Constant(value: value)]);
     private static WorldDecisionOption Option(string name, decimal score, ActionPredicate? gate = null, params ActionEffect[] effects) =>
         new(
             Name(value: name),
@@ -82,7 +82,7 @@ public sealed class WorldDecisionLawTests {
     private static long Value(WorldFixture fixture, string row) => WorldDefinitionRows.FindStateRow(
         fixture.Server.Definition.State,
         row
-    )!.Cells![0].Value;
+    )!.Cells![0].Value.AsInt;
     private static void Set(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
         WorldPrincipal.Console,
         row,
@@ -134,8 +134,8 @@ public sealed class WorldDecisionLawTests {
     public void InvalidScoreCannotWinOrCrashTheDecision() {
         var broken = new WorldDecisionOption(
             Name(value: "broken"),
-            new(Tokens: [new ValueToken.Constant(Value: 1),
-            new ValueToken.Constant(Value: 0), new ValueToken.Divide()]),
+            new(Instructions: [Instruction.Constant(value: 1),
+            Instruction.Constant(value: 0), Instruction.Of(operation: ExpressionOp.Divide)]),
             []
         );
         using var fixture = Fixtures.FreshServer(Document(Rule(Policy(
@@ -199,7 +199,7 @@ public sealed class WorldDecisionLawTests {
             ),
             new(
                 Name(value: "tempting"),
-                new(Tokens: [new ValueToken.State("score")]),
+                new(Instructions: [Instruction.Operand(name: "score")]),
                 []
             )
         ) with { CommitmentSeconds = 10 };
@@ -468,10 +468,12 @@ public sealed class WorldDecisionLawTests {
         ) with { Mode = WorldDecisionMode.Weighted };
         var chosen = Rule(policy);
         using var alone = Fixtures.FreshServer(Document(chosen));
-        using var withOther = Fixtures.FreshServer(Document(chosen) with { Rules = [Rule(
+        using var withOther = Fixtures.FreshServer(Document(chosen) with {
+            Rules = [Rule(
                 policy,
                 "other"
-            ), chosen] });
+            ), chosen],
+        });
 
         for (var index = 0; (index < 8); index++) {
             alone.Step(stepTicks: 504); withOther.Step(stepTicks: 504);
@@ -578,10 +580,10 @@ public sealed class WorldDecisionLawTests {
             Capacity: 3,
             Cells: [new(
                     Name(value: "1000000"),
-                    1
+                    CellValue.Int(value: 1)
                 ), new(
                     Name(value: "0"),
-                    1
+                    CellValue.Int(value: 1)
                 )]
         );
         using var fixture = Fixtures.FreshServer(Document(
@@ -637,11 +639,11 @@ public sealed class WorldDecisionLawTests {
 
         restored.Server.RestoreCheckpoint(checkpoint: decoded!);
         Assert.Equal(
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: original.Server,
                 tick: 0
             ),
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: restored.Server,
                 tick: 0
             )
@@ -655,11 +657,11 @@ public sealed class WorldDecisionLawTests {
 
             original.Server.Step(context: in context); restored.Server.Step(context: in context);
             Assert.Equal(
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: original.Server,
                     tick: index
                 ),
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: restored.Server,
                     tick: index
                 )
@@ -703,8 +705,8 @@ public sealed class WorldDecisionLawTests {
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertWorldRule(
             Principal: WorldPrincipal.Console,
             Rule: rule with {
-            Decision = rule.Decision! with { Seed = 99 },
-        }
+                Decision = rule.Decision! with { Seed = 99 },
+            }
         ));
         fixture.Step();
         Assert.Equal(
@@ -724,7 +726,7 @@ public sealed class WorldDecisionLawTests {
             Capacity: 1,
             Cells: [new(
                     Name(value: "0"),
-                    1
+                    CellValue.Int(value: 1)
                 )]
         );
         using var fixture = Fixtures.FreshServer(Document(
@@ -739,9 +741,9 @@ public sealed class WorldDecisionLawTests {
                         1
                     )
                 ) with {
-            Mode = WorldDecisionMode.Weighted,
-            PeriodSeconds = 10,
-        },
+                    Mode = WorldDecisionMode.Weighted,
+                    PeriodSeconds = 10,
+                },
                 forEach: "carriers"
             ),
             carriers
@@ -786,10 +788,10 @@ public sealed class WorldDecisionLawTests {
             Capacity: 2,
             Cells: [new(
                     Name(value: "0"),
-                    1
+                    CellValue.Int(value: 1)
                 ), new(
                     Name(value: "00"),
-                    1
+                    CellValue.Int(value: 1)
                 )]
         );
         using var fixture = Fixtures.FreshServer(Document(
@@ -837,7 +839,7 @@ public sealed class WorldDecisionLawTests {
             3 => state with { Key = 0 },
             _ => state with { Evaluated = false },
         };
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0
         );
@@ -847,7 +849,7 @@ public sealed class WorldDecisionLawTests {
         }));
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             )
@@ -871,16 +873,18 @@ public sealed class WorldDecisionLawTests {
             1 => policy with { CommitmentSeconds = -1 },
             2 => policy with { PeriodSeconds = 0.000001m },
             3 => policy with { IncumbentBonus = -1 },
-            4 => policy with { Options = [Option(
+            4 => policy with {
+                Options = [Option(
                 "a",
                 1
             ), Option(
                 "a",
                 2
-            )] },
+            )],
+            },
             _ => policy with { ScoreKind = CellKind.Bool },
         };
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Document(Rule(policy))));
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Document(Rule(policy))));
     }
     [Fact]
     public void DecisionCannotCombineAnEdgeLatchOrMismatchedScoreKinds() {
@@ -889,14 +893,14 @@ public sealed class WorldDecisionLawTests {
             1
         )));
 
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Document(rule with { Mode = ActionTriggerMode.Edge })));
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Document(rule with { Mode = ActionTriggerMode.Edge })));
         var typed = Policy(new WorldDecisionOption(
             Name(value: "a"),
-            new(Tokens: [new ValueToken.State("score")]),
+            new(Instructions: [Instruction.Operand(name: "score")]),
             []
         )) with { ScoreKind = CellKind.Fixed };
 
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Document(
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Document(
             Rule(typed),
             Slot(
                 name: "score",
@@ -920,8 +924,8 @@ public sealed class WorldDecisionLawTests {
         var roundTrip = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: document));
 
         Assert.Equal(
-            WorldRuleCompiler.CompileAll(definition: document)[0].Decision!.PolicyIdentity,
-            WorldRuleCompiler.CompileAll(definition: roundTrip)[0].Decision!.PolicyIdentity
+            ((CompiledWorldFactsRule)WorldFactsCompiler.CompileAll(definition: document)[0]).Decision!.PolicyIdentity,
+            ((CompiledWorldFactsRule)WorldFactsCompiler.CompileAll(definition: roundTrip)[0]).Decision!.PolicyIdentity
         );
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
@@ -950,7 +954,7 @@ public sealed class WorldDecisionLawTests {
                 start: 0
             ).Select(selector: i => new StateCell(
                 Name(value: i.ToString()),
-                1
+                CellValue.Int(value: 1)
             )).ToArray()
         );
         var policy = Policy(Enumerable.Range(
@@ -988,7 +992,7 @@ public sealed class WorldDecisionLawTests {
 
         for (var index = 0; (index < 8); index++) {
             fixture.Step(stepTicks: 504);
-            _ = WorldRuntimeStateHash.HashAuthoritative(
+            _ = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             );
@@ -998,7 +1002,7 @@ public sealed class WorldDecisionLawTests {
 
         for (var index = 0; (index < 16); index++) {
             fixture.Step(stepTicks: 504);
-            _ = WorldRuntimeStateHash.HashAuthoritative(
+            _ = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             );
@@ -1011,7 +1015,7 @@ public sealed class WorldDecisionLawTests {
 
         for (var index = 0; (index < 8); index++) {
             baseline.Step(stepTicks: 504);
-            _ = WorldRuntimeStateHash.HashAuthoritative(
+            _ = WorldStateHashComposition.HashAuthoritative(
                 server: baseline.Server,
                 tick: 0
             );
@@ -1020,7 +1024,7 @@ public sealed class WorldDecisionLawTests {
 
         for (var index = 0; (index < 16); index++) {
             baseline.Step(stepTicks: 504);
-            _ = WorldRuntimeStateHash.HashAuthoritative(
+            _ = WorldStateHashComposition.HashAuthoritative(
                 server: baseline.Server,
                 tick: 0
             );

@@ -198,9 +198,9 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             depth: out var hysteresis,
             reason: out _
         ) ||
-            !WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            !WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
             definition: definition,
-            depth: out var settle,
+            depth: out var deadband,
             reason: out _
         )
         ) {
@@ -210,7 +210,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         return WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in frame,
             reciprocalHysteresis: hysteresis,
-            verticalSettleDeadband: settle
+            verticalOwnershipDeadband: deadband
         );
     }
     private bool TryResolveCorner(WorldInstance source, string key, string destinationName, string counterpart, IWorldAdjacencyNeighbour intermediate, WorldAdjacencyEdgeView intermediateEdge, out IWorldAdjacencyNeighbour? handle) {
@@ -291,6 +291,26 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             handle.Pin(sourceTick: tick);
         }
 
+        // A neighbour's delivered image can predate a handoff this authority has already committed, so a traveler
+        // that has just arrived is still in it, at the slot it departed from. That entity is the arrival seen
+        // before its handoff, not a second body: contact would shove the arrival out of itself and the render would
+        // draw it twice. A generation-addressed slot names one occupant for all time, so the match is exact and
+        // needs no window.
+        var population = source.Server.Population;
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (!population.TryDepartedFrom(
+                departedFrom: out var departedFrom,
+                index: index
+            )) {
+                continue;
+            }
+
+            foreach (var handle in m_handles.Values) {
+                handle.MaskDeparted(address: in departedFrom);
+            }
+        }
+
         m_tickProjections = BuildProjections();
         m_tickProjectionsCurrent = true;
     }
@@ -336,6 +356,22 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             Authority: source.Server.AuthorityIdentity,
             Index: index,
             Generation: source.Server.Population.Generation(index: index)
+        );
+    }
+    /// <inheritdoc/>
+    public bool TryLocalDepartedFrom(int index, out Protocol.WorldEntityAddress departedFrom) {
+        departedFrom = default;
+
+        return (
+            m_instances.TryGet(
+                instance: out var source,
+                name: m_sourceInstanceName
+            ) &&
+            (source is not null) &&
+            source.Server.Population.TryDepartedFrom(
+                departedFrom: out departedFrom,
+                index: index
+            )
         );
     }
     /// <inheritdoc/>
@@ -586,6 +622,28 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             ? m_looks[index]
             : mirror.Look(index: index)
         );
+        public void MaskDeparted(in Protocol.WorldEntityAddress address) {
+            if (
+                !m_hasPin ||
+                (((uint)address.Index) >= ((uint)m_active.Length)) ||
+                !m_active[address.Index]
+            ) {
+                return;
+            }
+
+            var pinned = m_addresses[address.Index];
+
+            if (
+                (pinned.Generation == address.Generation) &&
+                string.Equals(
+                    a: pinned.Authority,
+                    b: address.Authority,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                m_active[address.Index] = false;
+            }
+        }
         public void Pin(ulong sourceTick) {
             Refresh();
             if (!m_frameResolved) {

@@ -140,6 +140,14 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // IsLegitimateSubject).
     private readonly int m_population;
     private readonly Action<WorldPrincipal, GrantSubject?, GrantSubject?> m_routeTransition;
+    // The server whose document, entity table and narration the grant-application, ownership-escrow and admission
+    // halves of this facade run against. Null only for a table built standalone, which reaches the capability doors
+    // below and nothing else.
+    private readonly WorldServer? m_host;
+
+    /// <summary>Gets the server this table serves.</summary>
+    /// <exception cref="InvalidOperationException">This table was built without one.</exception>
+    private WorldServer Host => (m_host ?? throw new InvalidOperationException(message: "This grant table was built without a server; only its own capability doors are reachable."));
 
     private readonly record struct GroupRoleReach(string GroupId, HashSet<WorldCapability> Reach);
 
@@ -166,10 +174,13 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="seatCount">The reserved local-seat count (each seat 0..seatCount-1 gets its default body grant).</param>
     /// <param name="population">The entity-table ceiling used to validate concrete body subjects.</param>
     /// <param name="routeTransition">The observer called after a principal's effective Control route changes.</param>
+    /// <param name="host">The server whose document, entity table and narration the grant-application, ownership-escrow
+    /// and admission halves run against; <see langword="null"/> builds a table reaching its own capability doors only.</param>
     /// <exception cref="ArgumentNullException"><paramref name="routeTransition"/> is <see langword="null"/>.</exception>
-    public WorldGrants(int seatCount, int population, Action<WorldPrincipal, GrantSubject?, GrantSubject?> routeTransition) {
+    public WorldGrants(int seatCount, int population, Action<WorldPrincipal, GrantSubject?, GrantSubject?> routeTransition, WorldServer? host = null) {
         ArgumentNullException.ThrowIfNull(argument: routeTransition);
 
+        m_host = host;
         m_population = population;
         m_routeTransition = routeTransition;
 
@@ -1418,7 +1429,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// exactly what "enabling an addon on your own seat is the consent gesture" requires and nothing beyond it: a
     /// Seat actor administering any other subject (another seat's body, a section, a screen, a state row)
     /// refuses.</remarks>
-    public bool HoldsForAdministration(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
+    private bool HoldsForAdministration(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
         if (principal.Kind == PrincipalKind.Console) {
             return true;
         }
@@ -1456,7 +1467,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="body">The 0-based entity index to test.</param>
     /// <param name="holder">The possessing principal, when one exists.</param>
     /// <returns><see langword="true"/> when a concrete Drive hold exists.</returns>
-    public bool IsBodyPossessed(int body, out WorldPrincipal holder) {
+    internal bool IsBodyPossessed(int body, out WorldPrincipal holder) {
         var subject = GrantSubject.Body(index: body);
 
         foreach (var pair in m_byPrincipal) {
@@ -1482,7 +1493,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// notes name explicitly — they diverge on <see cref="PrincipalKind.Addon"/>.</remarks>
     /// <param name="principal">The principal to classify.</param>
     /// <returns><see langword="true"/> for <see cref="PrincipalKind.Console"/> and <see cref="PrincipalKind.Seat"/>.</returns>
-    public static bool IsTrusted(WorldPrincipal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
+    private static bool IsTrusted(WorldPrincipal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
     /// <inheritdoc/>
     public ChannelCeilings PoolCeilings(WorldPrincipal seat, GrantSubject subject) =>
         (m_poolCeilings.TryGetValue(
@@ -1571,13 +1582,13 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// never the loud <c>Server.WorldServer.Grant</c> door — identical to how the constructor's own seed is silent).
     /// The runtime half of a whole-document rebuild (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>):
     /// "runtime grants drop; document grants re-apply as at boot." The document's own <c>Grants</c> section is
-    /// deliberately not replayed here — that half needs <see cref="Server.WorldServer.WithoutAuthoredConsent"/> and
+    /// deliberately not replayed here — that half needs <see cref="WithoutAuthoredConsent"/> and
     /// the loud <c>Grant</c> door, so the caller replays it immediately afterward exactly as the constructor's own
     /// body does, and re-mints every currently-admitted peer connection's admission grant afterward still (a
     /// peer is a connection, not a document row or a boot-time seat, so nothing here or in the document replay
     /// re-establishes it).</summary>
     /// <param name="seatCount">The reserved local-seat count — identical to the value passed at construction.</param>
-    public void Reset(int seatCount) {
+    internal void Reset(int seatCount) {
         var droppedApplications = new List<(WorldPrincipal Principal, GrantSubject Target)>();
 
         foreach (var (principal, applications) in m_applications) {
@@ -1721,7 +1732,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// ordinary door.</summary>
     /// <param name="principal">The principal to snapshot.</param>
     /// <returns>The rows in stable capability/subject order.</returns>
-    public IReadOnlyList<WorldGrant> Rows(WorldPrincipal principal) {
+    internal IReadOnlyList<WorldGrant> Rows(WorldPrincipal principal) {
         var rows = new List<WorldGrant>();
 
         foreach (var (capability, subject) in Held(principal: principal)) {
@@ -1823,7 +1834,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="index">The peer body index.</param>
     /// <param name="currentGeneration">The newly admitted generation.</param>
     /// <returns>The stale peer identities.</returns>
-    public IReadOnlyList<WorldPrincipal> StalePeerGenerations(int index, int currentGeneration) {
+    internal IReadOnlyList<WorldPrincipal> StalePeerGenerations(int index, int currentGeneration) {
         var stale = new List<WorldPrincipal>();
 
         foreach (var principal in m_byPrincipal.Keys) {
@@ -1853,7 +1864,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// row can never advance; <c>0</c> reads identically to any other tick. First-in-document-order gate wins a body
     /// (declaration-order tiebreak, the same convention same-tick rule effects resolve by).</summary>
     /// <param name="definition">The live document.</param>
-    public void SyncState(WorldDefinition definition) {
+    internal void SyncState(WorldDefinition definition) {
         var catalog = definition.StateCatalog;
 
         m_driveGates.Clear();

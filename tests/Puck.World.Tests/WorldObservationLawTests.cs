@@ -99,8 +99,9 @@ public sealed class WorldObservationLawTests {
             name,
             new Dictionary<string, string> { ["name"] = name, ["score"] = score, ["depth"] = depth }
         );
-    private static string[] Names(WorldServer server) => server.Definition.State.First(predicate: row => (row.Name.Value == "observedNames"))
-        .Cells!.Select(selector: cell => cell.Text!).ToArray();
+    // A row holding no cell carries none rather than an empty list — the one spelling the arena's export uses.
+    private static string[] Names(WorldServer server) => [.. (server.Definition.State.First(predicate: row => (row.Name.Value == "observedNames")).Cells ?? [])
+        .Select(selector: cell => cell.Value.AsText)];
     private static async Task Observe(WorldConfiguredExtensions runtime, WorldServer server, ulong tick, bool fails = false) {
         runtime.Pump(completedTick: tick);
         if (fails) { await Assert.ThrowsAnyAsync<Exception>(testCode: () => runtime.FlushObservationsAsync(cancellationToken: Cancel)); } else { await runtime.FlushObservationsAsync(cancellationToken: Cancel); }
@@ -133,7 +134,7 @@ public sealed class WorldObservationLawTests {
                 world.Server,
                 "observedScores",
                 "a"
-            ).Value
+            ).Value.AsInt
         );
         provider.Items = [Item(
                 "a",
@@ -151,7 +152,7 @@ public sealed class WorldObservationLawTests {
                 world.Server,
                 "observedScores",
                 "a"
-            ).Value
+            ).Value.AsInt
         );
         Assert.NotNull(@object: Assert.Single(collection: runtime.Observations).Failure);
         Assert.Equal(
@@ -334,7 +335,7 @@ public sealed class WorldObservationLawTests {
                 world.Server,
                 "observedScores",
                 "a"
-            ).Value
+            ).Value.AsInt
         );
         Assert.Equal(
             NumericLiteral.ToFixed(value: 12.375m).Value,
@@ -342,7 +343,7 @@ public sealed class WorldObservationLawTests {
                 world.Server,
                 "observedDepths",
                 "a"
-            ).Value
+            ).Value.AsFixed
         );
     }
     [Fact]

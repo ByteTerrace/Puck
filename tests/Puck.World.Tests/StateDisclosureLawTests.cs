@@ -26,7 +26,8 @@ public sealed class StateDisclosureLawTests {
             CellKind.Bool,
             Cells: [Cell(
                     key: "ace",
-                    value: 1
+                    value: 1,
+                    kind: CellKind.Bool
                 )],
             Domain: new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
@@ -39,7 +40,8 @@ public sealed class StateDisclosureLawTests {
             CellKind.Bool,
             Cells: [Cell(
                     key: "king",
-                    value: 1
+                    value: 1,
+                    kind: CellKind.Bool
                 )],
             Domain: new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
@@ -49,9 +51,12 @@ public sealed class StateDisclosureLawTests {
         )
         ]),
     };
-    private static StateCell Cell(string key, long value) => new(
+    private static StateCell Cell(string key, long value, CellKind kind = CellKind.Int) => new(
         Name(value: key),
-        value
+        ((kind == CellKind.Bool)
+            ? CellValue.Bool(value: (value != 0L))
+            : CellValue.Int(value: value)
+        )
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
 
@@ -89,7 +94,8 @@ public sealed class StateDisclosureLawTests {
                     CellKind.Bool,
                     Cells: [Cell(
                             key: "0",
-                            value: 1
+                            value: 1,
+                            kind: CellKind.Bool
                         )],
                     Domain: new StateDomain.CellsOf("map"),
                     Visibility: new([])
@@ -116,17 +122,23 @@ public sealed class StateDisclosureLawTests {
             ),
             userMessage: reason
         );
-        Assert.False(condition: WorldStateTransforms.TryApply(
+        // The arena kernels know no principals, so the ingress that stamped the acting principal is where an
+        // observe submitted by anyone but the world's own rules is refused, by name.
+        Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.Observe(Row: "known"),
             WorldPrincipal.Seat(slot: 0),
             8,
             "test",
             out _,
-            out _
+            out var denial
         ));
+        Assert.Contains(
+            actualString: denial,
+            expectedSubstring: "observe is a world-authored operation"
+        );
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.Observe(Row: "known"),
                 WorldPrincipal.World,
@@ -138,16 +150,18 @@ public sealed class StateDisclosureLawTests {
             userMessage: reason
         );
         var changed = seen.WithWorldState(rows: seen.State.Select(selector: r => r.Name.Value switch {
-            "truth" => r with { Cells = [Cell(
+            "truth" => r with {
+                Cells = [Cell(
                 key: "0",
                 value: 42
-            )] },
+            )],
+            },
             "sight" => r with { Cells = [] },
             _ => r
         }).ToArray());
 
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 changed,
                 new StateTransform.Observe(Row: "known"),
                 WorldPrincipal.World,
@@ -158,7 +172,7 @@ public sealed class StateDisclosureLawTests {
             ),
             userMessage: reason
         );
-        var cell = Assert.Single(collection: Assert.Single(collection: WorldStateDisclosure.Compose(
+        var cell = Assert.Single(collection: Assert.Single(collection: Fixtures.Disclose(
             definition: remembered,
             recipient: WorldPrincipal.Seat(slot: 0)
         )!).Cells);
@@ -196,14 +210,14 @@ public sealed class StateDisclosureLawTests {
     public void ProjectionOmitsHiddenIdentitiesAndAttributesWithoutChangingAuthority() {
         var definition = Cards();
         var before = WorldDefinitionSerialization.Serialize(definition: definition);
-        var a = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: WorldProjection.Compose(
+        var a = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: Fixtures.Project(
             definition,
             WorldDisclosureTier.Presentation,
             "test",
             1,
             WorldPrincipal.Seat(slot: 0)
         )!));
-        var b = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: WorldProjection.Compose(
+        var b = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: Fixtures.Project(
             definition,
             WorldDisclosureTier.Presentation,
             "test",

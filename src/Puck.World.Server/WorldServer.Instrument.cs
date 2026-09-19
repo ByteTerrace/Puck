@@ -5,7 +5,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
     /// <summary>Folds every currently engaged diegetic instrument's authored tempo into an ADDITIONAL beat-boundary
-    /// signal for THIS step, alongside (never in place of) <see cref="m_musicClock"/>'s own compiled boundary — every
+    /// signal for THIS step, alongside (never in place of) <see cref="WorldTick.MusicClock"/>'s own compiled boundary — every
     /// segment/transition authored against the world's own tempo keeps working unchanged. Simply holding a
     /// <see cref="GrantSubjectKind.Screen"/> <see cref="ControlApplication"/> onto an <see cref="IInstrumentClockSource"/>
     /// machine is the whole gate: <c>WorldSessionLever</c> is architecturally barred from feeding simulation state
@@ -14,13 +14,13 @@ public sealed partial class WorldServer {
     /// (<c>WorldCommand.ComposeControl</c>/<c>DissolveControl</c>, the same ordered domain every other authority
     /// command travels through) — reusing it needs no new mutation kind. Never contributes
     /// <see cref="Puck.Audio.Simulation.MusicClockBoundary.Bar"/>: a per-row authored tempo carries no bar-length
-    /// convention to derive one honestly from. Reuses <see cref="m_musicClock"/>'s own already-checkpointed
+    /// convention to derive one honestly from. Reuses <see cref="WorldTick.MusicClock"/>'s own already-checkpointed
     /// <c>ElapsedTicks</c> as the shared time base, so this fold needs no checkpoint/replay surface of its own — it
     /// is a pure function of (checkpointed clock position, the engaged instrument's static authored tempo) recomputed
     /// fresh every tick.</summary>
     /// <param name="previousElapsedTicks">The music clock's elapsed ticks before this step's <c>Advance</c>.</param>
     /// <param name="currentElapsedTicks">The music clock's elapsed ticks after this step's <c>Advance</c>.</param>
-    private Puck.Audio.Simulation.MusicClockBoundary InstrumentClockBoundary(ulong previousElapsedTicks, ulong currentElapsedTicks) {
+    public Puck.Audio.Simulation.MusicClockBoundary InstrumentClockBoundary(ulong previousElapsedTicks, ulong currentElapsedTicks) {
         var boundary = Puck.Audio.Simulation.MusicClockBoundary.None;
 
         for (var slot = 0; (slot < Population.LocalSeatCount); slot++) {
@@ -65,7 +65,7 @@ public sealed partial class WorldServer {
     // the application IS the clock-fold gate (see InstrumentClockBoundary's own remarks); the field stays a distinct
     // line rather than folding into "instrument=yes" because it names the FACT this verb exists to answer, not an
     // implementation detail of how the gate happens to work today.
-    private string DescribeInstrumentState(int seatSlot) {
+    public string DescribeInstrumentState(int seatSlot) {
         if (ResolveEngagedScreenIndex(seatSlot: seatSlot) is not { } screenIndex) {
             return "[instrument.state: none engaged]";
         }
@@ -77,7 +77,7 @@ public sealed partial class WorldServer {
         return $"[instrument.state: screen={screenIndex} instrument=yes ticksPerBeat={ticksPerBeat} driving=y]";
     }
     private long? InstrumentTicksPerBeat(int screenIndex) {
-        var screen = m_definition.Screens.FirstOrDefault(predicate: candidate => (candidate?.Index == screenIndex));
+        var screen = m_document.Definition.Screens.FirstOrDefault(predicate: candidate => (candidate?.Index == screenIndex));
 
         return ((screen?.Source is WorldScreenSource.Machine machine)
             ? m_machines.InstrumentTicksPerBeat(instance: machine.Instance)

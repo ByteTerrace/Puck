@@ -1,32 +1,23 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>Lowering coverage for the concise state-row declarations (state-authoring stage 1's syntax contract,
-/// stages 2/7/8): each declaration form emits exactly the JSON an independently authored explicit row would, and
-/// every refusal in the contract's list fires with its own diagnostic code and a non-degenerate source span.</summary>
+/// <summary>Lowering coverage for the concise state-row declarations: each declaration form emits exactly the JSON
+/// an independently authored explicit row would, and every refusal in the contract's list fires with its own
+/// diagnostic code and a non-degenerate source span.</summary>
 public class StateDeclarationEmitterTests {
     private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(source)
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
         );
 
-        var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        Assert.NotNull(@object: compilation.Json);
 
-        return (loweringResult.Value!, diagnostics);
+        return (compilation.Json, compilation.Diagnostics);
     }
     private static JsonArray WorldRows(JsonObject json) => Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["state"])["world"]);
     private static JsonObject WorldRow(JsonObject json, int index) => Assert.IsType<JsonObject>(@object: WorldRows(json: json)[index]);

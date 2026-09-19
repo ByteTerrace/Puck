@@ -1,0 +1,690 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 600,
+  "engineTick": 1008000,
+  "hashes": {
+    "authoritative": "d8018c463962c98c",
+    "capture": "c1ea84702f5bd6f8",
+    "pose": "cbf29ce484222325",
+    "world": "421a7c6f97e53ab8"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "ccBoard",
+        "kind": "Int",
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "ccHex"
+        }
+      },
+      {
+        "name": "pieceCell",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 30
+          },
+          {
+            "key": "s0p1",
+            "value": 14
+          },
+          {
+            "key": "s1p0",
+            "value": 36
+          },
+          {
+            "key": "s1p1",
+            "value": 19
+          },
+          {
+            "key": "s2p0",
+            "value": 24
+          },
+          {
+            "key": "s2p1",
+            "value": 10
+          }
+        ]
+      },
+      {
+        "name": "pieceCellPrev",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 30
+          },
+          {
+            "key": "s0p1",
+            "value": 14
+          },
+          {
+            "key": "s1p0",
+            "value": 36
+          },
+          {
+            "key": "s1p1",
+            "value": 19
+          },
+          {
+            "key": "s2p0",
+            "value": 24
+          },
+          {
+            "key": "s2p1",
+            "value": 10
+          }
+        ]
+      },
+      {
+        "name": "pieceSeat",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 0
+          },
+          {
+            "key": "s0p1",
+            "value": 0
+          },
+          {
+            "key": "s1p0",
+            "value": 1
+          },
+          {
+            "key": "s1p1",
+            "value": 1
+          },
+          {
+            "key": "s2p0",
+            "value": 2
+          },
+          {
+            "key": "s2p1",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "name": "turn",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "verdict",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "moverSeat",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "moverFrom",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "moverCell",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "movedCount",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "collisionCount",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "legal",
+        "kind": "Int",
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 0
+          },
+          {
+            "key": "s0p1",
+            "value": 0
+          },
+          {
+            "key": "s1p0",
+            "value": 0
+          },
+          {
+            "key": "s1p1",
+            "value": 0
+          },
+          {
+            "key": "s2p0",
+            "value": 66921180916
+          },
+          {
+            "key": "s2p1",
+            "value": 60879314668
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "pieceCell",
+          "ordered": false
+        }
+      },
+      {
+        "name": "counts",
+        "kind": "Int",
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 0
+          },
+          {
+            "key": "s0p1",
+            "value": 0
+          },
+          {
+            "key": "s1p0",
+            "value": 0
+          },
+          {
+            "key": "s1p1",
+            "value": 0
+          },
+          {
+            "key": "s2p0",
+            "value": 20
+          },
+          {
+            "key": "s2p1",
+            "value": 19
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "pieceCell",
+          "ordered": false
+        }
+      },
+      {
+        "name": "best",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "token",
+            "value": 5
+          },
+          {
+            "key": "to",
+            "value": 10
+          },
+          {
+            "key": "score",
+            "value": 99
+          }
+        ]
+      },
+      {
+        "name": "scores",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 199
+          },
+          {
+            "key": "1",
+            "value": 199
+          },
+          {
+            "key": "2",
+            "value": 99
+          }
+        ]
+      },
+      {
+        "name": "appliedToken",
+        "kind": "Int",
+        "value": 5
+      },
+      {
+        "name": "appliedTo",
+        "kind": "Int",
+        "value": 10
+      },
+      {
+        "name": "shouldApply",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "home0",
+        "kind": "Int",
+        "value": 2
+      },
+      {
+        "name": "home1",
+        "kind": "Int",
+        "value": 2
+      },
+      {
+        "name": "home2",
+        "kind": "Int",
+        "value": 1
+      },
+      {
+        "name": "winner",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "moveCount",
+        "kind": "Int",
+        "value": 15
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "hex",
+        "radius": 3,
+        "name": "ccHex",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1
+      }
+    ],
+    "families": [
+      {
+        "name": "home",
+        "size": 3,
+        "indices": null,
+        "members": null
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "ccBoard",
+      "cells": []
+    },
+    {
+      "row": "pieceCell",
+      "cells": [
+        {
+          "key": "s0p0",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "s0p1",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "s1p0",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "s1p1",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "s2p0",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "s2p1",
+          "value": 10,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "pieceCellPrev",
+      "cells": [
+        {
+          "key": "s0p0",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "s0p1",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "s1p0",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "s1p1",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "s2p0",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "s2p1",
+          "value": 10,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "pieceSeat",
+      "cells": [
+        {
+          "key": "s0p0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s0p1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s1p0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "s1p1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "s2p0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "s2p1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "turn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "verdict",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "moverSeat",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "moverFrom",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "moverCell",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "movedCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "collisionCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "legal",
+      "cells": [
+        {
+          "key": "s0p0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s0p1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s1p0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s1p1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s2p0",
+          "value": 66921180916,
+          "text": null
+        },
+        {
+          "key": "s2p1",
+          "value": 60879314668,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "counts",
+      "cells": [
+        {
+          "key": "s0p0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s0p1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s1p0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s1p1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "s2p0",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "s2p1",
+          "value": 19,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "best",
+      "cells": [
+        {
+          "key": "token",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "to",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "score",
+          "value": 99,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "scores",
+      "cells": [
+        {
+          "key": "0",
+          "value": 199,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 199,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 99,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "appliedToken",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 5,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "appliedTo",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 10,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "shouldApply",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "home0",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "home1",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "home2",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "winner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "moveCount",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 15,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

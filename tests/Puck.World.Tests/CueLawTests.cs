@@ -95,7 +95,7 @@ public sealed class CueLawTests {
             Capacity: 4,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: seedMagnitude.Value
+                    Value: CellValue.Fixed(rawBits: seedMagnitude.Value)
                 )]
         );
 
@@ -112,6 +112,7 @@ public sealed class CueLawTests {
                 World = [.. (source.StateRaw?.World ?? []), magnitudeRow],
             }),
             PopulationRaw = (source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
+            Simulation = new WorldSimulationDefaults(RateHz: 240),
         };
     }
     private static WorldFixture JoinSeatAndBall(WorldDefinition definition) {
@@ -137,7 +138,7 @@ public sealed class CueLawTests {
         return StateRows.FindCell(
             cells: row.Cells,
             key: CellName.Parse(candidate: "0")
-        )!.Value;
+        )!.Value.Raw;
     }
     // The release effect always addresses the same two live-resolved bodies: the struck target (a literal body
     // index) and the heading source (a different literal body index) — proving the effect strikes a body other
@@ -240,7 +241,7 @@ public sealed class CueLawTests {
                 Effects: [new ActionEffect.SetState(
                         State: MagnitudeRow,
                         Key: "0",
-                        Expression: ValueExpression.Parse(text: $"minimum({MagnitudeRow}[0] + {Step.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, {Max.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})")
+                        Expression: ExpressionProgram.Parse(text: $"minimum({MagnitudeRow}[0] + {Step.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, {Max.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})")
                     )]
             )],
         };
@@ -264,7 +265,7 @@ public sealed class CueLawTests {
 
         // At 240 Hz, 60 ticks is 0.25 s — comfortably past ceiling(max / step) = 40 charge ticks, so the cell must
         // have plateaued at max well before this loop ends.
-        for (var tick = 0; (tick < 8); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             fixture.Step();
 
             var current = MagnitudeCellRaw(fixture: fixture);

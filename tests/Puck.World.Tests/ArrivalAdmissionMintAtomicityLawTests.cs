@@ -47,12 +47,17 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
                     BodyColor: default,
                     CatalogRig: 4,
                     Mobility: new WorldMobilityIdentity(
-                        Incarnation: new WorldEntityAddress(
+                        DepartedFrom: new WorldEntityAddress(
                             Authority: "origin/world",
                             Generation: 7,
                             Index: WorldBodiesLimits.LocalSeatCount
                         ),
-                        Epoch: 0
+                        Epoch: 0,
+                        Incarnation: new WorldEntityAddress(
+                            Authority: "origin/world",
+                            Generation: 7,
+                            Index: WorldBodiesLimits.LocalSeatCount
+                        )
                     )
                 )]
         );
@@ -160,7 +165,8 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
                 Sequence: 1,
                 CorrelationId: 1,
                 Principal: WorldPrincipal.Console,
-                Payload: new WorldSubmissionPayload.Query(Value: new WorldQuery.Rules())
+                Payload: new WorldSubmissionPayload.Query(Value: new WorldQuery.Rules()),
+                OperationId: Guid.Empty
             ),
             completion: _ => {
                 drainOpen.Set();

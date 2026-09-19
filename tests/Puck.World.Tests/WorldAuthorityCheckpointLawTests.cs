@@ -220,7 +220,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         ),
         };
         var malformed = captured with { Population = captured.Population with { Entries = entries } };
-        var beforeHash = WorldRuntimeStateHash.HashAuthoritative(
+        var beforeHash = WorldStateHashComposition.HashAuthoritative(
             fixture.Server,
             tick: 0UL
         );
@@ -229,7 +229,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Equal(
             beforeHash,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 fixture.Server,
                 tick: 0UL
             )
@@ -250,7 +250,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Equal(
             beforeHash,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 fixture.Server,
                 tick: 0UL
             )
@@ -262,7 +262,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Equal(
             beforeHash,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 fixture.Server,
                 tick: 0UL
             )
@@ -274,7 +274,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Equal(
             beforeHash,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 fixture.Server,
                 tick: 0UL
             )
@@ -341,7 +341,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
             ),
             userMessage: reason
         );
-        var beforeHash = WorldRuntimeStateHash.HashAuthoritative(
+        var beforeHash = WorldStateHashComposition.HashAuthoritative(
             fixture.Server,
             tick: 0UL
         );
@@ -353,7 +353,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Equal(
             beforeHash,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 fixture.Server,
                 tick: 0UL
             )

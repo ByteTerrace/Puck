@@ -1,0 +1,2099 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 190,
+  "engineTick": 319200,
+  "hashes": {
+    "authoritative": "2f5a57f9ea343c98",
+    "capture": "afe0abe01d11f22a",
+    "pose": "5175e6147ad11551",
+    "world": "a2a187c07cad66f4"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "strategoOwner",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 1
+          },
+          {
+            "key": "5",
+            "value": 1
+          },
+          {
+            "key": "6",
+            "value": 1
+          },
+          {
+            "key": "7",
+            "value": 1
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 1
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 1
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 1
+          },
+          {
+            "key": "21",
+            "value": 1
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 1
+          },
+          {
+            "key": "24",
+            "value": 1
+          },
+          {
+            "key": "25",
+            "value": 1
+          },
+          {
+            "key": "26",
+            "value": 1
+          },
+          {
+            "key": "27",
+            "value": 1
+          },
+          {
+            "key": "28",
+            "value": 1
+          },
+          {
+            "key": "29",
+            "value": 1
+          },
+          {
+            "key": "30",
+            "value": 1
+          },
+          {
+            "key": "31",
+            "value": 1
+          },
+          {
+            "key": "32",
+            "value": 1
+          },
+          {
+            "key": "33",
+            "value": 1
+          },
+          {
+            "key": "34",
+            "value": 1
+          },
+          {
+            "key": "35",
+            "value": 1
+          },
+          {
+            "key": "36",
+            "value": 1
+          },
+          {
+            "key": "37",
+            "value": 1
+          },
+          {
+            "key": "38",
+            "value": 1
+          },
+          {
+            "key": "39",
+            "value": 1
+          },
+          {
+            "key": "42",
+            "value": 3
+          },
+          {
+            "key": "43",
+            "value": 3
+          },
+          {
+            "key": "46",
+            "value": 3
+          },
+          {
+            "key": "47",
+            "value": 3
+          },
+          {
+            "key": "52",
+            "value": 3
+          },
+          {
+            "key": "53",
+            "value": 3
+          },
+          {
+            "key": "56",
+            "value": 3
+          },
+          {
+            "key": "57",
+            "value": 3
+          },
+          {
+            "key": "60",
+            "value": 2
+          },
+          {
+            "key": "61",
+            "value": 2
+          },
+          {
+            "key": "62",
+            "value": 2
+          },
+          {
+            "key": "63",
+            "value": 2
+          },
+          {
+            "key": "64",
+            "value": 2
+          },
+          {
+            "key": "65",
+            "value": 2
+          },
+          {
+            "key": "66",
+            "value": 2
+          },
+          {
+            "key": "67",
+            "value": 2
+          },
+          {
+            "key": "68",
+            "value": 2
+          },
+          {
+            "key": "69",
+            "value": 2
+          },
+          {
+            "key": "70",
+            "value": 2
+          },
+          {
+            "key": "71",
+            "value": 2
+          },
+          {
+            "key": "72",
+            "value": 2
+          },
+          {
+            "key": "73",
+            "value": 2
+          },
+          {
+            "key": "74",
+            "value": 2
+          },
+          {
+            "key": "75",
+            "value": 2
+          },
+          {
+            "key": "76",
+            "value": 2
+          },
+          {
+            "key": "77",
+            "value": 2
+          },
+          {
+            "key": "78",
+            "value": 2
+          },
+          {
+            "key": "79",
+            "value": 2
+          },
+          {
+            "key": "80",
+            "value": 2
+          },
+          {
+            "key": "81",
+            "value": 2
+          },
+          {
+            "key": "82",
+            "value": 2
+          },
+          {
+            "key": "83",
+            "value": 2
+          },
+          {
+            "key": "84",
+            "value": 2
+          },
+          {
+            "key": "85",
+            "value": 2
+          },
+          {
+            "key": "86",
+            "value": 2
+          },
+          {
+            "key": "87",
+            "value": 2
+          },
+          {
+            "key": "88",
+            "value": 2
+          },
+          {
+            "key": "89",
+            "value": 2
+          },
+          {
+            "key": "90",
+            "value": 2
+          },
+          {
+            "key": "91",
+            "value": 2
+          },
+          {
+            "key": "92",
+            "value": 2
+          },
+          {
+            "key": "93",
+            "value": 2
+          },
+          {
+            "key": "94",
+            "value": 2
+          },
+          {
+            "key": "95",
+            "value": 2
+          },
+          {
+            "key": "96",
+            "value": 2
+          },
+          {
+            "key": "97",
+            "value": 2
+          },
+          {
+            "key": "98",
+            "value": 2
+          },
+          {
+            "key": "99",
+            "value": 2
+          }
+        ],
+        "phaseOf": "strategoTurnGuard",
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoTurnGuard",
+        "kind": "Int",
+        "cells": [],
+        "phase": {
+          "sequence": 0
+        }
+      },
+      {
+        "name": "strategoRedRank",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 11
+          },
+          {
+            "key": "1",
+            "value": 12
+          },
+          {
+            "key": "2",
+            "value": 11
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 7
+          },
+          {
+            "key": "6",
+            "value": 5
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 6
+          },
+          {
+            "key": "9",
+            "value": 11
+          },
+          {
+            "key": "10",
+            "value": 7
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 7
+          },
+          {
+            "key": "13",
+            "value": 5
+          },
+          {
+            "key": "14",
+            "value": 2
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 5
+          },
+          {
+            "key": "17",
+            "value": 4
+          },
+          {
+            "key": "18",
+            "value": 6
+          },
+          {
+            "key": "19",
+            "value": 3
+          },
+          {
+            "key": "20",
+            "value": 8
+          },
+          {
+            "key": "21",
+            "value": 8
+          },
+          {
+            "key": "22",
+            "value": 10
+          },
+          {
+            "key": "23",
+            "value": 8
+          },
+          {
+            "key": "24",
+            "value": 5
+          },
+          {
+            "key": "25",
+            "value": 6
+          },
+          {
+            "key": "26",
+            "value": 4
+          },
+          {
+            "key": "27",
+            "value": 7
+          },
+          {
+            "key": "28",
+            "value": 8
+          },
+          {
+            "key": "29",
+            "value": 11
+          },
+          {
+            "key": "30",
+            "value": 9
+          },
+          {
+            "key": "31",
+            "value": 9
+          },
+          {
+            "key": "32",
+            "value": 9
+          },
+          {
+            "key": "33",
+            "value": 9
+          },
+          {
+            "key": "34",
+            "value": 8
+          },
+          {
+            "key": "35",
+            "value": 9
+          },
+          {
+            "key": "36",
+            "value": 9
+          },
+          {
+            "key": "37",
+            "value": 9
+          },
+          {
+            "key": "38",
+            "value": 9
+          },
+          {
+            "key": "39",
+            "value": 11
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "readersFrom": "strategoReveal",
+          "isPublic": false
+        },
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoBlueRank",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "60",
+            "value": 11
+          },
+          {
+            "key": "61",
+            "value": 9
+          },
+          {
+            "key": "62",
+            "value": 9
+          },
+          {
+            "key": "63",
+            "value": 9
+          },
+          {
+            "key": "64",
+            "value": 9
+          },
+          {
+            "key": "65",
+            "value": 8
+          },
+          {
+            "key": "66",
+            "value": 9
+          },
+          {
+            "key": "67",
+            "value": 9
+          },
+          {
+            "key": "68",
+            "value": 9
+          },
+          {
+            "key": "69",
+            "value": 9
+          },
+          {
+            "key": "70",
+            "value": 11
+          },
+          {
+            "key": "71",
+            "value": 8
+          },
+          {
+            "key": "72",
+            "value": 7
+          },
+          {
+            "key": "73",
+            "value": 4
+          },
+          {
+            "key": "74",
+            "value": 6
+          },
+          {
+            "key": "75",
+            "value": 5
+          },
+          {
+            "key": "76",
+            "value": 8
+          },
+          {
+            "key": "77",
+            "value": 10
+          },
+          {
+            "key": "78",
+            "value": 8
+          },
+          {
+            "key": "79",
+            "value": 8
+          },
+          {
+            "key": "80",
+            "value": 3
+          },
+          {
+            "key": "81",
+            "value": 6
+          },
+          {
+            "key": "82",
+            "value": 4
+          },
+          {
+            "key": "83",
+            "value": 5
+          },
+          {
+            "key": "84",
+            "value": 1
+          },
+          {
+            "key": "85",
+            "value": 2
+          },
+          {
+            "key": "86",
+            "value": 5
+          },
+          {
+            "key": "87",
+            "value": 7
+          },
+          {
+            "key": "88",
+            "value": 11
+          },
+          {
+            "key": "89",
+            "value": 7
+          },
+          {
+            "key": "90",
+            "value": 11
+          },
+          {
+            "key": "91",
+            "value": 6
+          },
+          {
+            "key": "92",
+            "value": 4
+          },
+          {
+            "key": "93",
+            "value": 5
+          },
+          {
+            "key": "94",
+            "value": 7
+          },
+          {
+            "key": "95",
+            "value": 6
+          },
+          {
+            "key": "96",
+            "value": 3
+          },
+          {
+            "key": "97",
+            "value": 11
+          },
+          {
+            "key": "98",
+            "value": 12
+          },
+          {
+            "key": "99",
+            "value": 11
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "readersFrom": "strategoReveal",
+          "isPublic": false
+        },
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoRedSeen",
+        "kind": "Bool",
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoBlueSeen",
+        "kind": "Bool",
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoRedKnows",
+        "kind": "Int",
+        "cells": [],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        },
+        "knowledge": {
+          "source": "strategoBlueRank",
+          "mask": "strategoRedSeen"
+        },
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoBlueKnows",
+        "kind": "Int",
+        "cells": [],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        },
+        "knowledge": {
+          "source": "strategoRedRank",
+          "mask": "strategoBlueSeen"
+        },
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "strategoField"
+        }
+      },
+      {
+        "name": "strategoReveal",
+        "kind": "Text",
+        "capacity": 2,
+        "cells": []
+      },
+      {
+        "name": "strategoReady",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "red",
+            "value": 1
+          },
+          {
+            "key": "blue",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "strategoPhase",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 1
+      },
+      {
+        "name": "strategoTurn",
+        "kind": "Int",
+        "min": 1,
+        "max": 2,
+        "value": 1
+      },
+      {
+        "name": "strategoFrom",
+        "kind": "Int",
+        "min": 0,
+        "max": 99,
+        "value": 80
+      },
+      {
+        "name": "strategoTo",
+        "kind": "Int",
+        "min": 0,
+        "max": 99,
+        "value": 90
+      },
+      {
+        "name": "strategoRequest",
+        "kind": "Int",
+        "min": 0,
+        "value": 12
+      },
+      {
+        "name": "strategoApplied",
+        "kind": "Int",
+        "min": 0,
+        "value": 0
+      },
+      {
+        "name": "strategoResult",
+        "kind": "Int",
+        "min": -1,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "strategoLegal",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "strategoMoveRank",
+        "kind": "Int",
+        "min": 0,
+        "max": 12,
+        "value": 8
+      },
+      {
+        "name": "strategoDefRank",
+        "kind": "Int",
+        "min": 0,
+        "max": 12,
+        "value": 0
+      },
+      {
+        "name": "strategoTargetOwner",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      },
+      {
+        "name": "strategoMoves",
+        "kind": "Int",
+        "min": 0,
+        "value": 0
+      },
+      {
+        "name": "strategoWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "grid",
+        "width": 10,
+        "depth": 10,
+        "wrap": "None",
+        "band": 0,
+        "name": "strategoField",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "strategoOwner",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "75",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "76",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "77",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "78",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "79",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "80",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "81",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "82",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "83",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "84",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "85",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "86",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "87",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "88",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "89",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "90",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "91",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "92",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "93",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "94",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "95",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "96",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "97",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "98",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "99",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoTurnGuard",
+      "cells": []
+    },
+    {
+      "row": "strategoRedRank",
+      "cells": [
+        {
+          "key": "0",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 11,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoBlueRank",
+      "cells": [
+        {
+          "key": "60",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "75",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "76",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "77",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "78",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "79",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "80",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "81",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "82",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "83",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "84",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "85",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "86",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "87",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "88",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "89",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "90",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "91",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "92",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "93",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "94",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "95",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "96",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "97",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "98",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "99",
+          "value": 11,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoRedSeen",
+      "cells": []
+    },
+    {
+      "row": "strategoBlueSeen",
+      "cells": []
+    },
+    {
+      "row": "strategoRedKnows",
+      "cells": []
+    },
+    {
+      "row": "strategoBlueKnows",
+      "cells": []
+    },
+    {
+      "row": "strategoReveal",
+      "cells": []
+    },
+    {
+      "row": "strategoReady",
+      "cells": [
+        {
+          "key": "red",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "blue",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoPhase",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoTurn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoFrom",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 80,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoTo",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 90,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 12,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoResult",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoLegal",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoMoveRank",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoDefRank",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoTargetOwner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoMoves",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "strategoWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

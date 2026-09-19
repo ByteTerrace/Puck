@@ -15,7 +15,7 @@ public sealed class WorldTableLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    value
+                    CellValue.Int(value: value)
                 )]
         );
     private static long Value(WorldFixture fixture, string row) =>
@@ -25,7 +25,7 @@ public sealed class WorldTableLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
     private static (string Source, string Hash) Write(TableDocument document) {
         var source = $"tables-{Guid.NewGuid():N}.table.json";
 
@@ -124,13 +124,13 @@ public sealed class WorldTableLawTests {
                 CellName.Parse(candidate: "effect"),
                 [new ActionEffect.SetState(
                         State: "multiplier",
-                        FromState: "$table:chart:$bind:pair"
+                        FromState: "$table:chart:$local:pair"
                     )],
-                Bindings: [new RuleBinding(
+                Locals: [new RuleLocal(
                         CellName.Parse(candidate: "pair"),
                         CellKind.Int,
-                        new ValueExpression(Tokens: [
-                        new ValueToken.State("attack"), new ValueToken.Constant(Value: 100m), new ValueToken.Multiply(), new ValueToken.State("defend"), new ValueToken.Add(),
+                        new ExpressionProgram(Instructions: [
+                        Instruction.Operand(name: "attack"), Instruction.Constant(value: 100m), Instruction.Of(operation: ExpressionOp.Multiply), Instruction.Operand(name: "defend"), Instruction.Of(operation: ExpressionOp.Add),
                     ])
                     )]
             ),
@@ -322,7 +322,7 @@ public sealed class WorldTableLawTests {
                 CellKind.Fixed,
                 Cells: [new StateCell(
                         WorldStateRow.SlotKey,
-                        0L
+                        CellValue.Fixed(rawBits: 0L)
                     )]
             )]),
             Rules = [new WorldRule(

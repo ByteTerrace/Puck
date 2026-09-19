@@ -23,9 +23,9 @@ namespace Puck.World.Tests;
 /// Proven here against an isolated document first, then shipped for real in <c>modules/arcade.world.json</c>
 /// (<c>arcade_handheld-pickup</c>/<c>arcade_handheld-release</c> once composed under the island's <c>arcade</c>
 /// alias) — <see cref="RealArcadeModuleLawTests"/> below proves the shipped pair against the actual island document.
-/// An attach-only placement's <c>upsertPlacement</c> now costs <see cref="Puck.World.WorldPlacementEffectCost.DocumentCost"/>
-/// (<see cref="Puck.World.UpsertPlacementEffect.Cost"/> derives from what the row's own facets would rebuild, never a
-/// flat number), so shipping the pair fits comfortably under
+/// An attach-only placement's <c>upsertPlacement</c> costs <see cref="Puck.World.WorldPlacementEffectCost.DocumentCost"/>
+/// (<see cref="Puck.World.WorldPlacementEffectCost.Of"/> derives from what the row's own facets would rebuild, never
+/// a flat number), so shipping the pair fits comfortably under
 /// <see cref="Puck.State.RuleCapacity.MaxWorkUnitsPerTick"/>.
 /// </summary>
 public sealed class HandheldAttachLawTests {
@@ -137,7 +137,7 @@ public sealed class HandheldAttachLawTests {
                 Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0L
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
             ]),
@@ -206,7 +206,7 @@ public sealed class HandheldAttachLawTests {
     private static WorldPlacement Handheld(WorldFixture fixture) =>
         fixture.Server.Definition.Placements.Single(predicate: static placement => (placement.Id == "handheld"));
     private static long HandheldHeldCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == HandheldRow)).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == HandheldRow)).Cells!.Single().Value.Raw;
     private static void SubmitChannel(WorldFixture fixture, WorldPrincipal actor, int ordinal, FixedQ4816 value) => fixture.Server.ApplyIntentSubmission(
         body: fixture.Server.Body(index: actor.Index)!,
         submission: new IntentSubmission(

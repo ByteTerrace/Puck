@@ -59,17 +59,17 @@ public sealed partial class PlacementDealLawTests {
 
         Assert.Equal(
             1,
-            first.Read(reader: fixture.Server).Value
+            fixture.Server.RuleHost.Read(operand: first).Value
         );
         Assert.Equal(
             0,
-            second.Read(reader: fixture.Server).Value
+            fixture.Server.RuleHost.Read(operand: second).Value
         );
-        Assert.True(condition: new PlacementInfluenceOperand(
+        Assert.True(condition: fixture.Server.RuleHost.Read(operand: new PlacementInfluenceOperand(
             "water",
             TemplateId,
             "missing"
-        ).Read(reader: fixture.Server).IsAbsent);
+        )).IsAbsent);
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
             WorldPrincipal.Console,
@@ -81,20 +81,20 @@ public sealed partial class PlacementDealLawTests {
         fixture.Step();
         Assert.Equal(
             1,
-            second.Read(reader: fixture.Server).Value
+            fixture.Server.RuleHost.Read(operand: second).Value
         );
         Assert.Equal(
             0,
-            new PlacementInfluenceOperand(
+            fixture.Server.RuleHost.Read(operand: new PlacementInfluenceOperand(
                 "power",
                 TemplateId,
                 "b"
-            ).Read(reader: fixture.Server).Value
+            )).Value
         );
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
-        for (var read = 0; (read < 100); read++) { _ = second.Read(reader: fixture.Server); }
+        for (var read = 0; (read < 100); read++) { _ = fixture.Server.RuleHost.Read(operand: second); }
         Assert.Equal(
             0,
             (GC.GetAllocatedBytesForCurrentThread() - before)

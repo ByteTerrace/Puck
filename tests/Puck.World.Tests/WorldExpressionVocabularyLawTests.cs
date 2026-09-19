@@ -15,16 +15,16 @@ public sealed class WorldExpressionVocabularyLawTests {
         Kind: CellKind.Fixed,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Fixed(rawBits: value)
             )]
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldRule Rule(string name, string target, IReadOnlyList<ValueToken> tokens) => new(
+    private static WorldRule Rule(string name, string target, IReadOnlyList<Instruction> tokens) => new(
         Name: Name(value: name),
         Mode: ActionTriggerMode.Edge,
         Effects: [new ActionEffect.SetState(
                 State: target,
-                Expression: new ValueExpression(Tokens: tokens)
+                Expression: new ExpressionProgram(Instructions: tokens)
             )]
     );
     private static WorldStateRow Slot(string name, long value) => new(
@@ -32,7 +32,7 @@ public sealed class WorldExpressionVocabularyLawTests {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Int(value: value)
             )]
     );
     private static long Value(WorldFixture fixture, string row) {
@@ -44,7 +44,7 @@ public sealed class WorldExpressionVocabularyLawTests {
         return StateRows.FindCell(
             cells: declared.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
     }
 
     [Fact]
@@ -96,57 +96,57 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule(
                     name: "count",
                     target: "count",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.PopCount()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.PopCount)]
                 ),
                 Rule(
                     name: "lowest",
                     target: "lowest",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.TrailingZeroCount()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.TrailingZeroCount)]
                 ),
                 Rule(
                     name: "highest",
                     target: "highest",
-                    tokens: [new ValueToken.Constant(Value: 63m), new ValueToken.State(Name: "board"), new ValueToken.LeadingZeroCount(), new ValueToken.Subtract()]
+                    tokens: [Instruction.Constant(value: 63m), Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.LeadingZeroCount), Instruction.Of(operation: ExpressionOp.Subtract)]
                 ),
                 Rule(
                     name: "next",
                     target: "next",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.LowestSetBit()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.LowestSetBit)]
                 ),
                 Rule(
                     name: "rest",
                     target: "rest",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.ClearLowestSetBit()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.ClearLowestSetBit)]
                 ),
                 Rule(
                     name: "flip",
                     target: "flip",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.ByteSwap()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.ByteSwap)]
                 ),
                 Rule(
                     name: "turn",
                     target: "turn",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.BitReverse()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.BitReverse)]
                 ),
                 Rule(
                     name: "rot",
                     target: "rot",
-                    tokens: [new ValueToken.State(Name: "board"), new ValueToken.Constant(Value: 1m), new ValueToken.RotateLeft(), new ValueToken.Constant(Value: 1m), new ValueToken.RotateRight()]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.RotateLeft), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.RotateRight)]
                 ),
                 Rule(
                     name: "neg",
                     target: "neg",
-                    tokens: [new ValueToken.State(Name: "count"), new ValueToken.Negate()]
+                    tokens: [Instruction.Operand(name: "count"), Instruction.Of(operation: ExpressionOp.Negate)]
                 ),
                 Rule(
                     name: "mag",
                     target: "mag",
-                    tokens: [new ValueToken.State(Name: "mag"), new ValueToken.Abs()]
+                    tokens: [Instruction.Operand(name: "mag"), Instruction.Of(operation: ExpressionOp.Abs)]
                 ),
                 Rule(
                     name: "sign",
                     target: "sign",
-                    tokens: [new ValueToken.State(Name: "sgn"), new ValueToken.Sign(), new ValueToken.Constant(Value: 2.5m), new ValueToken.Constant(Value: 7.5m), new ValueToken.Select()]
+                    tokens: [Instruction.Operand(name: "sgn"), Instruction.Of(operation: ExpressionOp.Sign), Instruction.Constant(value: 2.5m), Instruction.Constant(value: 7.5m), Instruction.Of(operation: ExpressionOp.Select)]
                 ),
             ]
         );
@@ -244,10 +244,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "fixed-bitwise"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 1m),
-                    new ValueToken.Constant(Value: 2m),
-                    new ValueToken.BitAnd(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 1m),
+                    Instruction.Constant(value: 2m),
+                    Instruction.Of(operation: ExpressionOp.BitAnd),
                 ])
                         )]
                 )]
@@ -261,11 +261,11 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "fixed-condition"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 1m),
-                    new ValueToken.Constant(Value: 2m),
-                    new ValueToken.Constant(Value: 3m),
-                    new ValueToken.Select(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 1m),
+                    Instruction.Constant(value: 2m),
+                    Instruction.Constant(value: 3m),
+                    Instruction.Of(operation: ExpressionOp.Select),
                 ])
                         )]
                 )]
@@ -279,10 +279,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "dangling"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 1m),
-                    new ValueToken.Constant(Value: 2m),
-                    new ValueToken.Less(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 1m),
+                    Instruction.Constant(value: 2m),
+                    Instruction.Of(operation: ExpressionOp.Less),
                 ])
                         )]
                 )]
@@ -296,10 +296,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "underflow"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 1m),
-                    new ValueToken.Constant(Value: 2m),
-                    new ValueToken.Select(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 1m),
+                    Instruction.Constant(value: 2m),
+                    Instruction.Of(operation: ExpressionOp.Select),
                 ])
                         )]
                 )]
@@ -313,13 +313,13 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "control"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 1m),
-                    new ValueToken.Constant(Value: 2m),
-                    new ValueToken.Less(),
-                    new ValueToken.Constant(Value: 7m),
-                    new ValueToken.Constant(Value: 9m),
-                    new ValueToken.Select(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 1m),
+                    Instruction.Constant(value: 2m),
+                    Instruction.Of(operation: ExpressionOp.Less),
+                    Instruction.Constant(value: 7m),
+                    Instruction.Constant(value: 9m),
+                    Instruction.Of(operation: ExpressionOp.Select),
                 ])
                         )]
                 )]
@@ -367,23 +367,23 @@ public sealed class WorldExpressionVocabularyLawTests {
     }
     [Fact]
     public void EveryOperatorRoundTripsThroughTheStrictWireShape() {
-        ValueToken[] tokens = [
-            new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 2m), new ValueToken.Modulo(),
-            new ValueToken.Constant(Value: 3m), new ValueToken.BitAnd(), new ValueToken.Constant(Value: 4m), new ValueToken.BitOr(),
-            new ValueToken.Constant(Value: 5m), new ValueToken.BitXor(), new ValueToken.BitNot(),
-            new ValueToken.Constant(Value: 1m), new ValueToken.ShiftLeft(), new ValueToken.Constant(Value: 1m), new ValueToken.ShiftRight(),
-            new ValueToken.Constant(Value: 1m), new ValueToken.ShiftRightLogical(),
-            new ValueToken.Constant(Value: 6m), new ValueToken.Equal(), new ValueToken.Constant(Value: 0m), new ValueToken.NotEqual(),
-            new ValueToken.Constant(Value: 1m), new ValueToken.Less(), new ValueToken.Constant(Value: 1m), new ValueToken.LessOrEqual(),
-            new ValueToken.Constant(Value: 1m), new ValueToken.Greater(), new ValueToken.Constant(Value: 1m), new ValueToken.GreaterOrEqual(),
-            new ValueToken.Constant(Value: 8m), new ValueToken.Constant(Value: 9m), new ValueToken.Select(),
-            new ValueToken.PopCount(), new ValueToken.LeadingZeroCount(), new ValueToken.TrailingZeroCount(),
-            new ValueToken.LowestSetBit(), new ValueToken.ClearLowestSetBit(),
-            new ValueToken.Constant(Value: 3m), new ValueToken.RotateLeft(), new ValueToken.Constant(Value: 3m), new ValueToken.RotateRight(),
-            new ValueToken.ByteSwap(), new ValueToken.BitReverse(), new ValueToken.Negate(), new ValueToken.Abs(), new ValueToken.Sign(),
-            new ValueToken.Constant(Value: 12m), new ValueToken.ParallelBitExtract(), new ValueToken.Constant(Value: 12m), new ValueToken.ParallelBitDeposit(),
-            new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 2m), new ValueToken.BitField(),
-            new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 2m), new ValueToken.BitInsert(),
+        Instruction[] tokens = [
+            Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.Modulo),
+            Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.BitAnd), Instruction.Constant(value: 4m), Instruction.Of(operation: ExpressionOp.BitOr),
+            Instruction.Constant(value: 5m), Instruction.Of(operation: ExpressionOp.BitXor), Instruction.Of(operation: ExpressionOp.BitNot),
+            Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.ShiftLeft), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.ShiftRight),
+            Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.ShiftRightLogical),
+            Instruction.Constant(value: 6m), Instruction.Of(operation: ExpressionOp.Equal), Instruction.Constant(value: 0m), Instruction.Of(operation: ExpressionOp.NotEqual),
+            Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.Less), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.LessOrEqual),
+            Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.Greater), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.GreaterOrEqual),
+            Instruction.Constant(value: 8m), Instruction.Constant(value: 9m), Instruction.Of(operation: ExpressionOp.Select),
+            Instruction.Of(operation: ExpressionOp.PopCount), Instruction.Of(operation: ExpressionOp.LeadingZeroCount), Instruction.Of(operation: ExpressionOp.TrailingZeroCount),
+            Instruction.Of(operation: ExpressionOp.LowestSetBit), Instruction.Of(operation: ExpressionOp.ClearLowestSetBit),
+            Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.RotateLeft), Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.RotateRight),
+            Instruction.Of(operation: ExpressionOp.ByteSwap), Instruction.Of(operation: ExpressionOp.BitReverse), Instruction.Of(operation: ExpressionOp.Negate), Instruction.Of(operation: ExpressionOp.Abs), Instruction.Of(operation: ExpressionOp.Sign),
+            Instruction.Constant(value: 12m), Instruction.Of(operation: ExpressionOp.ParallelBitExtract), Instruction.Constant(value: 12m), Instruction.Of(operation: ExpressionOp.ParallelBitDeposit),
+            Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.BitField),
+            Instruction.Constant(value: 1m), Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.BitInsert),
         ];
         var definition = Document(
             state: [Slot(
@@ -394,14 +394,14 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "all"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: tokens)
+                            Expression: new ExpressionProgram(Instructions: tokens)
                         )]
                 )]
         );
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
         var effect = Assert.IsType<ActionEffect.SetState>(@object: Assert.Single(collection: Assert.Single(collection: (parsed.Rules ?? [])).Effects));
-        var round = Assert.IsType<ValueExpression>(@object: effect.Expression).Tokens;
+        var round = Assert.IsType<ExpressionProgram>(@object: effect.Expression).Instructions;
 
         Assert.Equal(
             expected: tokens.Length,
@@ -440,14 +440,14 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "board",
-                            Expression: new ValueExpression(Tokens: [
-                            new ValueToken.Constant(Value: 1m),
-                            new ValueToken.Constant(Value: 63m),
-                            new ValueToken.ShiftLeft(),
-                            new ValueToken.Constant(Value: 1m),
-                            new ValueToken.BitOr(),
-                            new ValueToken.BitNot(),
-                            new ValueToken.BitNot(),
+                            Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Constant(value: 1m),
+                            Instruction.Constant(value: 63m),
+                            Instruction.Of(operation: ExpressionOp.ShiftLeft),
+                            Instruction.Constant(value: 1m),
+                            Instruction.Of(operation: ExpressionOp.BitOr),
+                            Instruction.Of(operation: ExpressionOp.BitNot),
+                            Instruction.Of(operation: ExpressionOp.BitNot),
                         ])
                         )]
                 ),
@@ -461,10 +461,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     ),
                     Effects: [new ActionEffect.SetState(
                             State: "seen",
-                            Expression: new ValueExpression(Tokens: [
-                            new ValueToken.State(Name: "big"),
-                            new ValueToken.Constant(Value: 1m),
-                            new ValueToken.ShiftRightLogical(),
+                            Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Operand(name: "big"),
+                            Instruction.Constant(value: 1m),
+                            Instruction.Of(operation: ExpressionOp.ShiftRightLogical),
                         ])
                         )]
                 ),
@@ -516,12 +516,12 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "pos",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.State(Name: "pos"),
-                        new ValueToken.Constant(Value: 7m),
-                        new ValueToken.Add(),
-                        new ValueToken.Constant(Value: 40m),
-                        new ValueToken.Modulo(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Operand(name: "pos"),
+                        Instruction.Constant(value: 7m),
+                        Instruction.Of(operation: ExpressionOp.Add),
+                        Instruction.Constant(value: 40m),
+                        Instruction.Of(operation: ExpressionOp.Modulo),
                     ])
                         )]
                 ),
@@ -530,15 +530,15 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "ace",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.State(Name: "total"),
-                        new ValueToken.Constant(Value: 11m),
-                        new ValueToken.Add(),
-                        new ValueToken.Constant(Value: 21m),
-                        new ValueToken.LessOrEqual(),
-                        new ValueToken.Constant(Value: 11m),
-                        new ValueToken.Constant(Value: 1m),
-                        new ValueToken.Select(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Operand(name: "total"),
+                        Instruction.Constant(value: 11m),
+                        Instruction.Of(operation: ExpressionOp.Add),
+                        Instruction.Constant(value: 21m),
+                        Instruction.Of(operation: ExpressionOp.LessOrEqual),
+                        Instruction.Constant(value: 11m),
+                        Instruction.Constant(value: 1m),
+                        Instruction.Of(operation: ExpressionOp.Select),
                     ])
                         )]
                 ),
@@ -547,10 +547,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "frac",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.Constant(Value: 2.5m),
-                        new ValueToken.Constant(Value: 1m),
-                        new ValueToken.Modulo(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Constant(value: 2.5m),
+                        Instruction.Constant(value: 1m),
+                        Instruction.Of(operation: ExpressionOp.Modulo),
                     ])
                         )]
                 ),
@@ -559,13 +559,13 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "pick",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.Constant(Value: 0.25m),
-                        new ValueToken.Constant(Value: 0.5m),
-                        new ValueToken.Greater(),
-                        new ValueToken.Constant(Value: 3m),
-                        new ValueToken.Constant(Value: 0.5m),
-                        new ValueToken.Select(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Constant(value: 0.25m),
+                        Instruction.Constant(value: 0.5m),
+                        Instruction.Of(operation: ExpressionOp.Greater),
+                        Instruction.Constant(value: 3m),
+                        Instruction.Constant(value: 0.5m),
+                        Instruction.Of(operation: ExpressionOp.Select),
                     ])
                         )]
                 ),
@@ -630,8 +630,8 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "packed",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 176m), new ValueToken.Constant(Value: 240m), new ValueToken.ParallelBitExtract(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 176m), Instruction.Constant(value: 240m), Instruction.Of(operation: ExpressionOp.ParallelBitExtract),
                 ])
                         )]
                 ),
@@ -640,8 +640,8 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "spread",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 11m), new ValueToken.Constant(Value: 240m), new ValueToken.ParallelBitDeposit(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 11m), Instruction.Constant(value: 240m), Instruction.Of(operation: ExpressionOp.ParallelBitDeposit),
                 ])
                         )]
                 ),
@@ -650,8 +650,8 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "field",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 4660m), new ValueToken.Constant(Value: 4m), new ValueToken.Constant(Value: 8m), new ValueToken.BitField(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 4660m), Instruction.Constant(value: 4m), Instruction.Constant(value: 8m), Instruction.Of(operation: ExpressionOp.BitField),
                 ])
                         )]
                 ),
@@ -660,8 +660,8 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "inserted",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 4660m), new ValueToken.Constant(Value: 255m), new ValueToken.Constant(Value: 4m), new ValueToken.Constant(Value: 8m), new ValueToken.BitInsert(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 4660m), Instruction.Constant(value: 255m), Instruction.Constant(value: 4m), Instruction.Constant(value: 8m), Instruction.Of(operation: ExpressionOp.BitInsert),
                 ])
                         )]
                 ),
@@ -670,8 +670,8 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "refused",
-                            Expression: new ValueExpression(Tokens: [
-                    new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 60m), new ValueToken.Constant(Value: 8m), new ValueToken.BitField(),
+                            Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Constant(value: 1m), Instruction.Constant(value: 60m), Instruction.Constant(value: 8m), Instruction.Of(operation: ExpressionOp.BitField),
                 ])
                         )]
                 ),
@@ -747,12 +747,12 @@ public sealed class WorldExpressionVocabularyLawTests {
                             Effects: [
                     new ActionEffect.SetState(
                                     State: "mask",
-                                    Expression: ValueExpression.Parse(text: "replicationMask(width)")
+                                    Expression: ExpressionProgram.Parse(text: "replicationMask(width)")
                                 ),
                     new ActionEffect.SetState(
                                     State: "repeated",
-                                    Expression: new ValueExpression(Tokens: [
-                        new ValueToken.State(Name: "pattern"), new ValueToken.State(Name: "width"), new ValueToken.RepeatBits(),
+                                    Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Operand(name: "pattern"), Instruction.Operand(name: "width"), Instruction.Of(operation: ExpressionOp.RepeatBits),
                     ])
                                 ),
                 ],
@@ -822,10 +822,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [
-                            new ValueToken.Constant(Value: 1m),
-                            new ValueToken.Constant(Value: 64m),
-                            new ValueToken.ShiftLeft(),
+                                    Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Constant(value: 1m),
+                            Instruction.Constant(value: 64m),
+                            Instruction.Of(operation: ExpressionOp.ShiftLeft),
                         ])
                                 )],
                             OnFailure: [new ActionEffect.SetState(
@@ -840,10 +840,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [
-                            new ValueToken.Constant(Value: 1m),
-                            new ValueToken.Constant(Value: 0m),
-                            new ValueToken.Modulo(),
+                                    Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Constant(value: 1m),
+                            Instruction.Constant(value: 0m),
+                            Instruction.Of(operation: ExpressionOp.Modulo),
                         ])
                                 )],
                             OnFailure: [new ActionEffect.AddState(
@@ -857,10 +857,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                             State: "zero",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.State(Name: "wrapped"),
-                        new ValueToken.Constant(Value: -1m),
-                        new ValueToken.Modulo(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Operand(name: "wrapped"),
+                        Instruction.Constant(value: -1m),
+                        Instruction.Of(operation: ExpressionOp.Modulo),
                     ])
                         )]
                 ),
@@ -922,17 +922,17 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule(
                     name: "lead",
                     target: "lead",
-                    tokens: [new ValueToken.State(Name: "zero"), new ValueToken.LeadingZeroCount()]
+                    tokens: [Instruction.Operand(name: "zero"), Instruction.Of(operation: ExpressionOp.LeadingZeroCount)]
                 ),
                 Rule(
                     name: "trail",
                     target: "trail",
-                    tokens: [new ValueToken.State(Name: "zero"), new ValueToken.TrailingZeroCount()]
+                    tokens: [Instruction.Operand(name: "zero"), Instruction.Of(operation: ExpressionOp.TrailingZeroCount)]
                 ),
                 Rule(
                     name: "low",
                     target: "low",
-                    tokens: [new ValueToken.State(Name: "zero"), new ValueToken.LowestSetBit()]
+                    tokens: [Instruction.Operand(name: "zero"), Instruction.Of(operation: ExpressionOp.LowestSetBit)]
                 ),
                 new WorldRule(
                     Name: Name(value: "refuse-negate"),
@@ -940,7 +940,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()])
+                                    Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "min"), Instruction.Of(operation: ExpressionOp.Negate)])
                                 )],
                             OnFailure: [new ActionEffect.AddState(
                                     State: "failed",
@@ -954,7 +954,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()])
+                                    Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "min"), Instruction.Of(operation: ExpressionOp.Abs)])
                                 )],
                             OnFailure: [new ActionEffect.AddState(
                                     State: "failed",
@@ -968,7 +968,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()])
+                                    Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "low"), Instruction.Constant(value: 64m), Instruction.Of(operation: ExpressionOp.RotateLeft)])
                                 )],
                             OnFailure: [new ActionEffect.AddState(
                                     State: "failed",
@@ -987,7 +987,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Name: Name(value: "fixed-census"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [new ValueToken.Constant(Value: 1m), new ValueToken.PopCount()])
+                            Expression: new ExpressionProgram(Instructions: [Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.PopCount)])
                         )]
                 )]
         );

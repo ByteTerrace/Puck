@@ -24,12 +24,17 @@ public sealed class FederationTransferLawTests {
     );
     private static WorldMobilityIdentity Mobility(int index, ulong epoch = 0) =>
         new(
-            Incarnation: new WorldEntityAddress(
+            DepartedFrom: new WorldEntityAddress(
                 Authority: "origin/world",
                 Generation: 7,
                 Index: index
             ),
-            Epoch: epoch
+            Epoch: epoch,
+            Incarnation: new WorldEntityAddress(
+                Authority: "origin/world",
+                Generation: 7,
+                Index: index
+            )
         );
     // A budget expiry and a refusal must never read alike: the first says the machine never scheduled this exchange
     // within Laws.SocketBudget, the second is the law's own subject matter.
@@ -2079,6 +2084,10 @@ public sealed class FederationTransferLawTests {
         writer.WriteInt32(value: 0);
         writer.WriteInt32(value: 7);
         writer.WriteUInt64(value: 0UL);
+        // The slot the traveler departs from rides the mobility identity, after the epoch.
+        writer.WriteString(value: "origin/world");
+        writer.WriteInt32(value: 0);
+        writer.WriteInt32(value: 7);
         writer.WriteByte(value: 1);
         writer.WriteVector(value: Vector3.Zero);
         writer.WriteByte(value: 0);

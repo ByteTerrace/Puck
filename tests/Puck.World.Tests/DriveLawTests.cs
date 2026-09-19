@@ -268,7 +268,9 @@ public sealed class DriveLawTests {
         "fffffffffffd2583 fffffffffff31fdd fffffffffff55d49 fffffffffff62afb 0000000000027e14 ffffffffffedd197 ffffffffffe60000 0000000000007ee7 0000000000001eb8",
     ];
 
-    private static WorldDefinition BuildDriveDocument(float lateral = 22f, bool authorDrive = true) {
+    // rateHz defaults to the rate the recorded trace below was authored at; a law whose loop counts ticks to mean
+    // elapsed TIME names its own.
+    private static WorldDefinition BuildDriveDocument(float lateral = 22f, bool authorDrive = true, int rateHz = Fixtures.RecordedTraceRateHz) {
         var channels = new WorldChannel[] {
             new(
             Name: "forward",
@@ -363,7 +365,7 @@ public sealed class DriveLawTests {
             Collider: null
         );
 
-        return Fixtures.BuildDocument() with {
+        return Fixtures.BuildDocumentAtRate(rateHz: rateHz) with {
             ChannelsRaw = channels,
             BodyMotionProgramsRaw = [drive],
             KitRowsRaw = [kit],
@@ -630,13 +632,13 @@ public sealed class DriveLawTests {
     public void MaxPitchClampsTheDriveFrameAtItsAuthoredCeilingNotAHardcodedOne() {
         Assert.Equal(
             expected: FixedQ4816.FromDouble(value: 1.2),
-            actual: SaturatedDrivePitch(definition: BuildDriveDocument())
+            actual: SaturatedDrivePitch(definition: BuildDriveDocument(rateHz: Fixtures.DefaultRateHz))
         );
 
-        var kits = BuildDriveDocument().Kits.ToList();
+        var kits = BuildDriveDocument(rateHz: Fixtures.DefaultRateHz).Kits.ToList();
 
         kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { Turn = kits[0].Motion!.Turn with { MaxPitch = 0.3f } }) });
-        var narrowed = (BuildDriveDocument() with { KitRowsRaw = kits });
+        var narrowed = (BuildDriveDocument(rateHz: Fixtures.DefaultRateHz) with { KitRowsRaw = kits });
 
         Assert.Equal(
             expected: FixedQ4816.FromDouble(value: 0.3),

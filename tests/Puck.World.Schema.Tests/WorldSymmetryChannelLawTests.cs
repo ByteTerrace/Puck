@@ -9,16 +9,27 @@ namespace Puck.World.Schema.Tests;
 /// pins are the symmetry lattice's own.
 /// </summary>
 public sealed class WorldSymmetryChannelLawTests {
-    private static SymmetryOperand Compile(string channel, string? key = null, string destination = "out") {
-        var compiled = WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(
+    // Every ordinal and interned key a compiled operand carries belongs to the catalog of the document that
+    // compiled it, so the two spellings are read back through that same catalog.
+    private StateCatalog m_catalog = StateCatalog.Compile(section: null);
+
+    private string Key(CellKey key) => (key.IsValid
+        ? m_catalog.Keys[key].Value
+        : string.Empty);
+    private string Row(int ordinal) => m_catalog.Descriptors[ordinal].Name;
+    private Puck.State.Rules.SymmetryOperand Compile(string channel, string? key = null, string destination = "out") {
+        var definition = Definition(new ActionEffect.SetState(
             State: destination,
             FromState: channel,
             FromKey: key
-        )));
+        ));
+        var compiled = WorldFactsCompiler.CompileAll(definition: definition);
+
+        m_catalog = definition.StateCatalog;
 
         Assert.Single(collection: compiled);
 
-        return Assert.IsType<SymmetryOperand>(@object: ((WriteEffect)compiled[0].Effects[0]).From);
+        return Assert.IsType<Puck.State.Rules.SymmetryOperand>(@object: ((Puck.State.Rules.WriteEffect)compiled[0].Effects[0]).Source.Operand);
     }
     private static WorldDefinition Definition(params ActionEffect[] effects) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
@@ -28,7 +39,7 @@ public sealed class WorldSymmetryChannelLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 5
+                        Value: CellValue.Int(value: 5L)
                     )]
             ),
             new WorldStateRow(
@@ -36,7 +47,7 @@ public sealed class WorldSymmetryChannelLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 17
+                        Value: CellValue.Int(value: 17L)
                     )]
             ),
             new WorldStateRow(
@@ -45,7 +56,7 @@ public sealed class WorldSymmetryChannelLawTests {
                 Capacity: 4,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "0"),
-                        Value: 9
+                        Value: CellValue.Int(value: 9L)
                     )]
             ),
             new WorldStateRow(
@@ -53,7 +64,7 @@ public sealed class WorldSymmetryChannelLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0L)
                     )]
             ),
             new WorldStateRow(
@@ -61,7 +72,7 @@ public sealed class WorldSymmetryChannelLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Fixed(rawBits: 0L)
                     )]
             ),
         ]),
@@ -72,14 +83,14 @@ public sealed class WorldSymmetryChannelLawTests {
             )]
     );
     private static string Refusal(string channel, string? key = null, string destination = "out") {
-        var exception = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(
+        var exception = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(
             State: destination,
             FromState: channel,
             FromKey: key
         ))));
 
         Assert.Equal(
-            expected: RuleRefusal.SymmetryChannelMalformed,
+            expected: Puck.State.Rules.RuleRefusal.SymmetryChannelMalformed,
             actual: exception.Refusal
         );
 
@@ -92,10 +103,10 @@ public sealed class WorldSymmetryChannelLawTests {
 
         Assert.Equal(
             expected: "mirror",
-            actual: reflected.SymmetryOtherCell!.Value.Row
+            actual: Row(ordinal: reflected.SymmetryOtherCell!.Value.RowOrdinal)
         );
         Assert.Contains(
-            expected: reflected.SymmetryOtherCell.Value.Key,
+            expected: Key(key: reflected.SymmetryOtherCell.Value.Key),
             collection: new[] { string.Empty, WorldStateRow.SlotKey.Value }
         );
 
@@ -103,13 +114,13 @@ public sealed class WorldSymmetryChannelLawTests {
 
         Assert.Equal(
             expected: "nodes",
-            actual: keyedOther.SymmetryOtherCell!.Value.Row
+            actual: Row(ordinal: keyedOther.SymmetryOtherCell!.Value.RowOrdinal)
         );
         Assert.Equal(
             expected: "0",
-            actual: keyedOther.SymmetryOtherCell.Value.Key
+            actual: Key(key: keyedOther.SymmetryOtherCell.Value.Key)
         );
-        Assert.True(condition: keyedOther.SymmetryOtherCell.Value.Handle.IsValid);
+        Assert.True(condition: keyedOther.SymmetryOtherCell.Value.Key.IsValid);
 
         var keyedSource = Compile(
             channel: "$symmetry:ring:nodes",
@@ -118,11 +129,11 @@ public sealed class WorldSymmetryChannelLawTests {
 
         Assert.Equal(
             expected: "nodes",
-            actual: keyedSource.Row
+            actual: Row(ordinal: keyedSource.RowOrdinal)
         );
         Assert.Equal(
             expected: "0",
-            actual: keyedSource.Key
+            actual: Key(key: keyedSource.Key)
         );
     }
     [Fact]
@@ -141,7 +152,7 @@ public sealed class WorldSymmetryChannelLawTests {
 
             Assert.Equal(
                 expected: "node",
-                actual: operand.Row
+                actual: Row(ordinal: operand.RowOrdinal)
             );
             Assert.Equal(
                 expected: function,
@@ -193,13 +204,13 @@ public sealed class WorldSymmetryChannelLawTests {
         );
 
         // The source walk's own refusals still apply: a keyed row needs a key.
-        var keyed = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(
+        var keyed = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(
             State: "out",
             FromState: "$symmetry:ring:nodes"
         ))));
 
         Assert.NotEqual(
-            expected: RuleRefusal.SymmetryChannelMalformed,
+            expected: Puck.State.Rules.RuleRefusal.SymmetryChannelMalformed,
             actual: keyed.Refusal
         );
     }

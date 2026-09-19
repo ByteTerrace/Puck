@@ -137,9 +137,9 @@ public sealed class TabletopBoardLawTests {
                     start: 0
                 ).Select(selector: k => new StateCell(
                     CellName.Parse(candidate: k.ToString()),
-                    (seeded
+                    CellValue.Int(value: (seeded
             ? starting[k]
-            : 0)
+            : 0))
                 ))],
             Domain: new StateDomain.CellsOf("board")
         );
@@ -150,7 +150,7 @@ public sealed class TabletopBoardLawTests {
             Max: 3,
             Cells: [new StateCell(
                     CellName.Parse(candidate: "0"),
-                    initial
+                    CellValue.Int(value: initial)
                 )],
             Capacity: 1
         );
@@ -161,7 +161,7 @@ public sealed class TabletopBoardLawTests {
             Max: 5,
             Cells: [new StateCell(
                     CellName.Parse(candidate: WorldStateRow.SlotKey),
-                    initial
+                    CellValue.Int(value: initial)
                 )]
         );
 
@@ -499,7 +499,7 @@ public sealed class TabletopBoardLawTests {
                     start: 0
                 ).Select(selector: k => new StateCell(
                     CellName.Parse(candidate: k.ToString()),
-                    0
+                    CellValue.Int(value: 0)
                 ))],
             Domain: new StateDomain.CellsOf("board")
         );
@@ -513,7 +513,7 @@ public sealed class TabletopBoardLawTests {
                     start: 0
                 ).Select(selector: k => new StateCell(
                     CellName.Parse(candidate: k.ToString()),
-                    initial
+                    CellValue.Int(value: initial)
                 ))],
             Capacity: capacity
         );
@@ -920,7 +920,7 @@ public sealed class TabletopBoardLawTests {
             fixture.Server.Definition.State,
             "board"
         )!;
-        var cell0 = board.Cells!.Single(predicate: c => (c.Key.Value == "0")).Value;
+        var cell0 = board.Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw;
 
         Assert.Equal(
             actual: cell0,
@@ -967,7 +967,7 @@ public sealed class TabletopBoardLawTests {
             fixture.Server.Definition.State,
             name
         )!;
-        long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+        long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
         Assert.Equal(
             9,
             Cell(
@@ -1084,7 +1084,7 @@ public sealed class TabletopBoardLawTests {
             fixture.Server.Definition.State,
             name
         )!;
-        long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+        long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
 
         // The bridge: the resting body's cellOf derived cell 0 as occupied — never a boot phantom move (the row's
         // OWN sentinel guard keeps the first-ever derive from registering as a "move").
@@ -1121,6 +1121,8 @@ public sealed class TabletopBoardLawTests {
         // bridge itself is already proven above): stamp piecePrevCell/pieceCell exactly as piece-snapshot then
         // piece-derive would on a genuine second settle — cellOf re-resolving onto cell 1, pre-seeded occupied in
         // previousBoard — so mover-detect's gate crosses on the very next tick with quiescent still held.
+        // A mutation envelope carries its own operation id: WorldMutationBindingFactory refuses an empty one at
+        // ingress, before the mutation is ever buffered, and a refusal with no completion attached is silent.
         void Set(string row, long value, string key = "0") => fixture.Server.Submit(envelope: new(
             SubmissionEnvelope.LocalConnectionId,
             0,
@@ -1133,7 +1135,8 @@ public sealed class TabletopBoardLawTests {
                 key,
                 value,
                 WorldDocumentWriteKind.Set
-            ))
+            )),
+            Guid.NewGuid()
         ));
         Set(
             "piecePrevCell",

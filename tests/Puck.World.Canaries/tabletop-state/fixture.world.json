@@ -101,14 +101,14 @@
             {
               "$type": "addState",
               "expression": {
-                "tokens": [
+                "instructions": [
                   {
-                    "$type": "state",
+                    "op": "Operand",
                     "key": "$cell:positions:scout",
                     "name": "$board:pathCost:terrain:cell:destination:scout:100:16"
                   },
                   {
-                    "$type": "negate"
+                    "op": "Negate"
                   }
                 ]
               },

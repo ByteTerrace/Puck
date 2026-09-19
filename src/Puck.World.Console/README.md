@@ -21,7 +21,15 @@ fixed-point constants, and its live reference count), `world.curves`
 (`WorldCurveCommandModule`—the `curves` section's read-back: every row's
 authored shape, its compiled segment count and total arc length, and its live
 reference count), `world.group.*`/`world.ownership.*`/
-`world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
+`world.groups` (`WorldGroupCommandModule`—`world.group.form`/`.join`/`.leave`/
+`.kick` work the live runtime roster, added by `form` and wiped on the next
+whole-document rebuild, while the kind catalog itself is authored through
+`world.row.set`/`.remove groups.kinds`; `world.ownership.offer`/`.accept`/
+`.reclaim` work the escrow/transfer lane over an already-declared
+`WorldOwnership` row; `world.groups` is the read-back for all of it—kinds,
+live group rows, and ownership bindings. Every mutating verb routes
+`Simulation` and returns `None`, since the server prints the loud
+`[world.mutation: … applied/rejected]` line), `world.population.spawn`/
 `world.looks` (`WorldLookCommandModule`), `world.peers`/`world.projection`
 (`WorldNetworkCommandModule`), `world.row.*`/`world.kits`/`world.assign`
 (`WorldRowCommandModule`), `world.state.*`/`world.generate`/`world.state`

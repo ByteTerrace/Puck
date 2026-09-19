@@ -126,7 +126,7 @@ public sealed class TransferAbortKitWideningLawTests {
             ActionsRaw: new Dictionary<string, ActionSpec> {
                 // ONE authored action, bound OnFact only (no OnPress/OnRelease needed) — exercises the lane action
                 // runtime's own edge-latch/FactHeld (LaneLatch/LaneFactHeld) AND a DURABLE action-state write
-                // (ActionStateValues/Dirty/DirtyKind/DirtyOperand) through the SAME RunActionTriggers path real
+                // (ActionState/Dirty/DirtyKind/DirtyOperand) through the SAME RunActionTriggers path real
                 // gameplay drives. Gated on Falling (vertical velocity < 0, program-agnostic — see WorldBody.FactHolds)
                 // rather than Grounded: this fixture's kit carries no collider, so gravity alone free-falls the body
                 // from tick 1 (the SAME reason PortalSweepOriginLawTests' own fixture never grounds), making Falling
@@ -458,7 +458,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // WorldBody.LaneActionRuntime's own field remarks) legitimately stays 0 here: "surge" binds OnFact only, no
         // OnPress. Round-tripped below regardless (whatever value it holds, zero included, must survive exactly).
         Assert.True(
-            condition: (capturedState.ActionStateValues[0] > FixedQ4816.Zero),
+            condition: (capturedState.ActionState[0] > 0L),
             userMessage: "surgeCounter must have incremented from the Falling edge firing"
         );
         // ActionStateDirty/DirtyKind/DirtyOperand legitimately read false/default here: WorldPopulation.CompleteStep
@@ -572,12 +572,8 @@ public sealed class TransferAbortKitWideningLawTests {
             actual: restoredState.LaneFactHeld
         );
         Assert.Equal(
-            expected: capturedState.ActionStateValues,
-            actual: restoredState.ActionStateValues
-        );
-        Assert.Equal(
-            expected: capturedState.ActionStateTimers,
-            actual: restoredState.ActionStateTimers
+            expected: capturedState.ActionState,
+            actual: restoredState.ActionState
         );
         Assert.Equal(
             expected: capturedState.ActionStateDirty,
@@ -869,7 +865,7 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.True(condition: (capturedState.LaneFactHeld[SurgeOrdinal] != 0UL));
         // LaneLatch legitimately stays 0 here — see the drive law's own remarks (OnFact carries no OnPress latch).
         Assert.True(
-            condition: (capturedState.ActionStateValues[0] > FixedQ4816.Zero),
+            condition: (capturedState.ActionState[0] > 0L),
             userMessage: "surgeCounter must have incremented from the Rising edge firing"
         );
         // ActionStateDirty/DirtyKind/DirtyOperand — see the drive law's own remarks on why these legitimately read
@@ -964,12 +960,8 @@ public sealed class TransferAbortKitWideningLawTests {
             actual: restoredState.LaneFactHeld
         );
         Assert.Equal(
-            expected: capturedState.ActionStateValues,
-            actual: restoredState.ActionStateValues
-        );
-        Assert.Equal(
-            expected: capturedState.ActionStateTimers,
-            actual: restoredState.ActionStateTimers
+            expected: capturedState.ActionState,
+            actual: restoredState.ActionState
         );
         Assert.Equal(
             expected: capturedState.ActionStateDirty,

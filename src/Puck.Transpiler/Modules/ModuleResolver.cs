@@ -1,5 +1,6 @@
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 
 namespace Puck.Transpiler.Modules;
@@ -7,11 +8,12 @@ namespace Puck.Transpiler.Modules;
 /// <summary>Resolves multi-document import dependency graphs, detects cycles, and supports optional bundling.</summary>
 public static class ModuleResolver {
     private static void CollectStatements(
-        DocumentNode doc,
         string currentDir,
-        List<StatementNode> outputStatements,
+        DocumentNode doc,
         HashSet<string> loadedFiles,
-        DiagnosticBag diagnostics
+        List<StatementNode> outputStatements,
+        DiagnosticBag diagnostics,
+        IDocumentVocabulary? vocabulary = null
     ) {
         foreach (var stmt in doc.Statements) {
             if (stmt is ImportNode importNode) {
@@ -29,7 +31,7 @@ public static class ModuleResolver {
                 ) {
                     if (File.Exists(path: resolvedTarget)) {
                         var subText = File.ReadAllText(path: resolvedTarget);
-                        var subDoc = PuckParser.ParseDocument(subText);
+                        var subDoc = PuckParser.ParseDocument(source: subText, vocabulary: vocabulary);
                         var subDir = (Path.GetDirectoryName(path: resolvedTarget) ?? "");
 
                         CollectStatements(
@@ -37,7 +39,8 @@ public static class ModuleResolver {
                             diagnostics: diagnostics,
                             doc: subDoc,
                             loadedFiles: loadedFiles,
-                            outputStatements: outputStatements
+                            outputStatements: outputStatements,
+                            vocabulary: vocabulary
                         );
                     }
                 }
@@ -51,7 +54,8 @@ public static class ModuleResolver {
         string currentPath,
         HashSet<string> visited,
         List<string> activeChain,
-        DiagnosticBag diagnostics
+        DiagnosticBag diagnostics,
+        IDocumentVocabulary? vocabulary = null
     ) {
         var fullPath = Path.GetFullPath(path: currentPath);
         var currentDir = (Path.GetDirectoryName(path: fullPath) ?? "");
@@ -106,14 +110,15 @@ public static class ModuleResolver {
                 )) {
                     try {
                         var text = File.ReadAllText(path: resolvedTarget);
-                        var subDoc = PuckParser.ParseDocument(text);
+                        var subDoc = PuckParser.ParseDocument(source: text, vocabulary: vocabulary);
 
                         if (!TraverseImports(
                             activeChain: activeChain,
                             currentPath: resolvedTarget,
                             diagnostics: diagnostics,
                             doc: subDoc,
-                            visited: visited
+                            visited: visited,
+                            vocabulary: vocabulary
                         )) {
                             success = false;
                         }
@@ -137,12 +142,19 @@ public static class ModuleResolver {
     /// <param name="rootDoc">The root document AST.</param>
     /// <param name="rootPath">The root document filesystem path.</param>
     /// <param name="diagnostics">The DiagnosticBag to report resolution errors into.</param>
+    /// <param name="vocabulary">Optional document vocabulary providing schema-specific lexical rules.</param>
     /// <returns>A bundled DocumentNode with inlined statements, or null if errors occurred.</returns>
-    public static DocumentNode? BundleDocument(DocumentNode rootDoc, string rootPath, DiagnosticBag diagnostics) {
+    public static DocumentNode? BundleDocument(
+        DocumentNode rootDoc,
+        string rootPath,
+        DiagnosticBag diagnostics,
+        IDocumentVocabulary? vocabulary = null
+    ) {
         if (!ValidateImportGraph(
             diagnostics: diagnostics,
             rootDoc: rootDoc,
-            rootPath: rootPath
+            rootPath: rootPath,
+            vocabulary: vocabulary
         )) {
             return null;
         }
@@ -156,7 +168,8 @@ public static class ModuleResolver {
             diagnostics: diagnostics,
             doc: rootDoc,
             loadedFiles: loadedFiles,
-            outputStatements: bundledStatements
+            outputStatements: bundledStatements,
+            vocabulary: vocabulary
         );
 
         return new DocumentNode(
@@ -175,8 +188,14 @@ public static class ModuleResolver {
     /// <param name="rootDoc">The parsed root document node.</param>
     /// <param name="rootPath">The filesystem path to the root document.</param>
     /// <param name="diagnostics">The DiagnosticBag to report resolution errors into.</param>
+    /// <param name="vocabulary">Optional document vocabulary providing schema-specific lexical rules.</param>
     /// <returns>True if all imports resolve successfully without cycles.</returns>
-    public static bool ValidateImportGraph(DocumentNode rootDoc, string rootPath, DiagnosticBag diagnostics) {
+    public static bool ValidateImportGraph(
+        DocumentNode rootDoc,
+        string rootPath,
+        DiagnosticBag diagnostics,
+        IDocumentVocabulary? vocabulary = null
+    ) {
         ArgumentNullException.ThrowIfNull(rootDoc);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -188,7 +207,8 @@ public static class ModuleResolver {
             currentPath: rootPath,
             diagnostics: diagnostics,
             doc: rootDoc,
-            visited: visited
+            visited: visited,
+            vocabulary: vocabulary
         );
     }
 }

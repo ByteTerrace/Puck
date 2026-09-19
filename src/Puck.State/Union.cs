@@ -1,9 +1,9 @@
 namespace Puck.State;
 
-// The hand-written C# 15 basic union pattern (docs/game/design.md, "Compiled rule operands are a closed union"),
-// polyfilled internally until .NET 11 supplies the real attribute/interface pair. The day the toolchain moves, the
-// flip is deleting these two markers and switching on the carrier's Value directly wherever a case-type dispatch
-// exists today; nothing else moves.
+// The hand-written C# 15 basic union pattern (docs/reference/state/rules.md, "The facts"), polyfilled internally
+// until .NET 11 supplies the real attribute/interface pair. The day the toolchain moves, the flip is deleting these
+// two markers and switching on the carrier's Value directly wherever a case-type dispatch exists today; nothing
+// else moves.
 /// <summary>
 /// Marks a closed discriminated union — either an abstract class/record whose only cases are its own nested sealed
 /// classes/records (<see cref="StateDomain"/>), or a hand-written carrier struct over a sealed class hierarchy

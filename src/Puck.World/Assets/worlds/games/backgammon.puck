@@ -1,0 +1,164 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+documentId: "backgammon-probe"
+
+host {
+  presentation: "None"
+  backend: "auto"
+  width: 64
+  height: 64
+  surfaceFormat: "r8g8b8a8"
+  fullscreen: false
+  presentMode: "Immediate"
+  targetHertz: 0
+  exitAfterSeconds: 0
+  rayQuery: false
+  timing: false
+  genlock: null
+  listen: null
+}
+
+simulation {
+  rateHz: 30
+}
+
+generation {
+  worldSeed: 424242
+}
+
+state {
+  lattices [
+    ring(name: "points", origin: [0, 0, 0], cellSize: 1, width: 24)
+  ]
+
+  world {
+    row {
+      name: "board"
+      kind: "Int"
+      domain: cellsOf(topology: "points")
+    }
+
+    table checkerPoint: Int bounds(minimum: -1, maximum: 23) {
+      w0 = 0
+      w1 = 1
+      b0 = 23
+      b1 = 22
+    }
+
+    table origPoint: Int bounds(minimum: -1, maximum: 23) {
+      w0 = 0
+      w1 = 1
+      b0 = 23
+      b1 = 22
+    }
+
+    row {
+      name: "dice"
+      kind: "Int"
+      min: 1
+      max: 6
+      draw {
+        generator {
+          source: "UniformRange"
+          rangeMin: 1
+          rangeMax: 6
+        }
+        timing: "Event"
+      }
+      cells [
+        {
+          key: "d1"
+          value: 3
+        }
+        {
+          key: "d2"
+          value: 4
+        }
+      ]
+    }
+
+    slot cube: Int = 1 bounds(minimum: 1, maximum: 64)
+
+    slot turn: Int = 0 bounds(minimum: 0, maximum: 1)
+
+    slot verdict: Int = 0 bounds(minimum: 0, maximum: 1)
+
+    table best: Int {
+      token = 0
+      to = 0
+      score = 0
+    }
+
+    row {
+      name: "moveCounts"
+      kind: "Int"
+      domain: keysOf(row: "checkerPoint")
+    }
+  }
+}
+
+rule "backgammon-legal-w0" {
+  when checkerPoint[w0] != origPoint[w0]
+  mode: "Edge"
+  verdict = (turn == 0) & (((origPoint[w0] == -1) & ((checkerPoint[w0] == (dice[d1] - 1)) | (checkerPoint[w0] == (dice[d2] - 1)))) | ((origPoint[w0] != -1) & (origPoint[w1] != -1) & (((checkerPoint[w0] - origPoint[w0]) == dice[d1]) | ((checkerPoint[w0] - origPoint[w0]) == dice[d2]))))
+  turn = 1 - turn
+}
+
+rule "backgammon-legal-w1" {
+  when checkerPoint[w1] != origPoint[w1]
+  mode: "Edge"
+  verdict = (turn == 0) & (((origPoint[w1] == -1) & ((checkerPoint[w1] == (dice[d1] - 1)) | (checkerPoint[w1] == (dice[d2] - 1)))) | ((origPoint[w1] != -1) & (origPoint[w0] != -1) & (((checkerPoint[w1] - origPoint[w1]) == dice[d1]) | ((checkerPoint[w1] - origPoint[w1]) == dice[d2]))))
+  turn = 1 - turn
+}
+
+rule "backgammon-legal-b0" {
+  when checkerPoint[b0] != origPoint[b0]
+  mode: "Edge"
+  verdict = (turn == 1) & (((origPoint[b0] == -1) & ((checkerPoint[b0] == (24 - dice[d1])) | (checkerPoint[b0] == (24 - dice[d2])))) | ((origPoint[b0] != -1) & (origPoint[b1] != -1) & (((origPoint[b0] - checkerPoint[b0]) == dice[d1]) | ((origPoint[b0] - checkerPoint[b0]) == dice[d2]))))
+  turn = 1 - turn
+}
+
+rule "backgammon-legal-b1" {
+  when checkerPoint[b1] != origPoint[b1]
+  mode: "Edge"
+  verdict = (turn == 1) & (((origPoint[b1] == -1) & ((checkerPoint[b1] == (24 - dice[d1])) | (checkerPoint[b1] == (24 - dice[d2])))) | ((origPoint[b1] != -1) & (origPoint[b0] != -1) & (((origPoint[b1] - checkerPoint[b1]) == dice[d1]) | ((origPoint[b1] - checkerPoint[b1]) == dice[d2]))))
+  turn = 1 - turn
+}
+
+rule "backgammon-sync-orig" {
+  when checkerPoint[w0] != origPoint[w0] or checkerPoint[w1] != origPoint[w1] or checkerPoint[b0] != origPoint[b0] or checkerPoint[b1] != origPoint[b1]
+  mode: "Edge"
+  setState(state: "origPoint", key: "w0", fromState: "checkerPoint", fromKey: "w0")
+  setState(state: "origPoint", key: "w1", fromState: "checkerPoint", fromKey: "w1")
+  setState(state: "origPoint", key: "b0", fromState: "checkerPoint", fromKey: "b0")
+  setState(state: "origPoint", key: "b1", fromState: "checkerPoint", fromKey: "b1")
+}
+
+search {
+  jobs [
+    {
+      name: "ai"
+      tokens: "checkerPoint"
+      board: "board"
+      turn: "turn"
+      verdict: "verdict"
+      shapes [
+        relocate(displace: false)
+        drop()
+      ]
+      best: "best"
+      counts: "moveCounts"
+      depth: 2
+      "score": "(turn == 1) ? (checkerPoint[w0] + checkerPoint[w1] - dice[d1] - dice[d2]) : ((23 - checkerPoint[b0]) + (23 - checkerPoint[b1]) - dice[d1] - dice[d2])"
+      chance {
+        row: "dice"
+        atDepth: 1
+      }
+    }
+  ]
+}

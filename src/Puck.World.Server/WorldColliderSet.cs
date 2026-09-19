@@ -419,6 +419,12 @@ internal sealed class WorldColliderSet : IContactField {
             return;
         }
 
+        RefreshAttachedRows(population: population);
+    }
+    // The visitor below captures this method's locals, and a captured local's closure is allocated where its scope
+    // opens — at method entry. Keeping the walk in its own method is what lets a document with no attached row pay
+    // nothing per tick.
+    private void RefreshAttachedRows(WorldPopulation population) {
         var hash = Fnv1aHash.Create();
 
         foreach (var (placement, creation) in m_attachedRows) {

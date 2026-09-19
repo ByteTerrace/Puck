@@ -1,0 +1,32 @@
+state {
+  spaces {
+    space lore {
+      model: "puck-fixture"
+      revision: "1"
+      dimensions: 256
+    }
+  }
+  world {
+    table said: Text capacity(32) evicts
+    table saidVectors: Vector capacity(32) evicts
+    table saidStatus: Int capacity(32) evicts
+    table intents: Text embeds(intentVectors) {
+      directions = "Where is the road north?"
+      rumours = "Have you heard anything strange lately?"
+      threat = "Hand over your coin or else"
+    }
+    table answers: Text {
+      directions = "Follow the river until the old mill."
+      rumours = "Lights in the marsh, three nights running."
+      threat = "Guards!"
+    }
+    slot heard: Text = ""
+  }
+}
+
+rule "understand" {
+  forEach: "saidStatus"
+  mode: Edge
+  when saidStatus[$each] == 3
+  transform nearest(from: intentVectors, query: "saidVectors[$each]", into: heard, k: 1, threshold: 0.6)
+}

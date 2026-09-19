@@ -14,11 +14,18 @@
         <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
+        <ProjectReference Include="..\Puck.State.Rules\Puck.State.Rules.csproj" />
+        <ProjectReference Include="..\Puck.State.Search\Puck.State.Search.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
+        <Using Include="Puck.State.Rules" />
+        <!-- Both namespaces declare these two refusal families: the rule compiler's own, and the one the vector
+             kernel raises from Puck.State (which cannot reference Puck.State.Rules, since Rules depends on it). -->
+        <Using Include="Puck.State.Rules.RuleEffectRefusal" Alias="RuleEffectRefusal" />
+        <Using Include="Puck.State.Rules.RuleRefusal" Alias="RuleRefusal" />
     </ItemGroup>
 </Project>

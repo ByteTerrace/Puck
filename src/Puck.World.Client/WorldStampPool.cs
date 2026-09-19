@@ -88,7 +88,7 @@ public sealed partial class WorldStampPool {
         // The look's anonymous render-lane expressions (WorldLookMotion.Lanes), evaluated fresh every frame
         // against live state (WorldLookLaneEvaluator) and written into every dynamic slot this registration owns —
         // null for a row-rooted registration (row placements carry no WorldLookMotion) or an unauthored lane.
-        public IReadOnlyList<ValueExpression?>? Lanes;
+        public IReadOnlyList<ExpressionProgram?>? Lanes;
 
         // Whether the timeline replays on the render clock (an animated row always does; a body look only when its
         // motion says so — a cue-only timeline otherwise rests on frame 0, the live pose).

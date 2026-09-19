@@ -36,7 +36,7 @@ public sealed class ClientStateDeliveryLawTests {
             name: name
         )!.GetValue(obj: client)!;
     private static long RowCellValue(WorldDefinition definition, string row, string key) =>
-        definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+        definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
     private static object TargetTable(WorldClient client) => Field(
         client: client,
         name: "m_targets"

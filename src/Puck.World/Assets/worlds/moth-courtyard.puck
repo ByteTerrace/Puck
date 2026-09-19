@@ -185,11 +185,12 @@ let meadowTiles = [
 ]
 let meadowBlades = map(range(0, 144), i => {
   id: i
-  x: ((i % 12) - 5.5) * meadowSpacing + 0.026 * sine(i * 73.17)
+  x: (i % 12 - 5.5) * meadowSpacing + 0.026 * sine(i * 73.17)
   z: ((i - i % 12) / 12 - 5.5) * meadowSpacing + 0.026 * sine(i * 39.71 + 1)
   h: meadowHeight * (0.72 + 0.28 * sine(i * 13.31) + 0.16 * cosine(i * 0.43))
   yaw: i * 2.39996323
-})
+}
+)
 
 // This order also assigns the number keys. Some cameras come from the studio.
 let inspectionViews = [
@@ -562,11 +563,12 @@ prototypes {
       drivers: map([0, 1, 6, 7, 2, 3, 4, 5], i => {
         name: poseChannels[i]["driver"]
         signal: $"""state.{poseChannels[i]["name"]}.$body"""
-        when ["always"]
+        "when" ["always"]
         cadence: 1
         blendInSeconds: 0
         blendOutSeconds: 0
-      })
+      }
+      )
 
       shapes: concat([
         {
@@ -590,8 +592,11 @@ prototypes {
           pivot: bone["pivot"]
           wave: swing["wave"]
           phase: swing["phase"]
-        })
-      }))
+        }
+        )
+      }
+      )
+      )
       effectors []
     }
   }
@@ -667,10 +672,10 @@ prototypes {
         }
       ]
       noise {
-        frequency: 2.4,
-        amplitude: 0.01,
-        octaves: 2,
-        gain: 0.35,
+        frequency: 2.4
+        amplitude: 0.01
+        octaves: 2
+        gain: 0.35
         seed: 2461
       }
       shape Box "clearing" {
@@ -781,10 +786,10 @@ prototypes {
         }
       ]
       noise {
-        frequency: 1.8,
-        amplitude: 0.04,
-        octaves: 2,
-        gain: 0.4,
+        frequency: 1.8
+        amplitude: 0.04
+        octaves: 2
+        gain: 0.4
         seed: 7341
       }
       shape Superellipsoid "stone" {
@@ -865,10 +870,10 @@ prototypes {
         }
       ]
       noise {
-        frequency: 1.6,
-        amplitude: 0.025,
-        octaves: 2,
-        gain: 0.4,
+        frequency: 1.6
+        amplitude: 0.025
+        octaves: 2
+        gain: 0.4
         seed: 5123
       }
       shape Cylinder "trunk" {
@@ -879,7 +884,7 @@ prototypes {
       for i in range(0, 5) {
         shape Superellipsoid $"root-{i}" {
           exponent: landscapeExponent
-          position [0.48 * cosine((i * 1.2566370614)), 0.14, 0.48 * sine((i * 1.2566370614))]
+          position [0.48 * cosine(i * 1.2566370614), 0.14, 0.48 * sine(i * 1.2566370614)]
           scale [0.75, 0.24, 0.2]
           rotation [0, sine(-(i * 1.2566370614) / 2), 0, cosine(-(i * 1.2566370614) / 2)]
           material: 0
@@ -977,14 +982,14 @@ prototypes {
       ]
       for i in range(0, 7) {
         shape Prism $"blade-{i}" {
-          position [0.08 * cosine((i * 2.39996323)), 0.12 + (i % 3) * 0.03, 0.08 * sine((i * 2.39996323))]
-          scale [0.024, 0.14 + (i % 3) * 0.035, 0.009]
+          position [0.08 * cosine(i * 2.39996323), 0.12 + i % 3 * 0.03, 0.08 * sine(i * 2.39996323)]
+          scale [0.024, 0.14 + i % 3 * 0.035, 0.009]
           taper: 0
           rotation [
-            cosine((i * 2.39996323) / 2) * sine((0.15 + (i % 3) * 0.12) / 2),
-            sine((i * 2.39996323) / 2) * cosine((0.15 + (i % 3) * 0.12) / 2),
-            -sine((i * 2.39996323) / 2) * sine((0.15 + (i % 3) * 0.12) / 2),
-            cosine((i * 2.39996323) / 2) * cosine((0.15 + (i % 3) * 0.12) / 2),
+            cosine(i * 2.39996323 / 2) * sine((0.15 + i % 3 * 0.12) / 2),
+            sine(i * 2.39996323 / 2) * cosine((0.15 + i % 3 * 0.12) / 2),
+            -sine(i * 2.39996323 / 2) * sine((0.15 + i % 3 * 0.12) / 2),
+            cosine(i * 2.39996323 / 2) * cosine((0.15 + i % 3 * 0.12) / 2),
           ]
           material: i % 2
         }
@@ -1055,11 +1060,9 @@ prototypes {
           }
         ]
         // Elliptical fringe and a clearing around the northern boulder.
-        for blade in filter(filter(meadowBlades, b =>
-        ((tile[0] + b["x"] - 5.5) * (tile[0] + b["x"] - 5.5) / 3.9 +
-        (tile[1] + b["z"] - 6.7) * (tile[1] + b["z"] - 6.7) / 3.65) < 1 + 0.09 * sine(b["id"] * 7.1)), b =>
-        (tile[0] + b["x"] - 6.5) * (tile[0] + b["x"] - 6.5) +
-        (tile[1] + b["z"] - 9.8) * (tile[1] + b["z"] - 9.8) > 2.1) {
+        for blade in filter(filter(meadowBlades, b => (tile[0] + b["x"] - 5.5) * (tile[0] + b["x"] - 5.5) / 3.9 + (tile[1] + b["z"] - 6.7) * (tile[1] + b["z"] - 6.7) / 3.65 < 1 + 0.09 * sine(b["id"] * 7.1)
+        ), b => (tile[0] + b["x"] - 6.5) * (tile[0] + b["x"] - 6.5) + (tile[1] + b["z"] - 9.8) * (tile[1] + b["z"] - 9.8) > 2.1
+        ) {
           shape Prism $"""stem-{blade["id"]}""" {
             position [-blade["x"], -0.1 + blade["h"] * 0.3, -blade["z"]]
             scale [meadowWidth, blade["h"] * 0.3, 0.002]
@@ -1309,9 +1312,9 @@ placements {
     for i in range(0, 6) {
       placement $"grass-{cluster}-{i}" {
         prototype: "courtyard-grass"
-        position [center[0] + (0.28 + (i % 3) * 0.3) * cosine((i * 2.39996323 + cluster)), 0.025, center[1] + (0.28 + (i % 3) * 0.3) * sine((i * 2.39996323 + cluster))]
+        position [center[0] + (0.28 + i % 3 * 0.3) * cosine(i * 2.39996323 + cluster), 0.025, center[1] + (0.28 + i % 3 * 0.3) * sine(i * 2.39996323 + cluster)]
         yawDegrees: i * 67 + cluster * 19
-        scale: 0.75 + (i % 3) * 0.2
+        scale: 0.75 + i % 3 * 0.2
       }
     }
   }
@@ -1381,7 +1384,8 @@ cameras: map(courtyardCameras, camera => {
     ]
   }
   anchor: null
-})
+}
+)
 
 views {
   layouts: concat([
@@ -1402,7 +1406,9 @@ views {
         height: 1
       }
     ]
-  }))
+  }
+  )
+  )
   pipeline {
     $replace: true
   }
@@ -1423,43 +1429,46 @@ rules [
 
 state {
   world: concat(
-  map(poseChannels, pose => {
-    name: pose["name"]
-    kind: "Fixed"
-    cells: concat(
-    select(pose["replaceCells"], [
+    map(poseChannels, pose => {
+      name: pose["name"]
+      kind: "Fixed"
+      cells: concat(
+        select(pose["replaceCells"], [
+          {
+            $replace: true
+          }
+        ], []
+        ),
+        map(stations, station => {
+          key: $"""{station["index"]}"""
+          value: select(pose["heldZero"], "0", $"""{station[pose["field"]]}""")
+        }
+        )
+      )
+    }
+    ),
+    [
       {
-        $replace: true
+        name: "skyMode",
+        kind: "Fixed",
+        value: "0.5"
       }
-    ], []),
-    map(stations, station => {
-      key: $"""{station["index"]}"""
-      value: select(pose["heldZero"], "0", $"""{station[pose["field"]]}""")
-    })
-    )
-  }),
-  [
-    {
-      name: "skyMode",
-      kind: "Fixed",
-      value: "0.5"
-    }
-    {
-      name: "meadowWindSpeed",
-      kind: "Fixed",
-      value: "1.15"
-    }
-    {
-      name: "meadowFlutterSpeed",
-      kind: "Fixed",
-      value: "4.3"
-    }
-    {
-      name: "meadowWindPose",
-      kind: "Fixed",
-      value: "0"
-    }
-  ]
+      {
+        name: "meadowWindSpeed",
+        kind: "Fixed",
+        value: "1.15"
+      }
+      {
+        name: "meadowFlutterSpeed",
+        kind: "Fixed",
+        value: "4.3"
+      }
+      {
+        name: "meadowWindPose",
+        kind: "Fixed",
+        value: "0"
+      }
+    ]
   )
 }
 
@@ -1498,7 +1507,9 @@ render {
             gradient(stops: map(skyStops, stop => {
               elevation: stop["elevation"],
               color: "#B6B2BA"
-            }))
+            }
+            )
+            )
             fog(density: 0)
             sunDisc(intensity: 0)
           ]
@@ -1601,14 +1612,16 @@ bindingOverlays [
               sources: binding["sources"]
               text: null
               value: null
-            }), map(inspectionViews, (view, i) => {
+            }
+            ), map(inspectionViews, (view, i) => {
               sources [$"""keyboard.{select(i == 7, 0, i + 1)}"""]
               command: "view.override"
               value {
                 kind: "Axis1D",
                 raw [i + 1, 0, 0, 0]
               }
-            }), [
+            }
+            ), [
               {
                 sources: null
                 activator {
@@ -1630,7 +1643,8 @@ bindingOverlays [
                   raw [1, 0, 0, 0]
                 }
               }
-            ])
+            ]
+            )
           }
         }
       ]

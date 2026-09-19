@@ -1,0 +1,139 @@
+{
+  "basis": "../../src/Puck.World/Assets/worlds/games/hearts.world.json",
+  "grants": [
+    {
+      "capability": "Mutate",
+      "principal": "seat1",
+      "subject": "section:state"
+    },
+    {
+      "capability": "Edit",
+      "principal": "seat1",
+      "subject": "all"
+    }
+  ],
+  "host": {
+    "exitAfterSeconds": 0,
+    "presentation": "None"
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "if",
+          "condition": {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$phase:heartsPassPhase",
+            "value": 0
+          },
+          "then": [
+            {
+              "$type": "setState",
+              "key": "ok",
+              "state": "passPhaseAdvanced",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "fromState": "$phase:heartsPassPhase",
+          "key": "generation",
+          "state": "passPhaseAdvanced"
+        }
+      ],
+      "mode": "Level",
+      "name": "verdict-pass-phase-advanced"
+    },
+    {
+      "effects": [
+        {
+          "$type": "if",
+          "condition": {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$phase:heartsTrickPhase",
+            "value": 0
+          },
+          "then": [
+            {
+              "$type": "setState",
+              "key": "ok",
+              "state": "trickPhaseAdvanced",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "fromState": "$phase:heartsTrickPhase",
+          "key": "generation",
+          "state": "trickPhaseAdvanced"
+        }
+      ],
+      "mode": "Level",
+      "name": "verdict-trick-phase-advanced"
+    }
+  ],
+  "schedule": {
+    "directory": "out",
+    "rows": [
+      {
+        "command": "world.state.transform {\"$type\":\"transfer\",\"from\":\"heartsDeck\",\"to\":\"heartsHand1\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 3
+      },
+      {
+        "command": "world.state.act heartsPassPhase 0 {\"$type\":\"transfer\",\"from\":\"heartsHand1\",\"to\":\"heartsPass1\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 6
+      }
+    ],
+    "settleTicks": 6
+  },
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "ok",
+            "value": 0
+          },
+          {
+            "key": "generation",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "passPhaseAdvanced",
+        "verdict": {
+          "gate": "heartsPassPhase's generation advanced past 0 once the scheduled guarded transform landed",
+          "status": "ok"
+        }
+      },
+      {
+        "cells": [
+          {
+            "key": "ok",
+            "value": 0
+          },
+          {
+            "key": "generation",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "trickPhaseAdvanced",
+        "verdict": {
+          "gate": "heartsTrickPhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it",
+          "status": "ok"
+        }
+      }
+    ]
+  }
+}

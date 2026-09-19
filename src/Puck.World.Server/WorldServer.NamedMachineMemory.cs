@@ -36,7 +36,7 @@ public sealed partial class WorldServer {
         ) ||
             (m_machines.InstanceState(name: machine) is not { } instance) ||
             (instance.Generation != observation.State.Generation) ||
-            (m_definition.Machines.FirstOrDefault(predicate: row => (row.Name == machine))?.Memory?.Contains(value: observation.Binding) != true)
+            (m_document.Definition.Machines.FirstOrDefault(predicate: row => (row.Name == machine))?.Memory?.Contains(value: observation.Binding) != true)
         ) {
             return null;
         }
@@ -48,12 +48,12 @@ public sealed partial class WorldServer {
     private void SyncNamedMachineMemory(ulong tick) {
         if (!ReferenceEquals(
             objA: m_namedMemoryRows,
-            objB: m_definition.MachinesRaw
+            objB: m_document.Definition.MachinesRaw
         )) {
-            m_namedMemoryRows = m_definition.MachinesRaw;
+            m_namedMemoryRows = m_document.Definition.MachinesRaw;
             var retained = new HashSet<(string Machine, string Binding)>();
 
-            foreach (var machine in m_definition.Machines) {
+            foreach (var machine in m_document.Definition.Machines) {
                 foreach (var binding in (machine.Memory ?? [])) {
                     retained.Add(item: (machine.Name, binding.Name));
                 }
@@ -62,7 +62,7 @@ public sealed partial class WorldServer {
                 m_namedMemory.Remove(key: key);
             }
         }
-        foreach (var machine in m_definition.Machines) {
+        foreach (var machine in m_document.Definition.Machines) {
             foreach (var binding in (machine.Memory ?? [])) {
                 var generation = (m_machines.InstanceState(name: machine.Name)?.Generation ?? 0);
                 var key = (machine.Name, binding.Name);
@@ -137,7 +137,7 @@ public sealed partial class WorldServer {
         BindingObservation observation, ulong tick) {
         if (
             !WorldStateReader.TryRead(
-            m_definition,
+            m_document.Definition,
             binding.Row,
             binding.Key,
             tick,
@@ -230,7 +230,7 @@ public sealed partial class WorldServer {
                 observation: observation,
                 result: result
             );
-            m_output.DeliverState(definition: m_definition);
+            m_output.DeliverState(definition: m_document.Definition);
         } else {
             Observe(
                 observation,

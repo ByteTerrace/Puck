@@ -17,7 +17,7 @@ public sealed partial class WorldReplayTape {
             (m_currentAuthority.Count != 0) ||
             (m_currentIntents.Count != 0) ||
             (m_openMutationEntryIndices.Count != 0) ||
-            (m_liveAuthoritativeHashes[^1] != WorldRuntimeStateHash.HashAuthoritative(
+            (m_liveAuthoritativeHashes[^1] != WorldStateHashComposition.HashAuthoritative(
             server: m_liveServer,
             tick: (m_liveServer.NextInputTick - 1UL)
         ))

@@ -378,7 +378,7 @@ documentation artifact; Azure deploys the website. Desktop builds are downloadab
 
 ## Azure production deployment
 
-The [World release management plan](../plans/world-release-management.md)
+The [runtime and delivery programme](../plans/runtime-and-delivery.md#release-pairs)
 proposes a unified operator workflow for deployment, progress-preserving
 rollback, and explicit restore. The procedure below describes current behavior.
 

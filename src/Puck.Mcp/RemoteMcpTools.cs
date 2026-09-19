@@ -11,11 +11,12 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
     private static readonly JsonElement AttachmentOutput = JsonElement.Parse("""{"type":"object","properties":{"attachmentId":{"type":["string","null"]},"idleTimeoutSeconds":{"type":"integer"},"output":{"type":"string"},"isError":{"type":"boolean"}},"required":["attachmentId","idleTimeoutSeconds","output","isError"],"additionalProperties":false}""");
     private static readonly JsonElement ExecInput = AttachmentSchema(source: OperatorMcpServer.ExecTool());
     private static readonly JsonElement CaptureInput = AttachmentSchema(source: OperatorMcpServer.CaptureTool());
+    private static readonly JsonElement VectorWriteInput = AttachmentSchema(source: RemoteMcpHost.StateVectorWriteTool);
 
     internal async ValueTask<CallToolResult> CallAsync(CallToolRequestParams? parameters, CancellationToken token) {
         var service = ((parameters is not null) && host.GetServiceTools(caller: caller).Any(predicate: tool => (tool.Name == parameters.Name)));
         var start = System.Diagnostics.Stopwatch.GetTimestamp();
-        var tool = ((service || (parameters?.Name is "puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame"))
+        var tool = ((service || (parameters?.Name is "puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame" or "puck_state_vector_write"))
             ? parameters!.Name
             : "unknown"
         );
@@ -86,6 +87,12 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
                 CaptureInput
             ));
             }
+            if (capabilities.CommandHelp.Contains("world.state.cell.set")) {
+                tools.Add(item: WithAttachment(
+                    StateVectorWriteTool(),
+                    VectorWriteInput
+                ));
+            }
         }
         tools.AddRange(collection: host.GetServiceTools(caller: caller));
         return new() { Tools = tools };
@@ -134,7 +141,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
             message: "Unknown tool."
         );
         }
-        if (parameters?.Name is not ("puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame")) {
+        if (parameters?.Name is not ("puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame" or "puck_state_vector_write")) {
             throw new McpProtocolException(
             errorCode: McpErrorCode.InvalidParams,
             message: "Unknown tool."
@@ -248,5 +255,12 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
         source.InputSchema = schema;
         return source;
     }
+    private static Tool StateVectorWriteTool() => new() {
+        Annotations = RemoteMcpHost.StateVectorWriteTool.Annotations,
+        Description = RemoteMcpHost.StateVectorWriteTool.Description,
+        InputSchema = RemoteMcpHost.StateVectorWriteTool.InputSchema,
+        Name = RemoteMcpHost.StateVectorWriteTool.Name,
+        OutputSchema = RemoteMcpHost.StateVectorWriteTool.OutputSchema,
+    };
 }
 internal readonly record struct RemoteAttachmentMetadata(string? AttachmentId, int IdleTimeoutSeconds, string Output, bool IsError);

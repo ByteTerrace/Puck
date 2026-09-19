@@ -17,15 +17,21 @@ namespace Puck.World;
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
 /// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
 /// <see cref="LatticeTopology"/>; the document adds the physical <see cref="WorldFieldTopology"/> case).</param>
+/// <param name="Spaces">The declared vector embedding spaces, or <see langword="null"/> for none.</param>
+/// <param name="Enums">The declared symbolic value domains a row may name, or <see langword="null"/> for none.</param>
+/// <param name="Families">The declared row families, or <see langword="null"/> for none.</param>
 public sealed record WorldStateSection(
     IReadOnlyList<WorldStateRow>? World = null,
     IReadOnlyList<ActionStateSlot>? Body = null,
     IReadOnlyList<ActionStateSlot>? Identity = null,
-    IReadOnlyList<LatticeTopology>? Lattices = null
+    IReadOnlyList<LatticeTopology>? Lattices = null,
+    IReadOnlyList<StateSpace>? Spaces = null,
+    IReadOnlyList<StateEnum>? Enums = null,
+    IReadOnlyList<StateFamily>? Families = null
 ) : IStateSection {
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(items: value); } = Freeze(items: World);
+    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(items: MarkHostOwned(rows: value)); } = Freeze(items: MarkHostOwned(rows: World));
     /// <inheritdoc cref="Body"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(items: value); } = Freeze(items: Body);
@@ -35,11 +41,62 @@ public sealed record WorldStateSection(
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
+    /// <inheritdoc cref="Spaces"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = Freeze(items: value); } = Freeze(items: Spaces);
+    /// <inheritdoc cref="Enums"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = Freeze(items: value); } = Freeze(items: Enums);
+    /// <inheritdoc cref="Families"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateFamily>? Families { get => field; init => field = Freeze(items: value); } = Freeze(items: Families);
+
+    IReadOnlyList<StateEnum>? IStateSection.Enums => Enums;
+    IReadOnlyList<StateFamily>? IStateSection.Families => Families;
+    IReadOnlyList<StateSpace>? IStateSection.Spaces => Spaces;
 
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => Identity;
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
     IReadOnlyList<StateRow>? IStateSection.Rows => World;
 
+    // A row carrying the physical-field trait is served by the physics host, not by the store: the arena holds its
+    // descriptor and no columns, no rule writes it, and its owner hashes it. The mark has no wire form, so it is
+    // derived here rather than read back off the document.
+    private static IReadOnlyList<WorldStateRow>? MarkHostOwned(IReadOnlyList<WorldStateRow>? rows) {
+        if (rows is null) {
+            return null;
+        }
+
+        WorldStateRow[]? marked = null;
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+
+            if (
+                (row is null) ||
+                (row.Field is null) ||
+                row.HostOwned ||
+                (row.Shape is not (RowShape.Slot or RowShape.Lattice))
+            ) {
+                continue;
+            }
+            if (marked is null) {
+                marked = new WorldStateRow[rows.Count];
+                for (var copied = 0; (copied < rows.Count); copied++) {
+                    marked[copied] = rows[copied];
+                }
+            }
+
+            marked[index] = (row with {
+                HostOwned = true,
+            });
+        }
+
+        return ((marked is null)
+            ? rows
+            : marked
+        );
+    }
     // The one freeze site every construction and every `with` routes through — a section can never expose a list
     // the caller still holds a live, writable reference to. A list that is already an immutable array is handed
     // straight back, box and all: copying it would produce an equal value, and re-boxing it would allocate on
@@ -51,8 +108,8 @@ public sealed record WorldStateSection(
     });
 }
 /// <summary>
-/// One row of the document's <c>state</c> section: a <see cref="StateRow"/> plus the two traits only a world reads —
-/// the drive-admission gate and the physical-field storage. <see cref="StateRow.Name"/> is the
+/// One row of the document's <c>state</c> section: a <see cref="StateRow"/> plus the three traits only a world
+/// reads — the drive-admission gate, the physical-field storage, and the test verdict. <see cref="StateRow.Name"/> is the
 /// <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the <c>state:&lt;name&gt;</c> grant subject, and — for a
 /// slot-shaped row — the <c>state.&lt;name&gt;</c> HUD binding token.
 /// </summary>
@@ -89,6 +146,12 @@ public sealed record WorldStateSection(
 /// <param name="Knowledge">See <see cref="StateRow.Knowledge"/>.</param>
 /// <param name="PhaseOf">See <see cref="StateRow.PhaseOf"/>.</param>
 /// <param name="HistoryCursor">See <see cref="StateRow.HistoryCursor"/>.</param>
+/// <param name="Space">See <see cref="StateRow.Space"/>.</param>
+/// <param name="Enum">See <see cref="StateRow.Enum"/>.</param>
+/// <param name="HostOwned">See <see cref="StateRow.HostOwned"/>.</param>
+/// <param name="Verdict">The test-verdict trait (see <see cref="WorldVerdictTrait"/>) — this row is a test
+/// expectation's answer; <see langword="null"/> for every other row.</param>
+[method: JsonConstructor]
 public sealed record WorldStateRow(
     CellName Name,
     CellKind Kind,
@@ -110,7 +173,11 @@ public sealed record WorldStateRow(
     string? ValuesFrom = null,
     StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
-    long HistoryCursor = 0
+    long HistoryCursor = 0,
+    string? Space = null,
+    CellName? Enum = null,
+    bool HostOwned = false,
+    WorldVerdictTrait? Verdict = null
 ) : StateRow(
     Name,
     Kind,
@@ -133,13 +200,17 @@ public sealed record WorldStateRow(
     Visibility,
     Knowledge,
     PhaseOf,
-    HistoryCursor
+    HistoryCursor,
+    Space,
+    Enum,
+    HostOwned
 ) {
-    /// <summary>Initializes a document row over an engine row, adding the two world-only traits.</summary>
+    /// <summary>Initializes a document row over an engine row, adding the world-only traits.</summary>
     /// <param name="row">The engine row.</param>
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>
     /// <param name="field">The physical-field trait, or <see langword="null"/>.</param>
-    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field) : this(
+    /// <param name="verdict">The test-verdict trait, or <see langword="null"/>.</param>
+    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null) : this(
         Name: row.Name,
         Kind: row.Kind,
         Min: row.Min,
@@ -163,7 +234,20 @@ public sealed record WorldStateRow(
         Visibility: row.Visibility,
         Knowledge: row.Knowledge,
         PhaseOf: row.PhaseOf,
-        HistoryCursor: row.HistoryCursor
+        HistoryCursor: row.HistoryCursor,
+        Space: row.Space,
+        Enum: row.Enum,
+        HostOwned: row.HostOwned,
+        Verdict: verdict
     ) {
+        this.Generated = row.Generated;
     }
+
+    /// <inheritdoc/>
+    /// <remarks>A verdict row mints <see cref="WorldVerdict.FiredTickKey"/> beside the slot key: the effect door
+    /// stamps it, so the arena's export, the state hash and a checkpoint all carry it as an ordinary cell.</remarks>
+    public override bool MintsReservedCell(CellName key) => (
+        (key == SlotKey) ||
+        ((Verdict is not null) && (key == WorldVerdict.FiredTickKey))
+    );
 }

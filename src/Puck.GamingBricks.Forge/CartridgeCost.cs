@@ -96,23 +96,23 @@ public static class CartridgeCost {
             )
             : CostBound.Unmodeled(reason: $"The rule language evaluates '{ExpressionVocabulary.Spelling(operation: operation)}'; a cartridge does not.")
         );
-    private static CostBound Operand(ValueExpression? expression, CartridgeCostProfile profile) {
+    private static CostBound Operand(ExpressionProgram? expression, CartridgeCostProfile profile) {
         if (expression is null) {
             return CostBound.Zero;
         }
 
         var total = CostBound.Zero;
 
-        foreach (var token in expression.Tokens) {
+        foreach (var token in expression.Instructions) {
             total = CostBound.Add(
                 left: total,
                 right: token switch {
-                    ValueToken.Constant => CostBound.Zero,
-                    ValueToken.State state => Read(
+                    { Payload: InstructionPayload.Constant } => CostBound.Zero,
+                    { Payload: InstructionPayload.State state } => Read(
                         profile: profile,
                         state: state
                     ),
-                    _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
+                    _ => ((ExpressionVocabulary.Operation(instruction: token) is { } operation)
                     ? Evaluate(
                             operation: operation,
                             profile: profile
@@ -125,7 +125,7 @@ public static class CartridgeCost {
         return total;
     }
     // A key on a read is an element index, which is the one read that carries its own inner expression.
-    private static CostBound Read(ValueToken.State state, CartridgeCostProfile profile) =>
+    private static CostBound Read(InstructionPayload.State state, CartridgeCostProfile profile) =>
         ((CartridgeExpressions.Index(key: state.Key) is { } index)
             ? CostBound.Add(
                 left: CostBound.Known(cycles: profile.OperandArray),
@@ -143,8 +143,8 @@ public static class CartridgeCost {
                 : profile.OperandVariable))
         );
     // The one-token forms a guard is recognised by: a bare slot read on the left, a bare literal on the right.
-    private static string? Slot(ValueExpression expression) =>
-        ((expression.Tokens is [ValueToken.State { Key: null } state])
+    private static string? Slot(ExpressionProgram expression) =>
+        ((expression.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])
             ? state.Name
             : null
         );
@@ -313,8 +313,8 @@ public static class CartridgeCost {
         ExpressionOp.Clamp => CostBound.Known(cycles: (profile.ConditionCompare * 2L)),
         _ => CostBound.Unmodeled(reason: $"Operation '{ExpressionVocabulary.Spelling(operation: operation.Value)}' has no measured weight."),
     });
-    private static int? Whole(ValueExpression expression) =>
-        (((expression.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value))
+    private static int? Whole(ExpressionProgram expression) =>
+        (((expression.Instructions is [{ Payload: InstructionPayload.Constant constant }]) && (decimal.Truncate(d: constant.Value) == constant.Value))
             ? (int)constant.Value
             : null
         );

@@ -1,9 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
-using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Modules;
-using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -61,36 +57,20 @@ public class CanonicalSourceTests {
         );
         var stem = Path.GetFileNameWithoutExtension(path: sourcePath);
 
-        var diagnostics = new DiagnosticBag();
-        var parsed = PuckParser.ParseDocumentWithDiagnostics(
-            source: File.ReadAllText(path: sourcePath),
-            diagnostics: diagnostics
-        ).Value;
-
-        Assert.NotNull(@object: parsed);
-
-        ModuleResolver.ValidateImportGraph(
-            diagnostics: diagnostics,
-            rootDoc: parsed,
-            rootPath: sourcePath
-        );
-
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            basePath: worlds,
-            diagnostics: diagnostics,
-            document: parsed,
-            cancellationToken: TestContext.Current.CancellationToken
+        var lowered = WorldCompiler.CompileFile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            path: sourcePath
         );
 
         Assert.False(
-            condition: diagnostics.HasErrors,
+            condition: lowered.Diagnostics.HasErrors,
             userMessage: string.Join(
                 separator: "\n",
-                values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
+                values: lowered.Diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
             )
         );
 
-        var produced = JsonNode.Parse(System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: lowered.Value!)));
+        var produced = JsonNode.Parse(System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: lowered.RequireJson())));
         var committed = JsonNode.Parse(File.ReadAllText(path: documentPath));
 
         Assert.True(

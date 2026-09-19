@@ -193,7 +193,7 @@ public sealed class WorldRigidCommandLawTests {
             Capacity: 8,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: cellValue.Value
+                    Value: CellValue.Fixed(rawBits: cellValue.Value)
                 )]
         );
 

@@ -76,7 +76,7 @@ public sealed class ProjectionDisclosureLawTests {
             Custom: new Dictionary<string, JsonElement> { ["secret"] = JsonDocument.Parse(json: "true").RootElement.Clone() }
         ),
         });
-        var projection = WorldProjection.Compose(
+        var projection = Fixtures.Project(
             authority: "boot",
             definition: definition,
             revision: 7,
@@ -149,7 +149,7 @@ public sealed class ProjectionDisclosureLawTests {
             Tags: ["overworld"]
         ),
         });
-        var projection = WorldProjection.Compose(
+        var projection = Fixtures.Project(
             authority: "127.0.0.1:5000",
             definition: definition,
             revision: 3,
@@ -229,7 +229,7 @@ public sealed class ProjectionDisclosureLawTests {
     }
     [Fact]
     public void ProjectionParse_RefusesForeignAndUnreservedMembers() {
-        var projection = WorldProjection.Compose(
+        var projection = Fixtures.Project(
             definition: Fixtures.BuildDocument(),
             tier: WorldDisclosureTier.Presentation,
             authority: "boot",
@@ -293,13 +293,13 @@ public sealed class ProjectionDisclosureLawTests {
     public void ReplicaTier_SendsTheDefinitionVerbatim() {
         var definition = Fixtures.BuildDocument();
 
-        Assert.Null(@object: WorldProjection.Compose(
+        Assert.Null(@object: Fixtures.Project(
             authority: "boot",
             definition: definition,
             revision: 1,
             tier: WorldDisclosureTier.Replica
         ));
-        Assert.Null(@object: WorldProjection.Compose(
+        Assert.Null(@object: Fixtures.Project(
             authority: "boot",
             definition: definition,
             revision: 1,

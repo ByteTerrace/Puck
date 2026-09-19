@@ -15,6 +15,13 @@ public abstract record SyntaxNode(int Offset = 0, int Length = 0, int Line = 1, 
         Line,
         Column
     );
+    /// <summary>Gets the comments, blank lines, and line breaks the author wrote around this node.</summary>
+    public SyntaxTrivia Trivia { get; init; } = SyntaxTrivia.None;
+
+    /// <summary>Returns this node carrying <paramref name="trivia"/> in place of its own.</summary>
+    /// <param name="trivia">The trivia to attach.</param>
+    /// <returns>A copy of this node, of this node's own type, carrying <paramref name="trivia"/>.</returns>
+    public SyntaxNode WithTrivia(SyntaxTrivia trivia) => (this with { Trivia = trivia });
 }
 /// <summary>Represents a top-level authoring document.</summary>
 /// <param name="Schema">The schema identifier (e.g., 'puck.world.definition.v1').</param>
@@ -41,6 +48,9 @@ public sealed record DocumentNode(
     /// <summary>Gets the span of the <c>basis:</c> header itself, so a composition failure points at the line that
     /// named the basis rather than at the document. Defaults to the whole document when none was authored.</summary>
     public SourceSpan BasisSpan { get; init; }
+    /// <summary>Gets the span of the <c>schema:</c> header itself, so the trivia above it is the document's own
+    /// rather than the first statement's. Empty when no schema was authored.</summary>
+    public SourceSpan SchemaSpan { get; init; }
 }
 /// <summary>Base class for all statement nodes.</summary>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -200,7 +210,11 @@ public sealed record BlockNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets a value indicating whether <see cref="Name"/> was written as a quoted string rather than as a
+    /// bare identifier. Both spellings read back the same string, so only a printer reads this.</summary>
+    public bool NameQuoted { get; init; }
+}
 /// <summary>A key-value property assignment: <c>name: expression</c> or <c>name = expression</c>.</summary>
 /// <param name="Name">The property name.</param>
 /// <param name="Value">The assigned expression value.</param>
@@ -241,12 +255,12 @@ public abstract record ExpressionNode(int Offset = 0, int Length = 0, int Line =
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 /// <param name="RawText">
-/// For a fractional numeric literal (a decimal point or an exponent), the exact author-typed digits — sign,
-/// integer part, fractional part, and exponent — before they were parsed into <see cref="Value"/>'s <c>double</c>.
-/// A consumer that needs the author's own precision (an exact-fraction reduction, never a double's raw bits) reads
-/// this instead of re-deriving text from the already-rounded <c>double</c>. Null for every other literal, including
-/// an integer, a bool, a string, or a fractional value produced by folding an expression rather than parsing source
-/// text directly.
+/// The exact author-typed digits of a numeric literal, before they were parsed into <see cref="Value"/>: for a
+/// fractional literal the sign, integer part, fractional part, and exponent; for a hexadecimal literal the sign and
+/// the <c>0x</c> spelling. A consumer that needs the author's own precision (an exact-fraction reduction, never a
+/// double's raw bits) or the author's own base reads this instead of re-deriving text from the parsed value. Null
+/// for every other literal, including a plain decimal integer, a bool, a string, or a value produced by folding an
+/// expression rather than by parsing source text directly.
 /// </param>
 public sealed record LiteralExpressionNode(
     object? Value,
@@ -261,7 +275,11 @@ public sealed record LiteralExpressionNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets a value indicating whether a string value was written inside a <c>"""</c> fence, which carries
+    /// no escapes. Only a printer reads this; both spellings decode to the same value.</summary>
+    public bool RawFenced { get; init; }
+}
 /// <summary>A hex color literal: <c>#RRGGBB</c> or <c>#RRGGBBAA</c>.</summary>
 /// <param name="Hex">The raw hex string including '#'.</param>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -617,4 +635,8 @@ public sealed record InterpolatedStringNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets a value indicating whether the string was written inside a <c>$"""</c> fence, which carries no
+    /// escapes. Only a printer reads this; both spellings decode to the same segments.</summary>
+    public bool RawFenced { get; init; }
+}

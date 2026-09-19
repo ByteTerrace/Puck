@@ -1,8 +1,6 @@
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -133,7 +131,9 @@ public class ContainerSpellingTests {
     }
     [Fact]
     public void TestANestedFieldBlockLowersLikeItsPropertySpelling() {
-        var lowered = WorldDocumentEmitter.Lower(PuckParser.ParseDocument("""
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: """
             schema: "puck.world.definition.v1"
 
             placements {
@@ -141,7 +141,7 @@ public class ContainerSpellingTests {
                     candidateCap: 16
                 }
             }
-            """));
+            """).RequireJson();
         var placements = Assert.IsType<System.Text.Json.Nodes.JsonObject>(@object: lowered["placements"]);
         var policy = Assert.IsType<System.Text.Json.Nodes.JsonObject>(@object: placements["policy"]);
 
@@ -189,7 +189,7 @@ public class ContainerSpellingTests {
     }
     [Fact]
     public void TestFormattingNeverReintroducesTheColon() {
-        var formatted = PuckFormatter.Format("""
+        var formatted = PuckFormat.Format("""
             schema: "puck.world.definition.v1"
             host:
             {

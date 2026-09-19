@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
@@ -37,12 +36,7 @@ public sealed class TetrisShots {
             path3: "tetris.cgb.cartridge.json"
         ));
 
-        return JsonSerializer.Deserialize<CartridgeDocument>(
-            json: json,
-            options: new JsonSerializerOptions {
-            PropertyNameCaseInsensitive = true,
-        }
-        )!;
+        return CartridgeDocuments.Parse(utf8: System.Text.Encoding.UTF8.GetBytes(s: json));
     }
     // Steps a frame at a time until the cartridge reaches a phase, holds for a few more, then shoots. A fixed frame
     // count cannot catch a pass that lasts ten frames and starts whenever the piece happens to land.

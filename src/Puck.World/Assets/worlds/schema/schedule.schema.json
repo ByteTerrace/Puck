@@ -1,0 +1,73 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "directory": {
+      "description": "The output directory this world\u0027s schedule writes into \u2014 the state export (ExportFileName) and the submission manifest (ManifestFileName). Relative to the process\u0027s current directory unless rooted, and only ever written when --schedule-dir armed the run, whose path replaces this one; two runs of the same document therefore target sibling directories without two document copies.",
+      "type": "string"
+    },
+    "settleTicks": {
+      "description": "How many ticks the world keeps stepping past the last scheduled command\u0027s tick before the export is written: the settle margin a Simulation-routed command\u0027s apply, the mutation drain, and the rules reading its result need. At least 1 \u2014 a zero margin would export at the same tick the last command was submitted, before it could have applied \u2014 and at most MaxSettleTicks.",
+      "type": "integer"
+    },
+    "rows": {
+      "description": "The scheduled commands, ascending by tick. Rows may share a tick; they are then submitted in declaration order, which is the whole ordering contract. Capacity MaxRows. May be empty: a world whose expectations are decided by its rules alone still wants the export.",
+      "type": "array",
+      "items": {
+        "description": "One tick-scheduled command: the exact simulation tick the host submits it at, the seat it acts as, and one command line in the console/ingress vocabulary the host already accepts. The line is handed to the parser a live stdin line reaches, under a session bound to Principal, so admission, grants, phase guards, and refusals behave as they do for a live actor.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "tick": {
+            "description": "The completed-tick coordinate \u2014 the same coordinate Ticks arms at \u2014 this command is submitted at. Submission is what the coordinate pins: an Immediate-routed verb runs inline in that submission; a Simulation-routed verb folds into the next tick\u0027s snapshot and applies during Tick \u002B 1, as a live console line does. Tick 0 is refused \u2014 no step has completed there.",
+            "type": "integer"
+          },
+          "principal": {
+            "description": "The acting identity, spelled as the engine\u0027s own principal label (Describe): seat1..seat4, parsed by TryParse so the seat ceiling here is the one the wire codec enforces. Every other label is refused, console included: the console principal is trusted at every gate (Puck.World.Server.WorldGrants.IsTrusted), so a step acting as it proves nothing about authority. The power a scheduled step needs is authored in the document\u0027s own grants.",
+            "type": "string"
+          },
+          "command": {
+            "description": "The command line, verbatim: non-empty, one line, not a # comment, and opening with a verb WorldScheduleCommands admits. Argument shapes are not checked here \u2014 this project holds no command registry \u2014 so a malformed argument becomes a recorded refusal at its tick rather than a boot failure.",
+            "type": "string"
+          },
+          "expect": {
+            "description": "What the ingress must answer for this row. Any other recorded outcome fails the world by name: a step whose outcome nobody declared is a step nobody measured.",
+            "enum": [
+              "Submitted",
+              "Refused"
+            ],
+            "default": "Submitted",
+            "title": "WorldScheduleExpectation"
+          },
+          "refusal": {
+            "description": "Text the recorded refusal detail must contain, or null to accept any refusal. Legitimate only beside Refused.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "tick",
+          "principal",
+          "command"
+        ],
+        "additionalProperties": false,
+        "title": "WorldScheduleRow"
+      }
+    }
+  },
+  "required": [
+    "directory",
+    "settleTicks",
+    "rows"
+  ],
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldScheduleSection"
+}

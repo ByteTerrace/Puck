@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Lowering;
+using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -9,19 +10,30 @@ namespace Puck.World.Transpiler.Decompiler;
 // targeting the real `CreationDocument.Shapes` wire key. Elides a field only on an exact match against
 // `CreationCanonicalizer.Normalize`'s own defaults, mirroring the emitter's `LowerShapeBlock`.
 public static partial class WorldDecompiler {
-    // Whether every row in a `shapes` array is a whole shape the `shape Type "name" { }` grammar can carry — one
-    // with its own `type` — rather than a basis-merge patch (an `{ id, ... }` row naming only the facets it
-    // overrides on a base document's shape). A row with no `type` prints through the generic value path instead of
-    // guessing one from its `name`.
+    // The keys a `shape` row must carry before the `shape Type "name" { }` grammar applies are its construct's own
+    // description. A row missing one is a basis-merge patch (an `{ id, ... }` row naming only the facets it
+    // overrides on a base document's shape) and prints through the generic value path rather than having a type
+    // guessed from its name.
+    private static readonly IReadOnlyList<string> ShapeRequiredKeys = WorldConstructs.Table.TryGet(
+        construct: out var shapeConstruct,
+        keyword: "shape"
+    )
+        ? shapeConstruct!.RequiredKeys
+        : throw new InvalidOperationException(message: "'shape' is not a described construct.");
+
     private static bool CanSugarShapes(JsonArray shapes) {
         foreach (var item in shapes) {
-            if (
-                (item is not JsonObject shape) ||
-                (shape["type"] is not JsonValue typeVal) ||
-                !typeVal.TryGetValue<string>(value: out var type) ||
-                (type.Length == 0)
-            ) {
+            if (item is not JsonObject shape) {
                 return false;
+            }
+            foreach (var key in ShapeRequiredKeys) {
+                if (
+                    (shape[propertyName: key] is not JsonValue value) ||
+                    !value.TryGetValue<string>(value: out var text) ||
+                    (text.Length == 0)
+                ) {
+                    return false;
+                }
             }
         }
         return true;

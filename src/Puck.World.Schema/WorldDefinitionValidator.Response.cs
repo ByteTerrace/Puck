@@ -138,8 +138,8 @@ public static partial class WorldDefinitionValidator {
             return null;
         }
 
-        if (declared.Kind == CellKind.Text) {
-            errors.Add(item: $"{entryPath} references state row '{row}', which is kind=Text — a response compares numbers, never text.");
+        if (declared.Kind is CellKind.Text or CellKind.Vector) {
+            errors.Add(item: $"{entryPath} references state row '{row}', which is kind={declared.Kind} — a response compares numbers, never {StateSpelling.Kind(kind: declared.Kind)}.");
         }
 
         if (

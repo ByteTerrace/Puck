@@ -20,7 +20,7 @@ public sealed partial class WorldServer {
             m_reflowReviews.Remove(key: key);
         }
     }
-    private QueryAnswer AnswerReflowQuery(WorldQuery query, WorldPrincipal principal) {
+    public QueryAnswer AnswerReflowQuery(WorldQuery query, WorldPrincipal principal) {
         lock (m_reflowReviewGate) {
             ExpireReflowReviews();
             if (query is WorldQuery.ReflowCancel) {

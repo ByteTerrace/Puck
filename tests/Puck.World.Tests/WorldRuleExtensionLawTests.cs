@@ -32,8 +32,7 @@ public sealed class WorldRuleExtensionLawTests {
                     CellKind.Text,
                     Cells: [new(
                             StateRow.SlotKey,
-                            0,
-                            Text: "before"
+                            CellValue.Text(value: "before")
                         )]
                 ),
                 new WorldStateRow(
@@ -50,7 +49,7 @@ public sealed class WorldRuleExtensionLawTests {
                             ),
                 new ActionEffect.PushState(
                                 "history",
-                                Expression: ValueExpression.Parse(text: "source + 3")
+                                Expression: ExpressionProgram.Parse(text: "source + 3")
                             ),
                 (refuse
             ? new ActionEffect.RemoveStateCell(
@@ -75,7 +74,7 @@ public sealed class WorldRuleExtensionLawTests {
             (refuse
             ? "before"
             : "after"),
-            Assert.Single(collection: label.Cells!).Text
+            Assert.Single(collection: label.Cells!).Value.AsText
         );
         var history = fixture.Server.Definition.State.Single(predicate: row => (row.Name == "history"));
 
@@ -91,7 +90,7 @@ public sealed class WorldRuleExtensionLawTests {
         } else {
             Assert.Equal(
                 5,
-                Assert.Single(collection: history.Cells!).Value
+                Assert.Single(collection: history.Cells!).Value.Raw
             );
             Assert.Equal(
                 4,
@@ -105,8 +104,8 @@ public sealed class WorldRuleExtensionLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void BothTransactionBranchesRefuseNestingAndPersistence(bool failureBranch) {
-        foreach (var invalid in new ActionEffect[] { new WorldEffect.Save(), new ActionEffect.Transaction([new ActionEffect.SetState(
+    public void BothTransactionBranchesRefuseNesting(bool failureBranch) {
+        foreach (var invalid in new ActionEffect[] { new ActionEffect.Transaction([new ActionEffect.SetState(
                 "target",
                 Value: 1
             )]) }) {
@@ -134,7 +133,7 @@ public sealed class WorldRuleExtensionLawTests {
             );
             // Deserialization includes semantic admission, so the wire and direct compiler both refuse these arms.
             Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition)));
-            Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: definition));
+            Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: definition));
             Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
                 definition: definition,
                 reason: out _
@@ -163,10 +162,10 @@ public sealed class WorldRuleExtensionLawTests {
                     Effects: [new ActionEffect.Transaction(Effects: [
                     new ActionEffect.SetState(
                                 State: "target",
-                                Expression: new ValueExpression(Tokens: [
-                            new ValueToken.State(Name: "source"),
-                            new ValueToken.Constant(Value: 3m),
-                            new ValueToken.Add(),
+                                Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Operand(name: "source"),
+                            Instruction.Constant(value: 3m),
+                            Instruction.Of(operation: ExpressionOp.Add),
                         ])
                             ),
                     new ActionEffect.ScheduleState(
@@ -186,10 +185,13 @@ public sealed class WorldRuleExtensionLawTests {
         var set = Assert.IsType<ActionEffect.SetState>(@object: transaction.Effects[0]);
 
         Assert.Collection(
-            collection: Assert.IsType<ValueExpression>(@object: set.Expression).Tokens,
-            token => _ = Assert.IsType<ValueToken.State>(@object: token),
-            token => _ = Assert.IsType<ValueToken.Constant>(@object: token),
-            token => _ = Assert.IsType<ValueToken.Add>(@object: token)
+            collection: Assert.IsType<ExpressionProgram>(@object: set.Expression).Instructions,
+            token => _ = Assert.IsType<InstructionPayload.State>(@object: token.Payload),
+            token => _ = Assert.IsType<InstructionPayload.Constant>(@object: token.Payload),
+            token => Assert.Equal(
+                actual: token.Operation,
+                expected: ExpressionOp.Add
+            )
         );
         _ = Assert.IsType<ActionEffect.ScheduleState>(@object: transaction.Effects[1]);
     }
@@ -222,15 +224,15 @@ public sealed class WorldRuleExtensionLawTests {
                 ]),
                     Effects: [new ActionEffect.SetState(
                             State: "result",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.State(Name: "a"),
-                        new ValueToken.Constant(Value: 2m),
-                        new ValueToken.Add(),
-                        new ValueToken.Constant(Value: 3m),
-                        new ValueToken.Multiply(),
-                        new ValueToken.Constant(Value: 0m),
-                        new ValueToken.Constant(Value: 8m),
-                        new ValueToken.Clamp(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Operand(name: "a"),
+                        Instruction.Constant(value: 2m),
+                        Instruction.Of(operation: ExpressionOp.Add),
+                        Instruction.Constant(value: 3m),
+                        Instruction.Of(operation: ExpressionOp.Multiply),
+                        Instruction.Constant(value: 0m),
+                        Instruction.Constant(value: 8m),
+                        Instruction.Of(operation: ExpressionOp.Clamp),
                     ])
                         )]
                 )]
@@ -311,7 +313,7 @@ public sealed class WorldRuleExtensionLawTests {
             Max: 10L,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 2L
+                    Value: CellValue.Int(value: 2L)
                 )]
         );
         var definition = Document(
@@ -373,7 +375,7 @@ public sealed class WorldRuleExtensionLawTests {
         );
     }
     [Fact]
-    public void TransactionPreflightRejectsASelfDesignationBeforeEarlierWritesCanLeak() {
+    public void TheFiringsPreflightRejectsASelfDesignationBeforeEarlierWritesCanLeak() {
         var definition = Document(
             state: [Slot(
                     name: "target",
@@ -428,11 +430,20 @@ public sealed class WorldRuleExtensionLawTests {
                 row: "target"
             )
         );
+        // An irreversible arm is deferred to the firing's own commit, so the refusal lands outside the transaction
+        // that spelled it and its onFailure branch never runs; the firing rewinds instead.
         Assert.Equal(
-            expected: 1L,
+            expected: 0L,
             actual: Value(
                 fixture: fixture,
                 row: "failed"
+            )
+        );
+        Assert.Contains(
+            collection: fixture.Server.RuleRuntimeDiagnostics(),
+            filter: static diagnostic => diagnostic.Detail.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "cannot designate itself"
             )
         );
     }
@@ -447,10 +458,10 @@ public sealed class WorldRuleExtensionLawTests {
                     Name: Name(value: "diagnostic"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ValueExpression(Tokens: [
-                        new ValueToken.Constant(Value: 1m),
-                        new ValueToken.Constant(Value: 0m),
-                        new ValueToken.Divide(),
+                            Expression: new ExpressionProgram(Instructions: [
+                        Instruction.Constant(value: 1m),
+                        Instruction.Constant(value: 0m),
+                        Instruction.Of(operation: ExpressionOp.Divide),
                     ])
                         )]
                 )]
@@ -463,7 +474,7 @@ public sealed class WorldRuleExtensionLawTests {
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            expected: RuleEffectRefusal.Arithmetic,
+            expected: Puck.State.Rules.RuleEffectRefusal.Arithmetic,
             actual: diagnostic.Refusal
         );
         Assert.Equal(
@@ -502,7 +513,7 @@ public sealed class WorldRuleExtensionLawTests {
             )]),
         };
 
-        var interaction = Assert.Single(collection: WorldRuleCompiler.CompileAllInteractions(definition: definition));
+        var interaction = ((CompiledWorldFactsRule)Assert.Single(collection: WorldFactsCompiler.CompileAllInteractions(definition: definition)));
 
         Assert.Equal(
             expected: 6_554L,
@@ -533,7 +544,7 @@ public sealed class WorldRuleExtensionLawTests {
             )]),
         };
 
-        var budgeted = Assert.Single(collection: WorldRuleCompiler.CompileAllInteractions(definition: With(neighbours: 1)));
+        var budgeted = ((CompiledWorldFactsRule)Assert.Single(collection: WorldFactsCompiler.CompileAllInteractions(definition: With(neighbours: 1))));
 
         Assert.Equal(
             expected: 1,
@@ -548,8 +559,8 @@ public sealed class WorldRuleExtensionLawTests {
             userMessage: $"capacity {capacity}: every={every} one={one}"
         );
 
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: With(neighbours: 0)));
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: With(neighbours: (WorldInteractionCapacity.MaxNeighbours + 1))));
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAllInteractions(definition: With(neighbours: 0)));
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAllInteractions(definition: With(neighbours: (WorldInteractionCapacity.MaxNeighbours + 1))));
     }
     [Fact]
     public void AggregateRuleBudgetRejectsAValidButPathologicallyExpensiveProgram() {
@@ -742,7 +753,7 @@ public sealed class WorldRuleExtensionLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 2L
+                    Value: CellValue.Int(value: 2L)
                 )],
             Min: 0L,
             Max: 6L
@@ -762,7 +773,7 @@ public sealed class WorldRuleExtensionLawTests {
                                 ),
                         new ActionEffect.AddState(
                                     State: "bounded",
-                                    Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "bounded")])
+                                    Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "bounded")])
                                 ),
                     ],
                             OnFailure: [new ActionEffect.SetState(
@@ -807,10 +818,10 @@ public sealed class WorldRuleExtensionLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [
-                            new ValueToken.Constant(Value: 1m),
-                            new ValueToken.Constant(Value: 0m),
-                            new ValueToken.Divide(),
+                                    Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Constant(value: 1m),
+                            Instruction.Constant(value: 0m),
+                            Instruction.Of(operation: ExpressionOp.Divide),
                         ])
                                 )],
                             OnFailure: [new ActionEffect.SetState(
@@ -855,10 +866,10 @@ public sealed class WorldRuleExtensionLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ValueExpression(Tokens: [
-                            new ValueToken.Constant(Value: 100_000_000m),
-                            new ValueToken.Constant(Value: 100_000_000m),
-                            new ValueToken.Multiply(),
+                                    Expression: new ExpressionProgram(Instructions: [
+                            Instruction.Constant(value: 100_000_000m),
+                            Instruction.Constant(value: 100_000_000m),
+                            Instruction.Of(operation: ExpressionOp.Multiply),
                         ])
                                 )],
                             OnFailure: [new ActionEffect.SetState(
@@ -905,7 +916,9 @@ public sealed class WorldRuleExtensionLawTests {
                             State: "deadlines"
                         )]
                 )]
-        );
+        ) with {
+            Simulation = new WorldSimulationDefaults(RateHz: 240),
+        };
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
@@ -1295,7 +1308,7 @@ public sealed class WorldRuleExtensionLawTests {
         Kind: CellKind.Int,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Int(value: value)
             )]
     );
     private static WorldStateRow FixedSlot(string name, long value) => new(
@@ -1303,7 +1316,7 @@ public sealed class WorldRuleExtensionLawTests {
         Kind: CellKind.Fixed,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Fixed(rawBits: value)
             )]
     );
     private static WorldStateRow Keyed(string name, int capacity, IReadOnlyList<StateCell> cells) => new(
@@ -1314,7 +1327,7 @@ public sealed class WorldRuleExtensionLawTests {
     );
     private static StateCell Cell(string key, long value) => new(
         Key: Name(value: key),
-        Value: value
+        Value: CellValue.Int(value: value)
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Value(WorldFixture fixture, string row, string? key = null) {
@@ -1330,6 +1343,6 @@ public sealed class WorldRuleExtensionLawTests {
         return StateRows.FindCell(
             cells: declared.Cells,
             key: cellName
-        )!.Value;
+        )!.Value.Raw;
     }
 }

@@ -9,8 +9,8 @@ public sealed partial class WorldServer {
     // properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex>) — resolved through
     // WorldStateReader.TryRead, the SAME (row, key) read a rule's gate and world.state itself run, so this cannot
     // report a tag the engine would not have read.
-    private string DescribeProperties(int? bodyIndex) {
-        var names = (m_definition.Properties?.Names ?? []);
+    public string DescribeProperties(int? bodyIndex) {
+        var names = (m_document.Definition.Properties?.Names ?? []);
 
         if (bodyIndex is not { } index) {
             return ((names.Count == 0)
@@ -24,9 +24,9 @@ public sealed partial class WorldServer {
 
         if (
             (index < 0) ||
-            (index >= m_definition.Population.Capacity)
+            (index >= m_document.Definition.Population.Capacity)
         ) {
-            return $"[world.properties {index}: outside 0..{(m_definition.Population.Capacity - 1)} for the authored population capacity]";
+            return $"[world.properties {index}: outside 0..{(m_document.Definition.Population.Capacity - 1)} for the authored population capacity]";
         }
 
         var tick = (NextInputTick - 1UL);
@@ -36,7 +36,7 @@ public sealed partial class WorldServer {
         foreach (var name in names) {
             if (
                 WorldStateReader.TryRead(
-                definition: m_definition,
+                definition: m_document.Definition,
                 key: key,
                 rawValue: out var raw,
                 row: out _,
@@ -66,13 +66,14 @@ public sealed partial class WorldServer {
     // the gate held at the last evaluation (an Edge rule will not fire again until it lets go) and OPEN when it did
     // not (so the next tick the gate holds is a crossing, and an Edge rule fires). It read `armed=` before, which
     // inverted the sense it implied — a latch reading `armed=open` is the state in which an edge rule IS armed.
-    private string DescribeRules() => DescribeCompiledRules(
-        latch: m_ruleGateHeld,
-        rules: m_rules,
+    public string DescribeRules() => DescribeCompiledRules(
+        catalog: m_arena.Catalog,
+        latch: m_ruleHost.RuleGateHeld,
+        rules: m_ruleHost.Rules,
         verb: "world.rules"
     );
     // The dependents a placement-removal guard names: every speaker anchored to the placement (null = none).
-    private static string? DescribeSpeakersAnchoredTo(IReadOnlyList<WorldSpeaker> speakers, string placementId) {
+    public static string? DescribeSpeakersAnchoredTo(IReadOnlyList<WorldSpeaker> speakers, string placementId) {
         List<string>? names = null;
 
         foreach (var speaker in speakers) {
@@ -97,7 +98,7 @@ public sealed partial class WorldServer {
         );
     }
     // The dependents a tune/patch-removal guard names among speaker feeds (null = none).
-    private static string? DescribeSpeakersSourcing(IReadOnlyList<WorldSpeaker> speakers, Func<WorldSpeakerSource, bool> matches) {
+    public static string? DescribeSpeakersSourcing(IReadOnlyList<WorldSpeaker> speakers, Func<WorldSpeakerSource, bool> matches) {
         List<string>? names = null;
 
         foreach (var speaker in speakers) {
@@ -118,7 +119,7 @@ public sealed partial class WorldServer {
         );
     }
     // A short mutation label for the accept/reject console line — the kind plus its stable-id subject.
-    private static string Describe(WorldMutation mutation) => mutation switch {
+    public static string Describe(WorldMutation mutation) => mutation switch {
         WorldMutation.UpsertKit m => $"UpsertKit '{m.Kit.Name}'",
         WorldMutation.RemoveKit m => $"RemoveKit '{m.Name}'",
         WorldMutation.SetDefaultSeatKit m => $"SetDefaultSeatKit '{m.Name}'",
@@ -215,7 +216,7 @@ public sealed partial class WorldServer {
     /// admitted later by <see cref="WorldBody"/>, and the value after that overlay composed with the movement tier.</summary>
     /// <param name="bodyIndex">The 0-based body index already resolved to a live body.</param>
     /// <param name="body">The live body retaining the later held-overlay decision.</param>
-    private string DescribeChannels(int bodyIndex, WorldBody body) {
+    public string DescribeChannels(int bodyIndex, WorldBody body) {
         // The fold — and this read-back — only ever exists over a HUMAN-OCCUPIED LOCAL SEAT
         // (WorldPopulation.IsHumanOccupied; the whole per-seat retention above is sized WorldPopulation.LocalSeatCount).
         // A peer-slice population entry (4 through capacity minus one) or an unoccupied local seat is a bot at full authority by construction — there
@@ -238,13 +239,13 @@ public sealed partial class WorldServer {
             ))}";
 
         var channels = m_population.Channels;
-        var h = m_channelReadBase[bodyIndex];
-        var folded = m_channelReadFolded[bodyIndex];
+        var h = m_tick.ChannelReadBase[bodyIndex];
+        var folded = m_tick.ChannelReadFolded[bodyIndex];
         var held = body.ChannelReadHeld;
         var composed = body.ChannelReadComposed;
         var baseSlot = (bodyIndex * ChannelLimits.MaxChannels);
-        var contributorBase = (bodyIndex * MaxReadContributorsPerSeat);
-        var contributorCount = m_channelReadContributorCount[bodyIndex];
+        var contributorBase = (bodyIndex * WorldTick.MaxReadContributorsPerSeat);
+        var contributorCount = m_tick.ChannelReadContributorCount[bodyIndex];
         var segments = new List<string>(capacity: ChannelLimits.MaxChannels);
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
@@ -259,16 +260,16 @@ public sealed partial class WorldServer {
             for (var contributor = 0; (contributor < contributorCount); contributor++) {
                 var contributorSlot = (contributorBase + contributor);
 
-                if (!m_channelReadContributorMask[contributorSlot].Contains(ordinal: ordinal)) {
+                if (!m_tick.ChannelReadContributorMask[contributorSlot].Contains(ordinal: ordinal)) {
                     continue;
                 }
 
-                (m_channelReadContributorTrusted[contributorSlot]
+                (m_tick.ChannelReadContributorTrusted[contributorSlot]
                     ? trustedTags
-                    : untrustedTags).Add(item: m_channelReadContributor[contributorSlot].Describe());
+                    : untrustedTags).Add(item: m_tick.ChannelReadContributor[contributorSlot].Describe());
             }
 
-            var ceiling = m_channelReadCeiling[slot];
+            var ceiling = m_tick.ChannelReadCeiling[slot];
 
             segments.Add(item: $"{channels.Name(ordinal: ordinal)}:{ShapeWord(shape: channels.Shape(ordinal: ordinal))} folded={folded[ordinal]}({folded[ordinal].Value}) h={h[ordinal]}({h[ordinal].Value}) held={held[ordinal]}({held[ordinal].Value}) composed={composed[ordinal]}({composed[ordinal].Value}) trusted=[{string.Join(
                 separator: ",",
@@ -278,7 +279,7 @@ public sealed partial class WorldServer {
                 values: untrustedTags
             )}] ceiling={((ceiling > 0)
                 ? $"{FixedQ4816.FromRawBits(value: ceiling)}({ceiling})"
-                : "none")} clamped={(m_channelReadClamped[slot]
+                : "none")} clamped={(m_tick.ChannelReadClamped[slot]
                 ? "yes"
                 : "no")}");
         }
@@ -293,7 +294,7 @@ public sealed partial class WorldServer {
     //
     // `latch=held|open` is HELD when the gate held at the last evaluation (an Edge row will not fire again until it
     // lets go) and OPEN when it did not (so the next tick the gate holds is a crossing, and an Edge row fires).
-    private static string DescribeCompiledRules(string verb, CompiledWorldRule[] rules, RuleLatch latch) {
+    private static string DescribeCompiledRules(string verb, CompiledRule[] rules, RuleLatch latch, StateCatalog catalog) {
         if (rules.Length == 0) {
             return $"[{verb}: none]";
         }
@@ -313,25 +314,27 @@ public sealed partial class WorldServer {
                 values: rule.Effects.Select(selector: static effect => effect.Describe)
             );
 
-            if (rule.Decision is { } decision) {
+            var world = (rule as CompiledWorldFactsRule);
+
+            if (world?.Decision is { } decision) {
                 lines.Add(item: $"{rule.Name} decision={decision.Mode} options={decision.Options.Length} when {gate} -> common [{effects}]; choices/timers: world.decisions");
                 continue;
             }
 
             var held = latch.Held(name: rule.Name);
-            var boundValues = ((rule.Bindings is { Length: > 0 } declared)
-                ? $" bind [{string.Join(
+            var boundValues = ((rule.Locals is { Length: > 0 } declared)
+                ? $" local [{string.Join(
                     separator: ", ",
                     values: declared.Select(selector: static b => $"{b.Name}:{b.Kind.ToString().ToLowerInvariant()}")
                 )}]"
                 : string.Empty
             );
-            var scope = ((rule.Interaction is { } interaction)
+            var scope = ((world?.Interaction is { } interaction)
                 ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
                     ? $" <= {((double)interaction.Range)}"
                     : string.Empty)}"
-                : ((rule.ForEach is { } forEach)
-                    ? $" forEach {forEach}"
+                : ((rule.ForEachOrdinal >= 0)
+                    ? $" forEach {catalog.Descriptors[rule.ForEachOrdinal].Name}"
                     : string.Empty
             ));
 
@@ -345,7 +348,7 @@ public sealed partial class WorldServer {
             values: lines
         )}]";
     }
-    private static string DescribeContacts(int index, WorldBody body) {
+    public static string DescribeContacts(int index, WorldBody body) {
         var normal = body.LastObstructionNormal;
         var obstruction = ((normal == FixedVector3.Zero)
             ? "none"
@@ -366,9 +369,9 @@ public sealed partial class WorldServer {
             : "false")} obstruction={obstruction}]"
         );
     }
-    private string DescribeDocumentReceipt(string? ownerId) {
+    public string DescribeDocumentReceipt(string? ownerId) {
         if (
-            (m_lastDocumentReceipt is not { } receipt) ||
+            (m_document.LastDocumentReceipt is not { } receipt) ||
             !string.Equals(
             a: receipt.Submission.OwnerDocumentId,
             b: ownerId,
@@ -381,7 +384,7 @@ public sealed partial class WorldServer {
             ? "accepted"
             : "refused")}({receipt.Reason})";
     }
-    private string DescribeDurableOutputs(int entityIndex) {
+    public string DescribeDurableOutputs(int entityIndex) {
         var values = m_population.DurableStateOutputs
             .Where(predicate: output => (output.EntityIndex == entityIndex))
             .Select(selector: output => $"{output.Value.Name}@{output.Tick}");
@@ -396,18 +399,19 @@ public sealed partial class WorldServer {
         );
     }
     // The `world.interactions` read-back — the SAME line shape DescribeRules gives a compiled rule, since an
-    // interaction IS a compiled rule under the hood (see WorldRuleCompiler.CompileAllInteractions). This is also the
+    // interaction IS a compiled rule under the hood (see WorldFactsCompiler.CompileAllInteractions). This is also the
     // "echo an interaction firing" read-back the effect substrate promises: `latch=held` at the last evaluation IS
     // "this interaction fired (or is still holding, under Level)", the identical signal a rule's own latch already
     // gives.
-    private string DescribeInteractions() => DescribeCompiledRules(
-        latch: m_interactionGateHeld,
-        rules: m_interactions,
+    public string DescribeInteractions() => DescribeCompiledRules(
+        catalog: m_arena.Catalog,
+        latch: m_ruleHost.InteractionGateHeld,
+        rules: m_ruleHost.Interactions,
         verb: "world.interactions"
     );
     // Every dependent a patch-removal guard names: synth-sourced speakers plus placement emission facets
     // (creation sounds carry their patches INLINE, so they can never dangle). Null = none.
-    private static string? DescribePatchDependents(WorldDefinition current, string patchId) {
+    public static string? DescribePatchDependents(WorldDefinition current, string patchId) {
         List<string>? dependents = null;
 
         if (DescribeSpeakersSourcing(

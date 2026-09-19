@@ -24,12 +24,16 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck bench`](#puck-benchthe-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1`, checked and regenerated. |
+| [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
+| [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`. |
-| [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror. |
+| [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
+| [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck fmt`](#the-puck-dsl-verbs) | formats `.puck` sources (distinct from `puck format`, which rewrites this repository's C#). |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
+| [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting. |
 | [`puck format`](#puck-formatsource-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
@@ -81,9 +85,9 @@ To build the candidate directly for local development:
 dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 ```
 
-produces `src/Puck.Cli/publish/puck.exe` on Windows or `src/Puck.Cli/publish/puck`
-elsewhere—a framework-dependent .NET executable. A trivial invocation costs
-~0.18 s wall (measured quiet), cheap enough to call per query
+produces the candidate executable under `src/Puck.Cli/publish`—`puck.exe` on
+Windows, `puck` elsewhere—a framework-dependent .NET executable. A trivial
+invocation costs ~0.18 s wall (measured quiet), cheap enough to call per query
 though not per file.
 Do not attempt AOT: the search engine's F# runtime dependency and the
 BenchmarkDotNet host code both preclude it. `publish/` is git-ignored.
@@ -135,6 +139,8 @@ puck world release finalize
 puck world release resume
 puck world release deploy <package-directory> [--operation <id>]
 puck world release rollback [--operation <id>]
+puck world release checkpoint [--request <guid>]
+puck world release restore <recovery-point> [--operation <guid>] [--discard-progress]
 puck azure prepare-world-release [--output-directory <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
 puck world probe <host> <port> <public-key-file>
@@ -361,7 +367,7 @@ shaders or creating a GPU device. Compilation errors return exit code 1 and
 identify the source location.
 
 These commands use the same compiler and loader as live World pipelines.
-The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
+The [shader README](../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development)
 owns the source-language, resource and toolchain contracts.
 ## `puck canary`—real-World behavioral proofs
 
@@ -430,8 +436,7 @@ the entry an assertion with no `authority` selector reads by default—and a
 a different entry's transcript instead. A federated leg's `seconds`/
 `timeoutSeconds` ceilings are wider (concurrently-spawned processes on a
 shared machine see real spawn/handshake variance a single process does not).
-`tests/Puck.World.Canaries/addon-mutation-seam` is the `stream` override's
-first user; `tests/Puck.World.Canaries/four-corners-sharded` is `authorities`'
+`tests/Puck.World.Canaries/four-corners-sharded` is `authorities`'
 first user—five real processes (four ground worlds plus the floating
 island), one human-driven body ringing all four ground authorities. Not yet
 expressible in that same canary, owed to future widening rather than a
@@ -443,6 +448,159 @@ transfer/address observation red is out of scope for any two-leg manifest
 by the format's own rule (a manifest is exactly `positive`/`discriminating`);
 a Silo-hosted (rather than `dotnet run`) authority entry is a documented
 future transport arm, not a reshape of `authorities`' current members.
+
+---
+
+## `puck landing`—git-loss check, then the automatic canary set
+
+`puck landing --against <tip> --base <authoring-base>` refuses a commit that
+drops content its author never worked from — the shape a `git reset --soft
+<tip>` before a squash produces, which re-parents the author's own tree onto
+a newer tip and silently reverts everything that tip added. It compares the
+lines HEAD deletes relative to `<tip>` against the lines it deletes relative
+to `<base>`; anything in the first set and not the second arrived on the tip
+while the author was working and would be lost. `<base>` is required and
+cannot be derived — `merge-base(tip, HEAD)` returns the tip itself for a
+re-parented tree, which would make every deletion look intended — and a
+`<base>` equal to `<tip>`, or one HEAD does not descend from, is refused for
+the same reason.
+
+The git-loss check runs first, and only once it passes does `puck landing`
+run the nonempty automatic canary set (`puck canary`'s headless,
+no-environmental-requirement subset). There is no flag to skip either
+component. Exit codes: 0 both components passed; 1 unaccounted deletions or
+an observed canary failure; 2 usage, manifest, build, or infrastructure
+refusal.
+
+---
+
+## `puck test`—test worlds
+
+A test world carries its own test. Its `schedule` section says what command to
+submit and at exactly which simulation tick, acting as which seat; its
+`verdict`-marked `state` rows say what the rules must conclude, and the rule
+that decides each one writes the status plus the values its gate saw into that
+row's own cells. `puck test` boots each world through the real `Puck.World`
+executable, headless, and reads the verdicts back out of the canonical state
+export the world writes at the tick its schedule derives (the last scheduled
+tick plus the declared `settleTicks` margin).
+
+A path may name a `.puck` source instead of a document, which is how a world's
+own behaviour is normally written: the source is compiled and the worlds its
+[`test` blocks](../authoring/testing-a-world.md) generate are what run, one per
+block, named `<source stem>--<test slug>`. A directory contributes both its
+`*.world.json` documents and its `*.puck` sources, skipping a source that
+authors no test. A source that does not compile is exit 2; so is a single named
+source with no test block, since the verb was asked to run something that is not
+there.
+
+What a scheduled row may say is closed on both axes, because a world document
+travels and any boot can be asked to load one:
+
+- The section runs only when the boot **arms** it with `--schedule-dir`, which
+  `puck test` supplies. Any other boot of a document carrying a schedule
+  submits no row, writes no export, and prints one line saying the section is
+  present and unarmed; `world.schedule` reports the same either way.
+- A row's `command` opens with a verb from a closed step vocabulary — state
+  mutations, guarded transforms, body intents and poses, and joining or leaving
+  a seat. Anything that touches the process, the clock or the filesystem
+  (`quit`, `world.rate`, `world.save`, `world.load`, the capture and screenshot
+  verbs) and anything that changes who may act (`world.grant`, `world.revoke`)
+  is refused at validation, by name, with the row's index.
+- A row's `principal` is `seat1`..`seat4`, parsed by the same grammar the wire
+  codec enforces, so a seat the document admits is a seat a submission reaches.
+  `console` is refused: it is trusted at every gate, so a step acting as it
+  would prove nothing about authority. The power a step needs is authored in the
+  document's own `grants`, and its starting state in its own `state` cells.
+- A row declares the outcome it expects: `expect: "Submitted"` by default, or
+  `expect: "Refused"` (optionally with `refusal: "<text>"` the recorded detail
+  must carry) for a step whose point is that the world says no. Any other
+  recorded outcome fails the world by name with the row's index, its command and
+  what the run recorded. An outcome the **host** rather than the world answered —
+  a handler that threw (`faulted`), a principal with no ingress (`unroutable`), a
+  row still awaiting its answer (`pending`), or a refusal that never reached a
+  handler (`[wire.reject: …]`) — is exit 2 instead: nothing about the world was
+  measured.
+
+```text
+puck test <path>                       a .puck source, a *.world.json document, or a
+                                       directory of either
+puck test <path> --host server         the real Puck.World executable, headless (the default)
+puck test <path> --world-artifact <p>  boot this already-built Puck.World.dll instead of
+                                       building src/Puck.World into the run's own output
+puck test <path> --keep <dir>          run in <dir> and keep it: every generated test world
+                                       under <dir>/generated, plus both legs' transcripts,
+                                       exports and manifests
+puck test -h / --help                  this text
+```
+
+Reaching the authored export tick is part of the verdict. A run that stops
+early still writes an export — of whatever tick it reached — and the verdicts
+read off it answer a different question, so each leg is reconciled against the
+document before any verdict is reported: the tick reached must be the tick
+declared (`exported at tick 2, authored 56`), and every declared `schedule.rows`
+entry must have a recorded outcome at its own position in the manifest. A row
+the run never got to records `unreached`, and a leg carrying one is refused.
+Both are exit 2, not a failing verdict: nothing was measured.
+
+A scheduled run is not resumable, and says so rather than half-supporting it:
+inside an armed run `world.save`, `world.load`, `world.reload` and `world.undo`
+are refused by name. A schedule carries no cursor — which rows have been
+submitted is the process's own state, never the document's — so a restored,
+re-read or rewound world submits every row again from tick 1 and measures a
+different trajectory from the one the export was asked for.
+
+Each world then runs **twice**, into sibling leg directories, and a world whose
+two exports — or two `schedule.json` manifests — differ byte for byte is refused
+rather than reported: a verdict read off a world that does not reproduce says
+nothing, and neither do the refusals a manifest reports if the manifest itself
+drifts. The manifest therefore records only facts a rerun reproduces exactly: a
+row's own authored tick, its outcome and its detail. A recorded edit verdict
+carries no tick at all — an echo reaches the runner when the host narrates it,
+which is not the tick the edit applied on. That comparison is only
+possible because the export tick is the document's rather than the runner's — a
+console fence lands on whatever tick the command pump happened to reach, and an
+export taken there carries a different tick, and hash, every run. It is also
+why the reconciliation runs per leg rather than between them: two identically
+truncated runs reproduce each other perfectly.
+
+Only a rule's own effect writes a verdict row. The rule-effect door stamps the
+firing's simulation tick into the row's reserved `$firedTick` cell — an ordinary
+cell from there on, so the arena's export, the state hash and a checkpoint all
+carry it — and a status with no stamp beside it is reported as "never evaluated"
+whatever the cell reads. That is what closes the gap the authored-at-zero rule
+left open: a status a cell trait accrued into, or a scheduled command wrote,
+cannot pass. Every other door refuses the write by name — the cell-mutation
+door, a submitted state operation, and therefore a scheduled command, all with
+one text — and validation refuses a verdict row that declares a value-over-time
+trait (`advance`, `dynamics`, `cycle`, a cell `clock`, `draw`, `valuesFrom`), an
+authored ceiling (no ceiling bounds a tick), or a cell capacity with no room for
+the stamp.
+
+A failing verdict is sticky: once a firing writes `fail`, later firings are
+absorbed, so the report names the first failing tick and the values the gate saw
+then. An expectation is therefore written at the tick it becomes decidable — a
+rule whose `else` branch fails pre-emptively settles the verdict on its first
+tick and can never pass.
+
+One line per verdict, naming the row, the status, the gate it claims, the values
+it saw, and the firing tick. Refusals the run recorded (a scheduled command the
+world refused, which a test world often schedules on purpose) print beside the
+verdicts, read from the run's own `schedule.json` manifest.
+
+Exit codes: 0 every verdict passed and every row answered what it declared, 1 a
+verdict failed or a row's recorded outcome was not the one it declared, 2 usage —
+a world declaring no `schedule` section or no verdict row, a build or boot
+refusal, a leg that did not reach its authored export tick or account for every
+declared row, a row whose outcome the host rather than the world answered, a
+world whose two runs disagreed, or `--host browser`, which is refused by name
+because the browser engine host has no command ingress, principal or
+authoritative server to submit a scheduled command through.
+
+The worlds are under [`tests/Puck.World.Verdicts`](../../tests/Puck.World.Verdicts/README.md);
+the pairs reproducing each repaired hole are in
+[`proofs/`](../../tests/Puck.World.Verdicts/proofs/README.md) beside them, run by
+law rather than by a directory sweep.
 
 ---
 
@@ -728,7 +886,7 @@ puck bench world
 
 Regenerate the fixture document only when
 `Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Puck.World.Tests/Fixtures.cs) or
-`src/Puck.World/Assets/worlds/games/klondike.world.json` changes underneath
+`src/Puck.World/Assets/worlds/games/klondike.puck` changes underneath
 it—it is a checked-in snapshot, not derived at run time.
 
 ---
@@ -751,11 +909,37 @@ puck registry -h / --help   this text
 ```
 
 Both modes first refuse, exit 1, on a name-shaped document member the registry
-neither registers nor excludes with a reason—a `CellName`, `ValueExpression`,
+neither registers nor excludes with a reason—a `CellName`, `ExpressionProgram`,
 `BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
 member whose C# name reads like a name position—so a field added to the model
 without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
+
+## `puck vocabulary`—world authoring vocabulary
+
+Writes `docs/reference/world-vocabulary.md` from
+`Puck.World.Transpiler.Vocabulary.WorldConstructs.Table`
+(`src/Puck.World.Transpiler/Vocabulary/`): every construct of
+`puck.world.definition.v1`'s surface—its keyword, the members it carries with
+their kinds and defaults, the document member it lowers to, and what the printer
+requires before it may print a document node back as that construct. The
+parser's embedded-language test, the decompiler's sugar guards, and the language
+server's completion and hover read the same table, so the file cannot describe a
+construct the code spells differently.
+
+What a document *field* means is [`puck schema`](#puck-schemaworlddef-json-schema)'s
+and which fields carry names is [`puck registry`](#puck-registryworld-name-registry)'s;
+this table is the surface and its mapping onto them.
+
+```text
+puck vocabulary               write docs/reference/world-vocabulary.md
+puck vocabulary --check       regenerate in memory and compare against the file on disk;
+                              write nothing, exit 1 naming the first differing line
+puck vocabulary -h / --help   this text
+```
+
+Exit codes: **0** wrote or matched, **1** drift, **2** usage error or missing
+repository root.
 
 ## `puck scan`—source sweep
 
@@ -911,16 +1095,19 @@ error or missing repository root.
 
 ## The `.puck` DSL verbs
 
-Five verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
+Seven verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
 world documents. JSON stays the wire form and the checked-in source of every
 shipped world; `.puck` is how one is written and read by hand.
 
 ```text
 puck compile <source.puck> [-o <out.json>] [--validate] [--bundle] [--strict] [--watch]
-puck decompile <source.json> [-o <out.puck>]
+puck decompile <source.json> [-o <out.puck>] [--sql] [--embeddings <file.embeddings.json>]
+puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
+puck embed probe <path> <text>
 puck fmt <path> [--check] [--indent-size 2] [--tabs]
 puck lint <path> [--strict]
 puck lsp
+puck migrate <name> <path> [--check]
 ```
 
 `--validate` composes the document's `basis` and `imports` graph **before**
@@ -943,7 +1130,7 @@ each other on the same file. `puck lint`'s separate symbol-resolution pass
 (`Puck.World.Transpiler.Validation.PuckLinter.LintReferences`) composes any
 document naming a `basis` or `imports` to resolve names those supply, but
 reports an unresolved name only for a root—see
-[the transpiler README](../Puck.World.Transpiler/README.md#reference-resolution-lint).
+[the transpiler README](../../src/Puck.World.Transpiler/README.md#reference-resolution-lint).
 
 Every verb that validates or composes a world document—`compile --validate`,
 `lint`, and `world prepare`—registers the shipped screen-machine engines
@@ -957,10 +1144,48 @@ at boot.
 
 `decompile` writes beside its source when `-o` is omitted. A basis or import path
 inside the document resolves relative to the `.puck` file, so a round trip must
-write the `.puck` next to the JSON it came from.
+write the `.puck` next to the JSON it came from. Pass `--embeddings <file.embeddings.json>`
+to decompile vector cell arrays back into their original authored text literals when present
+in the lock.
+
+`embed` resolves all authored `embed(...)` text expressions and vector table literals in a
+`.puck` file or directory into committed `.embeddings.json` lock files. Pass `--check` in CI to verify
+that all locked vectors are present and fresh without network calls. Use `puck embed probe <path> <text>`
+to query a locked world's vector tables and rank matching keys by cosine similarity offline.
+
+`migrate` applies one registered rewrite—a `PuckMigration`, written against
+`Puck.Transpiler.Rewriting.PuckSyntaxRewriter`—to every `.puck` source under a
+directory, or to one named file, and prints each result through the same printer
+`fmt` uses. Every comment comes back as its author wrote it, and the run
+enforces that: the comments of each migrated source, in reading order, must
+equal the comments it started with, unless the migration declares
+`ReshapesComments`. Blank-line runs and the compile-time layer rest on the same
+printer `fmt` is gated on, and are not separately checked by the run. The run is
+all-or-nothing: every source is parsed,
+rewritten, and printed before anything is written, and each source the run would
+change is compiled before and after, its two documents compared with the members
+the migration declares excluded. A source the migration leaves alone is neither
+compiled nor written. A difference outside those members, an undeclared comment
+change, a source that does not parse, one whose migrated text does not parse
+back, one that does not compile, or one that would change but cannot be opened
+for writing refuses the whole run and writes nothing. `--check` reports what
+would change and writes nothing. An
+unknown name lists the registered migrations; the registry is empty between
+reshapes, because a migration lands with the reshape it serves and is deleted
+once it has run.
+
+Each source is written by staging its rewrite in a sibling `.migrate-tmp` file
+and moving that over the destination, so an interrupted run leaves every source
+either as it was or fully migrated—never truncated, which matters because a
+source that does not parse would refuse every later run. The one thing that is
+not atomic is the *set* of files: if a move fails after earlier moves have
+succeeded, those destinations stay migrated and the refusal names each of them.
+The common causes of that failure—a read-only file, a lock, a permission—are
+refused at plan time instead, before anything is staged.
 
 Exit codes: **0** success, **1** diagnostics at or above the failing severity
-(`--strict` promotes warnings), **2** usage error or unreadable input.
+(`--strict` promotes warnings; `migrate --check` uses it for work outstanding),
+**2** usage error, unreadable input, or a refused `migrate` run.
 
 ---
 

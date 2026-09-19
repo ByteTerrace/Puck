@@ -26,7 +26,7 @@ namespace Puck.World.Addons;
 /// declared kinds have no entry yet;
 /// <see cref="TryDecode"/> refuses an unwired ordinal by name rather than guessing a shape for it, so wiring one in
 /// is strictly additive — a new <c>case</c> arm, never a change to this method's own contract.</remarks>
-internal static class WorldAddonMutationDecoder {
+public static class WorldAddonMutationDecoder {
     private static readonly string[] RectMembers = ["x", "y", "width", "height"];
     private static readonly string[] ElementMembers = ["id", "kind", "rect", "style", "text", "binding"];
     private static readonly string[] PanelMembers = ["id", "rect", "layer", "style", "elements"];
@@ -45,6 +45,7 @@ internal static class WorldAddonMutationDecoder {
         ["fixed"] = CellKind.Fixed,
         ["bool"] = CellKind.Bool,
         ["text"] = CellKind.Text,
+        ["vector"] = CellKind.Vector,
     };
     private static readonly Dictionary<string, StateOverflow> Overflows = new(comparer: StringComparer.Ordinal) {
         ["refuse"] = StateOverflow.Refuse,
@@ -1284,37 +1285,47 @@ internal static class WorldAddonMutationDecoder {
     // A fixed-kind value is DECIMAL TEXT here, exactly as the document and the console verb spell it — the addon
     // wire's raw-bits convention covers the ABI's numeric channel cells (WorldMutation.UpsertStateCell.Value), never
     // this JSON payload, which is the SAME grammar world.row.set state takes and must not fork from it.
-    private static StateCell DecodeStateCell(CellName key, JsonElement element, CellKind kind, string context) {
+    private static StateCell DecodeStateCell(CellName key, JsonElement element, CellKind kind, string context) =>
+        new(
+            Key: key,
+            Value: DecodeCellValue(
+                context: context,
+                element: element,
+                kind: kind
+            )
+        );
+    // One wire payload as the one carrier the row's kind declares. Every kind has its own arm, so a kind added to
+    // CellKind arrives here as a refusal naming it rather than falling into a numeric read that would misread it.
+    private static CellValue DecodeCellValue(JsonElement element, CellKind kind, string context) {
         switch (kind) {
             case CellKind.Text:
                 if (element.ValueKind != JsonValueKind.String) {
                     throw new AddonMutationDecodeException(message: $"{context}: must be a string");
                 }
 
-                return new StateCell(
-                    Key: key,
-                    Text: (element.GetString() ?? string.Empty)
-                );
+                return CellValue.Text(value: (element.GetString() ?? string.Empty));
             case CellKind.Bool:
                 if (element.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) {
                     throw new AddonMutationDecodeException(message: $"{context}: must be a boolean");
                 }
 
-                return new StateCell(
-                    Key: key,
-                    Value: (element.GetBoolean()
-                    ? 1
-                    : 0)
-                );
+                return CellValue.Bool(value: element.GetBoolean());
+            case CellKind.Vector:
+                throw new AddonMutationDecodeException(message: $"{context}: vector state cells cannot be written by addons");
+            case CellKind.Int:
+                return CellValue.Int(value: RequireStateNumber(
+                    context: context,
+                    element: element,
+                    kind: kind
+                ));
+            case CellKind.Fixed:
+                return CellValue.Fixed(rawBits: RequireStateNumber(
+                    context: context,
+                    element: element,
+                    kind: kind
+                ));
             default:
-                return new StateCell(
-                    Key: key,
-                    Value: RequireStateNumber(
-                        context: context,
-                        element: element,
-                        kind: kind
-                    )
-                );
+                throw new AddonMutationDecodeException(message: $"{context}: '{kind}' is not a cell kind an addon can write");
         }
     }
     private static List<StateCell> DecodeStateCells(JsonElement element, CellKind kind, string context) {

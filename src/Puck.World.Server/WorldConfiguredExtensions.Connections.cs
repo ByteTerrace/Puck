@@ -24,6 +24,7 @@ public sealed partial class WorldConfiguredExtensions {
         try {
             if (m_configuration.World != m_server.Definition.DocumentId) { throw new InvalidOperationException(message: "Configured extension world identity changed."); }
             m_server.ExecuteAuthorityOperation(operation: () => PumpObservations(tick: completedTick));
+            m_server.ExecuteAuthorityOperation(operation: () => PumpEmbeddings(completedTick: completedTick));
             var requests = new List<Request>();
 
             m_server.ExecuteAuthorityOperation(operation: () => {
@@ -142,7 +143,12 @@ public sealed partial class WorldConfiguredExtensions {
     /// contributions. Does not wait for service completion or apply those contributions.</summary>
     /// <param name="cancellationToken">Cancels this wait, without cancelling admitted operations.</param>
     /// <returns>Completion of the current connection pass.</returns>
-    public Task FlushAsync(CancellationToken cancellationToken = default) => m_work.WaitAsync(cancellationToken: cancellationToken);
+    public async Task FlushAsync(CancellationToken cancellationToken = default) {
+        await m_work.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        foreach (var emb in m_embeddingConnections) {
+            await emb.InFlightTask.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        }
+    }
 
     private async Task ProcessRequestsAsync(IReadOnlyList<Request> requests, string? cause) {
         foreach (var request in requests) {

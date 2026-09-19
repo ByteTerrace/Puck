@@ -568,6 +568,45 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.State.Generators": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.State.Rules": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Generators": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Topology": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Vectors": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.State.Search": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Rules": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.State.Topology": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.State.Vectors": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Text": {
         "type": "Project",
         "dependencies": {
@@ -777,6 +816,7 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Rules": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
           "Puck.World.Authoring": "[1.0.0, )"
         }
@@ -792,6 +832,8 @@
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Rules": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Search": "[0.1.0-alpha, )",
           "Puck.Storage": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )"

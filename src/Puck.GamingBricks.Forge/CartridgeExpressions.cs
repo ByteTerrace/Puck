@@ -3,7 +3,7 @@ using Puck.State;
 namespace Puck.GamingBricks.Forge;
 
 /// <summary>
-/// The subset of <see cref="ValueExpression"/> a cartridge evaluates, and the walk both backends share to emit one.
+/// The subset of <see cref="ExpressionProgram"/> a cartridge evaluates, and the walk both backends share to emit one.
 /// </summary>
 /// <remarks>
 /// <para>The rule language evaluates well over a hundred token kinds — hex lattices, Hilbert indices, primes,
@@ -57,11 +57,11 @@ public static class CartridgeExpressions {
     /// <param name="operation">The operation.</param>
     /// <returns><see langword="true"/> when both backends have an arm for it.</returns>
     public static bool Admits(ExpressionOp operation) => Reads.Contains(item: operation);
-    /// <summary>Returns how many values a token consumes.</summary>
-    /// <param name="token">The token.</param>
+    /// <summary>Returns how many values an instruction consumes.</summary>
+    /// <param name="token">The instruction.</param>
     /// <returns>The count; zero for a constant or a state read.</returns>
-    public static int Arity(ValueToken token) =>
-        ((ExpressionVocabulary.Operation(token: token) is { } operation)
+    public static int Arity(Instruction token) =>
+        ((ExpressionVocabulary.Operation(instruction: token) is { } operation)
             ? ExpressionVocabulary.Arity(operation: operation)
             : 0
         );
@@ -69,18 +69,18 @@ public static class CartridgeExpressions {
     /// <param name="button">a, b, start, select, up, down, left or right.</param>
     /// <param name="mode">held, pressed or released.</param>
     /// <returns>The expression.</returns>
-    public static ValueExpression Button(string button, string mode) => Of(state: $"{KeyPrefix}{button}:{mode}");
+    public static ExpressionProgram Button(string button, string mode) => Of(state: $"{KeyPrefix}{button}:{mode}");
     /// <summary>Returns the deepest value stack <paramref name="expression"/> needs.</summary>
     /// <param name="expression">The expression.</param>
     /// <returns>The maximum number of values in flight at once.</returns>
     /// <exception cref="ArgumentException">The token list is not a well-formed postfix expression.</exception>
-    public static int Depth(ValueExpression expression) {
+    public static int Depth(ExpressionProgram expression) {
         ArgumentNullException.ThrowIfNull(argument: expression);
 
         var depth = 0;
         var most = 0;
 
-        foreach (var token in expression.Tokens) {
+        foreach (var token in expression.Instructions) {
             var arity = Arity(token: token);
 
             if (depth < arity) {
@@ -113,7 +113,7 @@ public static class CartridgeExpressions {
     /// <returns>The predicate.</returns>
     /// <remarks>A cartridge carries no fixed-point domain, so the comparison's kind is never anything else; this is the
     /// spelling that cannot get it wrong.</remarks>
-    public static ActionPredicate Gate(ValueExpression left, ActionStateComparison comparison, ValueExpression right) =>
+    public static ActionPredicate Gate(ExpressionProgram left, ActionStateComparison comparison, ExpressionProgram right) =>
         new ActionPredicate.CompareValue(
             Comparison: comparison,
             Kind: CellKind.Int,
@@ -129,7 +129,7 @@ public static class CartridgeExpressions {
     /// a key: a bare number is a constant index, and anything else arrives as the canonical infix spelling behind
     /// <see cref="RuleFacts.ExpressionKeyPrefix"/>. Both are one index expression here, so a backend compiles the
     /// index the same way it compiles any other operand.</remarks>
-    public static ValueExpression? Index(string? key) {
+    public static ExpressionProgram? Index(string? key) {
         if (key is null) {
             return null;
         }
@@ -137,7 +137,7 @@ public static class CartridgeExpressions {
             comparisonType: StringComparison.Ordinal,
             value: RuleFacts.ExpressionKeyPrefix
         )) {
-            return ValueExpression.Parse(text: key[RuleFacts.ExpressionKeyPrefix.Length..]);
+            return ExpressionProgram.Parse(text: key[RuleFacts.ExpressionKeyPrefix.Length..]);
         }
         // One element read through another: the expression language's own spelling for an index taken from a cell.
         if (key.StartsWith(
@@ -160,15 +160,15 @@ public static class CartridgeExpressions {
             s: key,
             out var literal
         )) {
-            return new ValueExpression(Tokens: [new ValueToken.Constant(Value: literal)]);
+            return new ExpressionProgram(Instructions: [Instruction.Constant(value: literal)]);
         }
 
-        return ValueExpression.Parse(text: key);
+        return ExpressionProgram.Parse(text: key);
     }
     /// <summary>Creates a key addressing an array element by a computed index.</summary>
     /// <param name="index">The index expression.</param>
     /// <returns>The key.</returns>
-    public static string Key(ValueExpression index) {
+    public static string Key(ExpressionProgram index) {
         ArgumentNullException.ThrowIfNull(argument: index);
 
         // The expression language reads a key in three shapes, and printing back the one it was written in is what
@@ -178,31 +178,27 @@ public static class CartridgeExpressions {
             return literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        if (index.Tokens is [ValueToken.State state]) {
+        if (index.Instructions is [{ Payload: InstructionPayload.State state }]) {
             return ((state.Key is null)
                 ? state.Name
                 : $"{RuleFacts.CellKeyPrefix}{state.Name}:{state.Key}"
             );
         }
 
-        return $"{RuleFacts.ExpressionKeyPrefix}{ExpressionSpelling.Print(tokens: index.Tokens)}";
+        return $"{RuleFacts.ExpressionKeyPrefix}{ExpressionSpelling.Print(instructions: index.Instructions)}";
     }
     /// <summary>Creates an expression reading one literal.</summary>
     /// <param name="constant">The literal.</param>
     /// <returns>The expression.</returns>
-    public static ValueExpression Of(int constant) => new(Tokens: [new ValueToken.Constant(Value: constant)]) { Text = constant.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) };
+    public static ExpressionProgram Of(int constant) => new(Instructions: [Instruction.Constant(value: constant)]);
     /// <summary>Creates an expression reading one state slot, or one array element.</summary>
     /// <param name="state">The declared state or array name.</param>
     /// <param name="key">The element index for an array, or null for a slot.</param>
     /// <returns>The expression.</returns>
-    public static ValueExpression Of(string state, string? key = null) {
-        var tokens = new ValueToken[] { new ValueToken.State(
-            Key: key,
-            Name: state
-        ) };
-
-        return new ValueExpression(Tokens: tokens) { Text = ExpressionSpelling.Print(tokens: tokens) };
-    }
+    public static ExpressionProgram Of(string state, string? key = null) => new(Instructions: [Instruction.Operand(
+        key: key,
+        name: state
+    )]);
     /// <summary>Creates a gate that holds while a button satisfies a mode.</summary>
     /// <param name="button">a, b, start, select, up, down, left or right.</param>
     /// <param name="mode">held, pressed or released.</param>
@@ -216,18 +212,20 @@ public static class CartridgeExpressions {
             comparison: ActionStateComparison.Equal,
             right: Of(constant: 1)
         );
-    /// <summary>Returns the spelling a token is named by, for a refusal that quotes the author.</summary>
-    /// <param name="token">The token.</param>
+    /// <summary>Returns the spelling an instruction is named by, for a refusal that quotes the author.</summary>
+    /// <param name="token">The instruction.</param>
     /// <returns>The function name, operator symbol, or payload description.</returns>
-    public static string Spell(ValueToken token) => (token switch {
-        ValueToken.Constant constant => constant.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-        ValueToken.State state => ((state.Key is { } key)
-        ? $"{state.Name}[{key}]"
-        : state.Name),
-        _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
-        ? ExpressionVocabulary.Spelling(operation: operation)
-        : token.GetType().Name),
-    });
+    public static string Spell(Instruction token) {
+        ArgumentNullException.ThrowIfNull(argument: token);
+
+        return (token switch {
+            { Payload: InstructionPayload.Constant constant } => constant.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+            { Payload: InstructionPayload.State state } => ((state.Key is { } key)
+            ? $"{state.Name}[{key}]"
+            : state.Name),
+            _ => ExpressionVocabulary.Spelling(operation: token.Operation),
+        });
+    }
     /// <summary>Splits a reserved button operand into its button and mode.</summary>
     /// <param name="name">The operand name.</param>
     /// <param name="button">The button on success.</param>
@@ -260,8 +258,8 @@ public static class CartridgeExpressions {
     /// <summary>Returns the whole number a one-token literal expression carries.</summary>
     /// <param name="expression">The expression.</param>
     /// <returns>The literal, or <see langword="null"/> when the expression is anything else.</returns>
-    public static int? Whole(ValueExpression? expression) =>
-        (((expression?.Tokens is [ValueToken.Constant constant]) && (decimal.Truncate(d: constant.Value) == constant.Value))
+    public static int? Whole(ExpressionProgram? expression) =>
+        (((expression?.Instructions is [{ Payload: InstructionPayload.Constant constant }]) && (decimal.Truncate(d: constant.Value) == constant.Value))
             ? (int)constant.Value
             : null
         );

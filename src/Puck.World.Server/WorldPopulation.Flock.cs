@@ -51,13 +51,13 @@ public sealed partial class WorldPopulation {
                 if (flock.Source.CohesionAffinity is { } cohesion) {
                     rows.Add(item: $"cohesionAffinity={System.Text.Json.JsonSerializer.Serialize(
                         cohesion,
-                        WorldJsonContext.Default.ValueExpression
+                        WorldJsonContext.Default.ExpressionProgram
                     )}");
                 }
                 if (flock.Source.AlignmentAffinity is { } alignment) {
                     rows.Add(item: $"alignmentAffinity={System.Text.Json.JsonSerializer.Serialize(
                         alignment,
-                        WorldJsonContext.Default.ValueExpression
+                        WorldJsonContext.Default.ExpressionProgram
                     )}");
                 }
             }

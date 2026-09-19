@@ -14,8 +14,9 @@ Use the smallest fixture that exercises the behavior under test:
 - `AuthoredGameFixtures.Program` loads a shipped game's state, rules, patterns,
   and tables into that minimal world. A poker hand must not build the Nexus
   navigation graph or simulate unrelated creatures.
-- `RuleFrameFixture` compiles a state program once per test, then reloads every
-  candidate's values and derived boards. Exhaustive rule checks retain all
+- `RuleArenaFixture` compiles a state program once per test, then loads every
+  candidate's values into the arena and judges it as one tick, with the derived
+  boards the arena's own import recomputes. Exhaustive rule checks retain all
   candidate combinations; physical sampling and mutation admission use server
   tests alongside them.
 - Composition checks load the complete Nexus once. Placement-identity checks

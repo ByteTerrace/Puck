@@ -186,6 +186,6 @@ internal static class SolitaireFixtures {
     public static long Value(WorldFixture f, string game, string key) => Row(
         f: f,
         name: game
-    ).Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+    ).Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
 
 }

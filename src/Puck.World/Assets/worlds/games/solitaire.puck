@@ -1,0 +1,21 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+import "klondike.world.json"
+import "spider.world.json"
+import "freecell.world.json"
+
+export action solitaire, solitaireFreecell, solitaireKlondike, solitaireSpider
+export binding solitaire, solitaireFreecell, solitaireKlondike, solitaireSpider
+export read solitaire, solitaireFreecell, solitaireKlondike, solitaireSpider
+
+state {
+  world {
+    table solitaire: Int capacity(1) {
+      table = 0
+    }
+  }
+}

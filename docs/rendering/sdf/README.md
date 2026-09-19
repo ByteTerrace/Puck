@@ -34,7 +34,7 @@ sampled distance bricks serve as invalidatable render caches.
 
 For the shared shader manifests, pipeline graphs, descriptor bindings, and
 configuration model, see the [`Puck.Shaders` README](../../../src/Puck.Shaders/README.md).
-For planned work beyond the current renderer, see [shader pipeline evolution](../../plans/shader-pipeline-evolution.md).
+For planned work beyond the current renderer, see [the rendering programme](../../plans/rendering.md).
 
 ## Source-level references
 

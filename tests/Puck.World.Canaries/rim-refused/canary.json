@@ -1,0 +1,144 @@
+{
+  "id": "rim-refused",
+  "title": "A body refused at a flat seam keeps falling under its own authority instead of hanging at the plane",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 28,
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "corner.world.json"
+  ],
+  "binding": "The rim-drop island over a corner document that validates as the seam's counterpart and refuses its own boot (it seats no one), so every handoff across the flat seam at y=80 is refused and the seam reads state=CLOSED. WorldAdjacencyUnavailable.Closed clamps a body one raw unit inside a boundary it walks through; at a pitched boundary the body keeps its pose and its velocity, because a clamp there pins a falling body in mid-air at the plane with nothing under it. The positive leg walks the body off the deck, narrates the refusal, and reads the body back far below the plane, still airborne and falling under the island's own authority (home stays the island's spawn). A clamped body is re-clamped every few ticks as gravity carries it back across the deadband, so it reads somewhere in y=79.x for as long as the run lasts; no such read appears. The discriminating leg boots island-solo.world.json, the same island with no seam, and runs the same script: no refusal is narrated at all.",
+  "positive": {
+    "world": "tests/Puck.World.Canaries/rim-refused/island.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.adjacencies",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the seam reads closed because its neighbour cannot boot",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "unavailable=closed onUnavailable=none state=CLOSED",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the refusal is narrated",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[world.adjacency: 'boot/under' seat 1 CLOSED",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the body is not held at the plane",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "pos=(0.00, 79.",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "the body is still falling under the island's own authority",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "facts=airborne|falling home=(0.00, 120.03, 0.00)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "nothing arrives anywhere",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "seat 1 arrived",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/rim-refused/island-solo.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.adjacencies",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the control document declares no seam at all",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.adjacencies: none]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no refusal is narrated without a seam",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "CLOSED",
+        "present": false
+      }
+    ]
+  }
+}

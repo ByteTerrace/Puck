@@ -108,7 +108,7 @@ rule "soft-drop" {
 | `key(<button>, held\|pressed\|released)` | a `key` condition |
 | `a == b` `!=` `<` `<=` `>` `>=` | a `compare` condition |
 
-An operand is an expression—the engine's own `ValueExpression`, in the same infix spelling a world rule uses, so
+An operand is an expression—the engine's own `ExpressionProgram`, in the same infix spelling a world rule uses, so
 `(score + bonus) * 2` and `field[cursor + 1]` are single operands and the compiler allocates whatever the machine
 holds in flight. A cartridge admits the subset an eight-bit machine spends a few instructions on
 (`CartridgeExpressions.Reads`); an operation the rule language evaluates and a cartridge does not is refused at

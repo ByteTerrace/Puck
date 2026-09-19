@@ -1,0 +1,184 @@
+using Puck.World.Protocol;
+
+namespace Puck.World.Server;
+
+public sealed partial class WorldTick {
+    private Func<string, bool>? m_transferAuthorityAllowed;
+
+    /// <summary>Installs the hosting boundary before admission. The predicate admits only authorities restored
+    /// together with this world. It cannot be replaced during an activation.</summary>
+    internal void ConstrainTransferAuthorities(Func<string, bool> allowed) {
+        ArgumentNullException.ThrowIfNull(allowed);
+        if (m_transferAuthorityAllowed is not null) { throw new InvalidOperationException(message: "transfer boundary is already installed"); }
+        m_transferAuthorityAllowed = allowed;
+    }
+
+    // Re-materializes every live federation stream's latest device state into this authority tick. A row is
+    // accepted only while the same peer principal still occupies its slot; an onward transfer leaves the old row
+    // inert, and slot reuse can never inherit it. ApplyIntentSubmission remains the one Drive/grant/input-hold door.
+    private void ApplyFederatedIntents() {
+        for (var index = 0; (index < m_federatedIntents.Length); index++) {
+            ref readonly var state = ref m_federatedIntents[index];
+
+            if (
+                !state.Active ||
+                (Host.Body(index: index) is not { } body) ||
+                !Host.Population.IsAdmittedPeer(bodyIndex: index) ||
+                (Host.Population.PeerPrincipal(index: index) != state.Principal)
+            ) {
+                continue;
+            }
+
+            var submission = state.Submission with { EntityIndex = index, Principal = state.Principal };
+
+            _ = ApplyIntentSubmission(
+                body: body,
+                submission: in submission
+            );
+        }
+    }
+
+    /// <summary>Releases a reservation before commit. A destination that already committed ignores the abort.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    internal void AbortTransfer(string sourceAuthority, ulong transferId) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Abort(
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        ));
+    /// <summary>Retires the acknowledged transaction while preserving stable mobility replay protection.</summary>
+    internal void AcknowledgeTransfer(string sourceAuthority, ulong transferId) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Acknowledge(
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        ));
+    /// <summary>Clears one exact authenticated arrival-border latch after reciprocal hysteresis is satisfied.
+    /// Callers already execute under the authority operation gate.</summary>
+    internal bool ClearTransferArrivalBorder(int bodyIndex, string expectedBorder) =>
+        Host.TransferEscrow.ClearArrivalBorder(
+            bodyIndex: bodyIndex,
+            expectedBorder: expectedBorder
+        );
+    /// <summary>Commits detached bodies into a live reservation. A repeated committed id is idempotently accepted;
+    /// an expired or absent reservation is refused.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    /// <param name="members">The travelers in reservation order.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns>Whether the commit is authoritative at this destination.</returns>
+    internal bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        if (
+            (m_transferAuthorityAllowed is not null) &&
+            !m_transferAuthorityAllowed(sourceAuthority)
+        ) {
+            reason = "closed rewind group refuses an external transfer"; return false;
+        }
+        var resolvedReason = string.Empty;
+        var accepted = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Commit(
+            members: members,
+            reason: out resolvedReason,
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        ));
+
+        reason = resolvedReason;
+        return accepted;
+    }
+    /// <summary>Publishes one authenticated federation stream's latest device image. The image is held as replicated
+    /// input state and reapplied once per destination tick; it is not consumed merely because this socket update was
+    /// sparse relative to the destination clock.</summary>
+    internal void PublishFederatedIntent(long leaseId, in IntentSubmission submission) {
+        if (
+            (leaseId <= 0) ||
+            (((uint)submission.EntityIndex) >= ((uint)m_federatedIntents.Length))
+        ) {
+            return;
+        }
+
+        var published = submission;
+
+        Host.ExecuteAuthorityOperation(operation: () => {
+            ref var state = ref m_federatedIntents[published.EntityIndex];
+
+            state = new WorldFederatedIntentState(
+                LeaseId: leaseId,
+                Principal: published.Principal,
+                Submission: published,
+                Active: true
+            );
+        });
+    }
+    /// <summary>Releases every device image still owned by one closing federation stream. Lease comparison makes
+    /// reconnect replacement atomic: a superseded stream cannot release the newer writer. A retired destination
+    /// needs no stream cleanup and keeps its frozen checkpoint unchanged.</summary>
+    internal void ReleaseFederatedIntents(long leaseId) {
+        if (leaseId <= 0) {
+            return;
+        }
+
+        lock (Host.AuthorityGate) {
+            if (Host.AuthorityRetiring) { return; }
+            for (var index = 0; (index < m_federatedIntents.Length); index++) {
+                if (
+                    m_federatedIntents[index].Active &&
+                    (m_federatedIntents[index].LeaseId == leaseId)
+                ) {
+                    m_federatedIntents[index] = default;
+                }
+            }
+        }
+    }
+    /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
+    /// colocation and the QUIC authority door; callers never reserve population capacity by inspecting it directly.</summary>
+    /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
+    /// <returns>The destination's verdict and assigned body indices.</returns>
+    internal WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) =>
+        Host.ExecuteAuthorityOperation(operation: () => (((m_transferAuthorityAllowed is not null) && !m_transferAuthorityAllowed(request.SourceAuthority))
+            ? WorldTransferReservationReply.Refused(reason: "closed rewind group refuses an external transfer")
+            : Host.TransferEscrow.Reserve(request: request)));
+    /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
+    internal void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
+        var credential = mobility;
+
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.RetireMobility(mobility: in credential));
+    }
+    /// <summary>Returns the destination's idempotent view of a source-scoped transfer.</summary>
+    internal WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Status(
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        ));
+    /// <summary>Reads the authenticated source-border identity for an active escrow-arrived body. Callers already
+    /// under the authority operation gate use this to apply reciprocal adjacency hysteresis.</summary>
+    internal bool TryTransferArrivalBorder(int bodyIndex, out string border) =>
+        Host.TransferEscrow.TryArrivalBorder(
+            bodyIndex: bodyIndex,
+            border: out border
+        );
+    /// <summary>Resolves the ordinary peer principal a committed federated transfer assigned.</summary>
+    internal bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
+        var resolved = default(WorldPrincipal);
+        var found = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.TryCommittedPrincipal(
+            ordinal: ordinal,
+            principal: out resolved,
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        ));
+
+        principal = resolved;
+        return found;
+    }
+    /// <summary>Resolves a stable incarnation/epoch credential without retaining its disposable transfer id.</summary>
+    internal bool TryTransferredPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out WorldPrincipal principal) {
+        var resolved = default(WorldPrincipal);
+        var credential = mobility;
+        var found = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.TryMobilityPrincipal(
+            mobility: in credential,
+            principal: out resolved,
+            sourceAuthority: sourceAuthority
+        ));
+
+        principal = resolved;
+        return found;
+    }
+}

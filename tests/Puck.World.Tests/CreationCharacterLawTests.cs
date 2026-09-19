@@ -23,14 +23,14 @@ public sealed class CreationCharacterLawTests {
         )!;
     private static StateCell Cell(string key, double value) => new(
         Key: CellName.Parse(candidate: key),
-        Value: FixedQ4816.FromDouble(value: value).Value
+        Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value)
     );
     private static WorldStateRow FixedRow(string name, double value) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Fixed,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: FixedQ4816.FromDouble(value: value).Value
+                Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value)
             )]
     );
     // A hump drawn left to right (z = sin(πx), the waveform an artist would draw), as the curvature-first knots the
@@ -431,7 +431,7 @@ public sealed class CreationCharacterLawTests {
             Kind: CellKind.Text,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Text: "north"
+                    Value: CellValue.Text(value: "north")
                 )]
         );
 

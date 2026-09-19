@@ -15,11 +15,18 @@ internal static class PuckFmtCommand {
             return 2;
         }
 
-        var formatted = PuckFormatter.Format(
-            insertSpaces: insertSpaces,
+        var result = PuckPrinter.Format(
+            options: new PuckPrintOptions { InsertSpaces = insertSpaces, TabSize = tabSize },
             source: original,
-            tabSize: tabSize
+            vocabulary: CliVocabularyResolver.Instance.Resolve(source: original)
         );
+
+        if (result.Value is not { } formatted) {
+            foreach (var diagnostic in result.Diagnostics.Where(predicate: static diagnostic => (diagnostic.Severity == Puck.Transpiler.Diagnostics.DiagnosticSeverity.Error))) {
+                Console.Error.WriteLine(value: $"error: {filePath}({diagnostic.Span.Line},{diagnostic.Span.Column}): {diagnostic.Code}: {diagnostic.Message}");
+            }
+            return 2;
+        }
 
         if (string.Equals(
             a: original,
@@ -97,6 +104,7 @@ internal static class PuckFmtCommand {
                 searchPattern: "*.puck"
             );
             var unformattedCount = 0;
+            var failedCount = 0;
 
             foreach (var file in files) {
                 var code = FormatFile(
@@ -106,11 +114,15 @@ internal static class PuckFmtCommand {
                     tabSize: tabSize
                 );
 
-                if (code != 0) {
-                    unformattedCount++;
-                }
+                if (code == 1) { unformattedCount++; } else if (code != 0) { failedCount++; }
             }
 
+            // A file the verb could not read or could not parse is a failure whatever mode it ran in: the sweep
+            // reports it and exits non-zero rather than leaving the caller to believe the tree was swept.
+            if (failedCount > 0) {
+                Console.Error.WriteLine(value: $"fmt: {failedCount} file(s) could not be formatted.");
+                return 2;
+            }
             if (
                 check &&
                 (unformattedCount > 0)

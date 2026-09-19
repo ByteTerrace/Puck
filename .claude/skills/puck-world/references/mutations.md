@@ -21,7 +21,7 @@ the replacement inventory equals the prior session's. Ordinary edits and undo re
 Rule-driven state, placement, and HUD mutations share one firing-order queue. Document effects validate a
 speculative candidate including earlier queued writes; scope rollback discards its entire tail. The end-of-rule
 fold installs through the ordinary mutation door once. Keep this boundary intact when adding an effect; see
-the [rule frame contract](../../../../src/Puck.World.Server/README.md#rule-effects-land-on-a-frame-worldserverrulehostcs-worldserverruleframecs).
+the [rule-effects-land-on-the-arena contract](../../../../src/Puck.World.Server/README.md#rule-effects-land-on-the-arena-worldrulehostcs-worldserverarenacs-worldrulehostarmscs).
 
 ## Contents
 
@@ -294,26 +294,30 @@ Rules the catalog encodes:
 
 A world rule's body is `.puck` sugar over `Puck.State`'s own effect union
 (`ActionEffect`, `src/Puck.State/ActionEffect.cs`) — `Puck.World.Transpiler`
-invents no rule-effect shape of its own. Each fired effect becomes a
-`StateMutation` (`src/Puck.State/IRuleHost.cs`), and `WorldServer.RuleFrame.cs`
-folds that into one of the SAME `WorldMutation` state kinds the catalog above
-already names — never a shape unique to rules:
+invents no rule-effect shape of its own. Every effect but `transformState`
+fires as a `Mutation` (`MutationKind`, `src/Puck.State/IEffectHost.cs`)
+applied inside the firing's journal scope by `WorldArenaHost`
+(`src/Puck.World.Server/WorldArenaHost.cs`); `transformState` instead calls
+`IArenaTransformHost.TryTransform` directly, since a transform addresses a
+selection of cells rather than one. Either way the arm folds into one of the
+SAME `WorldMutation` state kinds the catalog above already names — never a
+shape unique to rules:
 
-| `.puck` effect statement | `ActionEffect` discriminant | `StateMutation` | Folds through |
+| `.puck` effect statement | `ActionEffect` discriminant | `Mutation` | Folds through |
 |---|---|---|---|
-| `row[key] = rhs` | `setState` | `UpsertCell` (`Write: Set`) | `UpsertStateCell` (49) |
-| `row[key] += rhs` | `addState` | `UpsertCell` (`Write: Add`) | `UpsertStateCell` (49) |
-| `countdown row[key]` | `countdownState` | `UpsertCell` (decrements by the tick's own step, floored at 0) | `UpsertStateCell` (49) |
-| `schedule row[key] in Ns` | `scheduleState` | `UpsertCell` (writes the due tick) | `UpsertStateCell` (49) |
-| `remove row[key]` | `removeStateCell` | `RemoveCell` | `RemoveStateCell` (50) |
-| `push row = rhs` | `pushState` | `Apply(StateTransform.Push)` | `TransformState` (75) |
-| `transform local = call(...)` | `transformState` | `Apply(Transform)` | `TransformState` (75) |
+| `row[key] = rhs` | `setState` | `Write` (`StateWriteKind.Set`), or `WriteText` for a `Text` row | `UpsertStateCell` (49) |
+| `row[key] += rhs` | `addState` | `Write` (`StateWriteKind.Add`) | `UpsertStateCell` (49) |
+| `countdown row[key]` | `countdownState` | `Write` (decrements by the tick's own step, floored at 0) | `UpsertStateCell` (49) |
+| `schedule row[key] in Ns` | `scheduleState` | `Write` (writes the due tick) | `UpsertStateCell` (49) |
+| `remove row[key]` | `removeStateCell` | `Remove` | `RemoveStateCell` (50) |
+| `push row = rhs` | `pushState` | `Push` | `TransformState` (75) |
+| `transform call(...)` | `transformState` | none — `IArenaTransformHost.TryTransform` | `TransformState` (75) |
 | `generate(row: "...")` | `generate` | `Generate` | `Generate` (51) |
-| `transaction { } [onFailure { }]` | groups the statements above atomically (`RuleEvaluator.Effects.FireTransaction`) | — | each grouped effect folds as its own row above |
+| `transaction { } [onFailure { }]` | groups the statements above atomically (`RuleEvaluator.Effects.FireSavepoint`) | — | each grouped effect folds as its own row above |
 | `if Gate { } [else if Gate { }]* [else { }]` | `if` | branches to `Then`/`Else`; each fired effect folds as its own row above | — |
 
-Every one of these still lands on the rule frame first and installs once per
-tick — the cross-cutting "rule writes land on a frame" contract in
+Every one of these still lands on the arena first and installs once per
+tick — the cross-cutting "rule writes land on the arena" contract in
 `SKILL.md` — so the table names the kind a write eventually composes as,
 never a second apply path.
 

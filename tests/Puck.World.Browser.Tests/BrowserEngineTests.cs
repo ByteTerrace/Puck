@@ -146,7 +146,7 @@ public sealed class BrowserEngineTests {
         );
     }
     [Fact]
-    public void Compile_and_judge_one_tick_reports_no_refusals() {
+    public void Compile_and_judge_one_tick_refuses_no_write() {
         var errors = new List<string>();
         var deferred = new List<string>();
 
@@ -155,8 +155,7 @@ public sealed class BrowserEngineTests {
                 utf8Json: ComposedTicTacToeBytes(),
                 errors: errors,
                 deferred: deferred,
-                definition: out var definition,
-                compilation: out var compilation
+                definition: out var definition
             ),
             userMessage: string.Join(
                 separator: "; ",
@@ -164,13 +163,19 @@ public sealed class BrowserEngineTests {
             )
         );
 
-        var session = new BrowserSession(
-            definition: definition!,
-            compilation: compilation!
-        );
+        var session = new BrowserSession(definition: definition!);
         var trace = session.Judge(tick: 1UL);
 
-        Assert.Empty(collection: trace.Refusals);
+        // A gate conjunct that reads an absent cell is reported and read false; it refuses no write, which is what
+        // this document's own rules must not do on a tick nobody has played.
+        Assert.DoesNotContain(
+            collection: trace.Refusals,
+            filter: refusal => !string.Equals(
+                a: refusal.Effect,
+                b: "gate",
+                comparisonType: StringComparison.Ordinal
+            )
+        );
         Assert.NotNull(@object: trace.Rules);
         Assert.NotNull(@object: trace.Writes);
     }
@@ -280,7 +285,7 @@ public sealed class BrowserEngineTests {
         );
     }
     [Fact]
-    public void ReadRow_and_WriteRow_round_trip_through_the_frame() {
+    public void ReadRow_and_WriteRow_round_trip_through_the_arena() {
         var errors = new List<string>();
         var deferred = new List<string>();
 
@@ -288,14 +293,10 @@ public sealed class BrowserEngineTests {
             utf8Json: ComposedTicTacToeBytes(),
             errors: errors,
             deferred: deferred,
-            definition: out var definition,
-            compilation: out var compilation
+            definition: out var definition
         ));
 
-        var session = new BrowserSession(
-            definition: definition!,
-            compilation: compilation!
-        );
+        var session = new BrowserSession(definition: definition!);
         var scalarRow = definition!.State.FirstOrDefault(predicate: row => ((row.Kind == CellKind.Int) && !row.IsKeyed && (row.Field is null)));
 
         Assert.NotNull(@object: scalarRow);
@@ -305,11 +306,21 @@ public sealed class BrowserEngineTests {
             key: StateRow.SlotKey.Value
         );
 
+        Assert.Equal(
+            expected: nameof(CellKind.Int),
+            actual: before.Kind
+        );
+
+        var next = (long.Parse(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            s: before.Value!
+        ) + 1);
+
         Assert.True(
             condition: session.TryWriteRow(
                 row: scalarRow.Name.Value,
                 key: StateRow.SlotKey.Value,
-                value: (before.Value + 1),
+                value: next,
                 add: false,
                 reason: out var reason
             ),
@@ -322,7 +333,7 @@ public sealed class BrowserEngineTests {
         );
 
         Assert.Equal(
-            expected: (before.Value + 1),
+            expected: next.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
             actual: after.Value
         );
     }
@@ -335,14 +346,10 @@ public sealed class BrowserEngineTests {
             utf8Json: ComposedTicTacToeBytes(),
             errors: errors,
             deferred: deferred,
-            definition: out var definition,
-            compilation: out var compilation
+            definition: out var definition
         ));
 
-        var session = new BrowserSession(
-            definition: definition!,
-            compilation: compilation!
-        );
+        var session = new BrowserSession(definition: definition!);
         var rows = session.Rows();
 
         Assert.Equal(
@@ -359,14 +366,10 @@ public sealed class BrowserEngineTests {
             utf8Json: ComposedTicTacToeBytes(),
             errors: errors,
             deferred: deferred,
-            definition: out var definition,
-            compilation: out var compilation
+            definition: out var definition
         ));
 
-        var session = new BrowserSession(
-            definition: definition!,
-            compilation: compilation!
-        );
+        var session = new BrowserSession(definition: definition!);
         var first = session.StateHash();
         var second = session.StateHash();
 

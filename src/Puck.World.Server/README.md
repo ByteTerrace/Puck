@@ -14,10 +14,13 @@ presentation and backend assembly. The composition root that hosts it is
 
 Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking`,
 `Puck.Storage`, `Puck.Hosting`, and—through the schema—`Puck.State`, whose
-reader, catalog, topologies, and rule evaluator the tick runs; `WorldServer` is
-the evaluator's host (`WorldServer.RuleHost.cs`: the mutation door, preflight
-scopes, the world's effect arms—over a value frame, `WorldServer.RuleFrame.cs`,
-see below), and interactions and decisions stay here as
+reader, catalog, topologies, and rule evaluator the tick runs; `WorldRuleHost`
+is the evaluator's host (`WorldRuleHost*.cs`: the reads, the mutation door, the
+world's effect arms—over the arena, `WorldServer.Arena.cs`, see below—plus the
+queries, patterns, decisions, trace, diagnostics, flock affinities, identity
+facts and influence facts), reached from the server as
+`WorldServer.RuleHost`, and
+interactions and decisions stay here as
 the rule kinds only a world evaluates. The addon guest runtime itself is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md), which references this
 project rather than the reverse—see `IWorldAddonHost` below.
@@ -58,7 +61,7 @@ contact solves against the compiled solid field
 every list it carries (`World`/`Body`/`Identity`/`Lattices`), taken at
 construction and again on every `with`, so a candidate that changes shape is
 always a new `StateRaw` reference—the batch compose path
-(`WorldServer.MutationCompose.Batch.cs`) commits each cell write through
+(`WorldDocument.Compose.Batch.cs`) commits each cell write through
 `WithWorldState` rather than editing a shared row list in place, and
 `WorldStateCatalogLawTests` pins that an in-place edit of a caller's own array
 can never reach an already-built section. `WorldDefinition.StateCatalog`
@@ -90,7 +93,12 @@ batch, a grant submitted before a command is visible to that command, and a
 mutation followed by an `Immediate` read is serialized by the console's drain
 barrier (see the console section of
 [`Puck.World`'s README](../Puck.World/README.md)). Results return through
-typed completions (`WorldSubmissionResult`), and deliveries fan out through
+typed completions (`WorldSubmissionResult`); its `Mutation` case carries a
+`WorldMutationOutcome`—the applied/refused decision bound to the exact actor
+and payload, independent of a `WorldMutationPersistenceStatus`
+(`NotRequested`/`Pending`/`Durable`/`RecoveryRequired`) and, once durable, a
+`WorldDurableWatermark` naming the covering root publication, checkpoint, and
+journal sequence. Deliveries fan out through
 `WorldOutputHub.cs`, which supports multiple subscribed sinks. A sink's live
 definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write—see `Puck.World.Protocol`'s
@@ -113,6 +121,17 @@ group root and fences its explicit publication barrier. The CLI's Azure adapter
 uses this coordinator for deployment, rollback, and explicit group restore.
 The restore implementation is undergoing local acceptance; cloud acceptance is
 still outstanding.
+
+Each durable operation advances through one required action per phase, with
+its own recovery behavior on failure:
+
+| Phase | Required action and recovery behavior |
+|---|---|
+| Prepare | Verify artifacts, pair qualification, retention, free capacity, and current state on an isolated copy with external effects disabled. Failure leaves the serving release untouched. |
+| Drain | Close new admission and transfer initiation across the group, settle outstanding cross-boundary obligations, freeze at a pump boundary, and await final persistence. Record the coherent recovery roots. |
+| Activate | Stop the old writer, acquire fresh fences, recheck the final frozen state, apply the admitted transition to a candidate recovery branch in storage, and boot the target privately. Preserve the recorded recovery roots. |
+| Verify | Exercise recovery and continuation using the target image, persist its initial authoritative state, and check health and bindings. Verification writes must not manufacture player progress or external effects in the production state. |
+| Commit | Publish the active release and its coherent state references durably, then open admission. An interrupted admission-open step resumes the committed release. |
 
 New packages include `coordinatorContract: puck.world.release.restore.v1` in
 their canonical identity. Existing manifests without that member retain their
@@ -250,71 +269,91 @@ between independently packaged binaries. Bootstrap commits have no predecessor
 and advertise no rollback target. Finalization also works after a failed rollback
 returns to the source, retaining its history and recovery points.
 
-## Rule effects land on a frame (`WorldServer.RuleHost.cs`, `WorldServer.RuleFrame.cs`)
+## Rule effects land on the arena (`WorldRuleHost.cs`, `WorldServer.Arena.cs`, `WorldRuleHost.Arms.cs`)
 
-`EvaluateWorldRules` loads a `StateFrame` (`Puck.State`) from the installed
-document once at the start of the tick's rule evaluation and holds it active
-for `IRuleReader.Store` for that call only—a read from anywhere else (flock
-affinity among them) falls back to reading the installed document directly,
-which is the frame-commit contract: reads outside a tick's own rule
-evaluation never see a mid-evaluation frame the tick's own fold has not yet
-installed. A cell write, push, board combine, write-set, or a transfer by
-first/last/key answers straight from the frame's value array—no document
-compose—and queues its mapped `WorldMutation` on one flat, firing-order list
-(`m_ruleFrameMutations`) that a rejected preflight scope truncates back to its
-own start. Placement and HUD effects join that same ordered list after their
-candidate passes the ordinary document checks. At the end of the tick's evaluation, `FoldRuleFrameMutations`
-installs that list as ONE mutation (a single member installs as itself,
-several as a `Batch`) through the ordinary door—one compose, one
-touched-row validation, one journal entry, one delivery—replayed from the
-document the tick actually started on, never from whatever the frame's own
-cross-row path left `m_definition` at mid-tick. A tick that wrote nothing
-folds nothing.
+`WorldServer` is the rule evaluator's host: it implements `IStateReader`,
+`IEffectHost`, `IArenaTransformHost`, `IRuleOwner` and `IRuleRefusalSink`, and
+every state read and write of a tick addresses one `StateArena` (`Puck.State`).
+The arena is the authoritative state during a tick; the installed document is
+its export at the end of the tick's rule evaluation (`InstallArenaExport`), so a
+reader outside the rule loop sees the state as of the previous export.
 
-Shapes a value frame cannot answer—a text cell (the frame holds only
-raw integers), a cell removal, a generator draw (advances a row's own
-`DrawCursor`/`DrawnMasks`, not a cell value), a shuffle, and a transfer by
-`Random` or `Slice` (both need the generator stream `First`/`Last`/`Key`
-never touch)—and minting a new cell of a keyed row (a frame's layout is
-fixed-size once built) all fall to `TryApplyCrossRowStateMutation`: it
-replays this tick's own queued mutations plus the new one as one
-`WorldMutation.Batch` through the batch workspace below, from the tick's
-starting document, and re-derives the frame from the result so a later
-same-tick read (another rule's gate, or the very next effect) sees it. A cell
-write or removal among the replayed members shares that one workspace row-list
-copy instead of paying for a fresh whole-document compose per member, so a
-tick with many cross-row writes (a Klondike deal) no longer recomposes its
-whole prefix once per already-queued member.
-Document effects use the same queued prefix when preparing their candidate,
-so a later effect sees earlier numeric writes as well as earlier placement or
-HUD changes. Nothing here installs for real—the tick's own fold still owns that.
+One rule firing is one arena journal scope: every effect it produces lands in
+that scope, which commits when each required effect succeeds and rewinds
+otherwise, recording one counted refusal naming the effect that refused. An
+effect arm the host cannot rewind — a cue, a pose, a body motion, a document
+row upsert — declares `EffectNeeds.Irreversible`, is validated with
+`EffectFiring.Preflight` set before the commit, and fires after it.
 
-A preflight scope (an explicit `transaction` effect, or the transient
-validate-then-fire pass every top-level state effect takes before it commits
-for real) tracks the frame's own journal mark, its slice of the mutation
-list, and a stamp of how many cross-row reloads have happened so far.
-Closing the scope compares that stamp: unchanged, an ordinary journal rewind
-(or commit) suffices; changed, the frame is re-derived from `m_definition` as
-the scope's own close already left it, since a cross-row reload's whole-frame
-`Load` bypasses the journal and a plain rewind cannot undo it. Committing a
-scope keeps its speculative candidate and ordered writes; it does not install
-a separate document half. Rejecting a transaction discards its state and
-placement changes together; authored transactions cannot contain another transaction.
-Compiled handles continue using the installed program's catalog during speculative
-document-value refreshes, because rule effects cannot change row declarations.
+A submitted operation takes the same kernels. `WorldArenaTransforms.TryApply`
+resolves one authored `StateTransform` to ordinals and interned keys through the
+rule compiler, applies it inside a journal scope on an arena loaded from the
+definition it composes against, reads the candidate back, and rewinds, so the
+composition is pure and the ordinary mutation pipeline installs the result. The
+one authority an operation carries is decided there, at the ingress that stamped
+the acting principal: an `observe` submitted by anyone but the world's own rules
+is refused by name, and a phase guard admits against the arena's own
+phase-sequence column before advancing it.
 
-`WorldMutation.Batch` composes as one edit
-(`WorldServer.MutationCompose.Batch.cs`). A cell write or removal lands in a
-workspace—one private copy of the row list, written in place by every such
-member—while a member of any other kind composes through its own arm and
-the next cell write opens a fresh workspace over its result. The running
-candidate is re-seated over the workspace (`SyncWorkspace`) only where
-something other than a cell write needs it—before a non-cell member
-composes, before a document-value rehydration actually reads it back, and
-once more when the batch finishes—never once per placement:
-`WorldStateSection` owns an immutable copy of its own row list, so handing the
-workspace to it is the one point that copy is paid for, and a run of
-independent cell writes pays it once for the whole call. The document-value
+A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
+relayouts the arena in place rather than replacing it, so the participant and
+identity lanes ride across and everything holding the store keeps holding it.
+
+### The action-state slot lanes (`WorldActionStateLane.cs`)
+
+Every body's named action state — the `state.body` and `state.identity`
+declarations `FixedWorldKit.CompileActionStateFile` compiles into one world-wide
+register file — is stored in the arena's slot lanes and nowhere else.
+`WorldActionStateLane` resolves each register slot to its catalog row once per
+installed catalog (`WorldServer.AdoptLayout`), and each `WorldBody` holds only
+that binding plus its own entity index, which is the lane ordinal on both lanes.
+
+The roster is the entity table, by construction rather than by convention at
+each caller: `WorldPopulation.Entry.Active` is the only thing that joins an
+ordinal — birthing every register at its authored initial — and the only thing
+that releases one. A slot that stops being occupied therefore clears what it
+answered and the next occupant is born rather than inheriting it, and a call
+site that marked a slot occupied without minting a body would still get a
+joined ordinal instead of one that silently reads zero. `BindActionStateLane`
+hands a body its address only; a restore marks the slot occupied before writing
+the registers it captured. A binding reconciles the roster against the live
+table, so a fresh arena re-joins every active ordinal.
+
+Replacing the arena does not lose what the lanes hold. `SyncArena`'s relayout
+carries them across, and its `BuildArena` fallback — reached when a re-declared
+row set refuses to lay out or load — inherits them through the same
+`StateArena.CopyLanesTo`, so the fallback is a document rebuild rather than a
+silent re-birth of every live body's registers.
+
+The values therefore fold into the `Arena` hash component with the rest of the
+store; `BodyActionState` folds the declaration and the per-lane trigger runtime
+(press latches, fact-held edges, recency clocks) only. A checkpoint carries the
+lane image through `WorldBody.TransferState.ActionState`, captured by
+`CaptureActionState` and written back by `RestoreActionState`; a federation
+arrival loads its carried registers into the lane through
+`ApplyTransferActionContinuity`, settling each through the destination's own
+envelope — a range clamps to its nearest admitted value, a closed set has none
+to clamp to and settles the register to its authored initial, narrated by name
+on `body.arrival`. A register the arrival does not name keeps what this
+authority's own birth put there. `BodyActionStateLaneLawTests` pins all of it.
+
+A cell write or removal composes through an arena, not through the row list:
+the write's row record decides its kind and its cycle from the candidate built
+so far, and the store, the envelope, the capacity, the eviction and the settled
+clock are the arena's, so a submitted write and a rule's own write are admitted
+by one rule. A lone write loads an arena, applies, exports and rewinds
+(`WorldDocument.Compose.cs`'s state-cell arms); `WorldMutation.Batch`
+composes as one edit over ONE arena for all of its cell members
+(`WorldDocument.Compose.Batch.cs`). A member of any other kind composes
+through its own arm, and one that rewrites the state section drops the arena so
+the next cell member loads a fresh one over what that member produced. The
+running candidate is re-seated over the arena's export only where something
+other than a cell write needs it—before a non-cell member composes, before a
+document-value rehydration actually reads it back, and once more when the batch
+finishes—never once per write: `WorldStateSection` owns an immutable copy of
+its own row list, so the export is the one point that copy is paid for, and a
+run of independent cell writes pays it once for the whole call. The
+document-value
 refresh runs against one referenced-row set per batch
 (`WorldStateDocumentValues.CollectReferencedRows`), collected on the first
 state member and reused until a member that can add or drop a reference (a
@@ -504,16 +543,20 @@ a prebuilt string cache on the evaluation path.
 `WorldPrincipal.World`'s structural exemption so recovery is journalled rather
 than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted ownership offer),
 `WorldTransferEscrow.ReclaimExpired` (an unclaimed destination reservation),
-`SweepContributionTenure` (`WorldServer.Contributions.cs`—a presence-tenure
+`SweepContributionTenure` (`WorldTick.Contributions.cs`—a presence-tenure
 contribution slot whose watched `adjacencies` row has read dropped past the
-slot's own `graceSeconds`), and `WorldPopulation.ReclaimExpiredParks` (a
+slot's own `graceSeconds`; the slots are indexed by watched link once per
+document revision and the armed deadlines ride a `WorldDeadlineTable`, so a
+quiet tick reads one liveness verdict per distinct link and no placement row —
+`WorldTick.TenurePlacementReads` is the read-back), and `WorldPopulation.ReclaimExpiredParks` (a
 disconnected seat or peer past its reconnect grace). `SweepDeadlines`
-(`WorldDeadlineTable.cs`) runs the first three as one step beside rules; parks
-stays a separate call after `SweepPlacementResponses`
-(`WorldServer.Responses.cs`—right after `StepFields`, so it reads this
+(`WorldTick.Step.cs`) runs all four as one step beside rules, each off its own
+sorted `WorldDeadlineTable`, so a tick with nothing due pays four front
+comparisons and walks none of the four collections. Then
+`SweepPlacementResponses` (`WorldTick.Responses.cs`—right after `StepFields`, so it reads this
 tick's own lattice writes: the first `WorldPlacementResponse` entry whose
 condition holds at a placement's coupled cell becomes its prototype) and
-`SweepPlacementDeals` (`WorldServer.Deals.cs`—right after the response
+`SweepPlacementDeals` (`WorldTick.Deals.cs`—right after the response
 sweep, so the rule frame has folded and a cell a rule wrote this tick deals on
 this tick: each placement carrying a `WorldPlacementDeal` is a template whose
 children follow its keyed row, one `UpsertPlacement`/`RemovePlacement` per
@@ -570,7 +613,7 @@ lattice's own `stepEveryTicks` cadence. `WorldServer` is the
 every other state read uses, and `AddScalarSlot`'s write lands through the
 ordinary `UpsertStateCell` mutation (`WorldPrincipal.World`, journaled,
 undoable), never a bypass—a season row a rule writes and a reaction reads
-can never disagree about the value. `WorldServer.Responses.cs`'s
+can never disagree about the value. `WorldTick.Responses.cs`'s
 `WorldPlacementResponse` condition resolves its scalar the same way, by row
 name, since a response trait is authored outside the compiled reaction
 program and carries no precompiled handle.
@@ -617,7 +660,7 @@ the reserved local seats and the rest host simulated stand-ins and network
 peers. The client reserves 128 full-detail catalog rigs and represents later
 active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
-action state—including its live `Scale` multiplier (`WorldBody.Scale.cs`),
+action-state machinery—including its live `Scale` multiplier (`WorldBody.Scale.cs`),
 1 unless `bodies.scaleRow` names a keyed `state.world` row carrying this
 body's cell; `WorldPopulation.SyncBodyScale` resyncs every active body's
 `Scale` wholesale from that row at the same `Install`/admission choke points
@@ -636,11 +679,18 @@ target), a wall hold's travel speed, and a
 pull's own rate (`WorldBody.Hold.cs`)—a shrunk body's fall and depenetration stay
 proportionally gentle rather than free-falling one tick of full-scale gravity
 into a collider whose own contact skin margin it can no longer absorb; the
-client reads the same row live and folds it into the rendered rig. Only the
-self-collision sweep (`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads
-the scaled volumes—body-vs-body contact, overlap events, adjacency transfer
-sweeps, and the cross-boundary continuum trajectory still read the kit's
-shared unscaled copy.
+client reads the same row live and folds it into the rendered rig and the
+seat chase camera's orbit distance and look-at height, so a shrunk body stays
+framed rather than shrinking to a speck on screen. Body-vs-body contact
+(`WorldPopulation.ResolveDynamicContacts`), overlap events (`WorldEventFeed`),
+the cross-boundary continuum trajectory (`WorldBody.ApplyContinuumTrajectory`),
+the adjacency sweep's local side (`WorldAdjacencyContactField`), and a rigid
+body's own static-contact sweep (`WorldBody.AdvanceRigid`) all read each
+body's scaled collider volumes now, so a shrunk body's contact with another
+body agrees with its contact with the world. The one residual gap: the
+adjacency sweep's remote side still reads a neighbour authority's unscaled
+shared collider, because a delivered `EntitySnapshot`/`IWorldAdjacencyNeighbour`
+carries no per-entity `Scale` on the wire yet.
 
 A placement's `Inhabit.Count` (`Puck.World.WorldPlacementInhabitCount`) is
 either an authored literal or a cell reference (`{"row", "key"}` naming an Int
@@ -713,6 +763,15 @@ body. Without it, the normal remains a grounding fact, so a rounded lip cannot
 silently pitch the body. A live collision rebuild installs the new policy
 beside the new provider; the adoption rule is authoritative on the next step,
 and a defined new ambient direction reseats the held axis then.
+
+A grounded body's inward catch-up bias against a curving surface
+(`WorldMotion.GroundStick`, `groundStick`) is its own `motion` row field,
+independent of `Speed`, never derived from a kit's resolved move speed:
+deriving it from speed regresses slope climbing under `GradientDerivedUp`,
+because a faster kit's larger inward bias converts to downhill drift under
+depenetration rather than held contact — a shipped world would need to author
+`GradientDerivedUp` to exercise the regression at all, and none does.
+`world.kits` echoes it alongside the other feel fields.
 
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position
@@ -1053,7 +1112,7 @@ have resolved, reading a body-anchored tether's anchor from the SAME tick's
 just-advanced pose.
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
-`WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,
+`WorldRuleHost.Decisions.cs` owns each binding's selected option, local PCG state,
 reconsideration and commitment timers, and interrupt-edge memory. It reuses
 ordinary predicate/expression/effect evaluation and keeps state through an
 unchanged-policy recompile. The server checkpoint includes these bindings;
@@ -1063,7 +1122,7 @@ hashing visits their sorted keys without allocating a sorting buffer.
 and consumed draw count. A policy edit starts a new decision episode rather
 than applying old option ordinals to a different policy.
 Parameterized neighbor options also retain the selected body's generation.
-`WorldServer.DecisionNeighbors.cs` freezes poses once before ordinary rules,
+`WorldRuleHost.DecisionNeighbors.cs` freezes poses once before ordinary rules,
 shares lazily rebuilt power-of-two range grids, and uses the physics sampler's
 inspection bound even in a coincident crowd. Per-option reusable choice buffers
 avoid a population-sized stack or per-reconsideration allocation. The selected
@@ -1287,9 +1346,9 @@ on `HasNarrationSink` first and re-bind what the line needs into locals scoped
 to that one branch—the compiler hoists a captured loop-body variable into a
 display class allocated at its own declaration, not at the closure literal, so
 an unguarded capture allocates every iteration regardless of whether a sink is
-attached (`WorldServer.Responses.cs`'s `SweepPlacementResponses` is the worked
-example). A handful of `Console.Error` sites remain in `WorldServer.MutationApply.cs`,
-`WorldServer.RuleHost.cs`, `WorldServer.Step.cs`, and `WorldPopulation.Admission.cs`,
+attached (`WorldTick.Responses.cs`'s `SweepPlacementResponses` is the worked
+example). A handful of `Console.Error` sites remain in `WorldDocument.Apply.cs`,
+`WorldRuleHost.cs`, `WorldTick.Step.cs`, and `WorldPopulation.Admission.cs`,
 owned by other in-flight work; `build/Architecture.props`'s
 `PuckArchitectureDeniedApi` lane states the eventual destination (no
 `System.Console` reference under this project) and stays disabled until those
@@ -1437,7 +1496,64 @@ A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 silently reassign or deactivate a connected human's body—see "The entity
 table" above.
 
+## Persistence (`WorldPersistence*.cs`)
+
+`WorldPersistence` is the last facade and owns no state of its own: journal
+undo and its depth horizon, the authority checkpoint's capture and restore, the
+simulation state hash, and the replay timeline gate. It walks the other facades
+through its own private back-reference, which is exactly why it holds nothing.
+`WorldServer.Persistence` reaches it, and `EnqueueUndo`, `EnforceJournalDepth`,
+`FromCheckpoint`, `TryCaptureCheckpoint`, `RestoreCheckpoint` and
+`TryApplyJournalTailMutation` stay on the server as forwarders.
+
+A section whose state belongs to another facade reaches persistence through one
+seam, `IWorldPersistedSection<TCheckpoint>` (append-hash, capture, restore),
+which the owning facade implements explicitly: `WorldTick` for the
+board-enforcement latch and `WorldRuleHost` for the decision runtime, the
+latter through `IWorldPersistedDecisions`, which adds the checkpoint validation
+only the decision policies can answer. Both the fold and the capture walk the
+section in an order derived from its own entries, never from insertion order.
+
+## The tick (`WorldTick*.cs`)
+
+`WorldTick` is the tick facade of `WorldServer`: the one ordered domain and the
+per-tick intent queue, the step clock, the co-driving contribution fold and its
+`body.channels` read-back, and the per-tick engagement, transfer, field, music,
+response, placement-deal, contribution-tenure and board-enforcement work, plus
+the snapshot each completed tick emits. It reaches the server through its own
+private back-reference; `WorldServer.Tick` reaches it, and `Step`, `Advance`,
+`Submit`, `EnqueueIntent`, `ApplyIntentSubmission`, `ApplyServerEvent`,
+`DrainAdministrative`, `DispatchServerEvent`, the transfer surface and the
+`Describe*` read-backs stay on the server as forwarders.
+
+## The document pipeline (`WorldDocument*.cs`)
+
+`WorldDocument` is the document facade of `WorldServer`: the live
+`WorldDefinition`, the journal base it is an edit history over, the buffered
+live-edit ops, the mutation compose (`WorldDocument.Compose*.cs`) and apply
+(`WorldDocument.Apply.cs`) pipeline, the generate arm, state-transform
+admission, the solid field, and the per-tick delivery decision. It reaches the
+server through its own private back-reference; `WorldServer.Document` reaches it, and
+`Definition`, `JournalLength`, `SolidField`, `SolidRevision`, `Compact`,
+`ApplyCommand`, `ApplyComposition`, `ApplyDesignation`, `ApplyScreenOp`,
+`AttachAddons`, `AttachSink`, `EnqueueMutation`, `EnqueueRebuild`,
+`ResolveRebuildNeighbours` and `TryApplyMutation` stay on the server as
+forwarders. The arena build and install (`WorldServer.Arena.cs`) stay on the
+server: every facade reads the same store.
+
 ## Principals and grants (`WorldGrants.cs`)
+
+`WorldGrants` is the grants facade of `WorldServer`: the capability table
+itself (`WorldGrants.cs`, `WorldGrants.RoleAuthority.cs`) plus the three halves
+that run against it—the actor-checked grant/revoke doors and the mutation
+admission rule (`WorldGrants.Application.cs`), the ownership escrow deadline
+sweep (`WorldGrants.Ownership.cs`), and peer/session admission with its grant
+minting (`WorldGrants.Admission.cs`). It reaches the server through its own
+private back-reference; the server keeps `Grant`, `Revoke`, `GrantRows`,
+`TryAdmitMutation`, `ApplySession`, `ApplySessionLever`,
+`TryAdmitPeerConnection` and `DisconnectPeerConnection` as forwarders, and
+`WorldServer.GrantTable` is the facade itself where `WorldServer.Grants`
+remains the narrow `IWorldGrantsView`.
 
 Every write submission carries its acting `WorldPrincipal`—a seat, the
 console, a named addon guest, or a generation-bearing `Peer(index,
@@ -1515,6 +1631,14 @@ ownership latching is unified through this table (control applications'
 occupancy included—do not invent a parallel ownership mechanism), and the
 authority decision is deliberately not modeled as a lattice or quotient
 (see the state document's "What is NOT algebra" entry).
+
+A grant may also name a group as its principal (`WorldPrincipal.Group`,
+token `group:<id>`), held by every current member whose declared role
+(`WorldGroupKind`'s role→capability map) reaches the granted capability. This
+membership expansion (`WorldGrants.TryRoleGroupExpansion` over
+`GroupRoleReach`, rule `GrantRule.GroupHold`) is read fresh from the live
+role projection on every check, so a departed, null-role, or differently-roled
+member never retains authority through a stale group hold.
 
 ## Screen machines (`IWorldMachineHost.cs`)
 
@@ -1617,11 +1741,9 @@ only on a successful poke, so an as-yet-unbooted machine is retried every
 tick rather than silently latching a value it never delivered. A `Read`
 binding peeks the machine (`TryPeekMessage`) and, when the value differs from
 the last value it mirrored, applies one `WorldMutation.UpsertStateCell`
-(`WorldPrincipal.World`) through the ordinary door—the same mutation shape
-a rule-authored frame's own single-cell write folds into
-(`WorldServer.RuleFrame.cs`), without this seam reaching into that frame—
-and calls `WorldOutputHub.DeliverState`, matching every other engine-driven
-per-tick cell write in this project (`WorldServer.Fields.cs`). Both memos are
+(`WorldPrincipal.World`) through the ordinary door, without this seam reaching
+into the arena the tick's own rules write, and calls `WorldOutputHub.DeliverState`, matching every other engine-driven
+per-tick cell write in this project (`WorldTick.Fields.cs`). Both memos are
 keyed by (engine screen index, bus address), so an unmoved value costs one
 dictionary lookup and nothing past it: the peek/poke round trip through
 `Puck.GamingBricks.QueuedMachineWorker`'s marshaled worker thread is a real,
@@ -1656,20 +1778,30 @@ persists it. The concrete host—`WorldAddonRuntime`, the mount sequence,
 the WASM guest ABI decode, the addon.mutate refusal catalog—is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md).
 
-## Identity facts (`WorldServer.IdentityFacts.cs`)
+## Identity facts (`WorldRuleHost.IdentityFacts.cs`)
 
 A world declaring the reserved `identity` lane row (`WorldIdentityFactLane`, a
 keyed `int` row in `state.world`) carries each seated identity's facts in that
-body's cells, keyed `<bodyIndex>-<fact>`. The mirror runs once per tick inside
-`LoadRuleFrame`, before any rule reads: a body whose `Profile` reference or
-whose identity's `FactsRevision` moved since the last sync reloads its lane—
-its cells the identity does not carry are written 0, every fact the identity
-carries lands as a lane write—through the same `IRuleHost.TryApply` door a
-rule's own cell write takes, so the writes queue on the frame, fold once at
-the end of the tick, journal, undo, and replay like any rule-written cell. A
+body's cells, keyed `<bodyIndex>-<fact>`. The mirror runs once per tick at the
+start of the tick's rule evaluation, before any rule reads: a body whose
+`Profile` reference or whose identity's `FactsRevision` moved since the last
+sync reloads its lane—its cells the identity does not carry are written 0,
+every fact the identity carries lands as a lane write—through the same arena
+door a rule's own cell write takes, and rides the end-of-tick export like any
+rule-written cell. A
 lane write that would leave a cell as it is queues nothing, so a quiet tick
 moves no row version. Cells are never removed: a HUD binding a lane cell must
 find it declared, and the row's authored `capacity` bounds bodies times facts.
+
+Both of the arena's slot lanes are sized from `population.capacity`, because
+both are per-body: a body's named action state rides the participant lane for a
+`state.body` declaration and the identity lane for a `state.identity` one, each
+at the body's own entity index. `Puck.World.Schema`'s `WorldSlotLanes.Options`
+is the one function that says so, and every host that builds an arena over a
+world document calls it — this server, a compose's throwaway arena, a transform
+preflight, and `Puck.World.Browser`'s own session. A host that sized them
+differently could not have its arena hash compared with another's, because the
+lane widths are folded columns of `StateArena.ComputeHash`.
 
 The mirror caches the lane handle for the current rule catalog. Row selection,
 key enumeration, and unchanged-value checks use its document-lane ordinal;
@@ -1936,8 +2068,9 @@ disconnect-driven revoke; the client's own query replies prove the Completion
 lane round-trips. No persisted battery exists for this yet (a live owner
 conversation about runner disposition); do not add one without asking.
 
-Discrete tabletop and tactics state is folded by `WorldStateTransforms` through
-the existing mutation journal and transaction preflight. `WorldBoardQueries`
+Discrete tabletop and tactics state is folded by `WorldArenaTransforms` — one
+resolved operation applied through the arena kernels a rule firing fires through
+— and installed through the existing mutation journal and transaction preflight. `WorldBoardQueries`
 reads bounded topology scratch spans; physical fields remain a separate runtime
 allocation. `StateObservations(row)` passes `observe state:<row>` and then the
 row/cell audience policy for the authenticated submission stamp. Observation

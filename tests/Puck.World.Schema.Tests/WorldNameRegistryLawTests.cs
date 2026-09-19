@@ -84,8 +84,8 @@ public sealed class WorldNameRegistryLawTests {
                   "forEach": "board",
                   "gate": { "$type": "compareState", "state": "turn", "comparison": "Equal", "comparandState": "$reduce:count:board" },
                   "effects": [
-                    { "$type": "setState", "state": "turn", "expression": { "tokens": [ { "$type": "state", "name": "turn", "key": "$cell:board:$each" }, { "$type": "boardShift", "topology": "cube", "direction": "north" } ] } },
-                    { "$type": "addState", "state": "board", "key": "$each", "expression": "turn + 1" }
+                    { "$type": "setState", "state": "turn", "expression": { "instructions": [ { "op": "Operand", "name": "turn", "key": "$cell:board:$each" }, { "op": "BoardShift", "topology": "cube", "index": "north" } ] } },
+                    { "$type": "addState", "state": "board", "key": "$each", "expression": { "instructions": [ { "op": "Operand", "name": "turn" }, { "op": "Constant", "value": 1 }, { "op": "Add" } ] } }
                   ]
                 }
               ]
@@ -125,23 +125,23 @@ public sealed class WorldNameRegistryLawTests {
         );
         Assert.Equal(
             expected: "twin_turn",
-            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["tokens"]![0]!["name"]!.GetValue<string>()
+            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(
             expected: "$cell:twin_board:$each",
-            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["tokens"]![0]!["key"]!.GetValue<string>()
+            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![0]!["key"]!.GetValue<string>()
         );
         Assert.Equal(
             expected: "twin_cube",
-            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["tokens"]![1]!["topology"]!.GetValue<string>()
+            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![1]!["topology"]!.GetValue<string>()
         );
         Assert.Equal(
             expected: "north",
-            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["tokens"]![1]!["direction"]!.GetValue<string>()
+            actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![1]!["index"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_turn + 1",
-            actual: module["rules"]![0]!["effects"]![1]!["expression"]!.GetValue<string>()
+            expected: "twin_turn",
+            actual: module["rules"]![0]!["effects"]![1]!["expression"]!["instructions"]![0]!["name"]!.GetValue<string>()
         );
         Assert.DoesNotContain(
             actualString: text,
@@ -204,13 +204,39 @@ public sealed class WorldNameRegistryLawTests {
             )
         );
     }
+    [Fact]
+    public void AFoldsFamilyAndItsBodysReadsAreBothVisited() {
+        var program = ExpressionProgramJsonConverter.ToNode(program: new ExpressionProgram(Instructions: [Instruction.Fold(
+            operation: ExpressionOp.Count,
+            family: "board",
+            binder: "c",
+            subprogram: 0
+        )]) {
+            Subprograms = [new Subprogram(
+                Arity: 0,
+                Instructions: [Instruction.Operand(name: "armor")],
+                Name: "c"
+            )],
+        });
+        var visited = new List<string>();
+
+        WorldModuleNamespace.Visit(
+            node: program,
+            type: typeof(ExpressionProgram),
+            visitor: (holder, jsonName, value, field) => visited.Add(item: $"{jsonName}={value.GetValue<string>()}")
+        );
+        Assert.Equal(
+            actual: visited,
+            expected: ["family=board", "name=armor"]
+        );
+    }
     [InlineData("3 - board", "3 - a_board")]
     [InlineData("board[from] + game[to]", "a_board[from] + a_game[to]")]
     [InlineData("boardShift(board, cube, L0) & 0xFF", "boardShift(a_board, a_cube, L0) & 0xFF")]
     [InlineData("$board:mask:board:1:1 | min(armor, 2)", "$board:mask:a_board:1:1 | min(a_armor, 2)")]
     [InlineData("`pile-one`[$each] ? 1 : 0", "`a_pile-one`[$each] ? 1 : 0")]
     [InlineData("buffs[board[$each]]", "buffs[a_board[$each]]")]
-    [InlineData("$table:armor:power[$bind:move]", "$table:a_armor:power[$bind:move]")]
+    [InlineData("$table:armor:power[$local:move]", "$table:a_armor:power[$local:move]")]
     [InlineData("$match:run:$zones[game[from]]:prefix", "$match:a_run:$zones[a_game[from]]:prefix")]
     [Theory]
     public void ExpressionRoleRewritesReadsAndTopologyArguments(string authored, string expected) {
@@ -225,7 +251,7 @@ public sealed class WorldNameRegistryLawTests {
     [InlineData("board", "board")]
     [InlineData("12", "12")]
     [InlineData("$each", "$each")]
-    [InlineData("$bind:board", "$bind:board")]
+    [InlineData("$local:board", "$local:board")]
     [InlineData("$cell:board:$value", "$cell:a_board:$value")]
     [InlineData("$zone:$zones[game[from]]:last", "$zone:$zones[a_game[from]]:last")]
     [InlineData("cell:board:target", "cell:a_board:target")]
@@ -291,7 +317,15 @@ public sealed class WorldNameRegistryLawTests {
         );
         Assert.Contains(
             collection: paths,
-            expected: "rules[].effects[][setState].expression{tokens}.tokens[][state].name"
+            expected: "rules[].effects[][setState].expression{instructions}[state].name"
+        );
+        Assert.Contains(
+            collection: paths,
+            expected: "rules[].effects[][setState].expression{instructions}[fold].family"
+        );
+        Assert.Contains(
+            collection: paths,
+            expected: "rules[].effects[][setState].expression{subprograms}{instructions}[state].name"
         );
         Assert.Contains(
             collection: paths,

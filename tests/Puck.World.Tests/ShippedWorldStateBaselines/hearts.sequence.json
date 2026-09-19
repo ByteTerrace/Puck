@@ -1,0 +1,599 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/hearts.world.json",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "heartsTable",
+        "key": "deal",
+        "value": 1
+      }
+    },
+    {
+      "advance": 24
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 46
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 36
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 45
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 38
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 49
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 35
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 50
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 24
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 48
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 51
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 37
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 47
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 34
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 1
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 10
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 1
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 9
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 26
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 34
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 39
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 30
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 42
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 45
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "seat",
+        "value": 3
+      }
+    },
+    {
+      "set": {
+        "row": "heartsAct",
+        "key": "card",
+        "value": 49
+      }
+    },
+    {
+      "add": {
+        "row": "heartsAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 26
+    }
+  ]
+}

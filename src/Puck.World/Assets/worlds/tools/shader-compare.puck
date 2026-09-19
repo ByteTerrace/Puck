@@ -567,4 +567,3 @@ bindingOverlays [
     id: "shader-compare-bindings"
   }
 ]
-

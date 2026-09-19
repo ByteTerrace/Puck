@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>Proves the social-memory replacement primitive — an impression is an ordinary keyed row, and evidence
-/// deduplication is an authored gate over two existing pieces of vocabulary: a <see cref="ValueExpression"/>
+/// deduplication is an authored gate over two existing pieces of vocabulary: a <see cref="ExpressionProgram"/>
 /// packing (origin, sequence) into one Int64 via <c>shiftLeft</c>/<c>bitOr</c>, and
 /// <see cref="ActionPredicate.CompareValue"/> comparing that live pair against a row's own remembered marker. A
 /// Level-mode rule re-evaluates its gate every tick it holds, so without the freshness check a standing claim would
@@ -13,12 +13,11 @@ namespace Puck.World.Tests;
 /// isolate exactly that difference, fed by the same origin/sequence pair, one gated and one not.</summary>
 public sealed class KeyedImpressionDedupLawTests {
     // (1 - trust) * 0.5 — the same bounded blend-toward-one the garden's re-authored belief rows use.
-    private static ValueExpression Blend(string trustRow) => new(Tokens: [
-        new ValueToken.Constant(Value: 1), new ValueToken.State(
-            Key: "0",
-            Name: trustRow
-        ), new ValueToken.Subtract(),
-        new ValueToken.Constant(Value: 0.5m), new ValueToken.Multiply(),
+    private static ExpressionProgram Blend(string trustRow) => new(Instructions: [
+        Instruction.Constant(value: 1), Instruction.Operand(key: "0",
+            name: trustRow
+        ), Instruction.Of(operation: ExpressionOp.Subtract),
+        Instruction.Constant(value: 0.5m), Instruction.Of(operation: ExpressionOp.Multiply),
     ]);
     private static WorldDefinition BuildDocument() {
         var rows = new List<WorldStateRow> {
@@ -34,7 +33,7 @@ public sealed class KeyedImpressionDedupLawTests {
             Max: 65_536L,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: 0
+                    Value: CellValue.Fixed(rawBits: 0)
                 )]
         ),
             new(
@@ -44,7 +43,7 @@ public sealed class KeyedImpressionDedupLawTests {
             Min: 0L,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: 0
+                    Value: CellValue.Int(value: 0)
                 )]
         ),
             new(
@@ -55,7 +54,7 @@ public sealed class KeyedImpressionDedupLawTests {
             Max: 65_536L,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: 0
+                    Value: CellValue.Fixed(rawBits: 0)
                 )]
         ),
         };
@@ -66,9 +65,8 @@ public sealed class KeyedImpressionDedupLawTests {
                 Name: CellName.Parse(candidate: "gated-belief"),
                 Mode: ActionTriggerMode.Level,
                 Gate: new ActionPredicate.CompareValue(
-                    Left: new ValueExpression(Tokens: [new ValueToken.State(
-                            Key: "0",
-                            Name: "mark"
+                    Left: new ExpressionProgram(Instructions: [Instruction.Operand(key: "0",
+                            name: "mark"
                         )]),
                     Comparison: ActionStateComparison.NotEqual,
                     Right: Packed(),
@@ -106,9 +104,9 @@ public sealed class KeyedImpressionDedupLawTests {
             ],
         };
     }
-    private static ValueExpression Packed() => new(Tokens: [
-        new ValueToken.State(Name: "origin"), new ValueToken.Constant(Value: 32), new ValueToken.ShiftLeft(),
-        new ValueToken.State(Name: "seq"), new ValueToken.BitOr(),
+    private static ExpressionProgram Packed() => new(Instructions: [
+        Instruction.Operand(name: "origin"), Instruction.Constant(value: 32), Instruction.Of(operation: ExpressionOp.ShiftLeft),
+        Instruction.Operand(name: "seq"), Instruction.Of(operation: ExpressionOp.BitOr),
     ]);
     private static long Read(WorldDefinition definition, string row) {
         var found = WorldDefinitionRows.FindStateRow(
@@ -119,7 +117,7 @@ public sealed class KeyedImpressionDedupLawTests {
         return (StateRows.FindCell(
             cells: found.Cells,
             key: CellName.Parse(candidate: "0")
-        )?.Value ?? 0L);
+        )?.Value.AsFixed ?? 0L);
     }
     private static WorldStateRow Slot(string name, long initial = 0, bool nonNegative = false) => new(
         Name: CellName.Parse(candidate: name),
@@ -127,7 +125,7 @@ public sealed class KeyedImpressionDedupLawTests {
         Min: (nonNegative ? 0L : null),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: initial
+                Value: CellValue.Int(value: initial)
             )]
     );
     private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
@@ -162,7 +160,7 @@ public sealed class KeyedImpressionDedupLawTests {
             )
         ); // 0.5
 
-        for (var index = 0; (index < 1); index++) {
+        for (var index = 0; (index < 4); index++) {
             fixture.Step();
         }
 

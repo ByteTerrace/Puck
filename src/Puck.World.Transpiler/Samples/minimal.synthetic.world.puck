@@ -2,8 +2,8 @@ schema: "puck.world.definition.v1"
 basis: "worlds/base.puck"
 
 host {
-    width: 1280
-    height: 720
-    fullscreen: false
-    targetHertz: 60
+  width: 1280
+  height: 720
+  fullscreen: false
+  targetHertz: 60
 }

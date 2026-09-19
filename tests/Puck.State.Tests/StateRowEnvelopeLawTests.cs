@@ -39,7 +39,7 @@ public sealed class StateRowEnvelopeLawTests {
         Overflow: overflow,
         Cells: [new StateCell(
                 Key: StateRow.SlotKey,
-                Value: 0L
+                Value: CellValue.Int(value: 0L)
             )]
     );
     private static void Verify(long current, long operand, StateWriteKind write, long? min, long? max, StateOverflow overflow) {

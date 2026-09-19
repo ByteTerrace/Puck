@@ -39,8 +39,7 @@ public sealed class BrowserHostlessIslandTests {
                 utf8Json: ComposedPuckWorldBytes(),
                 errors: errors,
                 deferred: deferred,
-                definition: out var definition,
-                compilation: out var compilation
+                definition: out var definition
             ),
             userMessage: string.Join(
                 separator: "; ",
@@ -48,10 +47,7 @@ public sealed class BrowserHostlessIslandTests {
             )
         );
 
-        return new BrowserSession(
-            definition: definition!,
-            compilation: compilation!
-        );
+        return new BrowserSession(definition: definition!);
     }
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);

@@ -5,18 +5,23 @@ using Puck.Maths;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
+using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lowering;
 
 // `state { world { table/slot/row declarations } }` (the concise-authoring surface over StateRow) — see
 // src/Puck.World.Transpiler/README.md's syntax-contract section for the exact grammar, lowering, and refusals.
 public static partial class WorldDocumentEmitter {
-    private static readonly HashSet<string> AdmittedCellKinds = new(comparer: StringComparer.Ordinal) { "Int", "Fixed", "Bool", "Text" };
-    private static readonly HashSet<string> TableRowModifierNames = new(comparer: StringComparer.Ordinal) { "capacity", "bounds", "advance" };
-    private static readonly HashSet<string> SlotRowModifierNames = new(comparer: StringComparer.Ordinal) { "bounds", "advance" };
-    private static readonly HashSet<string> CellModifierNames = new(comparer: StringComparer.Ordinal) { "advance", "behavior" };
+    // What a declaration's kind annotation and its modifiers admit is its construct's own description; the emitter
+    // reads that rather than keeping a second list beside it.
+    private static readonly HashSet<string> AdmittedRowKinds = WorldConstructs.Choices(
+        enclosing: "world",
+        keyword: "table",
+        member: "kind"
+    );
+    private static readonly HashSet<string> TableCellModifiers = WorldConstructs.CellModifiersOf(enclosing: "world", keyword: "table");
 
-    private static void LowerStateSectionBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
+    private static bool LowerStateSectionBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["state"] is not JsonObject stateObj) {
             stateObj = [];
             parent["state"] = stateObj;
@@ -30,7 +35,23 @@ public static partial class WorldDocumentEmitter {
             span: block.Span
         );
 
+        // Pre-pass: Lower spaces block first so that world block can reference declared spaces
         foreach (var stmt in block.Statements) {
+            if (stmt is BlockNode { Identifier: "spaces", Name: null, Target: null } spacesBlock) {
+                ValidateAndLowerSpacesBlock(
+                    block: spacesBlock,
+                    scope: scope,
+                    stateObj: stateObj,
+                    statePointer: statePointer
+                );
+            }
+        }
+
+        foreach (var stmt in block.Statements) {
+            if (stmt is BlockNode { Identifier: "spaces", Name: null, Target: null }) {
+                continue;
+            }
+
             if (stmt is BlockNode { Identifier: "world", Name: null, Target: null } worldBlock) {
                 LowerStateWorldBlock(
                     block: worldBlock,
@@ -42,6 +63,19 @@ public static partial class WorldDocumentEmitter {
                 continue;
             }
 
+            if (stmt is PropertyNode { Name: "world" } prop) {
+                if (scope.Annotations.ContainsKey("StateWorldDeclarationBlock") ||
+                    scope.Annotations.ContainsKey("StateWorldSqlForm")) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.StateWorldSectionMixed,
+                        message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
+                        span: prop.Span
+                    );
+                    continue;
+                }
+                scope.Annotations["StateWorldArrayForm"] = true;
+            }
+
             scope.CurrentPointer = statePointer;
             ProcessStatement(
                 scope: scope,
@@ -51,9 +85,13 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.CurrentPointer = oldPointer;
+
+        return true;
     }
     private static void LowerStateWorldBlock(BlockNode block, JsonObject stateObj, DocumentScope scope, string statePointer) {
-        if (stateObj.ContainsKey(propertyName: "world")) {
+        if (scope.Annotations.ContainsKey("StateWorldArrayForm") ||
+            scope.Annotations.ContainsKey("StateWorldDeclarationBlock") ||
+            (stateObj.ContainsKey("world") && !scope.Annotations.ContainsKey("StateWorldSqlForm"))) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateWorldSectionMixed,
                 message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
@@ -63,9 +101,15 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        var worldArr = new JsonArray();
+        scope.Annotations["StateWorldDeclarationBlock"] = true;
 
-        stateObj["world"] = worldArr;
+        JsonArray worldArr;
+        if (stateObj["world"] is JsonArray existingArr) {
+            worldArr = existingArr;
+        } else {
+            worldArr = [];
+            stateObj["world"] = worldArr;
+        }
 
         var worldPointer = $"{statePointer}/world";
 
@@ -76,19 +120,24 @@ public static partial class WorldDocumentEmitter {
 
         var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var pendingReferences = new List<PendingStateReference>();
+        long totalVectorBytes = 0;
 
         foreach (var (stmt, rowScope) in Expand(
             block.Statements,
             scope
         )) {
+            JsonObject? companionRow = null;
             var rowObj = (stmt switch {
                 StateTableDeclarationNode table => LowerStateTableDeclaration(
                     scope: rowScope,
-                    table: table
+                    table: table,
+                    totalVectorBytes: ref totalVectorBytes,
+                    companionRow: out companionRow
                 ),
                 StateSlotDeclarationNode slot => LowerStateSlotDeclaration(
                     scope: rowScope,
-                    slot: slot
+                    slot: slot,
+                    totalVectorBytes: ref totalVectorBytes
                 ),
                 StatePileDeclarationNode pile => LowerStatePileDeclaration(
                     pending: pendingReferences,
@@ -138,6 +187,23 @@ public static partial class WorldDocumentEmitter {
                 span: stmt.Span
             );
             worldArr.AppendNode(item: rowObj);
+
+            if (companionRow is not null) {
+                if (companionRow["name"]?.ToString() is { } compName && !seenNames.Add(compName)) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.EmbedsInvalid,
+                        message: $"Companion vector table name '{compName}' collides with an existing row name.",
+                        span: stmt.Span
+                    );
+                } else {
+                    var compIdx = worldArr.Count;
+                    rowScope.SourceMap?.Register(
+                        jsonPointer: $"{worldPointer}/{compIdx}",
+                        span: stmt.Span
+                    );
+                    worldArr.AppendNode(item: companionRow);
+                }
+            }
         }
 
         ValidateStateCrossReferences(
@@ -146,7 +212,13 @@ public static partial class WorldDocumentEmitter {
             worldArr: worldArr
         );
     }
-    private static JsonObject LowerStateTableDeclaration(StateTableDeclarationNode table, DocumentScope scope) {
+    private static JsonObject LowerStateTableDeclaration(
+        StateTableDeclarationNode table,
+        DocumentScope scope,
+        ref long totalVectorBytes,
+        out JsonObject? companionRow
+    ) {
+        companionRow = null;
         ValidateStateRowName(
             kind: "table",
             name: table.Name,
@@ -164,6 +236,43 @@ public static partial class WorldDocumentEmitter {
             ["name"] = table.Name,
             ["kind"] = table.Kind,
         };
+
+        var rootObj = scope.Annotations.TryGetValue("WorldDocumentRoot", out var rObj) && rObj is JsonObject ro ? ro : new JsonObject();
+        string? spaceName = null;
+        (string Name, string Model, string Revision, int Dimensions)? spaceInfo = null;
+
+        if (table.Kind == "Vector") {
+            var spaceMod = table.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "space", StringComparison.OrdinalIgnoreCase));
+            if (spaceMod is not null && spaceMod.Arguments.Count > 0) {
+                if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                    spaceName = idNode.Name;
+                } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                    spaceName = sVal;
+                }
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                spaceName = FindDefaultSpace(rootObj);
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                    message: $"Vector row '{table.Name}' has no space and no default space was declared.",
+                    span: table.Span
+                );
+            } else {
+                rowObj["space"] = spaceName;
+                spaceInfo = FindSpaceInfo(rootObj, spaceName);
+                if (!spaceInfo.HasValue) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                        message: $"Embedding space '{spaceName}' declared on table '{table.Name}' was not found in 'spaces'.",
+                        span: table.Span
+                    );
+                }
+            }
+        }
 
         var cellsArr = new JsonArray();
         var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -186,19 +295,36 @@ public static partial class WorldDocumentEmitter {
 
             var cellObj = new JsonObject { ["key"] = cell.Key };
 
-            cellObj["value"] = LowerStateScalarValue(
-                context: $"table '{table.Name}' cell '{cell.Key}'",
-                expr: cell.Value,
-                kind: table.Kind,
-                scope: scope
-            );
+            if (table.Kind == "Vector") {
+                cellObj["value"] = LowerVectorCellValue(
+                    context: $"table '{table.Name}' cell '{cell.Key}'",
+                    expr: cell.Value,
+                    rootObj: rootObj,
+                    scope: scope,
+                    spaceName: spaceName ?? ""
+                );
+            } else {
+                cellObj["value"] = LowerStateScalarValue(
+                    context: $"table '{table.Name}' cell '{cell.Key}'",
+                    expr: cell.Value,
+                    kind: table.Kind,
+                    scope: scope
+                );
+            }
 
             var sawCellAdvance = false;
             var sawCellNone = false;
 
             foreach (var modifier in cell.Modifiers) {
                 switch (modifier.Name) {
-                    case "advance" when AdmitsBoundsOrAdvance(kind: table.Kind):
+                    case "advance" when AdmitsKind(
+                        enclosing: "world",
+                        keyword: "table",
+                        kind: table.Kind,
+                        member: "advance",
+                        position: WorldMemberPosition.Cell,
+                        scope: scope
+                    ):
                         if (sawCellAdvance) {
                             scope.Diagnostics.ReportError(
                                 code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
@@ -220,7 +346,13 @@ public static partial class WorldDocumentEmitter {
                     case "advance":
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
-                            message: $"'advance' is only legal on an Int or Fixed cell — table '{table.Name}' cell '{cell.Key}' is {table.Kind}",
+                            message: $"'advance' is only legal where the row's kind is {KindList(kinds: AdmittedKindsOf(
+                                enclosing: "world",
+                                keyword: "table",
+                                member: "advance",
+                                position: WorldMemberPosition.Cell,
+                                scope: scope
+                            ))} — table '{table.Name}' cell '{cell.Key}' is {table.Kind}",
                             span: modifier.Span
                         );
 
@@ -256,12 +388,24 @@ public static partial class WorldDocumentEmitter {
             cellsArr.AppendNode(item: cellObj);
         }
 
+        if (table.Initializer is not null) {
+            var initVal = DocumentLowering.LowerValue(expr: table.Initializer, scope: scope);
+            if (initVal is JsonArray initArr) {
+                for (var i = 0; i < initArr.Count; i++) {
+                    cellsArr.AppendNode(item: new JsonObject {
+                        ["key"] = i.ToString(),
+                        ["value"] = initArr[i]?.DeepClone(),
+                    });
+                }
+            }
+        }
+
         if (cellsArr.Count > 0) {
             rowObj["cells"] = cellsArr;
         }
 
         ApplyStateRowModifiers(
-            admitCapacity: true,
+            keyword: "table",
             kind: table.Kind,
             modifiers: table.Modifiers,
             rowName: table.Name,
@@ -290,9 +434,25 @@ public static partial class WorldDocumentEmitter {
             rowObj["domain"] = new JsonObject { ["$type"] = "keys" };
         }
 
+        if (table.Kind == "Vector" && spaceInfo.HasValue) {
+            int? capInt = (rowObj["capacity"] is JsonValue cv && cv.TryGetValue<int>(out var ci)) ? ci : null;
+            ValidateVectorCeilings(table.Name, capInt, cellsArr.Count, spaceInfo.Value.Dimensions, scope, table.Span, ref totalVectorBytes);
+        }
+
+        if (table.Kind == "Text") {
+            var embedsMod = table.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "embeds", StringComparison.OrdinalIgnoreCase));
+            if (embedsMod is not null) {
+                companionRow = CreateEmbedsCompanionRow(table, embedsMod, rowObj, rootObj, scope, ref totalVectorBytes);
+            }
+        }
+
         return rowObj;
     }
-    private static JsonObject LowerStateSlotDeclaration(StateSlotDeclarationNode slot, DocumentScope scope) {
+    private static JsonObject LowerStateSlotDeclaration(
+        StateSlotDeclarationNode slot,
+        DocumentScope scope,
+        ref long totalVectorBytes
+    ) {
         ValidateStateRowName(
             kind: "slot",
             name: slot.Name,
@@ -311,23 +471,74 @@ public static partial class WorldDocumentEmitter {
             ["kind"] = slot.Kind,
         };
 
+        var rootObj = scope.Annotations.TryGetValue("WorldDocumentRoot", out var rObj) && rObj is JsonObject ro ? ro : new JsonObject();
+        string? spaceName = null;
+        (string Name, string Model, string Revision, int Dimensions)? spaceInfo = null;
+
+        if (slot.Kind == "Vector") {
+            var spaceMod = slot.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "space", StringComparison.OrdinalIgnoreCase));
+            if (spaceMod is not null && spaceMod.Arguments.Count > 0) {
+                if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                    spaceName = idNode.Name;
+                } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                    spaceName = sVal;
+                }
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                spaceName = FindDefaultSpace(rootObj);
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                    message: $"Vector slot '{slot.Name}' has no space and no default space was declared.",
+                    span: slot.Span
+                );
+            } else {
+                rowObj["space"] = spaceName;
+                spaceInfo = FindSpaceInfo(rootObj, spaceName);
+                if (!spaceInfo.HasValue) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                        message: $"Embedding space '{spaceName}' declared on slot '{slot.Name}' was not found in 'spaces'.",
+                        span: slot.Span
+                    );
+                }
+            }
+        }
+
         if (slot.Value is { } value) {
-            rowObj["value"] = LowerStateScalarValue(
-                context: $"slot '{slot.Name}'",
-                expr: value,
-                kind: slot.Kind,
-                scope: scope
-            );
+            if (slot.Kind == "Vector") {
+                rowObj["value"] = LowerVectorCellValue(
+                    context: $"slot '{slot.Name}'",
+                    expr: value,
+                    rootObj: rootObj,
+                    scope: scope,
+                    spaceName: spaceName ?? ""
+                );
+            } else {
+                rowObj["value"] = LowerStateScalarValue(
+                    context: $"slot '{slot.Name}'",
+                    expr: value,
+                    kind: slot.Kind,
+                    scope: scope
+                );
+            }
         }
 
         ApplyStateRowModifiers(
-            admitCapacity: false,
+            keyword: "slot",
             kind: slot.Kind,
             modifiers: slot.Modifiers,
             rowName: slot.Name,
             rowObj: rowObj,
             scope: scope
         );
+
+        if (slot.Kind == "Vector" && spaceInfo.HasValue) {
+            ValidateVectorCeilings(slot.Name, capacity: 1, cellCount: 1, spaceInfo.Value.Dimensions, scope, slot.Span, ref totalVectorBytes);
+        }
 
         return rowObj;
     }
@@ -378,6 +589,26 @@ public static partial class WorldDocumentEmitter {
             }
 
             cellsArr.Add(item: new JsonObject { ["key"] = token.Key, ["value"] = true });
+        }
+
+        if (pile.Initializer is not null) {
+            var initVal = DocumentLowering.LowerValue(expr: pile.Initializer, scope: scope);
+            if (initVal is JsonArray initArr) {
+                foreach (var item in initArr) {
+                    var key = item?.ToString() ?? string.Empty;
+                    if (!seenKeys.Add(item: key)) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationDuplicateToken,
+                            message: $"pile '{pile.Name}' declares token '{key}' more than once",
+                            span: pile.Span
+                        );
+
+                        continue;
+                    }
+
+                    cellsArr.Add(item: new JsonObject { ["key"] = key, ["value"] = true });
+                }
+            }
         }
 
         // A pile's body is its cells, so an empty body lowers to an empty cells array rather than none.
@@ -800,10 +1031,23 @@ public static partial class WorldDocumentEmitter {
 
                         break;
                     }
-                    if (!AdmitsBoundsOrAdvance(kind: grid.Kind)) {
+                    if (!AdmitsKind(
+                        enclosing: "world",
+                        keyword: "grid",
+                        kind: grid.Kind,
+                        member: "bounds",
+                        position: WorldMemberPosition.Modifier,
+                        scope: scope
+                    )) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
-                            message: $"'bounds' is only legal on an Int grid — 'grid {grid.Name}' is {grid.Kind}",
+                            message: $"'bounds' is only legal where the row's kind is {KindList(kinds: AdmittedKindsOf(
+                                enclosing: "world",
+                                keyword: "grid",
+                                member: "bounds",
+                                position: WorldMemberPosition.Modifier,
+                                scope: scope
+                            ))} — 'grid {grid.Name}' is {grid.Kind}",
                             span: modifier.Span
                         );
 
@@ -1291,33 +1535,55 @@ public static partial class WorldDocumentEmitter {
         }
     }
     private static void ValidateStateKind(string kind, string rowName, DocumentScope scope, SourceSpan span) {
-        if (!AdmittedCellKinds.Contains(item: kind)) {
+        if (!AdmittedRowKinds.Contains(item: kind)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.UnknownKindAnnotation,
-                message: $"'{rowName}' names an unrecognized kind '{kind}' — expected Int, Fixed, Bool, or Text",
+                message: $"'{rowName}' names an unrecognized kind '{kind}' — expected {string.Join(
+                    separator: ", ",
+                    values: AdmittedRowKinds.Order(comparer: StringComparer.Ordinal)
+                )}",
                 span: span
             );
         }
     }
-    private static bool AdmitsBoundsOrAdvance(string kind) => (kind is "Int" or "Fixed");
-    private static void ApplyStateRowModifiers(JsonObject rowObj, IReadOnlyList<StateModifierNode> modifiers, string kind, string rowName, DocumentScope scope, bool admitCapacity) {
-        var admitted = (admitCapacity
-            ? TableRowModifierNames
-            : SlotRowModifierNames
+    private static void ApplyStateRowModifiers(JsonObject rowObj, IReadOnlyList<StateModifierNode> modifiers, string kind, string keyword, string rowName, DocumentScope scope) {
+        var admitted = ModifiersOf(
+            enclosing: "world",
+            keyword: keyword,
+            scope: scope
         );
+        var slotModifiers = ModifiersOf(
+            enclosing: "world",
+            keyword: "slot",
+            scope: scope
+        );
+        // The modifiers a table admits and a slot does not: a slot is always exactly one cell, so these get their
+        // own refusal rather than the generic one.
+        var tableOnly = new HashSet<string>(
+            collection: ModifiersOf(
+                enclosing: "world",
+                keyword: "table",
+                scope: scope
+            ),
+            comparer: StringComparer.Ordinal
+        );
+
+        tableOnly.ExceptWith(other: slotModifiers);
         var sawCapacity = false;
         var sawBounds = false;
         var sawAdvance = false;
+        var sawEvicts = false;
+        var sawSpace = false;
 
         foreach (var modifier in modifiers) {
             if (!admitted.Contains(item: modifier.Name)) {
                 scope.Diagnostics.ReportError(
-                    code: ((SlotRowModifierNames.Contains(item: modifier.Name) || (modifier.Name == "capacity"))
+                    code: ((slotModifiers.Contains(item: modifier.Name) || tableOnly.Contains(item: modifier.Name))
                         ? PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted
                         : PuckDiagnosticCodes.StateDeclarationUnknownModifier
                     ),
-                    message: ((modifier.Name == "capacity")
-                        ? $"'capacity' is only legal on a 'table' declaration — 'slot {rowName}' is always exactly one cell"
+                    message: (tableOnly.Contains(item: modifier.Name)
+                        ? $"'{modifier.Name}' is only legal on a 'table' declaration — 'slot {rowName}' is always exactly one cell"
                         : $"'{modifier.Name}' is not a modifier '{rowName}' admits — expected {string.Join(separator: ", ", values: admitted.Order(comparer: StringComparer.Ordinal))}"
                     ),
                     span: modifier.Span
@@ -1346,11 +1612,109 @@ public static partial class WorldDocumentEmitter {
                     );
 
                     break;
+                case "evicts":
+                    if (sawEvicts) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+                            message: $"table '{rowName}' declares 'evicts' more than once",
+                            span: modifier.Span
+                        );
+
+                        break;
+                    }
+
+                    sawEvicts = true;
+                    rowObj["evicts"] = true;
+                    break;
+                case "space":
+                    if (!AdmitsKind(
+                        enclosing: "world",
+                        keyword: keyword,
+                        kind: kind,
+                        member: "space",
+                        position: WorldMemberPosition.Modifier,
+                        scope: scope
+                    )) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                            message: $"Row '{rowName}' of kind '{kind}' cannot declare 'space' — only a row whose kind is {KindList(kinds: AdmittedKindsOf(
+                                enclosing: "world",
+                                keyword: keyword,
+                                member: "space",
+                                position: WorldMemberPosition.Modifier,
+                                scope: scope
+                            ))} names a space.",
+                            span: modifier.Span
+                        );
+                        break;
+                    }
+                    if (sawSpace) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+                            message: $"'{rowName}' declares 'space' more than once",
+                            span: modifier.Span
+                        );
+                        break;
+                    }
+                    sawSpace = true;
+                    string? spaceName = null;
+                    if (modifier.Arguments.Count > 0) {
+                        if (modifier.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                            spaceName = idNode.Name;
+                        } else if (modifier.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                            spaceName = sVal;
+                        }
+                    }
+                    if (string.IsNullOrEmpty(spaceName)) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
+                            message: $"Row '{rowName}' declares 'space' without a valid space name.",
+                            span: modifier.Span
+                        );
+                        break;
+                    }
+                    rowObj["space"] = spaceName;
+                    break;
+                case "embeds":
+                    if (!AdmitsKind(
+                        enclosing: "world",
+                        keyword: keyword,
+                        kind: kind,
+                        member: "embeds",
+                        position: WorldMemberPosition.Modifier,
+                        scope: scope
+                    )) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbedsInvalid,
+                            message: $"'embeds' is only legal where the row's kind is {KindList(kinds: AdmittedKindsOf(
+                                enclosing: "world",
+                                keyword: keyword,
+                                member: "embeds",
+                                position: WorldMemberPosition.Modifier,
+                                scope: scope
+                            ))} — table '{rowName}' is {kind}.",
+                            span: modifier.Span
+                        );
+                    }
+                    break;
                 case "bounds":
-                    if (!AdmitsBoundsOrAdvance(kind: kind)) {
+                    if (!AdmitsKind(
+                        enclosing: "world",
+                        keyword: keyword,
+                        kind: kind,
+                        member: "bounds",
+                        position: WorldMemberPosition.Modifier,
+                        scope: scope
+                    )) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
-                            message: $"'bounds' is only legal on an Int or Fixed row — '{rowName}' is {kind}",
+                            message: $"'bounds' is only legal where the row's kind is {KindList(kinds: AdmittedKindsOf(
+                                enclosing: "world",
+                                keyword: keyword,
+                                member: "bounds",
+                                position: WorldMemberPosition.Modifier,
+                                scope: scope
+                            ))} — '{rowName}' is {kind}",
                             span: modifier.Span
                         );
 
@@ -1377,10 +1741,23 @@ public static partial class WorldDocumentEmitter {
 
                     break;
                 case "advance":
-                    if (!AdmitsBoundsOrAdvance(kind: kind)) {
+                    if (!AdmitsKind(
+                        enclosing: "world",
+                        keyword: keyword,
+                        kind: kind,
+                        member: "advance",
+                        position: WorldMemberPosition.Modifier,
+                        scope: scope
+                    )) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
-                            message: $"'advance' is only legal on an Int or Fixed row — '{rowName}' is {kind}",
+                            message: $"'advance' is only legal where the row's kind is {KindList(kinds: AdmittedKindsOf(
+                                enclosing: "world",
+                                keyword: keyword,
+                                member: "advance",
+                                position: WorldMemberPosition.Modifier,
+                                scope: scope
+                            ))} — '{rowName}' is {kind}",
                             span: modifier.Span
                         );
 
@@ -1404,7 +1781,26 @@ public static partial class WorldDocumentEmitter {
                     );
 
                     break;
+                default:
+                    // The admission above comes from the construct table, so a modifier described for this
+                    // declaration but not lowered here would otherwise be accepted and dropped. A description is
+                    // honoured or refused by name, never inert.
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
+                        message: $"'{modifier.Name}' is described for '{rowName}' but this vocabulary does not lower it",
+                        span: modifier.Span
+                    );
+
+                    break;
             }
+        }
+
+        if (sawEvicts && !sawCapacity) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
+                message: $"table '{rowName}' declares 'evicts' without 'capacity' — evicts requires capacity",
+                span: modifiers.First(m => m.Name == "evicts").Span
+            );
         }
     }
     private static JsonNode LowerStateCapacityModifier(StateModifierNode modifier, string rowName, DocumentScope scope) {

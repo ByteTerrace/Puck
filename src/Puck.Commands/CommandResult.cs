@@ -20,6 +20,13 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// <c>IsError: true</c> on every failure return — that is what makes quiet mode safe.
     /// </summary>
     public bool IsError { get; init; }
+    /// <summary>
+    /// Gets a value indicating whether the handler THREW rather than returning this verdict — the one
+    /// <see cref="IsError"/> result that says nothing about the command's subject. Set only by the registry's own
+    /// exception boundary, never by a handler, so a caller that must separate "the world said no" from "the host
+    /// broke" has the distinction the text alone cannot carry.
+    /// </summary>
+    public bool Faulted { get; init; }
     /// <summary>Gets a result that produces no transcript output and leaves the transcript unchanged.</summary>
     public static CommandResult None => new("");
 

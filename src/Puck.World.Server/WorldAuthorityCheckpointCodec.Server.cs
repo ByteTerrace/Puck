@@ -7,6 +7,34 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    private static void WriteRuleLatchEntry(WireWriter writer, WorldRuleLatchEntry entry) {
+        writer.WriteString(value: entry.Rule);
+        writer.WriteString(value: entry.Key);
+        writer.WriteInt32(value: entry.Left);
+        writer.WriteInt32(value: entry.Right);
+        writer.WriteBoolean(value: entry.Held);
+    }
+    private static WorldRuleLatchEntry ReadRuleLatchEntry(ref WireReader reader, string field) {
+        var rule = reader.ReadString(
+            field: $"{field} name",
+            maxBytes: MaxStringBytes
+        );
+        var key = reader.ReadString(
+            field: $"{field} key",
+            maxBytes: MaxStringBytes
+        );
+        var left = reader.ReadInt32();
+        var right = reader.ReadInt32();
+        var held = reader.ReadBoolean();
+
+        return new WorldRuleLatchEntry(
+            Held: held,
+            Key: key,
+            Left: left,
+            Right: right,
+            Rule: rule
+        );
+    }
     private static void WriteIntentSubmission(WireWriter writer, IntentSubmission submission) {
         writer.WriteUInt64(value: submission.Tick);
         writer.WriteInt32(value: submission.EntityIndex);
@@ -297,7 +325,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     // ---- server section ----
 
-    private static byte[] EncodeServer(WorldServer.WorldServerCheckpoint section) {
+    private static byte[] EncodeServer(WorldServerCheckpoint section) {
         var writer = new WireWriter();
 
         writer.WriteBlock(value: section.DefinitionJson);
@@ -332,29 +360,33 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: section.RuleGateHeld,
+            writeItem: WriteRuleLatchEntry
+        );
+        WriteArray(
+            writer: writer,
+            items: section.RuleGroups,
             writeItem: static (w, row) => {
-                w.WriteString(value: row.Rule);
-                w.WriteBoolean(value: row.Held);
+                w.WriteString(value: row.Group);
+                w.WriteInt32(value: row.Step);
+                w.WriteBoolean(value: row.Running);
+                w.WriteBoolean(value: row.Breached);
             }
         );
         WriteArray(
             writer,
             section.Decisions,
             static (w, s) => {
-            w.WriteString(value: s.Rule); w.WriteInt32(value: s.Key); w.WriteInt32(value: s.Generation); w.WriteInt32(value: s.Selected);
-            w.WriteBoolean(value: s.Evaluated); w.WriteBoolean(value: s.InterruptHeld);
-            w.WriteUInt64(value: s.PeriodRemaining); w.WriteUInt64(value: s.CommitmentRemaining); w.WriteUInt64(value: s.RandomState);
-            w.WriteUInt64(value: s.DrawCount); w.WriteUInt64(value: s.Reconsiderations); w.WriteInt64(value: s.LastScore);
-            w.WriteInt32(value: s.Candidate); w.WriteInt32(value: s.CandidateGeneration);
-        }
+                w.WriteString(value: s.Rule); w.WriteInt32(value: s.Key); w.WriteInt32(value: s.Generation); w.WriteInt32(value: s.Selected);
+                w.WriteBoolean(value: s.Evaluated); w.WriteBoolean(value: s.InterruptHeld);
+                w.WriteUInt64(value: s.PeriodRemaining); w.WriteUInt64(value: s.CommitmentRemaining); w.WriteUInt64(value: s.RandomState);
+                w.WriteUInt64(value: s.DrawCount); w.WriteUInt64(value: s.Reconsiderations); w.WriteInt64(value: s.LastScore);
+                w.WriteInt32(value: s.Candidate); w.WriteInt32(value: s.CandidateGeneration);
+            }
         );
         WriteArray(
             writer: writer,
             items: section.InteractionGateHeld,
-            writeItem: static (w, row) => {
-                w.WriteString(value: row.Interaction);
-                w.WriteBoolean(value: row.Held);
-            }
+            writeItem: WriteRuleLatchEntry
         );
         WriteOptional(
             writer: writer,
@@ -390,7 +422,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeServer(byte[] bytes, string definitionHash, out string reason, out WorldServer.WorldServerCheckpoint section) {
+    private static bool TryDecodeServer(byte[] bytes, string definitionHash, out string reason, out WorldServerCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var definitionJson = reader.ReadBlock(
             field: "server definition",
@@ -450,15 +482,23 @@ public static partial class WorldAuthorityCheckpointCodec {
         var ruleGateHeld = ReadArray(
             reader: ref reader,
             field: "server rule gate held",
-            readItem: static (ref WireReader r) => {
-                var rule = r.ReadString(
-                    field: "rule gate name",
+            readItem: static (ref WireReader r) => ReadRuleLatchEntry(
+                field: "rule gate",
+                reader: ref r
+            )
+        );
+        var ruleGroups = ReadArray(
+            reader: ref reader,
+            field: "server rule groups",
+            readItem: static (ref WireReader r) => new WorldRuleGroupEntry(
+                Group: r.ReadString(
+                    field: "rule group name",
                     maxBytes: MaxStringBytes
-                );
-                var held = r.ReadBoolean();
-
-                return (rule, held);
-            }
+                ),
+                Step: r.ReadInt32(),
+                Running: r.ReadBoolean(),
+                Breached: r.ReadBoolean()
+            )
         );
         var decisions = ReadArray(
             ref reader,
@@ -486,15 +526,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var interactionGateHeld = ReadArray(
             reader: ref reader,
             field: "server interaction gate held",
-            readItem: static (ref WireReader r) => {
-                var interaction = r.ReadString(
-                    field: "interaction gate name",
-                    maxBytes: MaxStringBytes
-                );
-                var held = r.ReadBoolean();
-
-                return (interaction, held);
-            }
+            readItem: static (ref WireReader r) => ReadRuleLatchEntry(
+                field: "interaction gate",
+                reader: ref r
+            )
         );
         var lastDocumentReceipt = ReadOptional(
             reader: ref reader,
@@ -542,7 +577,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldServer.WorldServerCheckpoint(
+        section = new WorldServerCheckpoint(
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,
@@ -565,6 +600,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             MusicDirectorTransitionCount: musicDirectorTransitionCount,
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
+            RuleGroups: ruleGroups,
             SolidRevision: solidRevision
         );
         reason = string.Empty;
@@ -643,13 +679,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             rows: state.LaneRecency
         );
-        WriteFixedArray(
+        WriteLongArray(
             writer: writer,
-            values: state.ActionStateValues
-        );
-        WriteULongArray(
-            writer: writer,
-            values: state.ActionStateTimers
+            values: state.ActionState
         );
         WriteBoolArray(
             writer: writer,
@@ -763,12 +795,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "lane recency",
             reader: ref reader
         );
-        var actionStateValues = ReadFixedArray(
-            field: "action state values",
-            reader: ref reader
-        );
-        var actionStateTimers = ReadULongArray(
-            field: "action state timers",
+        var actionState = ReadLongArray(
+            field: "action state lane image",
             reader: ref reader
         );
         var actionStateDirty = ReadBoolArray(
@@ -830,11 +858,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
 
         return new WorldBody.TransferState(
+            ActionState: actionState,
             ActionStateDirty: actionStateDirty,
             ActionStateDirtyKind: actionStateDirtyKind,
             ActionStateDirtyOperand: actionStateDirtyOperand,
-            ActionStateTimers: actionStateTimers,
-            ActionStateValues: actionStateValues,
             BodyMotionProgramName: bodyMotionProgramName,
             ChannelTimerTicks: channelTimerTicks,
             ChannelTimerValues: channelTimerValues,

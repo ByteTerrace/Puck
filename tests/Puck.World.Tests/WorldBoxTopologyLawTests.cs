@@ -29,7 +29,7 @@ public sealed class WorldBoxTopologyLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [InlineData(4, 4, 4, 48)]
     [InlineData(4, 4, 2, 16)]
@@ -128,7 +128,7 @@ public sealed class WorldBoxTopologyLawTests {
         // authored run shape rather than only exact-length equality.
         static StateCell Mark(int x, int y, int z) => new(
             CellName.Parse(candidate: ((((z * 4) + y) * 4) + x).ToString()),
-            1L
+            CellValue.Int(value: 1L)
         );
         var board = new WorldStateRow(
             CellName.Parse(candidate: "cube"),
@@ -167,7 +167,7 @@ public sealed class WorldBoxTopologyLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
         var definition = Fixtures.BuildDocument() with {
@@ -238,7 +238,7 @@ public sealed class WorldBoxTopologyLawTests {
             CellKind.Int,
             Cells: [.. indices.Select(selector: i => new StateCell(
                     CellName.Parse(candidate: i.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
-                    7L
+                    CellValue.Int(value: 7L)
                 ))],
             Domain: new StateDomain.CellsOf("box")
         );
@@ -247,7 +247,7 @@ public sealed class WorldBoxTopologyLawTests {
             CellKind.Int,
             Cells: [new StateCell(
                     WorldStateRow.SlotKey,
-                    0L
+                    CellValue.Int(value: 0L)
                 )]
         );
         var runTerminated = new PatternRow(

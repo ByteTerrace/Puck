@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -29,25 +27,16 @@ public class ShapeSugarTests {
     }
     private static JsonObject Lower(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(source)
-        );
-
-        var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
         );
 
         Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport(source)
+            condition: compilation.Diagnostics.HasErrors,
+            userMessage: compilation.Diagnostics.FormatReport(source)
         );
-        return loweringResult.Value!;
+        return compilation.RequireJson();
     }
 
     [Fact]
@@ -157,21 +146,11 @@ public class ShapeSugarTests {
         );
 
         // Round-trips: the fallback text still compiles back to the same JSON it was decompiled from.
-        var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            puck,
-            diagnostics: diagnostics
-        );
-
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport(puck)
-        );
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
+        var lowered = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: puck
         );
 
         Assert.False(
@@ -183,7 +162,7 @@ public class ShapeSugarTests {
 
         Assert.True(condition: JsonNode.DeepEquals(
             node1: original,
-            node2: lowered.Value!["prototypes"]
+            node2: lowered.Json!["prototypes"]
         ));
     }
     [Fact]

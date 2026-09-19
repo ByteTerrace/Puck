@@ -1,36 +1,24 @@
 using System.Text.Json.Nodes;
-using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>Dot access (state-authoring stage 3): <c>row.key</c> compiles to the identical rule facts a bracket
-/// <c>row[key]</c> read produces, while an operand position that stores its expression verbatim keeps the authored
-/// dotted text rather than rewriting it to bracket form.</summary>
+/// <summary>Dot access: <c>row.key</c> compiles to the identical rule facts a bracket <c>row[key]</c> read produces,
+/// while an operand position that stores its expression verbatim keeps the authored dotted text rather than
+/// rewriting it to bracket form.</summary>
 public class DotAccessEquivalenceTests {
     private static JsonObject FirstRule(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(source)
-        );
-
-        var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source
         );
 
         Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport(source)
+            condition: compilation.Diagnostics.HasErrors,
+            userMessage: compilation.Diagnostics.FormatReport(source)
         );
-        var rules = Assert.IsType<JsonArray>(@object: loweringResult.Value!["rules"]);
+        var rules = Assert.IsType<JsonArray>(@object: compilation.RequireJson()["rules"]);
 
         return Assert.IsType<JsonObject>(@object: rules[0]);
     }
@@ -110,7 +98,7 @@ public class DotAccessEquivalenceTests {
         );
     }
     [Fact]
-    public void DottedEffectOperandKeepsItsDottedTextVerbatim() {
+    public void ADottedEffectOperandLowersToTheSameProgramAsItsBracketForm() {
         var rule = FirstRule(body: """
             rule "r" {
                 hp += vitals.mana
@@ -123,12 +111,12 @@ public class DotAccessEquivalenceTests {
             effect["$type"]?.ToString()
         );
         Assert.Equal(
-            "vitals.mana",
-            effect["expression"]?.ToString()
+            "vitals[mana]",
+            WorldExpressionJson.Text(node: effect["expression"])
         );
     }
     [Fact]
-    public void BracketEffectOperandKeepsItsBracketTextVerbatim() {
+    public void ABracketEffectOperandLowersToTheProgramItSpells() {
         var rule = FirstRule(body: """
             rule "r" {
                 hp += vitals[mana]
@@ -138,23 +126,23 @@ public class DotAccessEquivalenceTests {
 
         Assert.Equal(
             "vitals[mana]",
-            effect["expression"]?.ToString()
+            WorldExpressionJson.Text(node: effect["expression"])
         );
     }
     [Fact]
-    public void DottedBindExpressionKeepsItsDottedTextVerbatim() {
+    public void ADottedLocalExpressionLowersToTheProgramItSpells() {
         var rule = FirstRule(body: """
             rule "r" {
-                bind dx : Int = vitals.mana - 10
+                local dx : Int = vitals.mana - 10
                 flag = dx
             }
             """);
-        var bindings = Assert.IsType<JsonArray>(@object: rule["bindings"]);
-        var binding = Assert.IsType<JsonObject>(@object: bindings[0]);
+        var locals = Assert.IsType<JsonArray>(@object: rule["locals"]);
+        var local = Assert.IsType<JsonObject>(@object: locals[0]);
 
         Assert.Equal(
-            "vitals.mana - 10",
-            binding["expression"]?.ToString()
+            "vitals[mana] - 10",
+            WorldExpressionJson.Text(node: local["expression"])
         );
     }
 }

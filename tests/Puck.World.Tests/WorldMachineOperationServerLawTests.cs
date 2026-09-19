@@ -50,7 +50,8 @@ public sealed class WorldMachineOperationServerLawTests {
                 1,
                 1,
                 principal,
-                new WorldSubmissionPayload.Operation(Value: operation)
+                new WorldSubmissionPayload.Operation(Value: operation),
+                Guid.Empty
             ),
             result => completion = result
         );

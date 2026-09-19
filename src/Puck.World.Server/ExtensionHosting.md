@@ -121,8 +121,10 @@ extension epoch, and create fresh clients. Forks require separate namespaces
 and bindings. No live cloud connection resumes merely because a save was loaded.
 
 `WorldConfiguredExtensions` supplies the configurable state-table connector
-described in [declarative composition](ExtensionConfiguration.md). Custom
-adapters, including MCP transports, can map other triggers onto this client API;
-they must not expose provider objects, credentials, or the private journal.
-`WorldExtensionHostLawTests` verifies caller isolation, replay revocation,
-bounded admission, worker startup, and recovery without repeating effects.
+described in [declarative composition](ExtensionConfiguration.md). It supports external
+operation connections, live observation feeds, and runtime text embedding generation
+providers (`IWorldConfiguredEmbeddingProvider`). Custom adapters, including MCP transports,
+can map other triggers onto this client API; they must not expose provider objects,
+credentials, or the private journal. `WorldExtensionHostLawTests` and `EmbeddingConnectionLawTests`
+verify caller isolation, replay revocation, bounded admission, worker startup, LRU caching,
+and deterministic recovery without repeating effects.

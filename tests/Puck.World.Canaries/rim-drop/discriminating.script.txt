@@ -1,0 +1,15 @@
+# Discriminating leg — the same deck, the same walk, the same kit, with the seam removed.
+# island-solo.world.json is island.world.json minus its references/destinations/adjacencies, so
+# there is nothing beneath the island to be handed to: the body leaves the deck and keeps falling
+# under the island's own authority forever. No crossing narration, no arrival, and the per-body
+# stamina register is never advanced a second time because the body never touches ground again.
+world.wait 20
+wire.errors reset
+body.where 0
+body.state 0
+world.adjacencies
+body.fly 1 0 0 0 0 0 2
+world.wait 200
+body.where 0
+body.state 0
+world.adjacencies

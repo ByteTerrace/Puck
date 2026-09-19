@@ -5,7 +5,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Locks the rule host's mixed transaction boundary: state writes and a placement document write belong to
-/// one preflighted branch, and a later document leaf refusal rolls the whole branch back.</summary>
+/// one preflighted firing, and a later document leaf refusal rolls the whole firing back — the writes the rule made
+/// before the transaction included, since a firing is one scope.</summary>
 public sealed class WorldRuleMixedDocumentTransactionLawTests {
     private const string PlacementId = "camera-seat-0";
 
@@ -18,7 +19,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0L
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var prefixLabel = new WorldStateRow(
@@ -27,7 +28,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             Capacity: 1,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "entry"),
-                    Text: "before"
+                    Value: CellValue.Text(value: "before")
                 )]
         );
         var stage = new WorldStateRow(
@@ -35,7 +36,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0L
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var after = new WorldStateRow(
@@ -43,7 +44,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0L
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var label = new WorldStateRow(
@@ -52,7 +53,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             Capacity: 1,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "entry"),
-                    Text: "before"
+                    Value: CellValue.Text(value: "before")
                 )]
         );
         var updatedBall = Placement(
@@ -121,52 +122,10 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         };
     }
     private static long State(WorldDefinition definition, string row) =>
-        definition.State.Single(predicate: state => (state.Name.Value == row)).Cells!.Single().Value;
+        definition.State.Single(predicate: state => (state.Name.Value == row)).Cells!.Single().Value.Raw;
     private static string? Text(WorldDefinition definition, string row) =>
-        definition.State.Single(predicate: state => (state.Name.Value == row)).Cells!.Single().Text;
+        definition.State.Single(predicate: state => (state.Name.Value == row)).Cells!.Single().Value.AsText;
 
-    [Fact]
-    public void FailedReloadedScopePreservesEarlierNumericReads() {
-        var document = Scenario(includeBadSecondPlacement: true);
-        var first = document.Rules![0];
-
-        document = document with {
-            Rules = [
-            first with { Effects = first.Effects.Where(predicate: effect => (effect is not ActionEffect.SetState { State: "prefixLabel" })).ToArray() },
-            new WorldRule(
-                CellName.Parse(candidate: "read-retained-prefix"),
-                Effects: [new ActionEffect.SetState(
-                        State: "after",
-                        FromState: "prefix"
-                    )]
-            )
-        ],
-        };
-        using var fixture = Fixtures.FreshServer(document);
-
-        fixture.Step();
-        Assert.Equal(
-            1,
-            State(
-                definition: fixture.Server.Definition,
-                row: "prefix"
-            )
-        );
-        Assert.Equal(
-            1,
-            State(
-                definition: fixture.Server.Definition,
-                row: "after"
-            )
-        );
-        Assert.Equal(
-            1f,
-            Placement(
-                definition: fixture.Server.Definition,
-                id: PlacementId
-            ).Scale
-        );
-    }
     [Fact]
     public void MixedStateAndPlacementTransactionInstallsBothExactlyOnce() {
         using var fixture = Fixtures.FreshServer(definition: Scenario(includeBadSecondPlacement: false));
@@ -269,20 +228,20 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         );
     }
     [Fact]
-    public void RefusalOfALaterPlacementLeafRollsBackTheMixedTransaction() {
+    public void RefusalOfALaterPlacementLeafRollsBackTheWholeFiring() {
         using var fixture = Fixtures.FreshServer(definition: Scenario(includeBadSecondPlacement: true));
 
         fixture.Step();
 
         Assert.Equal(
-            expected: 1L,
+            expected: 0L,
             actual: State(
                 definition: fixture.Server.Definition,
                 row: "prefix"
             )
         );
         Assert.Equal(
-            expected: "prefix",
+            expected: "before",
             actual: Text(
                 definition: fixture.Server.Definition,
                 row: "prefixLabel"

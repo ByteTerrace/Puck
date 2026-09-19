@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
@@ -27,12 +26,7 @@ public sealed class TetrisCartridgeTests {
             path3: "tetris.cgb.cartridge.json"
         ));
 
-        return JsonSerializer.Deserialize<CartridgeDocument>(
-            json: json,
-            options: new JsonSerializerOptions {
-            PropertyNameCaseInsensitive = true,
-        }
-        )!;
+        return CartridgeDocuments.Parse(utf8: System.Text.Encoding.UTF8.GetBytes(s: json));
     }
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);

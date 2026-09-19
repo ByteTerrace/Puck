@@ -4,8 +4,8 @@ namespace Puck.State;
 
 /// <summary>A data-composable gate over named state. A rule fires only while its gate holds. The <c>$type</c> string
 /// is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the
-/// ones this library owns, and a document project appends its own derived arms through a <see cref="RuleVocabulary"/>
-/// (see <see cref="RuleVocabulary.ExtendJson"/>) rather than by editing this list.</summary>
+/// ones this library owns, and a document project appends its own derived arms through its own rule vocabulary
+/// (<c>RuleVocabulary.ExtendJson</c>) rather than by editing this list.</summary>
 [JsonDerivedType(typeof(ActionPredicate.CompareState), typeDiscriminator: "compareState")]
 [JsonDerivedType(typeof(ActionPredicate.CompareValue), typeDiscriminator: "compareValue")]
 [JsonDerivedType(typeof(ActionPredicate.All), typeDiscriminator: "all")]
@@ -18,7 +18,7 @@ public abstract record ActionPredicate {
     /// <param name="Comparison">The comparison operation.</param>
     /// <param name="Right">Right numeric expression.</param>
     /// <param name="Kind">The common Int or Fixed domain; no implicit conversion is performed.</param>
-    public sealed record CompareValue(ValueExpression Left, ActionStateComparison Comparison, ValueExpression Right, CellKind Kind = CellKind.Fixed) : ActionPredicate;
+    public sealed record CompareValue(ExpressionProgram Left, ActionStateComparison Comparison, ExpressionProgram Right, CellKind Kind = CellKind.Fixed) : ActionPredicate;
     /// <summary>Compares a named state cell against either a fixed authored value, or another named state
     /// cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of
     /// <paramref name="Value"/> and <paramref name="ComparandState"/> may be present (refused by name when both or

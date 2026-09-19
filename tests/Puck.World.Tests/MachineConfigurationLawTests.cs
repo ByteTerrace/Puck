@@ -8,6 +8,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Provider metadata governs configuration and resource preparation without host-owned hardware fields.</summary>
+[Collection(name: DocumentCompositionCollection.Name)]
 public sealed class MachineConfigurationLawTests {
     [Fact]
     public void AliasedDisplaysAndSpeakersKeepTheirNamedProducer() {
@@ -218,7 +219,6 @@ public sealed class MachineConfigurationLawTests {
             var firstFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: [("test", first)]);
             var secondFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: [("test", second)]);
 
-            WorldDefinitionFileSource.ForgetComposedDocuments();
             Assert.True(
                 condition: WorldDefinitionFileSource.TryComposeDocumentTree(
                     Path.Combine(
@@ -247,12 +247,31 @@ public sealed class MachineConfigurationLawTests {
             );
             Assert.NotNull(@object: firstTree);
             Assert.NotNull(@object: secondTree);
-            Assert.Equal(
-                4,
-                WorldDefinitionFileSource.ComposedDocumentsHeld
-            );
+
+            // The claim is per key, not a process-wide count: the store holds one image per (path, fingerprint)
+            // pair, so one path under two catalogs occupies two slots and neither catalog reads the other's.
+            foreach (var document in new[] { "root.world.json", "fragment.world.json" }) {
+                var path = Path.Combine(
+                    path1: directory,
+                    path2: document
+                );
+
+                foreach (var fingerprint in new[] { firstFingerprint, secondFingerprint }) {
+                    Assert.True(
+                        condition: WorldDefinitionFileSource.HoldsComposedDocument(
+                            catalogFingerprint: fingerprint,
+                            resolvedPath: path
+                        ),
+                        userMessage: $"'{document}' holds no image under its own catalog fingerprint"
+                    );
+                }
+
+                Assert.False(
+                    condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path),
+                    userMessage: $"'{document}' holds an image under no fingerprint at all"
+                );
+            }
         } finally {
-            WorldDefinitionFileSource.ForgetComposedDocuments();
             Directory.Delete(
                 directory,
                 recursive: true

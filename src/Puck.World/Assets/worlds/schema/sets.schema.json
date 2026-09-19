@@ -1,0 +1,75 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One declared, reusable cell set: a name a rule addresses and the expression it stands for.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The set\u0027s stable name \u2014 unique within the document.",
+        "title": "CellName",
+        "type": "string"
+      },
+      "set": {
+        "description": "The expression the name stands for.",
+        "type": "object",
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionBoard"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionFamily"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionZone"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionEverything"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionNothing"
+          },
+          {
+            "description": "The union of the items.",
+            "properties": {
+              "$type": {
+                "const": "any"
+              },
+              "items": {
+                "$ref": "./common.schema.json#/$defs/CellSetExpressionListNonNullable",
+                "description": "The items."
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "additionalProperties": false,
+            "title": "CellSetExpressionAny"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionBoth"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/CellSetExpressionComplement"
+          }
+        ],
+        "title": "CellSetExpression"
+      }
+    },
+    "required": [
+      "name",
+      "set"
+    ],
+    "additionalProperties": false,
+    "title": "CellSetRow"
+  },
+  "default": null
+}

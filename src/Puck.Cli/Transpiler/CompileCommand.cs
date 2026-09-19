@@ -3,9 +3,11 @@ using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.Transpiler.Diagnostics;
 using Puck.GamingBricks.Transpiler;
-using Puck.World.Transpiler.Lowering;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler;
 using Puck.World.Transpiler.Validation;
 
 namespace Puck.Cli.Transpiler;
@@ -71,13 +73,29 @@ internal static class CompileCommand {
             return 2;
         }
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            source: sourceText,
-            diagnostics: diagnostics
+        // The document's own `schema:` line picks the vocabulary that knows what its sections mean. The language is
+        // the same either way; only the lowering differs.
+        var vocabulary = CliVocabularyResolver.Instance.Resolve(source: sourceText);
+        var isCartridge = ReferenceEquals(
+            objA: vocabulary,
+            objB: CartridgeVocabulary.Instance
         );
-        var documentNode = parseResult.Value;
+        var sourceMap = new SourceMap();
+        var imports = (bundle
+            ? ImportHandling.Bundle
+            : ImportHandling.Validate
+        );
 
-        if (documentNode is null) {
+        var (effectiveAst, loweredJson) = CompileSource(
+            diagnostics: diagnostics,
+            imports: imports,
+            sourceMap: sourceMap,
+            sourcePath: sourcePath,
+            sourceText: sourceText,
+            vocabulary: vocabulary
+        );
+
+        if (effectiveAst is null) {
             PrintDiagnostics(
                 diagnostics: diagnostics,
                 filePath: sourcePath,
@@ -86,50 +104,7 @@ internal static class CompileCommand {
             return 1;
         }
 
-        var baseDirectory = (Path.GetDirectoryName(path: sourcePath) ?? Directory.GetCurrentDirectory());
-        var effectiveAst = documentNode;
-
-        if (bundle) {
-            var bundledDoc = ModuleResolver.BundleDocument(
-                diagnostics: diagnostics,
-                rootDoc: documentNode,
-                rootPath: sourcePath
-            );
-
-            if (bundledDoc is not null) {
-                effectiveAst = bundledDoc;
-            }
-        } else {
-            ModuleResolver.ValidateImportGraph(
-                diagnostics: diagnostics,
-                rootDoc: documentNode,
-                rootPath: sourcePath
-            );
-        }
-
-        var sourceMap = new SourceMap();
-        // The document's own `schema:` line picks the vocabulary that knows what its sections mean. The language is
-        // the same either way; only the lowering differs.
-        var isCartridge = string.Equals(
-            a: effectiveAst.Schema,
-            b: CartridgeVocabulary.Schema,
-            comparisonType: StringComparison.Ordinal
-        );
-        var loweringResult = (isCartridge
-            ? CartridgeDocumentEmitter.LowerWithDiagnostics(
-                diagnostics: diagnostics,
-                document: effectiveAst,
-                sourceMap: sourceMap
-            )
-            : WorldDocumentEmitter.LowerWithDiagnostics(
-                basePath: baseDirectory,
-                diagnostics: diagnostics,
-                document: effectiveAst,
-                sourceMap: sourceMap
-            )
-        );
-
-        var jsonObject = (loweringResult.Value ?? new JsonObject());
+        var jsonObject = (loweredJson ?? new JsonObject());
         var jsonBytes = CanonicalJsonDocument.Serialize(node: jsonObject);
 
         // A module is a fragment whichever root imports it supplies fields for, so validating one as a world
@@ -212,6 +187,105 @@ internal static class CompileCommand {
             Console.Error.WriteLine(value: $"error: Failed to write output file '{outputPath}': {ex.Message}");
             return 2;
         }
+    }
+
+    // The cartridge vocabulary is `Puck.World.Transpiler`'s peer, so its lowering is not reachable from behind
+    // `WorldCompiler`; the stage order is the same one that door runs.
+    /// <summary>Compiles <paramref name="sourceText"/> as if it were the file at <paramref name="sourcePath"/>,
+    /// through whichever vocabulary its own <c>schema:</c> names. Nothing is written.</summary>
+    /// <param name="sourceText">The source to compile.</param>
+    /// <param name="sourcePath">The file the text stands for; it roots relative assets, the import walk, and the
+    /// embedding lock beside it.</param>
+    /// <param name="vocabulary">The vocabulary the source's schema resolves to.</param>
+    /// <param name="imports">What the import graph is worth to this compile.</param>
+    /// <param name="diagnostics">The bag every stage reports into.</param>
+    /// <param name="sourceMap">The map the lowering registers pointers in.</param>
+    /// <returns>The lowered document and its JSON, either of which is null when a stage refused.</returns>
+    internal static (DocumentNode? Document, JsonObject? Json) CompileSource(
+        string sourceText,
+        string sourcePath,
+        IDocumentVocabulary vocabulary,
+        ImportHandling imports,
+        DiagnosticBag diagnostics,
+        SourceMap sourceMap
+    ) {
+        if (!string.Equals(
+            a: (PuckParser.TryReadDocumentSchema(schema: out var schema, source: sourceText)
+                ? schema
+                : null),
+            b: CartridgeVocabulary.Schema,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            var compilation = WorldCompiler.Compile(
+                diagnostics: diagnostics,
+                imports: imports,
+                source: sourceText,
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
+            );
+
+            return (compilation.Document, compilation.Json);
+        }
+
+        return (CompileCartridge(
+            diagnostics: diagnostics,
+            imports: imports,
+            json: out var cartridgeJson,
+            sourceMap: sourceMap,
+            sourcePath: sourcePath,
+            sourceText: sourceText,
+            vocabulary: vocabulary
+        ), cartridgeJson);
+    }
+
+    private static DocumentNode? CompileCartridge(
+        string sourceText,
+        string sourcePath,
+        IDocumentVocabulary vocabulary,
+        ImportHandling imports,
+        DiagnosticBag diagnostics,
+        SourceMap sourceMap,
+        out JsonObject? json
+    ) {
+        json = null;
+
+        var documentNode = PuckParser.ParseDocumentWithDiagnostics(
+            source: sourceText,
+            diagnostics: diagnostics,
+            vocabulary: vocabulary
+        ).Value;
+
+        if (documentNode is null) {
+            return null;
+        }
+
+        if (imports == ImportHandling.Bundle) {
+            var bundledDoc = ModuleResolver.BundleDocument(
+                diagnostics: diagnostics,
+                rootDoc: documentNode,
+                rootPath: sourcePath,
+                vocabulary: vocabulary
+            );
+
+            if (bundledDoc is not null) {
+                documentNode = bundledDoc;
+            }
+        } else if (imports == ImportHandling.Validate) {
+            ModuleResolver.ValidateImportGraph(
+                diagnostics: diagnostics,
+                rootDoc: documentNode,
+                rootPath: sourcePath,
+                vocabulary: vocabulary
+            );
+        }
+
+        json = CartridgeDocumentEmitter.LowerWithDiagnostics(
+            diagnostics: diagnostics,
+            document: documentNode,
+            sourceMap: sourceMap
+        ).Value;
+
+        return documentNode;
     }
     private static void PrintDiagnostics(DiagnosticBag diagnostics, string filePath, string sourceText) {
         if (!diagnostics.Any()) {

@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/freecell.world.json",
+  "simulationRateHz": 30,
+  "ticks": 610,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 21,
+      "interactionRows": 0,
+      "evaluationSlots": 21,
+      "workUnitsPerTick": 70408,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 21,
+      "interactionRows": 0,
+      "evaluationSlots": 21,
+      "workUnitsPerTick": 70408,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

@@ -51,7 +51,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [Fact]
@@ -141,7 +141,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
 
         fixture.Server.EnqueueUndo(
@@ -161,7 +161,7 @@ public sealed partial class PlacementDealLawTests {
             WorldDefinitionRows.FindStateRow(
                 fixture.Server.Definition.State,
                 "credits"
-            )!.Cells![0].Value
+            )!.Cells![0].Value.Raw
         );
     }
     [Fact]

@@ -32,7 +32,7 @@ public sealed class ReviewFixLawTests {
         Kind: kind,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: ((kind == CellKind.Fixed) ? CellValue.Fixed(rawBits: value) : CellValue.Int(value: value))
             )],
         Advance: advance,
         Cycle: cycle
@@ -48,7 +48,7 @@ public sealed class ReviewFixLawTests {
                 GatesDrive: true,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "0"),
-                        Value: 0,
+                        Value: CellValue.Int(value: 0L),
                         Cycle: new StateCycle()
                     )]
             ),
@@ -61,7 +61,7 @@ public sealed class ReviewFixLawTests {
     }
     [Fact]
     public void AFractionalComparand_LowersToTheExactIntegerGate() {
-        static GateToken Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
+        static Puck.State.Rules.GateToken Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
             var definition = Definition(
                 rows: [Slot(
                         name: "count",
@@ -83,7 +83,7 @@ public sealed class ReviewFixLawTests {
                     )]
             );
 
-            return WorldRuleCompiler.CompileAll(definition: definition)[0].Gate[0];
+            return WorldFactsCompiler.CompileAll(definition: definition)[0].Gate[0];
         }
 
         var greater = Compile(
@@ -97,7 +97,7 @@ public sealed class ReviewFixLawTests {
         );
         Assert.Equal(
             expected: 2L,
-            actual: greater.Value
+            actual: greater.RightSource.RawValue
         );
 
         var greaterOrEqual = Compile(
@@ -111,7 +111,7 @@ public sealed class ReviewFixLawTests {
         );
         Assert.Equal(
             expected: 1L,
-            actual: greaterOrEqual.Value
+            actual: greaterOrEqual.RightSource.RawValue
         );
 
         var less = Compile(
@@ -125,7 +125,7 @@ public sealed class ReviewFixLawTests {
         );
         Assert.Equal(
             expected: 1L,
-            actual: less.Value
+            actual: less.RightSource.RawValue
         );
 
         var equal = Compile(
@@ -139,7 +139,7 @@ public sealed class ReviewFixLawTests {
         );
         Assert.Equal(
             expected: long.MaxValue,
-            actual: equal.Value
+            actual: equal.RightSource.RawValue
         );
 
         var integral = Compile(
@@ -153,7 +153,7 @@ public sealed class ReviewFixLawTests {
         );
         Assert.Equal(
             expected: 2L,
-            actual: integral.Value
+            actual: integral.RightSource.RawValue
         );
 
         var fixedGate = Compile(
@@ -168,7 +168,7 @@ public sealed class ReviewFixLawTests {
         );
         Assert.Equal(
             expected: FixedQ4816.FromDouble(value: 1.5).Value,
-            actual: fixedGate.Value
+            actual: fixedGate.RightSource.RawValue
         );
     }
     [Fact]
@@ -215,7 +215,7 @@ public sealed class ReviewFixLawTests {
             expected: string.Empty,
             actual: Refusal(definition: definition)
         );
-        Assert.IsType<GenerateEffect>(@object: WorldRuleCompiler.CompileAll(definition: definition)[0].Effects[0]);
+        Assert.IsType<Puck.State.Rules.GenerateEffect>(@object: WorldFactsCompiler.CompileAll(definition: definition)[0].Effects[0]);
     }
     [Fact]
     public void DynamicsState_RoundTripsInTheFixedSpelling_OnAnIntRow() {
@@ -224,7 +224,7 @@ public sealed class ReviewFixLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 300,
+                    Value: CellValue.Int(value: 300L),
                     Clock: new StateCellClock(
                         EpochTick: 7,
                         V0: (5L << FixedQ4816.FractionBitCount),
@@ -332,7 +332,7 @@ public sealed class ReviewFixLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 1
+                    Value: CellValue.Int(value: 1L)
                 )],
             Draw: new Draw(
                 Generator: generator,
@@ -419,7 +419,7 @@ public sealed class ReviewFixLawTests {
                 Capacity: 8,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "1"),
-                        Value: 5
+                        Value: CellValue.Int(value: 5L)
                     )],
                 Advance: new StateAdvance(
                     PerSecondDenominator: 1,

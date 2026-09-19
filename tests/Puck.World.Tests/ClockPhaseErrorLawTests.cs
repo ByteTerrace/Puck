@@ -40,7 +40,7 @@ public sealed class ClockPhaseErrorLawTests {
             bytes: music.Bytes
         );
 
-        return Fixtures.BuildDocument() with {
+        return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             Music = [new WorldMusicRow(
                 Name: "test-score",
                 Source: musicPath,
@@ -167,7 +167,7 @@ public sealed class ClockPhaseErrorLawTests {
         CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                0L
+                CellValue.Int(value: 0L)
             )]
     );
     private static long Value(WorldFixture fixture, string row) =>
@@ -177,7 +177,7 @@ public sealed class ClockPhaseErrorLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
     // phaseError is signed; a tolerance window is symmetric, so the gate is press AND |phaseError| <= tolerance —
     // the bound read as two ANDed comparisons, the ordinary compareState composition every other authored range in
     // this repository uses.
@@ -199,7 +199,7 @@ public sealed class ClockPhaseErrorLawTests {
     public void AWorldWithNoMusicRefusesTheOperand() {
         var reason = default(string);
         var refused = !WorldDefinitionValidator.TryValidateLocally(
-            definition: Fixtures.BuildDocument() with {
+            definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             Rules = [Reader(
                     clockName: "anything",
                     state: "phaseError"

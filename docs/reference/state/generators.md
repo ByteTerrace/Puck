@@ -60,8 +60,8 @@ matters; reproducibility alone does not establish a distribution's properties.
 
 ## Separate a real draw from a possible outcome
 
-A host applies `StateMutation.Generate` and installs the resulting value and
-bookkeeping together. A plain `FrameHost` refuses generator mutations.
+A host applies a `Mutation` of kind `MutationKind.Generate` and installs the
+resulting value and bookkeeping together. A scoped judge refuses generator mutations.
 Search can instead receive a bounded, precomputed
 [chance-outcome table](search.md#account-for-chance) and evaluate hypothetical
 outcomes without consuming the live site's history.

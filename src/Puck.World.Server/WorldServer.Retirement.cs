@@ -15,15 +15,15 @@ public sealed partial class WorldServer {
     public void FreezeForRetirement() {
         lock (m_authorityGate) {
             if (m_authorityRetiring) { return; }
-            if (m_externalOperationsInFlight != 0) {
+            if (Extensions.ExternalOperationsInFlight != 0) {
                 throw new InvalidOperationException(message: "Authority retirement requires external operations to settle first.");
             }
             // No other thread can admit work during this drain. Accepted extension contributions still use
             // the ordinary submission door, so admission closes only after that existing queue has settled.
             m_mutationBudget.BeginTick();
-            DrainOrdered();
-            DrainRecordedExtensions();
-            _ = DrainPendingOps(tick: m_lastCompletedTick);
+            m_tick.DrainOrdered();
+            Extensions.Drain();
+            _ = m_tick.DrainPendingOps(tick: m_tick.CompletedTick);
             m_authorityRetiring = true;
         }
     }

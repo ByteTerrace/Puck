@@ -1,7 +1,7 @@
 /**
  * The "puck.official.v1" manifest shape — see the official manifest contract recorded beside
  * this feature's landing change. Parsing refuses an unknown `schema` or a `build.worldSchema`
- * other than "puck.world.def.v1" by name; every other shape mismatch surfaces as a thrown
+ * other than "puck.world.definition.v1" by name; every other shape mismatch surfaces as a thrown
  * `ManifestRefusal` naming the offending field.
  */
 

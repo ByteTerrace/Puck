@@ -202,37 +202,37 @@ public sealed partial class WorldConfiguredExtensions {
     private static StateCell ParseObservedCell(CellKind kind, CellName key, string text) => kind switch {
         CellKind.Int => new(
         key,
-        Value: long.Parse(
+        Value: CellValue.Int(value: long.Parse(
             text,
             NumberStyles.AllowLeadingSign,
             CultureInfo.InvariantCulture
-        )
+        ))
     ),
         CellKind.Fixed => new(
         key,
-        Value: NumericLiteral.ToFixed(value: decimal.Parse(
+        Value: CellValue.Fixed(rawBits: NumericLiteral.ToFixed(value: decimal.Parse(
             text,
             NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture
-        )).Value
+        )).Value)
     ),
         CellKind.Bool => new(
         key,
-        Value: text switch {
-            "true" or "1" => 1L,
-            "false" or "0" => 0L,
+        Value: CellValue.Bool(value: text switch {
+            "true" or "1" => true,
+            "false" or "0" => false,
             _ => throw new FormatException(message: $"'{text}' is not a valid Bool observation value."),
-        }
+        })
     ),
         _ => new(
         key,
-        Text: text
+        Value: CellValue.Text(value: text)
     ),
     };
     private static bool ObservedCellMatches(CellKind kind, WorldObservedCell actual, StateCell desired) =>
         ((kind == CellKind.Text)
-            ? (actual.Text == desired.Text)
-            : (actual.Value == desired.Value)
+            ? ((desired.Value.Kind == CellKind.Text) && (actual.Text == desired.Value.AsText))
+            : ((desired.Value.Kind is (CellKind.Bool or CellKind.Fixed or CellKind.Int)) && (actual.Value == desired.Value.Raw))
         );
 
     /// <summary>Waits for current read-only source calls. Call Pump afterwards to admit their results.</summary>

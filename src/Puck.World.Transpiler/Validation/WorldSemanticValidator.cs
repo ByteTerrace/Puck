@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler.Vocabulary;
 using Puck.Transpiler.Diagnostics;
 using Puck.Abstractions.Machines;
 
@@ -12,26 +13,6 @@ public static class WorldSemanticValidator {
     /// fragment.</summary>
     public const string RootSchemaId = "puck.world.definition.v1";
 
-    private static string ConvertTojsonPointer(string path) {
-        if (string.IsNullOrEmpty(value: path)) {
-            return "";
-        }
-
-        // Replace '[0]' with '/0' and '.' with '/'
-        var sb = new System.Text.StringBuilder();
-
-        sb.Append(value: '/');
-        foreach (var c in path) {
-            if (c == '.') {
-                sb.Append(value: '/');
-            } else if (c == '[') {
-                sb.Append(value: '/');
-            } else if (c != ']') {
-                sb.Append(value: c);
-            }
-        }
-        return sb.ToString();
-    }
     private static SourceSpan ExtractSpanFromError(string error, SourceMap? sourceMap) {
         if (sourceMap is null) {
             return SourceSpan.None;
@@ -47,8 +28,10 @@ public static class WorldSemanticValidator {
             ).FirstOrDefault() ?? "")
         );
 
-        // Convert dot notation "views.layouts[0]" to JSON pointer "/views/layouts/0"
-        var jsonPointer = ConvertTojsonPointer(path: pathToken);
+        var jsonPointer = WorldDocumentPointers.ToJsonPointer(
+            path: pathToken,
+            table: WorldConstructs.Table
+        );
 
         // The map registers the nodes the emitter lowered, which are rarely the leaf the engine names; walking back
         // up the pointer finds the nearest enclosing node that does carry a span.

@@ -3,7 +3,7 @@ namespace Puck.Transpiler.Ast;
 /// <summary>Base class for all gate-predicate nodes parsed from a <c>when</c> clause (§1 of the sugar wave).
 /// A predicate node never classifies itself as <c>compareState</c>/<c>compareValue</c> — it carries the raw operand
 /// text the parser validated through <c>ExpressionSpelling.TryParse</c>, leaving that classification (and the
-/// verbatim <c>ValueExpression</c> capture) to the lowering stage.</summary>
+/// verbatim <c>ExpressionProgram</c> capture) to the lowering stage.</summary>
 public abstract record PredicateNode(int Offset = 0, int Length = 0, int Line = 1, int Column = 1)
     : SyntaxNode(
     Offset,

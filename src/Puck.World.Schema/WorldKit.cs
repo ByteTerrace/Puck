@@ -140,16 +140,21 @@ public readonly record struct FixedWorldKit(
     FixedWorldCarry? Carry = null,
     FixedWorldTether? Tether = null
 ) {
-    private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
+    /// <summary>Compiles the world's named action-state register file: every <c>state.body</c> declaration in
+    /// document order, then every <c>state.identity</c> one.</summary>
+    /// <param name="bodyState">The body-owned ephemeral declarations.</param>
+    /// <param name="identityState">The identity-owned durable declarations.</param>
+    /// <returns>The register file, in slot order.</returns>
+    /// <remarks>The file is a world-wide product of the two declaration lists, so every kit compiles the same one
+    /// and a slot ordinal means the same thing on every body.</remarks>
+    public static CompiledActionStateSlot[] CompileActionStateFile(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
+        ArgumentNullException.ThrowIfNull(argument: bodyState);
+        ArgumentNullException.ThrowIfNull(argument: identityState);
+
         var slots = new List<CompiledActionStateSlot>();
-        var byName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         void Add(IReadOnlyList<ActionStateSlot> declarations, ActionStateLifetime lifetime) {
             foreach (var state in declarations) {
-                byName.Add(
-                    key: state.Name,
-                    value: slots.Count
-                );
                 slots.Add(item: new CompiledActionStateSlot(
                     Name: state.Name,
                     Kind: state.Kind,
@@ -176,7 +181,7 @@ public readonly record struct FixedWorldKit(
             lifetime: ActionStateLifetime.Durable
         );
 
-        return (Slots: slots.ToArray(), ByName: byName);
+        return slots.ToArray();
     }
     private static CompiledActionStateEnvelope? CompileEnvelope(ActionStateSlot state) {
         long Compile(float value) => ((state.Kind == ActionStateKind.Counter)
@@ -241,10 +246,21 @@ public readonly record struct FixedWorldKit(
         var roleMask = new bool[ChannelLimits.MaxChannels];
         var program = programs[kit.BodyMotionProgram];
 
-        var (actionState, stateSlots) = CompileActionState(
+        var actionState = CompileActionStateFile(
             bodyState: bodyState,
             identityState: identityState
         );
+        var stateSlots = new Dictionary<string, int>(
+            capacity: actionState.Length,
+            comparer: StringComparer.Ordinal
+        );
+
+        for (var slot = 0; (slot < actionState.Length); slot++) {
+            stateSlots.Add(
+                key: actionState[slot].Name,
+                value: slot
+            );
+        }
 
         // Every ordinal carries the world's own declared threshold, bound or not: the held reads (a speed modifier,
         // a shaping gate), the engage-channel probe, and the previous-bit image all compare against this array, and

@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 [Collection(ConsoleRedirectionCollection.Name)]
 public sealed class WorldDecisionNeighborLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static ValueExpression Constant(decimal value) => new(Tokens: [new ValueToken.Constant(Value: value)]);
+    private static ExpressionProgram Constant(decimal value) => new(Instructions: [Instruction.Constant(value: value)]);
     private static WorldStateRow Row(string name, params long[] values) => new(
         Name(value: name),
         CellKind.Int,
@@ -20,16 +20,15 @@ public sealed class WorldDecisionNeighborLawTests {
         ),
         Cells: values.Select(selector: (value, index) => new StateCell(
             Name(value: index.ToString()),
-            value
+            CellValue.Int(value: value)
         )).ToArray()
     );
     private static WorldDecision Policy(WorldDecisionNeighbors? neighbors = null) => new(
         [
         new(
                 Name(value: "companion"),
-                new(Tokens: [new ValueToken.State(
-                        Key: "$right",
-                        Name: "appeal"
+                new(Instructions: [Instruction.Operand(key: "$right",
+                        name: "appeal"
                     )]),
                 [new ActionEffect.AddState(
                         "entries",
@@ -66,7 +65,7 @@ public sealed class WorldDecisionNeighborLawTests {
             CellKind.Int,
             Cells: [new(
                     WorldStateRow.SlotKey,
-                    0
+                    CellValue.Int(value: 0)
                 )]
         )]),
         Rules = [new(
@@ -131,7 +130,7 @@ public sealed class WorldDecisionNeighborLawTests {
     private static long Entries(WorldFixture fixture) => WorldDefinitionRows.FindStateRow(
         fixture.Server.Definition.State,
         "entries"
-    )!.Cells![0].Value;
+    )!.Cells![0].Value.AsInt;
     private static void Appeal(WorldFixture fixture, int index, long value) => fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
         WorldPrincipal.Console,
         "appeal",
@@ -369,11 +368,13 @@ public sealed class WorldDecisionNeighborLawTests {
         };
         using var fixture = Fixtures.FreshServer(doc);
 
-        for (var i = 0; (i < 4); i++) { _ = Join(
+        for (var i = 0; (i < 4); i++) {
+            _ = Join(
             fixture,
             i,
             0
-        ); }
+        );
+        }
         Assert.Equal(
             124,
             fixture.Server.Population.SetSimulatedCount(124)
@@ -421,11 +422,14 @@ public sealed class WorldDecisionNeighborLawTests {
         WorldDefinition WithRanges(params decimal[] ranges) => Document(policy: Policy() with {
             PeriodSeconds = 100,
             CommitmentSeconds = 100,
-            Options = ranges.Select(selector: (range, index) => option with { Name = Name(value: $"option{index}"), Neighbors = new(
+            Options = ranges.Select(selector: (range, index) => option with {
+                Name = Name(value: $"option{index}"),
+                Neighbors = new(
             range,
             4,
             3
-        ) }).ToArray(),
+        ),
+            }).ToArray(),
         });
         var one = WorldRuleWorkBudget.Measure(definition: WithRanges(17));
         var shared = WorldRuleWorkBudget.Measure(definition: WithRanges(
@@ -553,7 +557,7 @@ public sealed class WorldDecisionNeighborLawTests {
                 CellKind.Int,
                 Cells: [new(
                         WorldStateRow.SlotKey,
-                        0
+                        CellValue.Int(value: 0)
                     )]
             )],
             },
@@ -602,37 +606,38 @@ public sealed class WorldDecisionNeighborLawTests {
     public void AParameterizedOptionCannotLeakBindingsIntoOtherOptionsOrCommonEffects() {
         var doc = Document();
 
-        Assert.NotNull(@object: WorldRuleCompiler.CompileAll(definition: doc)[0].Decision!.Options[0].Neighbors);
+        Assert.NotNull(@object: ((CompiledWorldFactsRule)WorldFactsCompiler.CompileAll(definition: doc)[0]).Decision!.Options[0].Neighbors);
         var rule = doc.Rules![0];
-        var fixedOption = rule.Decision!.Options[1] with { Score = new(Tokens: [new ValueToken.State(
-                Key: "$right",
-                Name: "appeal"
-            )]) };
+        var fixedOption = rule.Decision!.Options[1] with {
+            Score = new(Instructions: [Instruction.Operand(key: "$right",
+                name: "appeal"
+            )]),
+        };
 
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.Compile(
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.Compile(
             rule with {
-            Decision = rule.Decision with { Options = [rule.Decision.Options[0], fixedOption] },
-        },
-            doc
+                Decision = rule.Decision with { Options = [rule.Decision.Options[0], fixedOption] },
+            },
+            WorldFactsCompiler.Context(definition: doc)
         ));
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.Compile(
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.Compile(
             rule with {
-            Effects = [new ActionEffect.SetState(
+                Effects = [new ActionEffect.SetState(
                     "appeal",
                     Key: "$right",
                     Value: 1
                 )],
-        },
-            doc
+            },
+            WorldFactsCompiler.Context(definition: doc)
         ));
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.Compile(
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.Compile(
             rule with { ForEach = null },
-            doc
+            WorldFactsCompiler.Context(definition: doc)
         ));
-        Assert.NotNull(@object: WorldRuleCompiler.Compile(
-            definition: doc,
+        Assert.NotNull(@object: ((CompiledWorldFactsRule)WorldFactsCompiler.Compile(
+            context: WorldFactsCompiler.Context(definition: doc),
             rule: rule
-        ).Decision);
+        )).Decision);
     }
     [InlineData(0)]
     [InlineData(1)]
@@ -656,7 +661,7 @@ public sealed class WorldDecisionNeighborLawTests {
             4 => source with { HalfAngleDegrees = 0 },
             _ => source with { MaxCandidates = 33, CandidateBudget = 128 },
         };
-        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Document(policy: Policy(neighbors: source))));
+        Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Document(policy: Policy(neighbors: source))));
     }
     [Fact]
     public void StrictRoundTripAndWireCheckpointPreserveFutureNeighborChoicesAndHashes() {
@@ -669,11 +674,13 @@ public sealed class WorldDecisionNeighborLawTests {
         );
         using var original = Fixtures.FreshServer(doc);
 
-        for (var i = 0; (i < 4); i++) { _ = Join(
+        for (var i = 0; (i < 4); i++) {
+            _ = Join(
             original,
             i,
             i
-        ); }
+        );
+        }
         original.Step(); var captured = Capture(fixture: original);
 
         Assert.True(
@@ -698,11 +705,11 @@ public sealed class WorldDecisionNeighborLawTests {
                 State(fixture: restored)
             );
             Assert.Equal(
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: original.Server,
                     tick: tick
                 ),
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: restored.Server,
                     tick: tick
                 )
@@ -784,11 +791,13 @@ public sealed class WorldDecisionNeighborLawTests {
         using var control = Fixtures.FreshServer(doc with { Rules = [] });
 
         static void Populate(WorldFixture fixture) {
-            for (var i = 0; (i < 4); i++) { _ = Join(
+            for (var i = 0; (i < 4); i++) {
+                _ = Join(
                 fixture,
                 i,
                 0
-            ); }
+            );
+            }
             Assert.Equal(
                 124,
                 fixture.Server.Population.SetSimulatedCount(124)
@@ -807,10 +816,12 @@ public sealed class WorldDecisionNeighborLawTests {
         // Exercise every body before measuring. Tiered compilation is disabled for allocation laws, so
         // no background promotion needs thousands of warmup calls. Repeated windows isolate one-off bookkeeping.
         static (long Bytes, TimeSpan Time) Run(WorldFixture f) {
-            for (var i = 0; (i < 16); i++) { f.Step(stepTicks: 504); _ = WorldRuntimeStateHash.HashAuthoritative(
+            for (var i = 0; (i < 16); i++) {
+                f.Step(stepTicks: 504); _ = WorldStateHashComposition.HashAuthoritative(
                 server: f.Server,
                 tick: 0
-            ); }
+            );
+            }
             var bestBytes = long.MaxValue;
             var bestTime = TimeSpan.MaxValue;
 
@@ -818,10 +829,12 @@ public sealed class WorldDecisionNeighborLawTests {
                 var bytes = GC.GetAllocatedBytesForCurrentThread();
                 var start = Stopwatch.GetTimestamp();
 
-                for (var i = 0; (i < 32); i++) { f.Step(stepTicks: 504); _ = WorldRuntimeStateHash.HashAuthoritative(
+                for (var i = 0; (i < 32); i++) {
+                    f.Step(stepTicks: 504); _ = WorldStateHashComposition.HashAuthoritative(
                     server: f.Server,
                     tick: 0
-                ); }
+                );
+                }
 
                 var allocated = (GC.GetAllocatedBytesForCurrentThread() - bytes);
 
@@ -879,7 +892,7 @@ public sealed class WorldDecisionNeighborLawTests {
             2 => original with { CandidateGeneration = -1 },
             _ => original with { Candidate = original.Key },
         };
-        var before = WorldRuntimeStateHash.HashAuthoritative(
+        var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0
         );
@@ -887,7 +900,7 @@ public sealed class WorldDecisionNeighborLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: captured with { Server = captured.Server with { Decisions = [invalid] } }));
         Assert.Equal(
             before,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: 0
             )

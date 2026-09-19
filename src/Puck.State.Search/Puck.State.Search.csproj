@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.State.Search</AssemblyName>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>Deterministic game-tree search over a Puck.State arena: negamax with alpha-beta and transpositions, UCB1 tree search, chance nodes, and per-seat max-n scores, every candidate a journal scope rather than a copied position. A candidate is judged by the same compiled rules the simulation runs, through the Puck.State.Rules evaluator, so a search judges what the world would judge and a rewound candidate leaves the arena byte-identical. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.State.Search</PackageId>
+        <PackageTags>determinism;negamax;search;simulation;state</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.State</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Puck.State carries the arena every candidate scope opens on, the catalog its ordinals and keys address,
+             and the shared plan vocabulary; Puck.State.Rules carries the evaluator, the effect host, and the
+             compiled rules a candidate's judge runs; Puck.Maths carries the hash fold a position key and an input
+             stamp are built from. Nothing else, and nothing points back. -->
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="..\Puck.State.Rules\Puck.State.Rules.csproj" />
+    </ItemGroup>
+</Project>

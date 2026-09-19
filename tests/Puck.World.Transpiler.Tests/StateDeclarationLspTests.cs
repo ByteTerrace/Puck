@@ -5,8 +5,8 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>LSP completion for a dot-access read (state-authoring stage 3): completing a declared table's own cell
-/// keys after <c>row.</c>, including recovery from an in-progress, not-yet-closed statement.</summary>
+/// <summary>LSP completion for a dot-access read: completing a declared table's own cell keys after <c>row.</c>,
+/// including recovery from an in-progress, not-yet-closed statement.</summary>
 public class StateDeclarationLspTests {
     private static JsonNode ReadResponseWithId(Stream stream, int id) {
         while (true) {

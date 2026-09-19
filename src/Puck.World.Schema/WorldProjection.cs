@@ -209,7 +209,9 @@ public static class WorldProjection {
     /// <see cref="WorldDisclosureTier.Frames"/> (the caller sends no document at all).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
+    /// <param name="arena">The authority's live store, which every disclosed value and audience is read from.</param>
+    /// <param name="time">The clocks a disclosed cell's value-over-time trait is read at.</param>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, WorldPrincipal? recipient = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
@@ -275,14 +277,19 @@ public static class WorldProjection {
         );
 
         WorldStateDisclosure.ValidateBindings(
+            arena: arena,
             definition: definition,
             graph: projection,
             recipient: recipient
         );
-        projection = projection with { Observations = WorldStateDisclosure.Compose(
+        projection = projection with {
+            Observations = WorldStateDisclosure.Compose(
+            arena: arena,
             definition: definition,
-            recipient: recipient
-        ) };
+            recipient: recipient,
+            time: in time
+        ),
+        };
         return Flatten(
             definition: definition,
             projection: projection

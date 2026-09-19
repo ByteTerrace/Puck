@@ -1,0 +1,6 @@
+world.wait 20
+body.where 0
+world.adjacencies
+body.fly 1 0 0 0 0 0 2
+world.wait 200
+body.where 0

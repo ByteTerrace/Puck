@@ -137,7 +137,7 @@ public sealed class LocalAttitudeHoldLawTests {
             )
         );
 
-        return Fixtures.BuildDocument() with {
+        return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             BodyMotionProgramsRaw = [free, roam],
             ChannelsRaw = channels,
             DefaultSeatKitRaw = "flyer-test",

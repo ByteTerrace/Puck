@@ -25,7 +25,7 @@ public sealed class EngineTimeClockSequenceLawTests {
         ),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: CellValue.Int(value: value)
             )]
     );
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument().WithWorldState(rows: rows);
@@ -110,7 +110,7 @@ public sealed class EngineTimeClockSequenceLawTests {
             actual: WorldDefinitionRows.FindStateRow(
                 rows: fixture.Server.Definition.State,
                 name: "clock"
-            )!.Cells!.Single().Value
+            )!.Cells!.Single().Value.AsInt
         );
         Assert.NotEqual(
             expected: beforeUndo,
@@ -180,7 +180,7 @@ public sealed class EngineTimeClockSequenceLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0)
                 )]
         );
         using var ruled = Fixtures.FreshServer(definition: Document(ClockRow(), trigger) with {

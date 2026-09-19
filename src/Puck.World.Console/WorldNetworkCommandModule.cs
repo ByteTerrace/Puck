@@ -220,11 +220,14 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             return $"replica: {WorldDefinitionSerialization.Serialize(definition: definition).Length} bytes, the whole {WorldDefinition.SchemaVersion} document";
         }
 
+        var time = server.Time;
         var projection = WorldProjection.Compose(
+            arena: server.Arena,
             definition: definition,
             tier: tier,
             authority: server.AuthorityIdentity,
-            revision: server.Population.Revision
+            revision: server.Population.Revision,
+            time: in time
         )!;
         var bytes = WorldProjection.Serialize(projection: projection);
 

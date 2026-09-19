@@ -29,14 +29,16 @@ is non-serialized; definitions sharing `StateRaw` share its compiled view, and
 `WithWorldState` preserves that view and its handles across value-only updates.
 
 `state.world` (`WorldStateRow`) is genre-neutral game state — score, rounds,
-inventory, flags. **A slot is a table with one
+inventory, flags, semantic memories, and vector embeddings. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
-declares its `kind`, and carries EITHER a bare `value` — sugar for the one
+declares its `kind` (`Int`, `Fixed`, `Bool`, `Text`, or `Vector`), and carries EITHER a bare `value` — sugar for the one
 cell keyed `WorldStateRow.SlotKey` (`"$value"`) — OR a `cells` array of
 author-keyed `{"key","value"}` objects. Two optional fields, never two
 discriminators: a row carrying both, or a `value` beside a `capacity`
 (declaring a capacity is declaring keyed-row intent), refuses by name.
-Omitting both is a declared-but-empty row.
+Omitting both is a declared-but-empty row. When `kind` is `Vector`, the row references
+a declared embedding space in `state.spaces` (`spaces { space <name> { ... } }`).
+Text tables can declare `embeds(vectorRow)` to automatically link text entries to companion vector rows.
 
 Runtime rule operands compile world-row names to catalog-bound handles. Keyed
 reads return stored values and authored behavior metadata together. Reductions
@@ -68,6 +70,7 @@ future-decision state, rather than manifest compatibility, is the assertion.
 
 ```json
 "state": {
+  "spaces": [{"name":"lore","model":"puck-fixture","revision":"1","dimensions":256}],
   "world": [{"name":"score","kind":"Int","value":0,"min":0,"max":1000}],
   "body": [{"name":"jumpUses","kind":"Counter","initial":0,"resetFact":"Grounded"}],
   "identity": [{"name":"stance","kind":"Counter","initial":0,"playerWritable":true,
@@ -168,13 +171,14 @@ cell instead of refusing (in-place rewrites of an existing key never grow the
 row, so they can never trigger it, and never move that key's age — true
 insertion-order FIFO, not LRU). Requires a declared `capacity` — refused by
 name without one, which also covers a slot row, since a slot never declares
-one. The composition itself (`StateCellWriter.ApplyEviction`, `Puck.State`) is a SHARED pure function: `WorldServer.TryCompose`'s
-`UpsertStateCell` arm calls it for the running world's own document (so a live
-write and every `world.undo` journal re-composition reproduce the identical
-victim; the dropped key is named on that write's `[world.mutation: …]` echo,
-`"(evicted '<key>')"` — never a silent drop), and `WorldIdentity.TryAppendEvictingText`
-calls the SAME function for an owned-identity document write outside the
-ordered mutation domain (a self-authored `chat.log`, or a cross-document
+one. The eviction itself belongs to `StateArena`'s mint (`Puck.State`), and
+both doors reach it: `WorldServer.TryCompose`'s `UpsertStateCell` arm composes
+through an arena over the running world's own document (so a live write and
+every `world.undo` journal re-composition reproduce the identical victim; the
+dropped key is named on that write's `[world.mutation: …]` echo,
+`"(evicted '<key>')"` — never a silent drop), and
+`WorldIdentity.TryAppendEvictingText` composes through an arena over the owned
+identity's document, outside the ordered mutation domain (a self-authored `chat.log`, or a cross-document
 `chat.whisper` landing in a bounded inbox — see `authority.md`'s C-CHAT entry)
 — one composition, never two readings of the eviction rule.
 
@@ -224,9 +228,16 @@ rate reads the same value at the same wall-clock moment regardless of rate. A
 `advance` is legal there (not refused) and simply never accrues past whatever
 base its last explicit write left it at.
 An explicit write RE-BASES (base=written value, `clock.epochEngineTick`=the
-applying engine tick, unconditionally — `Server.WorldServer.RebaseCellTraits`
-(per cell, `SettleCell`), which also runs inside `world.undo`'s per-entry
-replay, keyed off each journal entry's own RECORDED engine tick (every journal
+applying engine tick, unconditionally — `StateArena.TryWriteLive`, the arena
+door a cell write composes through, for a per-cell write;
+`StateArena.TrySettleRedeclared` for a whole-row re-declaration, which settles
+every cell the row carries across the transition table. A re-declaration
+carries the stored value, so one restating the base a cell already held is not
+a write of the value: the epoch moves and the accumulation the cell had reached
+becomes the new base, which is why changing a row's default rate never
+restarts a cell that declares its own. Both run inside
+`world.undo`'s per-entry replay, keyed off each journal entry's own RECORDED
+engine tick (every journal
 entry, in-memory and durable, carries an engine tick beside its simulation
 tick), so undo restores `(base, clock)` bit-exactly). A declared `min`/`max`
 CLAMPS the computed value every read without rewriting the stored base — the
@@ -302,8 +313,12 @@ the node (0..239) carried `power` applications along its orbit per step. The
 stored value is the phase in the row's displayed unit — an ordinary write
 (the effective cycle unchanged) sets the phase and leaves the clock alone;
 only a re-authored default or override (a fresh key, a switch in or out, a
-parameter change) settles the clock, per the transition table in
-[state-authoring.md](../../../../docs/plans/state-authoring.md#row-behavior-applies-to-every-cell).
+parameter change) settles the clock. Settling out of a cycle stores the value
+the rotation was displaying, never its phase, so removing a rotation leaves a
+reader's number where it was; settling from one cycle into another carries the
+phase, which the new rotation re-derives its own output from. Both per the
+behavior transitions in
+[Model state with rows and cells](../../../../docs/reference/state/data-model.md#choose-behavior-deliberately).
 `world.state` echoes
 `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n>[+<substepTicks>] order=<n>`;
 `world.save` settles the value to the current index/node at epoch `0`. Read
@@ -544,8 +559,8 @@ accepting verdict value (the binding's `accept`, else 1). A job over piles names
 over the token domain `tokens` names) instead of `board`: the zones are its cells, `tokens` is the domain row,
 the one shape is `transfer` (`selector`: `last`/`first`, the zone end a token must stand at; `insertFirst`), and
 `turn`/`verdict` are authored (no binding, no `reach`). Pile order is the zones' own: only an end token moves, and
-the judge reads the moved pile through the frame (`StateFrame` lays an ordered zone out by capacity —
-`FrameRowKind.Zone` — and `TryTransferToken` moves membership without a row).
+the judge reads the moved pile through the arena, which lays an ordered zone out by capacity and moves
+membership without rewriting a row.
 
 `shapes` names the candidate shapes the walk enumerates, ahead of token and
 target/direction; absent, the one default `relocate` (`displace: true`) this
@@ -568,11 +583,11 @@ cell `held` (int slot, the token's ordinal in `tokens`) may reach, empty
 elsewhere — out of range paints nothing — and `counts` (int row keyed by the
 tokens) is each token's own accepted count. `reach`/`held` are authored
 together. The job walks every (shape, token, target cell or direction) triple
-in that order: it applies the shape's move to a `StateFrame` copy of the
-section — an invalid candidate (occupied landing, unoccupied jump
-intermediate, off-board companion) is skipped before judging — and judges it
-with the rules a frame can evaluate (no interaction, no decision, no
-world-only read — `RuleDataflow.ReadsHost`), accepting when the verdict reads
+in that order: it applies the shape's move inside a journal scope on the
+arena (`ArenaSearchCandidate`) — an invalid candidate (occupied landing,
+unoccupied jump intermediate, off-board companion) is skipped before judging —
+and judges it with the rules a scoped judge can evaluate (no interaction, no
+decision, no world-only read), accepting when the verdict reads
 `accept` and the turn changed. This root walk never prunes and never skips a
 valid candidate, so the root outputs are unaffected by `depth`/`score`. It
 restarts when any framed cell other than its outputs changes. Quota derives
@@ -593,7 +608,7 @@ from the perspective of the side that just moved) while plies remain, else
 `-WorldSearchCapacity.MateScore`. Alpha-beta prunes every ply past the root
 only. `method: tree` searches the same `score` by UCB1 instead: `iterations` rounds over a
 `WorldSearchCapacity.TreeNodes` pool, playouts drawn from a SplitMix64 stream seeded by the job's stamp, the
-score read from the mover's side at a dead end or the `depth` cap, landing the most-visited root move. The recursion is an explicit stack (one `StateFrame` per ply beyond the
+score read from the mover's side at a dead end or the `depth` cap, landing the most-visited root move. The recursion is an explicit stack (one journal scope per ply beyond the
 root), not the call stack, so it suspends at any node across a tick boundary
 and checkpoints byte-for-byte.
 

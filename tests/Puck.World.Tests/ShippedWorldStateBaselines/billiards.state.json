@@ -1,0 +1,215 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 510,
+  "engineTick": 856800,
+  "hashes": {
+    "authoritative": "d12e3b5b9918143f",
+    "capture": "fba7cf545f8f1dbd",
+    "pose": "3bc174eed39d4348",
+    "world": "b5b1383917890287"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "cue",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "1.00006103515625"
+          }
+        ]
+      },
+      {
+        "name": "billiardsColors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "ball",
+            "value": "#F5F1E6"
+          },
+          {
+            "key": "tray",
+            "value": "#2E2A26"
+          }
+        ]
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "cue",
+      "cells": [
+        {
+          "key": "0",
+          "value": 65540,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "billiardsColors",
+      "cells": [
+        {
+          "key": "ball",
+          "value": 0,
+          "text": "#F5F1E6"
+        },
+        {
+          "key": "tray",
+          "value": 0,
+          "text": "#2E2A26"
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

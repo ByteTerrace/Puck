@@ -8,7 +8,9 @@ namespace Puck.State;
 /// zone was empty. Infinity participates in comparisons through
 /// <see cref="ActionStateComparisons.Holds(ActionStateComparison, FixedQ4816, bool, FixedQ4816, bool)"/>; an absent
 /// fact holds no comparison at all (neither equal nor not-equal to anything), faults an expression, and stops a copy
-/// from firing. Neither is ever encoded as a numeric stand-in.</summary>
+/// from firing, each refusing by name and pointing at <see cref="ExpressionOp.IsAbsent"/> and
+/// <see cref="ExpressionOp.Coalesce"/>, the operations that answer an absence. Neither is ever encoded as a numeric
+/// stand-in.</summary>
 /// <param name="Value">The raw value in <paramref name="Kind"/>'s encoding; ignored when <paramref name="IsForever"/>
 /// or <paramref name="IsAbsent"/>.</param>
 /// <param name="Kind">The encoding <paramref name="Value"/> carries.</param>

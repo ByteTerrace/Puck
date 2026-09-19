@@ -1,0 +1,244 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action tttMoveCell, tttMoveRequest
+export binding tttActive, tttMoveCount, tttWinner
+export read tttActive, tttBoard, tttCube, tttMoveApplied, tttMoveCount, tttWinner
+
+rule "ttt-place-mark" {
+  when tttMoveRequest != tttMoveApplied and tttWinner == 0 and tttMoveCell >= 0 and tttMoveCell <= 63 and tttBoard[tttMoveCell[$value]] == 0
+  mode: "Edge"
+  tttBoard[tttMoveCell[$value]] = tttActive
+  tttMoveCount += 1
+  tttBoardVersion += 1
+  tttMoveApplied = tttMoveRequest
+  tttActive = 3 - tttActive
+}
+
+rule "ttt-reject-out-of-range" {
+  when tttMoveRequest != tttMoveApplied and (tttMoveCell < 0 or tttMoveCell > 63)
+  mode: "Edge"
+  tttMoveApplied = tttMoveRequest
+}
+
+rule "ttt-reject-illegal" {
+  when tttMoveRequest != tttMoveApplied and tttMoveCell >= 0 and tttMoveCell <= 63 and (tttWinner != 0 or tttBoard[tttMoveCell[$value]] != 0)
+  mode: "Edge"
+  tttMoveApplied = tttMoveRequest
+}
+
+rule "ttt-check-win" {
+  when tttBoardVersion != tttWinCheckVersion
+  mode: "Edge"
+  setState(state: "tttMaskX", expression: "$board:mask:tttBoard:1:1")
+  tttXWin = ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)
+  tttXWin = tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)
+  tttXWin = tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)
+  tttXWin = tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)
+  setState(state: "tttMaskO", expression: "$board:mask:tttBoard:2:2")
+  tttOWin = ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)
+  tttOWin = tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)
+  tttOWin = tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)
+  tttOWin = tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)
+  tttWinner = tttXWin ? 1 : tttOWin ? 2 : tttMoveCount >= 64 ? 3 : 0
+  tttWinCheckVersion = tttBoardVersion
+}
+
+state {
+  lattices [
+    box(cellSize: 1, depth: 4, layerHeight: 1, layers: 4, name: "tttCube", origin: [0, -32, 0], width: 4, directions: [
+      {
+        name: "L0"
+        x: 0
+        y: 0
+        z: 1
+      }
+      {
+        name: "L1"
+        x: 0
+        y: 1
+        z: -1
+      }
+      {
+        name: "L2"
+        x: 0
+        y: 1
+        z: 0
+      }
+      {
+        name: "L3"
+        x: 0
+        y: 1
+        z: 1
+      }
+      {
+        name: "L4"
+        x: 1
+        y: -1
+        z: -1
+      }
+      {
+        name: "L5"
+        x: 1
+        y: -1
+        z: 0
+      }
+      {
+        name: "L6"
+        x: 1
+        y: -1
+        z: 1
+      }
+      {
+        name: "L7"
+        x: 1
+        y: 0
+        z: -1
+      }
+      {
+        name: "L8"
+        x: 1
+        y: 0
+        z: 0
+      }
+      {
+        name: "L9"
+        x: 1
+        y: 0
+        z: 1
+      }
+      {
+        name: "L10"
+        x: 1
+        y: 1
+        z: -1
+      }
+      {
+        name: "L11"
+        x: 1
+        y: 1
+        z: 0
+      }
+      {
+        name: "L12"
+        x: 1
+        y: 1
+        z: 1
+      }
+      {
+        name: "L0Back"
+        x: 0
+        y: 0
+        z: -1
+      }
+      {
+        name: "L1Back"
+        x: 0
+        y: -1
+        z: 1
+      }
+      {
+        name: "L2Back"
+        x: 0
+        y: -1
+        z: 0
+      }
+      {
+        name: "L3Back"
+        x: 0
+        y: -1
+        z: -1
+      }
+      {
+        name: "L4Back"
+        x: -1
+        y: 1
+        z: 1
+      }
+      {
+        name: "L5Back"
+        x: -1
+        y: 1
+        z: 0
+      }
+      {
+        name: "L6Back"
+        x: -1
+        y: 1
+        z: -1
+      }
+      {
+        name: "L7Back"
+        x: -1
+        y: 0
+        z: 1
+      }
+      {
+        name: "L8Back"
+        x: -1
+        y: 0
+        z: 0
+      }
+      {
+        name: "L9Back"
+        x: -1
+        y: 0
+        z: -1
+      }
+      {
+        name: "L10Back"
+        x: -1
+        y: -1
+        z: 1
+      }
+      {
+        name: "L11Back"
+        x: -1
+        y: -1
+        z: 0
+      }
+      {
+        name: "L12Back"
+        x: -1
+        y: -1
+        z: -1
+      }
+    ]
+    )
+  ]
+
+  world {
+    row {
+      domain: cellsOf(topology: "tttCube")
+      kind: "Int"
+      name: "tttBoard"
+    }
+
+    slot tttActive: Int = 1 bounds(minimum: 1, maximum: 2)
+
+    slot tttMoveCell: Int = -1 bounds(minimum: -1, maximum: 63)
+
+    slot tttMoveRequest: Int = 0 bounds(minimum: 0)
+
+    slot tttMoveApplied: Int = 0 bounds(minimum: 0)
+
+    slot tttBoardVersion: Int = 0 bounds(minimum: 0)
+
+    slot tttWinCheckVersion: Int = 0 bounds(minimum: 0)
+
+    slot tttWinner: Int = 0 bounds(minimum: 0, maximum: 3)
+
+    slot tttMoveCount: Int = 0 bounds(minimum: 0, maximum: 64)
+
+    slot tttXWin: Int = 0 bounds(minimum: 0, maximum: 1)
+
+    slot tttOWin: Int = 0 bounds(minimum: 0, maximum: 1)
+
+    slot tttMaskX: Int = 0 bounds(minimum: -9223372036854775808, maximum: 9223372036854775807)
+
+    slot tttMaskO: Int = 0 bounds(minimum: -9223372036854775808, maximum: 9223372036854775807)
+  }
+}

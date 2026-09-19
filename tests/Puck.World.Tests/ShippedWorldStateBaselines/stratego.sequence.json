@@ -1,0 +1,331 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/stratego.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-stratego-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "join": {
+        "seat": 2
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.5
+      }
+    },
+    {
+      "press": {
+        "seat": 2,
+        "channel": "attack",
+        "value": 1,
+        "holdSeconds": 0.5
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 34
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 44
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 64
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 54
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 39
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 49
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 32
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 42
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 44
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 54
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 65
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 55
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 35
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 45
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 68
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 58
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 45
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 55
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 58
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 48
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 54
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 55
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "strategoFrom",
+        "key": "$value",
+        "value": 80
+      }
+    },
+    {
+      "set": {
+        "row": "strategoTo",
+        "key": "$value",
+        "value": 90
+      }
+    },
+    {
+      "add": {
+        "row": "strategoRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 40
+    }
+  ]
+}

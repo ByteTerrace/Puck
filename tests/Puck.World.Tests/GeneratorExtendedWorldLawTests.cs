@@ -49,7 +49,7 @@ public sealed class GeneratorExtendedWorldLawTests {
             name: "extended-roll"
         )!;
 
-        return (row.DrawCursor, row.Cells![0].Value);
+        return (row.DrawCursor, row.Cells![0].Value.Raw);
     }
 
     [Fact]
@@ -76,11 +76,11 @@ public sealed class GeneratorExtendedWorldLawTests {
             expected: leftValue
         );
         Assert.Equal(
-            expected: WorldRuntimeStateHash.HashAuthoritative(
+            expected: WorldStateHashComposition.HashAuthoritative(
                 server: left.Server,
                 tick: 0UL
             ),
-            actual: WorldRuntimeStateHash.HashAuthoritative(
+            actual: WorldStateHashComposition.HashAuthoritative(
                 server: right.Server,
                 tick: 0UL
             )

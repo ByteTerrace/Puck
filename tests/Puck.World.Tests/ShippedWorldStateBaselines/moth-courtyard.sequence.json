@@ -1,0 +1,24 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "moth-courtyard.world.json",
+  "host": {
+    "kind": "document",
+    "rewriteBasis": "avatars/moth.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 60
+    },
+    {
+      "set": {
+        "row": "skyMode",
+        "key": "$value",
+        "value": 65536
+      }
+    },
+    {
+      "advance": 540
+    }
+  ]
+}

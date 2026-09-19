@@ -1,5 +1,28 @@
 namespace Puck.Transpiler.Ast;
 
+/// <summary>One item of a family's bracketed member list — either an index range (<c>2..12</c>, or a single index
+/// when <see cref="Last"/> is absent) or a member row named outright (<c>"PileA"</c>).</summary>
+/// <param name="First">The first family index of the range, or <see langword="null"/> when the item names a row.</param>
+/// <param name="Last">The last family index of an inclusive range, or <see langword="null"/> for a single index.</param>
+/// <param name="Row">The member row's own name, or <see langword="null"/> when the item is an index range.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record FamilyMemberNode(
+    ExpressionNode? First = null,
+    ExpressionNode? Last = null,
+    string? Row = null,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : SyntaxNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>A modifier call attached to a <c>table</c>/<c>slot</c> declaration or one of a table's cell entries —
 /// e.g. <c>bounds(minimum: 0, maximum: 100)</c>, <c>advance(perSecond: 5)</c>, <c>capacity(8)</c>, or
 /// <c>behavior(none)</c>. This IS a call — it reuses the ordinary call-expression grammar
@@ -59,6 +82,10 @@ public sealed record StateCellEntryNode(
 /// own refusal, not a parse error — the core does not know the admitted kind set).</param>
 /// <param name="Modifiers">The row-level modifier calls, in written order.</param>
 /// <param name="Cells">The declared cell entries, in written order.</param>
+/// <param name="FamilySize">The optional compile-time family count expression (e.g. [8]), or null for a single row.</param>
+/// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
+/// bare count, or null.</param>
+/// <param name="Initializer">The optional compile-time collection initializer expression (e.g. range(0, 52)), or null when cells are authored individually.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -68,6 +95,9 @@ public sealed record StateTableDeclarationNode(
     string Kind,
     IReadOnlyList<StateModifierNode> Modifiers,
     IReadOnlyList<StateCellEntryNode> Cells,
+    ExpressionNode? FamilySize = null,
+    IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
+    ExpressionNode? Initializer = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -85,6 +115,9 @@ public sealed record StateTableDeclarationNode(
 /// <param name="Value">The optional default value expression, or <see langword="null"/> for an uninitialized
 /// slot (a row that gains its cell only once something writes it).</param>
 /// <param name="Modifiers">The row-level modifier calls, in written order.</param>
+/// <param name="FamilySize">The optional compile-time family count expression (e.g. [3]), or null for a single row.</param>
+/// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
+/// bare count, or null.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -94,6 +127,8 @@ public sealed record StateSlotDeclarationNode(
     string Kind,
     ExpressionNode? Value,
     IReadOnlyList<StateModifierNode> Modifiers,
+    ExpressionNode? FamilySize = null,
+    IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -134,6 +169,10 @@ public sealed record StatePileTokenNode(
 /// <param name="Modifiers">The row-level modifier calls, in written order (only <c>capacity</c> is legal — the
 /// owning vocabulary refuses the rest by name).</param>
 /// <param name="Tokens">The declared initial members, in pile order (first entry is index 0 of <c>cells</c>).</param>
+/// <param name="FamilySize">The optional compile-time family count expression (e.g. [8]), or null for a single row.</param>
+/// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
+/// bare count, or null.</param>
+/// <param name="Initializer">The optional compile-time token collection initializer (e.g. range(0, 52)), or null when tokens are authored individually.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -143,6 +182,9 @@ public sealed record StatePileDeclarationNode(
     string TokenRow,
     IReadOnlyList<StateModifierNode> Modifiers,
     IReadOnlyList<StatePileTokenNode> Tokens,
+    ExpressionNode? FamilySize = null,
+    IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
+    ExpressionNode? Initializer = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -165,6 +207,9 @@ public sealed record StatePileDeclarationNode(
 /// board, which authors no cells of its own.</param>
 /// <param name="HasBody">Whether a <c>{ }</c> body was written at all, distinct from an empty one — a table's own
 /// convention (see <see cref="StateTableDeclarationNode"/>) does not apply here because a grid's body is optional.</param>
+/// <param name="FamilySize">The optional compile-time family count expression, or null for a single row.</param>
+/// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
+/// bare count, or null.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -175,6 +220,8 @@ public sealed record StateGridDeclarationNode(
     IReadOnlyList<StateModifierNode> Modifiers,
     IReadOnlyList<StateCellEntryNode> Cells,
     bool HasBody,
+    ExpressionNode? FamilySize = null,
+    IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -185,3 +232,80 @@ public sealed record StateGridDeclarationNode(
     Line,
     Column
 );
+/// <summary>One member of an <c>enum</c> declaration. It is a node rather than a bare name so the comments and
+/// blank lines around it have somewhere to ride.</summary>
+/// <param name="Name">The member's name; its ordinal is its position in the declaration.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record EnumMemberNode(
+    string Name,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : SyntaxNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>enum Name { Member1, Member2, ... }</c>. Lowers to integer constants and validation bounds.</summary>
+public sealed record EnumDeclarationNode(
+    string Name,
+    IReadOnlyList<EnumMemberNode> Members,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary>A typed field inside a record declaration.</summary>
+public sealed record RecordFieldNode(
+    string Name,
+    string TypeName,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : SyntaxNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>record Name { field1: Type1 ... }</c>. Lowers to columnar state row sets (Structure of Arrays).</summary>
+public sealed record RecordDeclarationNode(
+    string Name,
+    IReadOnlyList<RecordFieldNode> Fields,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>derive name = expression</c>. Compile-time macro inlining or cached derived state.</summary>
+public sealed record DerivedStateNode(
+    string Name,
+    ExpressionNode Expression,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1,
+    string? RawExpression = null
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+

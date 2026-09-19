@@ -296,11 +296,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{value}' must be a \"host:port\" pair with a port 1..65535.");
         }
     }
-    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldRuleCompiler.CompileAllInteractions(WorldDefinition)"/>
+    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldFactsCompiler.CompileAllInteractions(WorldDefinition)"/>
     /// owns which co-occurrence/effect kinds are admissible and which names resolve (the property registry, a region
     /// placement), so this pass calls it and reports its by-name refusal, mirroring <see cref="ValidateRules"/>'s own
-    /// division against <see cref="WorldRuleCompiler.CompileAll(WorldDefinition)"/>.</summary>
-    private static CompiledWorldRule[] ValidateInteractions(WorldInteractionsSection? interactions, WorldDefinition definition, List<string> errors, ref WorldRuleCompileContext? context) {
+    /// division against <see cref="WorldFactsCompiler.CompileAll(WorldDefinition)"/>.</summary>
+    private static Puck.State.Rules.CompiledRule[] ValidateInteractions(WorldInteractionsSection? interactions, WorldDefinition definition, List<string> errors, ref WorldFactsCompileContext? context) {
         var rows = (interactions?.Interactions ?? []);
 
         if (rows.Count == 0) {
@@ -342,9 +342,9 @@ public static partial class WorldDefinitionValidator {
         }
 
         try {
-            return WorldRuleCompiler.CompileAllInteractions(
-                definition,
-                context ??= WorldRuleCompiler.Context(definition: definition)
+            return WorldFactsCompiler.CompileAllInteractions(
+                context: context ??= WorldFactsCompiler.Context(definition: definition),
+                definition: definition
             );
         } catch (RuleException exception) {
             errors.Add(item: exception.Message);
@@ -484,11 +484,11 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    /// <summary>Validates the <c>rules</c> section by compiling it — <see cref="WorldRuleCompiler"/> owns which
+    /// <summary>Validates the <c>rules</c> section by compiling it — <see cref="WorldFactsCompiler"/> owns which
     /// predicate/effect kinds are admissible at world scope and which names resolve, so this pass calls it and
     /// reports its by-name refusal rather than restating the rule set (the exact division
     /// <c>BodyMotionProgramException</c> already has for kit programs).</summary>
-    private static CompiledWorldRule[] ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors, ref WorldRuleCompileContext? context) {
+    private static Puck.State.Rules.CompiledRule[] ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors, ref WorldFactsCompileContext? context) {
         if (rules is not { Count: > 0 }) {
             return [];
         }
@@ -516,14 +516,34 @@ public static partial class WorldDefinitionValidator {
         }
 
         try {
-            return WorldRuleCompiler.CompileAll(
-                definition,
-                context ??= WorldRuleCompiler.Context(definition: definition)
-            );
+            return WorldFactsCompiler.CompileAll(definition: definition);
         } catch (RuleException exception) {
-            errors.Add(item: exception.Message);
+            errors.Add(item: LocateRuleRefusal(
+                definition: definition,
+                exception: exception
+            ));
             return [];
         }
+    }
+    // A rule refusal names the document node it was drawn under, so a tool with a source map can report it on the
+    // authored line rather than on the whole document. The refusal itself carries only where inside the rule it
+    // came from; the rule's index is this document's to supply.
+    private static string LocateRuleRefusal(WorldDefinition definition, RuleException exception) {
+        var rules = (definition.Rules ?? []);
+
+        for (var index = 0; (index < rules.Count); index++) {
+            if (string.Equals(
+                a: rules[index]?.Name.Value,
+                b: exception.RuleName,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return $"rules[{index}]{((exception.Path.Length == 0)
+                    ? ""
+                    : $".{exception.Path}")}: {exception.Message}";
+            }
+        }
+
+        return exception.Message;
     }
     /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring
     /// a <c>Medium</c> hold row requires.</summary>

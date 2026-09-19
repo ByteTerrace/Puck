@@ -136,7 +136,7 @@ public sealed class WorldIdentity {
             name: name,
             rows: rows
         ) is { Kind: CellKind.Fixed, IsSlot: true } row)
-            ? FixedQ4816.FromRawBits(value: row.Cells![0].Value)
+            ? FixedQ4816.FromRawBits(value: row.Cells![0].Value.AsFixed)
             : null
         );
     // The type-level wall for a live locomotion rate: the verb door (identity.motion) refuses this range with a
@@ -175,7 +175,7 @@ public sealed class WorldIdentity {
                 return false;
             }
 
-            next = checked((seqRow.Cells![0].Value + 1));
+            next = checked((seqRow.Cells![0].Value.AsInt + 1));
         }
 
         WriteState(row: new WorldStateRow(
@@ -184,7 +184,7 @@ public sealed class WorldIdentity {
             Min: 0L,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: next
+                    Value: CellValue.Int(value: next)
                 )]
         ));
 
@@ -201,7 +201,7 @@ public sealed class WorldIdentity {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: value.Value
+                        Value: CellValue.Fixed(rawBits: value.Value)
                     )]
             ));
         }
@@ -349,18 +349,53 @@ public sealed class WorldIdentity {
             return false;
         }
 
-        if (!StateCellWriter.TryComposeTextCell(
-            cells: out var cells,
-            evictedKey: out evictedKey,
-            key: key,
+        // The append goes through an arena over this identity's own document: the row's capacity, its eviction and
+        // its reserved-cell rule are the arena's, the same ones a running world's cell write is admitted by. An
+        // identity document is a durable store with no server and no tick, so the arena is loaded at the origin.
+        if (
+            (Document is not { } document) ||
+            !StateArena.TryCreate(
+            arena: out var arena,
+            catalog: document.StateCatalog,
+            options: null,
             reason: out reason,
-            row: row,
-            text: text
-        )) {
+            section: document.StateRaw,
+            time: ArenaTime.Origin
+        ) ||
+            !arena.Catalog.TryResolve(
+            handle: out var handle,
+            lane: StateLane.Document,
+            name: rowName.Value
+        )
+        ) {
+            reason = $"state row '{rowName}' does not load into the arena: {reason}";
+
             return false;
         }
 
-        WriteState(row: row with { Cells = cells });
+        if (arena.TryEvictionVictim(
+            key: out var victim,
+            rowOrdinal: handle.Ordinal
+        )) {
+            evictedKey = arena.Catalog.Keys[victim];
+        }
+
+        if (!arena.TryMint(
+            key: out _,
+            name: key,
+            reason: out reason,
+            rowOrdinal: handle.Ordinal,
+            value: CellValue.Text(value: text)
+        )) {
+            evictedKey = null;
+
+            return false;
+        }
+
+        WriteState(row: ((WorldStateRow)StateRows.FindStateRow(
+            rows: arena.ToRows(),
+            name: rowName.Value
+        )!));
 
         return true;
     }
@@ -415,7 +450,7 @@ public sealed class WorldIdentity {
                 if (cells[index].Key != key) {
                     continue;
                 }
-                if (cells[index].Value == value) {
+                if (cells[index].Value.AsInt == value) {
                     reason = string.Empty;
 
                     return true;
@@ -429,7 +464,7 @@ public sealed class WorldIdentity {
 
                 replaced[index] = new StateCell(
                     Key: key,
-                    Value: value
+                    Value: CellValue.Int(value: value)
                 );
                 WriteState(row: declared with { Cells = replaced });
                 changed = true;
@@ -446,7 +481,7 @@ public sealed class WorldIdentity {
 
             WriteState(row: declared with { Cells = [.. cells, new StateCell(
                     Key: key,
-                    Value: value
+                    Value: CellValue.Int(value: value)
                 )] });
         } else {
             WriteState(row: new WorldStateRow(
@@ -455,7 +490,7 @@ public sealed class WorldIdentity {
                 Capacity: definition.Capacity,
                 Cells: [new StateCell(
                         Key: key,
-                        Value: value
+                        Value: CellValue.Int(value: value)
                     )]
             ));
         }
@@ -479,5 +514,28 @@ public sealed class WorldIdentity {
 
         Document = Document.WithWorldState(rows: state);
         m_factsRevision++;
+    }
+    /// <summary>Validates that any space in an identity document sharing a name with a host space satisfies <see cref="StateSpace.HasSameIdentity"/>.</summary>
+    public static bool TryValidateSpacesAgainstHost(IReadOnlyList<StateSpace>? identitySpaces, IReadOnlyList<StateSpace>? hostSpaces, out string reason) {
+        reason = string.Empty;
+        if ((identitySpaces is null) || (hostSpaces is null) || (identitySpaces.Count == 0) || (hostSpaces.Count == 0)) {
+            return true;
+        }
+
+        var hostByName = hostSpaces.Where(predicate: static s => s is not null).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
+
+        foreach (var space in identitySpaces) {
+            if (space is null) {
+                continue;
+            }
+
+            if (hostByName.TryGetValue(key: space.Name.Value, value: out var hostSpace) && !space.HasSameIdentity(other: hostSpace)) {
+                reason = $"identity space '{space.Name}' does not match host space identity (model: '{space.Model}' vs '{hostSpace.Model}', revision: '{space.Revision}' vs '{hostSpace.Revision}', dimensions: {space.Dimensions} vs {hostSpace.Dimensions})";
+
+                return false;
+            }
+        }
+
+        return true;
     }
 }

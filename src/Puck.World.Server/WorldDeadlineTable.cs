@@ -142,15 +142,3 @@ public sealed class WorldDeadlineTable<TToken> {
         return true;
     }
 }
-public sealed partial class WorldServer {
-    // Ownership escrow reclaim, transfer-lease expiry, and contribution-tenure retraction all evaluate on the same
-    // tick-driven, replay-deterministic terms (see ReclaimExpiredEscrows' own remarks) — one call keeps that shared
-    // shape visible at the call site instead of three adjacent lines that could drift apart. Park reclaim shares the
-    // shape too but stays a separate call in WorldServer.Step: it runs after SweepPlacementResponses, and folding it
-    // in here would silently reorder it ahead of a sweep whose own comment ties it to running after StepFields.
-    private void SweepDeadlines(ulong tick) {
-        ReclaimExpiredEscrows(tick: tick);
-        m_transferEscrow.ReclaimExpired(tick: tick);
-        SweepContributionTenure(tick: tick);
-    }
-}

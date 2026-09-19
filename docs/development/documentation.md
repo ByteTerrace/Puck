@@ -37,9 +37,10 @@ Different pages serve different purposes:
 | Evidence record | The dated candidate, environment, check, result, and limits of the conclusion. |
 
 Use the shape that fits the content. Short pages can stay short; long pages need
-clear navigation rather than a mandatory set of empty sections. Tables compare
-or map information, numbered lists express order, and bullets present parallel
-choices. Explain the reasoning in prose.
+clear navigation rather than a mandatory set of empty sections. A plan is not
+forced into one section template merely because another plan uses one. Tables
+compare or map information, numbered lists express order, and bullets present
+parallel choices. Explain the reasoning in prose.
 
 ## Name pages and sections
 
@@ -54,7 +55,9 @@ Use lowercase filenames with hyphens between words. Keep `README.md` for directo
 entry points. Ordered handbook prefixes, dated evidence bundles, source-owned
 example names, and generated filenames have useful naming conventions of their
 own. Rename a file when its meaning or discoverability improves, then repair
-its incoming links.
+its incoming links. Changing a linked heading is the same kind of intentional
+interface change: it is not a reason to keep an old anchor or an obsolete page
+in place, and the pages that reference it get repaired in the same change.
 
 ## Keep terminology and punctuation consistent
 
@@ -91,6 +94,9 @@ shows that it is stale.
 
 ## Choose the authoritative home
 
+Centralization means readers find one authoritative explanation for a subject.
+It does not require every explanation to live in the same folder.
+
 The manual owns the learning path and detailed human reference, including usage
 of individual libraries. A package README is a small entry point: it identifies
 the component and routes readers to its manual topic. Keep behavior, examples,
@@ -118,11 +124,15 @@ files own terms. When moving material, identify the surviving home and repair
 consumers in the same change. Generated inventories stay generated.
 
 Every active project and independently distributed package has a README.
-Nested source folders need one only when they own a useful explanation or
-navigation task. Existing specialized source references can remain the single
-home for their topic until migrated; link to them from the manual rather than
-copying them. Move a package README's detailed guidance into its owning manual
-topic before reducing it to navigation.
+Nested source folders need one only when they own a useful explanation,
+examples, or a directory-level navigation task. Existing specialized source
+references can remain the single home for their topic until migrated; link to
+them from the manual rather than copying them. Do not split a long package
+reference merely to meet a length target — the drift that creates is the
+problem centralization solves. Move a package README's detailed guidance into
+its owning manual topic before reducing it to navigation. This guide is the one
+writing standard for Puck's human documentation; extend it rather than
+introduce a second style guide.
 
 ## Organize a README
 
@@ -168,7 +178,9 @@ Human procedures can and should include commands. Name the shell, working
 directory, prerequisites, and expected observable result. Mark fenced blocks
 with their language; use `text` for non-executable output and text diagrams.
 Preserve literal examples when editing their surrounding explanation. Run an
-example again if its executable content changes.
+example again if its executable content changes. Agent execution guidance —
+the operational constraints an agent follows while working in an area — stays
+in that area's skill rather than in this register.
 
 Explain current behavior in guides, proposed work in plans, and dated results
 in evidence records. A passing test establishes the behavior it exercised for
@@ -190,3 +202,22 @@ These conventions use the approachable explanations and direct language in
 and [heading guidance](https://learn.microsoft.com/en-us/style-guide/scannable-content/headings).
 Apply those properties to the reader's task; completeness and technical accuracy
 remain essential when a subject needs a longer explanation.
+
+Google's [developer documentation style
+guide](https://developers.google.com/style) supports the same sentence-case
+headings, descriptive lowercase filenames, and direct tone; its [filenames
+guidance](https://developers.google.com/style/filenames) and [headings
+guidance](https://developers.google.com/style/headings) apply directly here.
+[Diátaxis](https://diataxis.fr/how-to-use-diataxis/) distinguishes tutorial,
+procedure, explanation, and reference content within the existing topic
+structure, without requiring a new folder reorganization to apply it. The W3C's
+[heading organization technique](https://www.w3.org/WAI/WCAG22/Techniques/general/G141)
+supports properly nested, navigable headings. A documentation pass applies
+these properties within the existing structure; it does not need a broad
+automatic prose rewrite or a new documentation platform to succeed.
+
+[GitHub's README guidance](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes)
+supports explaining a project's purpose, getting a reader started, and pointing
+to further help, with repository-relative links for checkout navigation. Its
+automatic outline from properly nested headings makes a hand-maintained table
+of contents unnecessary.

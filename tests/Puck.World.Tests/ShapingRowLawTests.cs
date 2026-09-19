@@ -104,7 +104,7 @@ public sealed class ShapingRowLawTests {
             Collider: null
         );
 
-        return Fixtures.BuildDocument() with {
+        return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             ChannelsRaw = channels,
             DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(
                 Damping: 1f,
@@ -218,7 +218,7 @@ public sealed class ShapingRowLawTests {
             Collider: null
         );
 
-        return Fixtures.BuildDocument() with {
+        return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             ChannelsRaw = channels,
             BodyMotionProgramsRaw = [walker, roam],
             KitRowsRaw = [kit],
@@ -402,7 +402,7 @@ public sealed class ShapingRowLawTests {
                 Collider: null
             );
 
-            return Fixtures.BuildDocument() with {
+            return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
                 ChannelsRaw = channels,
                 BodyMotionProgramsRaw = [program, roam],
                 KitRowsRaw = [kit],
@@ -532,7 +532,7 @@ public sealed class ShapingRowLawTests {
 
         var body = fixture.Server.Body(index: actor.Index)!;
 
-        for (var tick = 0; (tick < 4); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
                 ordinal: ForwardOrdinal,
                 value: FixedQ4816.One
@@ -545,7 +545,7 @@ public sealed class ShapingRowLawTests {
             actual: body.CaptureTransferState().PlanarVelocity.Z
         );
 
-        for (var tick = 0; (tick < 2); tick++) {
+        for (var tick = 0; (tick < 15); tick++) {
             body.SubmitIntent(intent: default);
             fixture.Step();
         }

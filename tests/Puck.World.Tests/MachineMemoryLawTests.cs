@@ -110,7 +110,7 @@ public sealed class MachineMemoryLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0)
                     )]
             ),
             new WorldStateRow(
@@ -118,7 +118,7 @@ public sealed class MachineMemoryLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0)
                     )]
             ),
         ]);
@@ -175,7 +175,7 @@ public sealed class MachineMemoryLawTests {
         return Assert.Single(
             collection: (row!.Cells ?? []),
             predicate: static cell => (cell.Key == WorldStateRow.SlotKey)
-        ).Value;
+        ).Value.Raw;
     }
 
     private readonly ITestOutputHelper m_output;

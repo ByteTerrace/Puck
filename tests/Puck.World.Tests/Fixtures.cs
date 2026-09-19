@@ -37,7 +37,8 @@ internal static class Fixtures {
     /// FLAT-UP control arm's straight vertical fall still lands on the same steep face (proving the control's push
     /// is real contact, not a body that free-falls past the ball entirely) rather than missing the sphere outright.</summary>
     private const float FlankSpawnClearance = 0.3f;
-    /// <summary>The default fixture simulation rate; individual documents may author another rate.</summary>
+    /// <summary>The default fixture simulation rate; individual documents may author another rate through
+    /// <see cref="BuildDocumentAtRate"/>.</summary>
     private const uint SimulationRateHz = WorldDefinition.UnauthoredSimulationRateHz;
     /// <summary><c>Puck.World.Authoring.CreationGeometry</c>'s own canonical <c>SdfSolidPrimitive.Sphere</c> local
     /// radius — that table's constant is private, so this mirrors its grepped value rather than referencing it, to
@@ -50,6 +51,12 @@ internal static class Fixtures {
     /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
     /// <see cref="GradientUpContactLawTests"/>'s brief, never a raw magic number at the call site.</summary>
     public const float BallSurfaceRadius = 3f;
+    /// <summary>The rate <see cref="BuildDocument()"/> authors — the shipped game's own, for a law with no reason to
+    /// want another.</summary>
+    public const int DefaultRateHz = ((int)SimulationRateHz);
+    /// <summary>The simulation rate the recorded traces and hand-derived tick counts in the laws that ask for it by
+    /// name were authored against. It is a stress rate, never a default.</summary>
+    public const int RecordedTraceRateHz = 240;
     /// <summary>The seat slot <see cref="GradientUpContactLawTests"/> joins and repositions onto the ball's flank —
     /// slot 0 maps directly to body index 0 (the 0-based seat/body correspondence
     /// <see cref="EngageAuthorityLawTests"/> also relies on), and is the ONE spawn point
@@ -107,7 +114,8 @@ internal static class Fixtures {
     /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
     /// <param name="creations">The document's creation rows.</param>
     /// <param name="placements">The document's placement rows.</param>
-    private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldPrototype[] creations, WorldPlacement[] placements) {
+    /// <param name="rateHz">The document's authored <c>simulation.rateHz</c>.</param>
+    private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldPrototype[] creations, WorldPlacement[] placements, int rateHz) {
         var channels = new WorldChannel[] {
             new(
             Name: "forward",
@@ -352,8 +360,7 @@ internal static class Fixtures {
                 Panels: []
             ),
             StateRaw: new WorldStateSection(World: []),
-            // Authored seconds now (WorldDefinition.InputHold is the AUTHORED shape) — 120/60/0 ticks at the
-            // fixture's authored 240 Hz is 0.5/0.25/0 seconds.
+            // WorldDefinition.InputHold is the AUTHORED (seconds) shape, so these are rate-independent.
             InputHoldRaw: new WorldInputHoldAuthoring(
                 CeilingSeconds: 0.5f,
                 DefaultSeconds: 0f,
@@ -361,9 +368,9 @@ internal static class Fixtures {
                 LowerAfterSeconds: 0.25f,
                 Participants: []
             ),
-            // The engine holds no rate of its own (absence is a rate-0 resident world), so the stepping fixture
-            // authors the standard 240 Hz itself, like its views section.
-            Simulation: new WorldSimulationDefaults(RateHz: ((int)SimulationRateHz))
+            // The engine holds no rate of its own (absence is a rate-0 resident world), so a stepping fixture
+            // authors one itself, like its views section.
+            Simulation: new WorldSimulationDefaults(RateHz: rateHz)
         );
     }
     /// <summary>The one locomotion kit every fixture document declares — <see cref="BuildDocument"/> passes
@@ -485,6 +492,7 @@ internal static class Fixtures {
                 MaxSlopeDegrees: 60f,
                 Requirements: []
             ),
+            rateHz: DefaultRateHz,
             seatCollider: null,
             creations: [creation],
             placements: [
@@ -534,7 +542,52 @@ internal static class Fixtures {
     /// <see cref="BuildGradientUpDocument"/> extends with the ONE collider-bearing arm
     /// <see cref="GradientUpContactLawTests"/> needs, without duplicating this whole literal.
     /// </summary>
-    public static WorldDefinition BuildDocument() => BuildDocumentCore(
+    // The disclosure and the projection read the live store, so a law over a document alone composes one over it
+    // first, through the same import door a boot takes.
+    public static StateArena Store(WorldDefinition definition) => new(
+        catalog: definition.StateCatalog,
+        section: definition.StateRaw,
+        time: ArenaTime.Origin
+    );
+    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, WorldPrincipal? recipient) {
+        var time = ArenaTime.At(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        return WorldStateDisclosure.Compose(
+            arena: Store(definition: definition),
+            definition: definition,
+            recipient: recipient,
+            time: in time
+        );
+    }
+    public static WorldProjectionDocument? Project(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
+        var time = ArenaTime.At(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        return WorldProjection.Compose(
+            arena: Store(definition: definition),
+            authority: authority,
+            definition: definition,
+            recipient: recipient,
+            revision: revision,
+            tier: tier,
+            time: in time
+        );
+    }
+    /// <summary>Returns the base fixture document at the default <see cref="SimulationRateHz"/>.</summary>
+    public static WorldDefinition BuildDocument() => BuildDocumentAtRate(rateHz: DefaultRateHz);
+    /// <summary>Returns the base fixture document at an explicitly authored simulation rate.</summary>
+    /// <remarks>A fixture booted from this document through <see cref="FreshServer"/> steps one SIMULATION tick per
+    /// <see cref="WorldFixture.Step"/>, so <paramref name="rateHz"/> also sets how much world TIME one step spans.
+    /// Pass <see cref="RecordedTraceRateHz"/> for a law whose recorded trace or hand-derived tick counts were
+    /// authored at that rate.</remarks>
+    /// <param name="rateHz">The document's authored <c>simulation.rateHz</c>; must divide
+    /// <c>FixedTickConversion.TicksPerSecond</c> exactly.</param>
+    public static WorldDefinition BuildDocumentAtRate(int rateHz) => BuildDocumentCore(
         spawnPoints: BuildSpawnPoints(),
         collision: new WorldCollision(
             ContactSkin: 0.02f,
@@ -545,7 +598,8 @@ internal static class Fixtures {
         ),
         seatCollider: null,
         creations: [],
-        placements: []
+        placements: [],
+        rateHz: rateHz
     );
     /// <summary>Extends <see cref="BuildDocumentCore"/> with the ONE fixture <see cref="GradientUpContactLawTests"/>
     /// needs: <see cref="BuildBallCreation"/> placed at the origin with <c>solid.margin</c> 0, a capsule collider on
@@ -584,6 +638,7 @@ internal static class Fixtures {
                 ),
                 Radius: 0.35f
             ),
+            rateHz: DefaultRateHz,
             creations: [creation],
             placements: [
                 new WorldPlacement(
@@ -687,8 +742,8 @@ internal static class Fixtures {
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
-            catalog: (machineCatalog ?? new WorldMachineCatalog((engines ?? []))),
-            documentPath: documentPath
+            catalog: (machineCatalog ?? ((engines is not null) ? new WorldMachineCatalog(engines) : TestHookInstaller.CreateMachineCatalog())),
+            documentPath: (documentPath ?? Path.Combine(AuthoredGameFixtures.Root, "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
         );
         // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
         // second round trip to disk for nothing. It sits under one run-wide root that is removed once, rather than
@@ -715,7 +770,8 @@ internal static class Fixtures {
         return new WorldFixture(
             machines: machines,
             server: server,
-            stateDirectory: stateDirectory
+            stateDirectory: stateDirectory,
+            stepTicks: StepTicksAt(rateHz: definition.SimulationRateHz)
         );
     }
     /// <summary>The floatable medium row a medium-hold fixture splices into its <c>state.world</c>: a
@@ -1045,10 +1101,17 @@ internal static class Fixtures {
         return root;
     });
 
-    /// <summary>The tick duration every fixture step advances by — <see cref="EngineTicks.PerRate"/> at the fixed
-    /// 240 Hz simulation rate, computed once and reused so every <see cref="WorldFixture.Step"/> call advances by
-    /// the identical amount.</summary>
+    /// <summary>The engine-tick duration one simulation tick spans at the default <see cref="SimulationRateHz"/>,
+    /// computed once and reused.</summary>
     public static ulong StepTicks { get; } = EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
+
+    /// <summary>Returns the engine-tick duration one simulation tick spans at <paramref name="rateHz"/>, or the
+    /// default <see cref="StepTicks"/> for the resident, non-stepping rate 0 (which has no tick duration).</summary>
+    /// <param name="rateHz">The authored simulation rate.</param>
+    public static ulong StepTicksAt(int rateHz) => ((rateHz > 0)
+        ? EngineTicks.PerRate(ratePerSecond: ((uint)rateHz))
+        : StepTicks
+    );
 
     /// <summary>The test double for <see cref="IFieldLatticeHost"/>: every hook defaults to the same
     /// no-op/zero <see cref="FieldLattice.Step"/> itself falls back to when a caller omits a delegate.</summary>
@@ -1088,11 +1151,15 @@ internal static class Fixtures {
 internal sealed class WorldFixture : IDisposable {
     private readonly WorldMachineHost m_machines;
     private readonly string m_stateDirectory;
+    private readonly ulong m_stepTicks;
 
-    internal WorldFixture(WorldServer server, WorldMachineHost machines, string stateDirectory) {
+    // stepTicks is the engine-tick width one Step advances by; null means one simulation tick at the default
+    // fixture rate.
+    internal WorldFixture(WorldServer server, WorldMachineHost machines, string stateDirectory, ulong? stepTicks = null) {
         Server = server;
         m_machines = machines;
         m_stateDirectory = stateDirectory;
+        m_stepTicks = (stepTicks ?? Fixtures.StepTicks);
     }
 
     /// <summary>The live server under test.</summary>
@@ -1105,8 +1172,11 @@ internal sealed class WorldFixture : IDisposable {
     public void Dispose() => m_machines.Dispose();
     /// <summary>Drains one authority step through the normal buffered mutation pipeline. Uses the same
     /// authority-owned advancement as the production step shell, including checkpoint rewinds.</summary>
+    /// <remarks>The default width is one SIMULATION tick of the document this fixture booted from, so a law that
+    /// authors its own <c>simulation.rateHz</c> gets that rate's tick duration without restating it per call.</remarks>
+    /// <param name="stepTicks">An explicit engine-tick width, or <see langword="null"/> for one simulation tick.</param>
     public void Step(ulong? stepTicks = null) {
-        var width = (stepTicks ?? Fixtures.StepTicks);
+        var width = (stepTicks ?? m_stepTicks);
 
         Server.Advance(stepTicks: width);
     }

@@ -3,7 +3,7 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteSearchLevel(WireWriter writer, SearchLevelCheckpoint level) {
+    private static void WriteSearchLevel(WireWriter writer, ArenaSearchLevelCheckpoint level) {
         writer.WriteInt32(value: level.Shape);
         writer.WriteInt32(value: level.Token);
         writer.WriteInt32(value: level.Target);
@@ -13,14 +13,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: level.BestToken);
         writer.WriteInt32(value: level.BestTarget);
         writer.WriteInt64(value: level.BaseTurn);
-        WriteLongArray(
-            writer: writer,
-            values: level.Values
-        );
         writer.WriteUInt64(value: level.Key);
         writer.WriteInt64(value: level.AlphaEntry);
+        writer.WriteBoolean(value: (level.Seats is not null));
+
+        if (level.Seats is { } seats) {
+            WriteLongArray(
+                values: seats,
+                writer: writer
+            );
+        }
     }
-    private static SearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
+    private static ArenaSearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
         var shape = reader.ReadInt32();
         var token = reader.ReadInt32();
         var target = reader.ReadInt32();
@@ -30,14 +34,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         var bestToken = reader.ReadInt32();
         var bestTarget = reader.ReadInt32();
         var baseTurn = reader.ReadInt64();
-        var values = ReadLongArray(
-            field: "search level values",
-            reader: ref reader
-        );
         var key = reader.ReadUInt64();
         var alphaEntry = reader.ReadInt64();
+        long[]? seats = null;
 
-        return new SearchLevelCheckpoint(
+        if (reader.ReadBoolean()) {
+            seats = ReadLongArray(
+                field: "search level seats",
+                reader: ref reader
+            );
+        }
+
+        return new ArenaSearchLevelCheckpoint(
             Alpha: alpha,
             AlphaEntry: alphaEntry,
             BaseTurn: baseTurn,
@@ -46,13 +54,29 @@ public static partial class WorldAuthorityCheckpointCodec {
             BestToken: bestToken,
             Beta: beta,
             Key: key,
+            Seats: seats,
             Shape: shape,
             Target: target,
-            Token: token,
-            Values: values
+            Token: token
         );
     }
-    private static void WriteSearchJob(WireWriter writer, SearchJobCheckpoint job) {
+    private static void WriteSearchScope(WireWriter writer, ArenaSearchScopeCheckpoint scope) {
+        writer.WriteInt32(value: scope.Shape);
+        writer.WriteInt32(value: scope.Token);
+        writer.WriteInt32(value: scope.Target);
+    }
+    private static ArenaSearchScopeCheckpoint ReadSearchScope(ref WireReader reader) {
+        var shape = reader.ReadInt32();
+        var token = reader.ReadInt32();
+        var target = reader.ReadInt32();
+
+        return new ArenaSearchScopeCheckpoint(
+            Shape: shape,
+            Target: target,
+            Token: token
+        );
+    }
+    private static void WriteSearchJob(WireWriter writer, ArenaSearchJobCheckpoint job) {
         writer.WriteString(value: job.Name);
         writer.WriteUInt64(value: job.Stamp);
         writer.WriteBoolean(value: job.Running);
@@ -62,19 +86,20 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: job.Target);
         writer.WriteInt64(value: job.Count);
         WriteLongArray(
-            writer: writer,
-            values: job.Legal
+            values: job.Legal,
+            writer: writer
         );
         WriteLongArray(
-            writer: writer,
-            values: job.Counts
+            values: job.Counts,
+            writer: writer
         );
         WriteLongArray(
-            writer: writer,
-            values: job.Wide
+            values: job.Wide,
+            writer: writer
         );
         writer.WriteInt64(value: job.Nodes);
         writer.WriteInt64(value: job.BaseTurn);
+        writer.WriteInt32(value: job.TokenCount);
         writer.WriteInt32(value: job.PassDepth);
         writer.WriteInt32(value: job.Active);
         writer.WriteInt64(value: job.Best);
@@ -83,21 +108,26 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: job.Alpha);
         writer.WriteInt64(value: job.Beta);
         WriteArray(
-            writer: writer,
             items: job.Levels,
-            writeItem: WriteSearchLevel
+            writeItem: WriteSearchLevel,
+            writer: writer
+        );
+        WriteArray(
+            items: job.Scopes,
+            writeItem: WriteSearchScope,
+            writer: writer
         );
         WriteULongArray(
-            writer: writer,
-            values: job.TtKey
+            values: job.TtKey,
+            writer: writer
         );
         WriteLongArray(
-            writer: writer,
-            values: job.TtValue
+            values: job.TtValue,
+            writer: writer
         );
         WriteLongArray(
-            writer: writer,
-            values: job.TtMeta
+            values: job.TtMeta,
+            writer: writer
         );
         writer.WriteBoolean(value: (job.Tree is not null));
 
@@ -107,15 +137,22 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer.WriteInt32(value: tree.Count);
             writer.WriteInt32(value: tree.Iteration);
             writer.WriteUInt64(value: tree.Seed);
-            writer.WriteInt32(value: tree.UShape);
-            writer.WriteInt32(value: tree.UToken);
-            writer.WriteInt32(value: tree.UTarget);
-            writer.WriteInt32(value: tree.UScan);
-            writer.WriteInt32(value: tree.UStart);
+            writer.WriteInt32(value: tree.ExpandShape);
+            writer.WriteInt32(value: tree.ExpandToken);
+            writer.WriteInt32(value: tree.ExpandTarget);
+            writer.WriteInt32(value: tree.Scan);
+            writer.WriteInt32(value: tree.Start);
             writer.WriteInt32(value: tree.PlayoutPlies);
+            writer.WriteInt32(value: tree.PlayCount);
             writer.WriteInt32(value: tree.PathLength);
 
-            foreach (var values in new[] { tree.Parent, tree.FirstChild, tree.ChildCount, tree.Visits, tree.Total, tree.Shape, tree.Token, tree.Target, tree.Expanded, tree.Path, tree.UctValues, tree.PlayValues }) {
+            foreach (var values in new[] { tree.Parent, tree.FirstChild, tree.ChildCount, tree.Shape, tree.Token, tree.Target, tree.Path }) {
+                WriteIntArray(
+                    values: values,
+                    writer: writer
+                );
+            }
+            foreach (var values in new[] { tree.Visits, tree.Total, tree.Expanded }) {
                 WriteLongArray(
                     values: values,
                     writer: writer
@@ -123,7 +160,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         }
     }
-    private static SearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
+    private static ArenaSearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
         var name = reader.ReadRequiredString(
             field: "search job name",
             maxBytes: MaxHashChars
@@ -149,6 +186,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var nodes = reader.ReadInt64();
         var baseTurn = reader.ReadInt64();
+        var tokenCount = reader.ReadInt32();
         var passDepth = reader.ReadInt32();
         var active = reader.ReadInt32();
         var best = reader.ReadInt64();
@@ -157,9 +195,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         var alpha = reader.ReadInt64();
         var beta = reader.ReadInt64();
         var levels = ReadArray(
-            reader: ref reader,
             field: "search job levels",
+            reader: ref reader,
             readItem: static (ref WireReader r) => ReadSearchLevel(reader: ref r)
+        );
+        var scopes = ReadArray(
+            field: "search job scopes",
+            reader: ref reader,
+            readItem: static (ref WireReader r) => ReadSearchScope(reader: ref r)
         );
         var ttKey = ReadULongArray(
             field: "search job transposition keys",
@@ -173,7 +216,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "search job transposition meta",
             reader: ref reader
         );
-        SearchTreeCheckpoint? tree = null;
+        ArenaSearchTreeCheckpoint? tree = null;
 
         if (reader.ReadBoolean()) {
             var treeActive = reader.ReadBoolean();
@@ -181,51 +224,58 @@ public static partial class WorldAuthorityCheckpointCodec {
             var treeCount = reader.ReadInt32();
             var iteration = reader.ReadInt32();
             var seed = reader.ReadUInt64();
-            var uShape = reader.ReadInt32();
-            var uToken = reader.ReadInt32();
-            var uTarget = reader.ReadInt32();
-            var uScan = reader.ReadInt32();
-            var uStart = reader.ReadInt32();
+            var expandShape = reader.ReadInt32();
+            var expandToken = reader.ReadInt32();
+            var expandTarget = reader.ReadInt32();
+            var scan = reader.ReadInt32();
+            var start = reader.ReadInt32();
             var playoutPlies = reader.ReadInt32();
+            var playCount = reader.ReadInt32();
             var pathLength = reader.ReadInt32();
-            var arrays = new long[12][];
+            var ints = new int[7][];
+            var longs = new long[3][];
 
-            for (var index = 0; (index < arrays.Length); index++) {
-                arrays[index] = ReadLongArray(
+            for (var index = 0; (index < ints.Length); index++) {
+                ints[index] = ReadIntArray(
+                    field: "search job tree",
+                    reader: ref reader
+                );
+            }
+            for (var index = 0; (index < longs.Length); index++) {
+                longs[index] = ReadLongArray(
                     field: "search job tree",
                     reader: ref reader
                 );
             }
 
-            tree = new SearchTreeCheckpoint(
+            tree = new ArenaSearchTreeCheckpoint(
                 Active: treeActive,
-                Phase: phase,
+                ChildCount: ints[2],
                 Count: treeCount,
+                ExpandShape: expandShape,
+                ExpandTarget: expandTarget,
+                ExpandToken: expandToken,
+                Expanded: longs[2],
+                FirstChild: ints[1],
                 Iteration: iteration,
-                Seed: seed,
-                UShape: uShape,
-                UToken: uToken,
-                UTarget: uTarget,
-                UScan: uScan,
-                UStart: uStart,
-                PlayoutPlies: playoutPlies,
-                Parent: arrays[0],
-                FirstChild: arrays[1],
-                ChildCount: arrays[2],
-                Visits: arrays[3],
-                Total: arrays[4],
-                Shape: arrays[5],
-                Token: arrays[6],
-                Target: arrays[7],
-                Expanded: arrays[8],
-                Path: arrays[9],
+                Parent: ints[0],
+                Path: ints[6],
                 PathLength: pathLength,
-                UctValues: arrays[10],
-                PlayValues: arrays[11]
+                PlayCount: playCount,
+                PlayoutPlies: playoutPlies,
+                Phase: phase,
+                Scan: scan,
+                Seed: seed,
+                Shape: ints[3],
+                Start: start,
+                Target: ints[5],
+                Token: ints[4],
+                Total: longs[1],
+                Visits: longs[0]
             );
         }
 
-        return new SearchJobCheckpoint(
+        return new ArenaSearchJobCheckpoint(
             Active: active,
             Alpha: alpha,
             BaseTurn: baseTurn,
@@ -242,10 +292,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             Nodes: nodes,
             PassDepth: passDepth,
             Running: running,
+            Scopes: scopes,
             Shape: shape,
             Stamp: stamp,
             Target: target,
             Token: token,
+            TokenCount: tokenCount,
             Tree: tree,
             TtKey: ttKey,
             TtMeta: ttMeta,
@@ -253,22 +305,22 @@ public static partial class WorldAuthorityCheckpointCodec {
             Wide: wide
         );
     }
-    private static byte[] EncodeSearch(SearchCheckpoint section) {
+    private static byte[] EncodeSearch(ArenaSearchCheckpoint section) {
         var writer = new WireWriter();
 
         WriteArray(
-            writer: writer,
             items: section.Jobs,
-            writeItem: WriteSearchJob
+            writeItem: WriteSearchJob,
+            writer: writer
         );
 
         return writer.ToArray();
     }
-    private static bool TryDecodeSearch(byte[] bytes, out string reason, out SearchCheckpoint section) {
+    private static bool TryDecodeSearch(byte[] bytes, out string reason, out ArenaSearchCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var jobs = ReadArray(
-            reader: ref reader,
             field: "search jobs",
+            reader: ref reader,
             readItem: static (ref WireReader r) => ReadSearchJob(reader: ref r)
         );
 
@@ -279,7 +331,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new SearchCheckpoint(Jobs: jobs);
+        section = new ArenaSearchCheckpoint(Jobs: jobs);
         reason = string.Empty;
 
         return true;

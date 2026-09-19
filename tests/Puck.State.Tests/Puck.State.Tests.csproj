@@ -15,5 +15,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="..\..\src\Puck.State.Rules\Puck.State.Rules.csproj" />
     </ItemGroup>
 </Project>

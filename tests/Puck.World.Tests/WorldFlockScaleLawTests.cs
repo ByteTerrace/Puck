@@ -89,6 +89,14 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         };
     }
 
+    // The authority ticks an authored cadence spans, never less than one: a cadence shorter than a step runs every
+    // step.
+    private static int CadenceTicks(int rateHz, float seconds) => Math.Max(
+        val1: 1,
+        val2: ((int)MathF.Round(x: (seconds * rateHz)))
+    );
+    private static int PerTickShare(int population, int cadenceTicks) => (((population + cadenceTicks) - 1) / cadenceTicks);
+
     [Fact]
     public void FourThousandCoincidentCreaturesStayBoundedDeterministicAndAllocationStable() {
         using var fixture = Fixtures.FreshServer(DenseDocument());
@@ -100,18 +108,35 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         );
         Coincide(fixture: fixture);
 
+        // A cadence authored in seconds spreads its population over that many authority ticks, so the per-tick
+        // share is the population over the cadence's tick count, rounded up. Every ceiling below is derived from
+        // the document's own rate and authored seconds, so the law holds at whatever rate the fixture runs.
+        var rateHz = fixture.Server.Definition.SimulationRateHz;
+        var flockCadenceTicks = CadenceTicks(
+            rateHz: rateHz,
+            seconds: 0.1f
+        );
+        var motionCadenceTicks = CadenceTicks(
+            rateHz: rateHz,
+            seconds: (1f / 60f)
+        );
+        var flockShare = PerTickShare(
+            cadenceTicks: flockCadenceTicks,
+            population: expected
+        );
+
         fixture.Step();
         var burst = fixture.Server.Population.FlockStatistics;
 
         Assert.InRange(
             burst.Followers,
             1,
-            172
+            (flockShare + 1)
         );
         Assert.InRange(
             burst.Updates,
             1,
-            172
+            (flockShare + 1)
         );
         Assert.InRange(
             burst.Candidates,
@@ -119,13 +144,18 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             (expected * 32)
         );
 
-        // Cover an entire 24-tick perception cadence in both warmup and measurement. Every creature is
-        // still present; optimized JIT from startup removes the former 240-tick promotion wait.
-        for (var tick = 0; (tick < 24); tick++) { fixture.Step(); }
+        // Cover at least one whole perception cadence in both warmup and measurement. Every creature is still
+        // present.
+        var window = Math.Max(
+            val1: 24,
+            val2: flockCadenceTicks
+        );
+
+        for (var tick = 0; (tick < window); tick++) { fixture.Step(); }
         var candidates = 0;
         var retained = 0;
         var updates = 0;
-        var samples = new long[24];
+        var samples = new long[window];
         var watch = Stopwatch.StartNew();
 
         for (var tick = 0; (tick < samples.Length); tick++) {
@@ -154,7 +184,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         var ordered = samples.Order().ToArray();
         var median = ordered[(ordered.Length / 2)];
 
-        output.WriteLine(message: $"dense flock: {expected} coincident creatures, 24 ticks in {watch.Elapsed.TotalMilliseconds:F1} ms ({(watch.Elapsed.TotalMilliseconds / 24):F2} ms/tick), median {median} thread bytes/tick, widest {ordered[^1]}");
+        output.WriteLine(message: $"dense flock: {expected} coincident creatures, {window} ticks in {watch.Elapsed.TotalMilliseconds:F1} ms ({(watch.Elapsed.TotalMilliseconds / window):F2} ms/tick), median {median} thread bytes/tick, widest {ordered[^1]}");
         Assert.InRange(
             actual: candidates,
             high: (updates * 32),
@@ -173,18 +203,23 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             high: 64,
             low: 0
         );
+        // A cadence deals its phases over the peer capacity, not the live count, so a tick's share sits within one
+        // of the even split.
         Assert.InRange(
             fixture.Server.Population.AutonomyStatistics.MotionUpdates,
-            1023,
-            1024
+            ((expected / motionCadenceTicks) - 1),
+            (PerTickShare(
+                cadenceTicks: motionCadenceTicks,
+                population: expected
+            ) + 1)
         );
         Assert.InRange(
             fixture.Server.Population.AutonomyStatistics.SteeringUpdates,
-            170,
-            172
+            ((expected / flockCadenceTicks) - 1),
+            (flockShare + 1)
         );
 
-        var first = WorldRuntimeStateHash.HashAuthoritative(
+        var first = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 120
         );
@@ -198,7 +233,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         for (var tick = 0; (tick < 49); tick++) { replay.Step(); }
         Assert.Equal(
             first,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 server: replay.Server,
                 tick: 120
             )
@@ -537,7 +572,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         );
 
         for (var tick = 0; (tick < 37); tick++) { fixture.Step(); }
-        var expected = WorldRuntimeStateHash.HashAuthoritative(
+        var expected = WorldStateHashComposition.HashAuthoritative(
             fixture.Server,
             tick: 0UL
         );
@@ -546,7 +581,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         for (var tick = 0; (tick < 37); tick++) { fixture.Step(); }
         Assert.Equal(
             expected,
-            WorldRuntimeStateHash.HashAuthoritative(
+            WorldStateHashComposition.HashAuthoritative(
                 fixture.Server,
                 tick: 0UL
             )

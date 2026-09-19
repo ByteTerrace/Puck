@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -12,24 +10,18 @@ namespace Puck.World.Transpiler.Tests;
 /// falls back to <c>row { }</c>.</summary>
 public class StateDeclarationDecompilerTests {
     private static (JsonObject Json, DiagnosticBag Diagnostics) Recompile(string puckSource) {
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(puckSource);
-
-        Assert.False(
-            condition: parseResult.Diagnostics.HasErrors,
-            userMessage: parseResult.Diagnostics.FormatReport(puckSource)
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: puckSource
         );
 
-        var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value!,
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        Assert.NotNull(@object: compilation.Json);
 
-        return (loweringResult.Value!, diagnostics);
+        return (compilation.Json, compilation.Diagnostics);
     }
     private static void AssertRoundTrips(JsonObject original) {
         var decompiled = WorldDecompiler.Decompile(root: original);
+
         var (recompiled, diagnostics) = Recompile(puckSource: decompiled);
 
         Assert.False(
@@ -279,5 +271,50 @@ public class StateDeclarationDecompilerTests {
             expectedSubstring: "\"2 players\""
         );
         AssertRoundTrips(original: original);
+    }
+    [Fact]
+    public void ALoweredCapacitySurvivesTheTableAndPileSugar() {
+        // A capacity written as `row { capacity: N }` reaches the decompiler through the generic scalar path, which
+        // lowers a whole number to a long — the kind a reader asking only for an int refuses, dropping the modifier.
+        var (lowered, loweringDiagnostics) = Recompile(puckSource: """
+            schema: "puck.world.definition.v1"
+
+            state {
+                world {
+                    row {
+                        name: "cardNames"
+                        kind: "Int"
+                        capacity: 3
+                        cells [ { key: "a" value: 1 } ]
+                    }
+                    row {
+                        name: "deck"
+                        kind: "Bool"
+                        domain { $type: "keysOf" row: "cardNames" ordered: true }
+                        capacity: 3
+                        cells [ ]
+                    }
+                }
+            }
+            """);
+
+        Assert.False(
+            condition: loweringDiagnostics.HasErrors,
+            userMessage: loweringDiagnostics.FormatReport("")
+        );
+
+        var decompiled = WorldDecompiler.Decompile(root: lowered);
+
+        Assert.Contains(
+            actualString: decompiled,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "table cardNames : Int capacity(3)"
+        );
+        Assert.Contains(
+            actualString: decompiled,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "pile deck of cardNames capacity(3)"
+        );
+        AssertRoundTrips(original: lowered);
     }
 }

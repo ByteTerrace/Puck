@@ -9,7 +9,7 @@ namespace Puck.World.Transpiler.Lowering;
 // `shape Type "name" { }` (§4.1, a creation-document row — CreationDocument.Shapes, the live successor to the dead
 // `solid`/`"solids"` collector this renames in place) and `placements { policy { } placement "id" { } }` (§4.2).
 public static partial class WorldDocumentEmitter {
-    private static void LowerShapeBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
+    private static bool LowerShapeBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["shapes"] is not JsonArray shapesArr) {
             shapesArr = [];
             parent["shapes"] = shapesArr;
@@ -74,8 +74,10 @@ public static partial class WorldDocumentEmitter {
         }
 
         shapesArr.AppendNode(item: shapeObj);
+
+        return true;
     }
-    private static void LowerPlacementsBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
+    private static bool LowerPlacementsBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["placements"] is not JsonObject placementsObj) {
             placementsObj = [];
             parent["placements"] = placementsObj;
@@ -143,6 +145,8 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.CurrentPointer = oldPointer;
+
+        return true;
     }
     // A section whose rows are read by a dedicated dispatcher still admits `for` and a template invocation: both
     // are flattened to the statements they produce before the dispatcher sees them, so a generated row is
@@ -204,6 +208,43 @@ public static partial class WorldDocumentEmitter {
                     )) {
                         yield return nested;
                     }
+                }
+
+                break;
+
+            case StateTableDeclarationNode table when IsRecordType(kind: table.Kind, scope: scope):
+                foreach (var fieldTable in ExpandRecordTable(scope: scope, table: table)) {
+                    foreach (var expanded in ExpandOne(depth: (depth + 1), scope: scope, statement: fieldTable)) {
+                        yield return expanded;
+                    }
+                }
+
+                break;
+
+            case StateTableDeclarationNode table when IsFamily(members: table.FamilyMembers, size: table.FamilySize):
+                foreach (var singleTable in ExpandTableFamily(scope: scope, table: table)) {
+                    yield return (singleTable, scope);
+                }
+
+                break;
+
+            case StateSlotDeclarationNode slot when IsFamily(members: slot.FamilyMembers, size: slot.FamilySize):
+                foreach (var singleSlot in ExpandSlotFamily(scope: scope, slot: slot)) {
+                    yield return (singleSlot, scope);
+                }
+
+                break;
+
+            case StatePileDeclarationNode pile when IsFamily(members: pile.FamilyMembers, size: pile.FamilySize):
+                foreach (var singlePile in ExpandPileFamily(pile: pile, scope: scope)) {
+                    yield return (singlePile, scope);
+                }
+
+                break;
+
+            case StateGridDeclarationNode grid when IsFamily(members: grid.FamilyMembers, size: grid.FamilySize):
+                foreach (var singleGrid in ExpandGridFamily(grid: grid, scope: scope)) {
+                    yield return (singleGrid, scope);
                 }
 
                 break;
@@ -279,7 +320,7 @@ public static partial class WorldDocumentEmitter {
 
         return rowObj;
     }
-    private static void LowerPrototypesBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
+    private static bool LowerPrototypesBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["prototypes"] is not JsonArray protoArr) {
             protoArr = [];
             parent["prototypes"] = protoArr;
@@ -321,6 +362,8 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.CurrentPointer = oldPointer;
+
+        return true;
     }
     // `WorldPrototype.Id` is the block's quoted name, the same way `WorldPlacement.Id` is; `document` is an
     // ordinary nested block reached through `LowerBlockToObject` -> `ProcessStatement` -> `LowerBlock`, so a `shape`

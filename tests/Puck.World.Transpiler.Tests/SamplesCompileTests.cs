@@ -1,7 +1,4 @@
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Modules;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -10,7 +7,7 @@ namespace Puck.World.Transpiler.Tests;
 /// must exercise the sugar an author is meant to reach for.</summary>
 public class SamplesCompileTests {
     private static readonly string[] SugarKeywords = [
-        "rule ", "when ", "bind ", "schedule ", "transaction ", "decision ", "option ", "shape ", "placement ",
+        "rule ", "when ", "local ", "schedule ", "transaction ", "decision ", "option ", "shape ", "placement ",
     ];
 
     private static string FindSamplesDirectory() {
@@ -42,25 +39,14 @@ public class SamplesCompileTests {
         var source = File.ReadAllText(path: path);
 
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            source,
-            diagnostics: diagnostics
-        );
-
-        Assert.NotNull(@object: parseResult.Value);
-
-        ModuleResolver.ValidateImportGraph(
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: diagnostics,
-            rootDoc: parseResult.Value,
-            rootPath: path
+            source: source,
+            sourcePath: path
         );
 
-        WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
-            basePath: Path.GetDirectoryName(path: path),
-            diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        Assert.NotNull(@object: compilation.Document);
 
         Assert.False(
             condition: diagnostics.HasErrors,

@@ -22,6 +22,13 @@ public interface IWorldAdjacencySource {
     WorldEntityAddress LocalEntityAddress(int index);
     /// <summary>The authored dynamic-body contact mode of one locally authoritative entity.</summary>
     WorldBodyContactMode LocalBodyContact(int index);
+    /// <summary>Reads the generation-addressed slot one locally authoritative entity held under the authority it
+    /// arrived from. A neighbour's delivered record can predate a handoff this authority has already committed, and
+    /// the entity it still shows at that address is the arrival seen before its handoff, never a second body.</summary>
+    /// <param name="index">The local entity index.</param>
+    /// <param name="departedFrom">The address on success.</param>
+    /// <returns><see langword="true"/> when the entity arrived by a committed handoff.</returns>
+    bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom);
     /// <summary>Freezes the delivered neighbour records that simulation may read during one authority tick. A
     /// transport may continue delivering newer records concurrently, but they become eligible only at the next
     /// call. Rendering observes the same most-recent frozen record.</summary>

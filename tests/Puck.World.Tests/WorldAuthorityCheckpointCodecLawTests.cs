@@ -109,12 +109,17 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             ],
             DynamicState: dynamicState,
             Mobility: new WorldMobilityIdentity(
-                Incarnation: new WorldEntityAddress(
+                DepartedFrom: new WorldEntityAddress(
                     Authority: "row-a",
                     Generation: 1,
                     Index: 0
                 ),
-                Epoch: 1
+                Epoch: 1,
+                Incarnation: new WorldEntityAddress(
+                    Authority: "row-a",
+                    Generation: 1,
+                    Index: 0
+                )
             ),
             Peer: new WorldPeerEventEntry(
                 AuthorityTransferred: false,
@@ -401,6 +406,41 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
                 b: decoded
             ),
             userMessage: DeepEqual.LastMismatchPath
+        );
+    }
+    // No shipped document declares a rule group yet, so a captured checkpoint's group list is empty and only an
+    // authored entry proves the wire form carries a group's cursor, its open flag and its ceiling breach.
+    [Fact]
+    public void A_rule_groups_progress_round_trips_on_the_wire() {
+        var captured = CapturedCheckpoint();
+        var checkpoint = captured with {
+            Server = captured.Server with {
+                RuleGroups = [new WorldRuleGroupEntry(
+                        Breached: true,
+                        Group: "settle",
+                        Running: true,
+                        Step: 3
+                    ), new WorldRuleGroupEntry(
+                        Breached: false,
+                        Group: "deal",
+                        Running: false,
+                        Step: 0
+                    )],
+            },
+        };
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
+        Assert.True(
+            condition: WorldAuthorityCheckpointCodec.TryDecode(
+                bytes: encoded,
+                checkpoint: out var decoded,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.Equal(
+            actual: decoded!.Server.RuleGroups,
+            expected: checkpoint.Server.RuleGroups
         );
     }
     [Fact]

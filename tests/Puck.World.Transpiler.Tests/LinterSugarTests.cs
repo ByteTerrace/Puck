@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 using Xunit;
@@ -92,17 +91,17 @@ public class LinterSugarTests {
                 diagnostics
             );
             var sourceMap = new SourceMap();
-            var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-                parseResult.Value,
+            var loweringResult = WorldCompiler.Compile(
                 basePath: Path.GetDirectoryName(path: fullPath),
-                sourceMap: sourceMap,
+                cancellationToken: TestContext.Current.CancellationToken,
                 diagnostics: diagnostics,
-                cancellationToken: TestContext.Current.CancellationToken
+                source: decompiled,
+                sourceMap: sourceMap
             );
 
-            if (loweringResult.Value is not null) {
+            if (loweringResult.Json is not null) {
                 PuckLinter.LintReferences(
-                    loweringResult.Value,
+                    loweringResult.Json,
                     sourceMap,
                     diagnostics,
                     sourcePath: fullPath
@@ -117,15 +116,15 @@ public class LinterSugarTests {
 
     [Fact]
     public void ANonCompareValueLeftRightPairIsNeverReadAsAnExpression() {
-        // WorldInteraction's own "left"/"right" name a property or placement id, never a ValueExpression — only
+        // WorldInteraction's own "left"/"right" name a property or placement id, never a ExpressionProgram — only
         // ActionPredicate.CompareValue's pair is. A bare identifier there must never be checked against `state`.
         var document = new JsonObject {
             ["state"] = new JsonObject { ["world"] = new JsonArray() },
             ["interactions"] = new JsonObject {
                 ["interactions"] = new JsonArray(new JsonObject {
                     ["name"] = "i",
-                    ["left"] = "hound",
-                    ["right"] = "bone",
+                    ["left"] = WorldExpressionJson.Node(text: "hound"),
+                    ["right"] = WorldExpressionJson.Node(text: "bone"),
                     ["coOccurrence"] = "Region",
                     ["range"] = 0,
                     ["effects"] = new JsonArray(),
@@ -191,8 +190,8 @@ public class LinterSugarTests {
                     ["$type"] = "compareValue",
                     ["comparison"] = "Equal",
                     ["kind"] = "Fixed",
-                    ["left"] = "$tabl:power:1",
-                    ["right"] = "1",
+                    ["left"] = WorldExpressionJson.Node(text: "$tabl:power:1"),
+                    ["right"] = WorldExpressionJson.Node(text: "1"),
                 },
                 ["effects"] = new JsonArray(),
             }),
@@ -318,8 +317,8 @@ public class LinterSugarTests {
                     ["$type"] = "compareValue",
                     ["comparison"] = "Equal",
                     ["kind"] = "Fixed",
-                    ["left"] = "$board:cellOf:board:1:1",
-                    ["right"] = "1",
+                    ["left"] = WorldExpressionJson.Node(text: "$board:cellOf:board:1:1"),
+                    ["right"] = WorldExpressionJson.Node(text: "1"),
                 },
                 ["effects"] = new JsonArray(),
             }),
@@ -340,8 +339,8 @@ public class LinterSugarTests {
                     ["$type"] = "compareValue",
                     ["comparison"] = "Equal",
                     ["kind"] = "Fixed",
-                    ["left"] = "$table:power:1",
-                    ["right"] = "1",
+                    ["left"] = WorldExpressionJson.Node(text: "$table:power:1"),
+                    ["right"] = WorldExpressionJson.Node(text: "1"),
                 },
                 ["effects"] = new JsonArray(),
             }),
@@ -533,8 +532,8 @@ public class LinterSugarTests {
                     ["$type"] = "compareValue",
                     ["comparison"] = "NotEqual",
                     ["kind"] = "Int",
-                    ["left"] = "hp + 1",
-                    ["right"] = "mana",
+                    ["left"] = WorldExpressionJson.Node(text: "hp + 1"),
+                    ["right"] = WorldExpressionJson.Node(text: "mana"),
                 },
                 ["effects"] = new JsonArray(),
             }),

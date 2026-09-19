@@ -43,7 +43,7 @@ public sealed class HoldGravityFallbackLawTests {
                 Rise: 28f
             );
             var envelope = new WorldHoldEnvelope(SinkSpeed: 40f);
-            var document = Fixtures.BuildDocument();
+            var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
             var kits = document.Kits.ToList();
             var motion = kits[0].Motion! with {
                 Holds = [
@@ -83,7 +83,7 @@ public sealed class HoldGravityFallbackLawTests {
 
             var body = fixture.Server.Body(index: actor.Index)!;
 
-            for (var tick = 0; (tick < 30); tick++) {
+            for (var tick = 0; (tick < 240); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
                 lines[tick] = TraceLine(body: body);

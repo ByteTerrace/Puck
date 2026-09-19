@@ -1,14 +1,21 @@
 # Solitaire collection
 
-Nexus imports [solitaire.world.json](solitaire.world.json), which composes the
+Nexus imports [solitaire.puck](solitaire.puck), which composes the
 three patience games bundled with Windows XP. They run as state rows, patterns,
 and rules; the console is their playing surface.
 
+Every game in this directory is authored as `.puck` source; edit the source,
+never the `.world.json` document beside it, which is `puck compile`'s output.
+`build/WorldAssets.targets` lists every source in this directory the
+`Puck.Cli` build regenerates; every document here is `.gitignore`d build
+output, never a committed copy, held to its source byte for byte by
+[ShippedWorldsParityTests](../../../../../tests/Puck.World.Transpiler.Tests/ShippedWorldsParityTests.cs).
+
 | Table | Module | Options |
 |---|---|---|
-| 1 | [Klondike](klondike.world.json) | Draw one (`option=1`) or three (`option=3`); unlimited stock passes |
-| 2 | [Spider](spider.world.json) | One, two, or four suits (`option=1`, `2`, or `4`) |
-| 3 | [FreeCell](freecell.world.json) | Four free cells and eight columns (`option=1`) |
+| 1 | [Klondike](klondike.puck) | Draw one (`option=1`) or three (`option=3`); unlimited stock passes |
+| 2 | [Spider](spider.puck) | One, two, or four suits (`option=1`, `2`, or `4`) |
+| 3 | [FreeCell](freecell.puck) | Four free cells and eight columns (`option=1`) |
 
 ## Start and inspect a game
 
@@ -138,15 +145,16 @@ phases and resumes them on return.
 
 The executable rules are exercised by
 [SolitaireLawTests](../../../../../tests/Puck.World.Tests/SolitaireLawTests.cs).
-The shared dynamic keys, transaction rollback, live frame reads, and pattern
-accounting are exercised by
-[ZoneEndKeyLawTests](../../../../../tests/Puck.State.Tests/ZoneEndKeyLawTests.cs).
+The shared dynamic keys and a firing's rollback are exercised by
+[PointerKeyLawTests](../../../../../tests/Puck.State.Rules.Tests/PointerKeyLawTests.cs)
+and
+[AtomicFiringLawTests](../../../../../tests/Puck.State.Rules.Tests/AtomicFiringLawTests.cs).
 For console changes, also run the real `Puck.World` executable and record a
 `replay.record` / `replay.stop` / `replay.verify` trajectory.
 
 ## Billiards: the cue gesture
 
-[billiards.world.json](billiards.world.json)'s cue ball takes a strike through the shared `attack`
+[billiards.puck](billiards.puck)'s cue ball takes a strike through the shared `attack`
 channel (declared by the arena district; a physical control means "attack" or "strike" depending
 which table a seat stands at, never a second input surface). Holding it charges the keyed Fixed
 `cue` row's cell `0` monotonically toward its authored ceiling (`cue-charge`, a level rule gated on
@@ -169,7 +177,7 @@ single-card play from limitations in older automatic multi-card shortcuts.
 
 ## Backgammon—the chance-node probe
 
-[backgammon.world.json](backgammon.world.json) is a standalone, self-contained
+[backgammon.puck](backgammon.puck) is a standalone, self-contained
 document (its own `documentId`, headless `host.presentation: "none"`) rather
 than an importable module: the market's probe for the `search` section's
 `chance` node, run on its own rather than composed into the island. A `points`
@@ -200,7 +208,7 @@ cell post-boot: those cells are exactly what the four judge rules above watch,
 so an external write crosses the same rules the search's own hypothetical walk
 does and flips `turn` for real before anything else runs.
 
-[SearchChanceLawTests](../../../../../tests/Puck.State.Tests/SearchChanceLawTests.cs)
+[ArenaSearchChanceLawTests](../../../../../tests/Puck.State.Search.Tests/ArenaSearchChanceLawTests.cs)
 proves the chance mechanism itself—an expectiminimax value over a two-outcome
 chance equalling the hand-computed average, and a `Method: Tree` job's playout
 drawing from the job's own stream so two independently built runtimes with the
@@ -210,7 +218,7 @@ proves the document: the bar-occupied refusal (with its control—a checker's
 own bar entry stays legal) and the same position with a clear bar.
 ## Chinese Checkers—chains and many seats
 
-[chinese-checkers.world.json](chinese-checkers.world.json) is the market's probe for two `search`
+[chinese-checkers.puck](chinese-checkers.puck) is the market's probe for two `search`
 primitives: the `jump` shape's chain (a candidate is 1..`maxHops` hops, each over an occupied cell onto an
 empty one, never revisiting a cell) and an n-seat `scores` row (a level maximizes the mover seat's own
 entry rather than negating the reply—max-n, no zero-sum assumption). Unlike its siblings this document
@@ -232,15 +240,493 @@ what was last applied, which also advances the real `turn` and re-syncs `pieceCe
 own turn flip lives entirely inside the search's hypothetical frame and never needs to reach the real one.
 `home0`/`home1`/`home2` and `winner` are the win-condition read-back: a seat's row reaching its own piece
 count sets `winner` to that seat, checked by
-[ChineseCheckersLawTests](../../../../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs). The chain
-shape and the max-n fold are exercised in isolation, against hand-built boards with no document at all, by
-[SearchChainLawTests](../../../../../tests/Puck.State.Tests/SearchChainLawTests.cs).
+[ChineseCheckersLawTests](../../../../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs). The max-n
+fold is exercised in isolation, against a hand-built arena with no world document, by
+[ArenaSearchSeatScoreLawTests](../../../../../tests/Puck.State.Search.Tests/ArenaSearchSeatScoreLawTests.cs).
 
 Two things this probe does not do: `maxHops` is 2, not deep enough to force the long multi-jump chains a
 tournament board invites, and `Relocate`'s own geometry admits any cell, so a step's adjacency and a
 chain's even distance are both judged after the fact by the rule above rather than by the shape refusing a
 non-adjacent single step outright—a genuine `Relocate` distance-2 move with nothing to jump over reads
 as legal here. Both are probe-scale simplifications, not the shape's own limits.
+
+## Reversi—rays, brackets, and an inverse board
+
+[reversi.puck](reversi.puck) is 8x8 Reversi (Othello) under the
+[World Othello Federation's official rules](https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english),
+a standalone, self-bootable document (its own `documentId`, headless
+`host.presentation: "None"`) like backgammon and Chinese Checkers. `reversiBoard`
+is a `cellsOf` row over an 8x8 `Grid` whose eight default compass directions are
+the eight rays a move brackets along: 0 empty, 1 black, 2 white, cell ordinal
+`row * 8 + file`, black to move first from the four opening discs on 27, 28, 35
+and 36.
+
+Play is one door: write `reversiMoveCell`, then increment `reversiMoveRequest`.
+
+```text
+world.state.cell.set reversiMoveCell $value 19
+world.state.cell.set reversiMoveRequest $value 1 add
+world.wait 30
+world.state reversiBoard
+world.state reversiRay
+```
+
+`reversiMoveApplied` catching up to `reversiMoveRequest` is the acknowledgement;
+`reversiRejected` counts the requests the rules refused and `reversiFlips` counts
+the discs the last accepted move turned. `reversiRay` holds that move's eight
+bracket probes, each the step distance to the first cell an unbroken run of the
+opponent's discs does not cover.
+
+Three mechanisms carry the game. **Legality** is one `$match` read: the patterns
+`reversiBlackLine`/`reversiWhiteLine` accept a whole ray that opens with a run of
+the opponent's discs and closes on one of the mover's, and the `any` direction's
+`count` facet answers how many of the eight rays accept — one move door
+conjunct rather than eight. **Flips** are `setRay`, which rewrites the longest run
+its pattern accepts walking outward from the origin: exactly a bracket, and a ray
+that brackets nothing accepts no prefix and refuses its own write while its seven
+siblings stand. **Mobility** is the `reversiMobility` INVERSE board: the
+`reversiCandidate` tokens hold each legal cell's own ordinal (and -1 elsewhere),
+`reversiCellIndex` supplies the codes, and the board they derive is the side to
+move's legal-move map, counted into `reversiMobilityCount` through
+`$board:mask`. A side whose mobility is zero passes; two consecutive passes end
+the game, as does a full board, and the larger disc count wins.
+
+`setRay`'s origin is a literal cell of its board's topology — unlike
+`clearEnclosed`'s `from` and `writeSet`'s `setKey`, it resolves no dynamic key —
+so the move door hands the played cell to one rule per cell per colour, 120 of
+them written out. A rule's name is a literal token that no `template` parameter
+or `for` variable substitutes into, so that table cannot be generated.
+
+Two things this document does not do. There is no `search` job, and so no CPU
+opponent: a job's judge cost is the sum of every ordinary rule's work units with
+none of the mutual-exclusion folding the tick budget applies, so these 120
+flip rules price one judge run at 10,631,721 units against the 1,540,087 the
+sheet leaves, and the job refuses to plan. And the board carries no placements or
+pieces — it is a state-and-rules document, played through the console.
+
+[ShippedWorldStateBaselines](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/README.md)
+holds the recorded trajectory: five accepted moves, one refused, ending on a
+two-direction flip whose `reversiRay` shows `W` and `SW` at 2.
+## Stratego—hidden ranks, and what each side has learned
+
+[stratego.puck](stratego.puck) is a module fragment, not a bootable world: the
+board, the two armies and the rules, over a 10×10 `grid` topology
+(`strategoField`, cell ordinal = row × 10 + column counting from red's back
+rank). `minimal-stratego-host.world.json` under
+[`tests/Puck.World.Tests/Fixtures`](../../../../../tests/Puck.World.Tests/Fixtures)
+supplies the two local seats and the `attack` channel the module's rules read.
+
+The rule set is the classic one: ranks 1 Marshal through 10 Spy with a lower
+number winning, 11 Bomb and 12 Flag which never move, one 40-piece army a side,
+two 2×2 lakes, the Spy beating a Marshal it attacks, the Miner defusing a Bomb,
+equal ranks removing each other, and the Flag ending the game
+([Stratego](https://en.wikipedia.org/wiki/Stratego)).
+
+`strategoOwner` is the one public board—0 empty, 1 red, 2 blue, 3 lake. Authoring
+the lakes as owner 3 is what makes a ray over that board stop at water exactly as
+it stops at a piece, so the Scout's reach is one `$match:…:distance` read rather
+than a second terrain row. Each side's ranks live on its own board
+(`strategoRedRank`, `strategoBlueRank`) whose `visibility` admits that side's
+seat alone, and whose `readersFrom` names `strategoReveal`, the keyed text row a
+flag capture writes both seats into: the armies are revealed at the end by
+widening the live audience, not by copying the boards.
+
+What a side has learned is a `knowledge` board (`strategoRedKnows`,
+`strategoBlueKnows`) over the same topology, each naming the opposing rank board
+as its source and a Bool mask (`strategoRedSeen`, `strategoBlueSeen`) as the
+squares it currently sees. A strike raises the one square each side learns about,
+fires `observe` on that side's knowledge board—which folds the source rank in
+with its own observation tick—and lowers the mask again in the same rule, so a
+later strike elsewhere cannot overwrite the memory with whatever stands on the
+square afterwards. A remembered cell keeps its value and reads `visible: false`
+on the next refresh. Knowledge is indexed by square, which is the shape
+`StateKnowledge` carries: a piece that moves after being revealed leaves its rank
+behind on the square it was revealed on.
+
+Captured pieces are removed with `removeStateCell` rather than zeroed, so a
+side's rank board's cell count is its surviving piece count.
+
+Moves arrive through `strategoFrom`, `strategoTo` and an incremented
+`strategoRequest`. `stratego-judge` states the legality of the pending request
+once—ownership, a moveable rank, a target that is neither own nor lake, an
+orthogonal line, and the Scout's own reach—and the six rules after it read that
+verdict. `strategoResult` is 1 for an accepted move and -1 for a refused one;
+`strategoApplied` catches up to `strategoRequest` either way, and a refused move
+does not end the turn. `strategoOwner` carries `phaseOf: "strategoTurnGuard"`:
+an external gameplay transform writing the board must present that row's
+generation. Setup ends when both seats hold their own `attack` control, which is
+what `strategoReady` records.
+
+Deliberate reductions, stated rather than left to be discovered: the two-squares
+and more-squares repetition restrictions are not modelled; a Scout moves any
+distance along an empty line but may only attack an adjacent square, which is the
+original rule rather than the later variant; losing by having no legal move is not
+detected, only the flag capture ends the game; and both armies' opening setups are
+authored in the document rather than chosen by the players, so the setup phase is
+a readiness handshake rather than a placement interface.
+
+`stratego.state.json` under
+[`ShippedWorldStateBaselines`](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines)
+records the export after the committed sequence: twelve requests, nine of them
+accepted, three of those nine strikes—one won, one lost, one mutual—and three
+refused outright, a Bomb asked to move, a move into a lake, and a move onto one's
+own piece.
+## Hearts—the pile-ordering probe
+
+[hearts.puck](hearts.puck) is a standalone, self-contained document (its own
+`documentId`, headless `host.presentation: "None"`) rather than an importable
+module: four seats, one deal, a three-card pass and thirteen tricks, played
+through one console door. It is the market's probe for the four transforms that
+order a pile—`sortZone`, `sortKeyed`, `arrange`, and the history-ring
+`push`—and for the `phase`/`phaseOf` submission-protocol pair.
+
+The rules are the standard four-player game as
+[Pagat](https://www.pagat.com/reverse/hearts.html) states them: a full 52-card
+deal, a three-card pass rotating left, right, across and hold by hand number,
+the two of clubs leading the first trick, follow suit if you can, no point card
+on the first trick, no heart led until hearts are broken, the highest card of
+the led suit taking the trick, one point per heart, thirteen for the queen of
+spades, and shooting the moon. A card is its own key: card `i` is suit `i / 13`
+(0 clubs, 1 diamonds, 2 hearts, 3 spades) and rank `i % 13 + 2`, so the two of
+clubs is 0 and the queen of spades is 49. The deal is a `shuffle` over the
+`heartsStream` stream draw, the engine's own deterministic generator; nothing
+else in the document is unordered.
+
+A player names a seat and a card in `heartsAct` and increments `request`;
+`result` answers `1` accepted or `-1` refused, and `heartsTable` counts both:
+
+```text
+world.state.cell.set heartsTable deal 1
+world.wait 20
+world.state.cell.set heartsAct seat 3
+world.state.cell.set heartsAct card 0
+world.state.cell.set heartsAct request 1 add
+world.wait 8
+world.state heartsAct result
+world.state heartsTable
+```
+
+Where each transform earns its keep. `sortZone` orders a hand by
+`heartsSuit` then `heartsRank` after the deal and again after the pass lands.
+`sortKeyed` keeps `heartsTricks` in capture order and `heartsScore` in match
+order. `arrange` at rank zero—the token domain's own order—normalizes a pass
+zone, so the receiving seat learns nothing from the order its neighbour picked,
+and normalizes a finished trick, so the winner's pile records cards rather than
+play order. `push` writes the winning seat into the `heartsEvents` ring, one
+cell per trick. `phase` carries the pass and trick submission generations, and
+the pass zones and the trick declare `phaseOf` against them, so an outside
+gameplay transform against those rows carries the generation or is refused by
+name.
+
+Two authoring constraints this document works inside, both engine behavior
+rather than style:
+
+- **A rule's bindings are sixteen wide, and only the declared half is priced.**
+  `RuleCompiler.CompileBindings` checks the authored count against
+  `RuleCapacity.MaxBindingsPerRule`; the implicit bindings a computed cell key
+  mints while that same binding's expression compiles are appended without a
+  second check, so a rule can compile past the ceiling and
+  `RuleEvaluator.EvaluateOnce` then throws `IndexOutOfRangeException` writing
+  `m_bindingValues[ordinal]`. `hearts-resolve` exists for this reason: it turns
+  the request into plain literal-keyed cells one tick ahead, so the rules that
+  judge a move spell no computed key at all.
+- **A binding whose value comes from a live zone is memoized against the rows
+  the selection last resolved to.** Moving `$zones[...]` to another seat's zone
+  re-serves the previous seat's answer, which reads as a legal move refused.
+  `hearts-pass-pick` therefore names all four pass zones in its `held` binding
+  instead of selecting one; live zones stay in the effects, where each firing
+  resolves them afresh.
+
+Three deliberate reductions, stated rather than left to be discovered: the
+document plays one hand rather than a match to a hundred; a seat that cannot
+follow suit may discard anything, with no further discard restriction past the
+first trick; and the pass is all-or-nothing—every seat picks three cards before
+any of them travel, rather than each pass landing as it completes.
+
+[hearts.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/hearts.sequence.json)
+drives a real hand through that door: the full twelve-card pass, two complete
+tricks, and four moves the rules refuse—passing a card another seat holds,
+playing out of turn, leading a heart before hearts are broken, and discarding a
+heart while still holding the suit led. The recorded export carries the queen of
+spades on seat 3's pile for thirteen points.
+## Snake—a ring body on a tick-indexed beat
+
+[snake.puck](snake.puck) is a module, not a bootable document: it declares the
+state and rules and leaves the seat, the input channels and the population to a
+host. [minimal-snake-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json)
+is the smallest host that completes it—one local seat on the shared `walk` kit,
+plus the `forward`/`strafe` bipolar channels the four turn presses arrive on.
+
+The rules are the arcade set [Blockade (1976) fixed and the 1997 Nokia handheld
+made universal](https://en.wikipedia.org/wiki/Snake_(video_game_genre)): one
+snake crawls a cell per beat, a turn that reverses straight into the neck is
+refused, eating the food grows the snake and places another, and running into
+the snake's own body ends the run. Two reductions are deliberate: the 8x8 field
+wraps rather than carrying walls, and the cell the tail is about to vacate
+counts as solid.
+
+The body is a `ring`-domain row (`snakeTrail`) that each step pushes the new
+head cell onto; `snakeBoard` is the occupancy the gates read, and the departing
+tail is cleared through the trail age `snakeLength - 1`, which is why the snake
+is capped at six segments—a `$history:` age is a compile-time constant, so the
+chain of addressable tail ages is bounded by the cap. `snakeHeadingLog` is a
+second ring, four deep, written by the `push` state transform with the literal
+heading each accepted turn took; `snakeIllegalTurns` counts the reversals the
+same four rules refused. `snakeMeals` is a two-deep `evicts` table keyed by the
+cell each meal was eaten on, so a third meal drops the first.
+
+The beat is two `cycle` cells of `snakeTempo` over the same thirty-step lattice
+rotation: `slow` turns one step a tick and reads zero once every thirty ticks,
+`fast` turns two and reads zero once every fifteen. `snakePace` accumulates one
+a second through `advance` from the last spawn, and the step rule reads `fast`
+instead of `slow` once it passes eight—the beat's period halves as a run goes
+on. A death rebases it, sets `snakeRespawn` to one second of engine ticks, and
+`countdown snakeRespawn` drains it a simulation step at a time until the spawn
+rule re-seeds the field.
+
+Turns reach the game two ways, both landing on the same
+`snakeTurnRequest`/`snakeTurnSerial` pair: a `body.press` on the seat's
+`strafe`/`forward` channels, or an ordered console submission—
+
+```text
+world.state.cell.set snakeTurnRequest $value 1
+world.state.cell.set snakeTurnSerial $value 1 add
+world.wait 30
+world.state snakeHead
+world.state snakeHeadingLog
+```
+
+—where the request is the heading (0 east, 1 south, 2 west, 3 north) and the
+serial is what makes it a new submission. The recorded trajectory is
+[snake.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/snake.sequence.json):
+it joins the seat, is refused one reversal, eats four times (the third and fourth
+each evicting a meal), dies on its own body, waits out the countdown, plays a
+second run, and dies again — ending partway through the second countdown, so
+`snakeRespawn` carries a live partial value rather than a settled zero.
+## Pong—a physical court and three interaction latches
+
+[pong.puck](pong.puck) is a module, not a bootable document: it declares a court,
+three bodies that play on it, and the rules that judge them, and leaves the seat,
+the `attack` channel and the population to a host.
+[minimal-pong-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-pong-host.world.json)
+is the smallest host that completes it—one local seat, the `walk` program, the
+three looks and a population of six.
+
+The rules are the 1972 coin-op's
+([Pong](https://en.wikipedia.org/wiki/Pong)): two paddles face each other across a
+court, the side that was last scored upon serves, a paddle that meets the ball
+returns it, a ball that passes a paddle and reaches the goal behind it scores one
+point for the other side, and the first side to eleven wins.
+
+Where the other games in this directory judge a board, this one judges geometry.
+`pongBall` is a `rigid` kit on the court's solid floor; a serve is an
+`applyRigidImpulse` down the court, the same door `body.impulse` opens. The three
+questions the rules ask about that geometry are the `interactions` table's three
+rows, one per latch shape it carries:
+
+| Interaction | Shape | Asks |
+|---|---|---|
+| `pong-paddle-strike` | Distance × Edge | did a paddle just meet the ball? (one firing per approach) |
+| `pong-paddle-pressure` | Distance × Level | is the ball still inside a paddle's reach? (one firing per tick) |
+| `pong-goal-west` / `pong-goal-east` | Region × Edge | has the ball arrived in a goal? |
+
+An interaction row carries no gate, so a goal is an event rather than a point:
+`pong-point-west`/`pong-point-east` turn one into a point only while the ball is
+in play, and `pong-dead-ball-*` count the arrivals that were not. The serve
+door is one pair—write `pongServeSerial` or press the seat's `attack` control—and
+`pong-serve-refuse` turns a serve away while the ball is live, while the
+between-points countdown is draining, or after the game has been won.
+`pongRallyClock` accumulates a second a second through `advance` from the serve
+that started the rally; `pongSpin` is a `Fixed` row whose `dynamics` trait makes
+every read of it an eased follower chasing the stored value a strike writes; and
+`pong-let` reads `$physics:quiescent`—the ball is the only rigid body on the
+court—to call a rally whose ball has stopped short of either goal.
+
+Two facts the document works inside, both engine behavior rather than style:
+
+- **A property row's keys are body indices, and an inhabited placement claims the
+  highest free slot first.** With the host's population of six, the ball is body
+  5, the paddles 4 and 3 and the two serve posts 2 and 1. The keys and
+  `bodies.capacity` are one fact.
+- **A placed body's facing is reset by the placing.** A baseline sequence's
+  `pose` step writes a zero yaw, so a paddle that has been moved can no longer
+  supply a heading. The serve therefore aims along a pair of fixed posts standing
+  in the court's far corners, which nothing ever moves.
+
+[pong.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/pong.sequence.json)
+plays a whole game through those doors: a rally the physics plays by itself (the
+ball is served, returned by the east paddle and turned again by the west one,
+`pongLongestRally` 2) ending in a let, a dead ball, three refused serves, and
+twenty-one points, each one a real serve down an open lane into the goal behind
+the paddle that stepped out of it. Since an unopposed serve always scores and the
+conceding side serves, the points alternate and the recorded game ends 11-10 with
+`pongWinner` reading 1.
+
+## Codenames—the word grid, the hidden key, and a spymaster that aims
+
+[codenames.puck](codenames.puck) is a module fragment, not a bootable world: a
+5x5 word grid, a key card the two spymasters alone may read, and the rules for
+touching cards.
+[minimal-codenames-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-codenames-host.world.json)
+is the smallest host that completes it—four local seats and nothing else, since
+this module reads no channel and owns no placement. The seats are the four
+roles: 1 red spymaster, 2 red operative, 3 blue spymaster, 4 blue operative.
+
+The rules are the published ones
+([Codenames, Vlaada Chvatil, Czech Games Edition](https://czechgames.com/en/codenames/rules/)):
+twenty-five word cards; a key card giving nine to the starting team, eight to
+the other, seven to bystanders and one to the assassin; a one-word clue and a
+number; the number plus one guesses; an own agent lets the team guess again,
+anything else ends the turn, the assassin loses the game outright, and the first
+team to contact all its own agents wins.
+
+A cell is its own key: grid ordinal `"0"`..`"24"`, row-major. The `sql { }`
+block authors the public half of the board in one statement—`codenamesBoard`
+decomposes into `codenamesBoardShown` (0 face down, else the identity the touch
+turned up) and `codenamesBoardLive` (the keyed Bool mask `nearest` and `mean`
+filter candidates on)—plus the six scalar `DECLARE`s the game keeps score in.
+`codenamesWords` is a `Text` table declared `embeds(codenamesWordVectors)`, so
+one declaration mints the word at each ordinal and its vector under the same
+key; `codenamesLexicon` does the same for twelve clue words that are **not** on
+the board, which is what makes a clue a clue.
+
+The key card and the four masks derived from it (`codenamesRedLive`,
+`codenamesBlueLive`, `codenamesRedAvoid`, `codenamesBlueAvoid`) and the
+spymaster's shortlist `codenamesHint` declare `visibility` admitting `seat1`
+and `seat3` alone. Everything else is public.
+
+The spymaster is five rules, one stage a tick, because every vector transform
+takes the cross-row path and lands at the tick boundary rather than in the rule
+frame: the masks refresh, two `mean`s reduce the team's own live agents and the
+cards it must steer away from (the other team's plus the assassin) to two
+poles, `mix` aims three parts toward the first and one part away from the second,
+then one `nearest` over the lexicon speaks the clue word into a `Text` slot,
+one `nearest` over the board words—filtered by `codenamesBoardLive`—is the
+private shortlist, and `remember` files the aim under the clue's own number
+unless a clue already on file is within 0.9 cosine of it. The clue **number**
+is `$reduce:count:codenamesHint:where:<team>Live`: how many of the three cards
+the clue pulled are the clueing team's own live agents, which is exactly what a
+Codenames number states.
+
+A player names a seat and a cell in `codenamesAct` and increments `request`;
+`result` answers `1` accepted or `-1` refused:
+
+```text
+world.state.cell.set codenamesAct seat 2
+world.state.cell.set codenamesAct word 0
+world.state.cell.set codenamesAct request 1 add
+world.wait 12
+world.state codenamesBoardShown
+world.state codenamesClueWord
+```
+
+Two authoring constraints this document works inside, both engine behavior
+rather than style:
+
+- **A `Bool` cell refuses a numeric expression as its source, and an expression
+  refuses to carry a `Bool` cell into an `Int` one.** A `mean`/`nearest`
+  `where` filter must be a keyed `Bool` row, so `codenames-live-refresh`
+  classifies each cell with an `if`/`else if`/`else` chain writing literals
+  rather than with four boolean expressions, and `codenames-resolve` reads the
+  reveal state through a branch.
+- **`nearest` into a keyed `Int` table replaces that row's whole cell set**
+  with the matched keys and their integer dot products. `codenamesHint` is
+  therefore the shortlist itself, not a row anything else writes.
+
+Four deliberate reductions, stated rather than left to be discovered. The
+embedding model is `puck-fixture`, the offline SHA-256 generator `puck embed`
+locks into [codenames.embeddings.json](codenames.embeddings.json): its vectors
+are deterministic but carry no real semantics, so the clue word a game picks is
+reproducible rather than apt. Both spymasters are the same rule pair, so there
+is no human spymaster interface. A clue's word and number are published but the
+guess is the operative's own choice through the door above, not taken from the
+shortlist. And the game plays one board rather than a match.
+
+[codenames.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/codenames.sequence.json)
+drives a real game through that door: four seats join, three clues are given,
+four guesses land—an own agent, a bystander that ends red's turn, blue's own
+agent, and the assassin, which ends the game with `codenamesWinner` at 2—and
+five requests are refused, a spymaster guessing instead of the operative, a card
+already face up, a guess before the clue lands, a guess on the other team's
+turn, and a guess after the game is over. `codenamesClueLog` holds two of the
+three clues: the third was within 0.9 cosine of one already on file and
+`remember` declined it.
+
+## Arena deathmatch—pickups, respawns, and a contended meter
+
+[arena.puck](arena.puck) is a module, not a bootable document: two fighters,
+two health pickups and the rules that score them, left to a host for its seats,
+its `attack` channel and its population.
+[minimal-arena-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-arena-host.world.json)
+is the smallest one that completes it—two local seats on one floating kit, the
+`attack` channel the fighters shoot on, a four-body population (seats 0 and 1,
+the two items) and the `arenaItem` look the item placements wear.
+
+The rule set is the free-for-all deathmatch id Software's Quake III Arena ships
+as its default game type
+([Quake III Arena](https://en.wikipedia.org/wiki/Quake_III_Arena),
+[Deathmatch](https://en.wikipedia.org/wiki/Deathmatch_(video_games))): a kill
+scores its killer a frag and its victim a death, a killed fighter waits out a
+respawn countdown and fires nothing until it drains, health regenerates between
+hits, health pickups restore more of it at once and return on their own item
+respawn clock, a participant may enter a match already under way, and the first
+fighter to the frag limit wins.
+
+Four mechanisms carry it. **Regeneration** is the `advance` trait on
+`arenaHealth`: the row's stored cell is the last explicit write's base and its
+ceiling clamps every read, so the export's `resolved` view carries a fighter's
+live health while its `state` cell carries the base the regeneration runs from.
+**Respawn and item cooldowns** are `countdown`, which drains by the step's own
+engine-tick width, so both waits are durations rather than tick counts.
+**Pickups** are the `interactions` section's one `Distance` row: `arenaFighter`
+against `arenaPickup`, both keyed carrier tables in the `properties` registry,
+firing once per crossing inside an 8-unit radius with the fighter bound `$left`
+and the item `$right`. A dead fighter's tag drops and a consumed item's tag
+drops, so the same table that grants the heal is what enforces who may take one
+and how often. **Contention** is `arenaMomentum`, a Fixed cell carrying a
+second-order `dynamics` follower that both fire rules write in opposite
+directions: two presses landing on the same tick both write it, document order
+decides the target the cell carries out of the tick, and the cell's clock keeps
+the follower's position and velocity at that write—which is what a contended
+tick looks like in the export.
+
+Entering the match is its own submission rather than a gesture on the attack
+control:
+
+```text
+world.state.cell.set arenaEnter $value 1
+world.wait 30
+world.state arenaRoster
+world.state arenaFighter
+```
+
+`arena-join` sits after the four shot rules in document order on purpose. A
+rule's writes land on the tick's own frame and every rule after it reads
+through that frame, so an `arena-join` placed first would hand `arena-fire-2` a
+fighter that had joined and was alive in the same tick.
+
+An inhabited placement claims the highest free entity slot in document order,
+and a property tag is keyed by body index, so the two item placements are
+declared mega-health-first to make the tags read 2 (medkit) and 3 (mega health)
+against a host declaring two seats and two peer slots.
+
+Deliberate reductions, stated rather than left to be discovered: a shot always
+hits, since there is no aim, no weapon inventory and no projectile—a fighter's
+body is the marker the pickup radius is measured against, not a shooter; the
+two fighters are a fixed pair rather than an open lobby; armour, powerups and
+self-damage are not modelled; the frag limit ends the match rather than a time
+limit; and health regenerates on the trait's own clock even while a fighter is
+waiting to respawn, which never matters because the respawn write rebases it to
+full.
+
+[arena.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/arena.sequence.json)
+drives a whole match through those doors: seat 1 joins, seat 2 takes its seat
+and then enters the roster, the two trade fire on the same tick twice, each
+kills the other at least once, each is refused a shot it tries to take while
+dead, the medkit is carried onto the plaza while one fighter is out and taken
+by the other, and the match ends 2–1 on the frag limit. The mega health is
+never taken: it stands 40 units out for the whole match, which is the control
+on the distance the interaction measures.
 
 This collection is part of [Puck.World](../../../README.md).
 

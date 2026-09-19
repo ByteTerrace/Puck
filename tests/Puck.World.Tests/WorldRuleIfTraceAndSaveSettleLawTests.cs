@@ -19,7 +19,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var always = new WorldStateRow(
@@ -27,7 +27,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 1
+                    Value: CellValue.Int(value: 1L)
                 )]
         );
         var a = new WorldStateRow(
@@ -35,7 +35,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var b = new WorldStateRow(
@@ -43,7 +43,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
 
@@ -78,7 +78,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
         WorldDefinitionRows.FindStateRow(
             rows: fixture.Server.Definition.State,
             name: row
-        )!.Cells!.Single().Value;
+        )!.Cells!.Single().Value.AsInt;
 
     [Fact]
     public void TheUnmetBranchFiresElseAndTheMetBranchFiresThenAndBothNameTheChoiceInTheTrace() {
@@ -153,7 +153,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var always = new WorldStateRow(
@@ -161,7 +161,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 1
+                    Value: CellValue.Int(value: 1L)
                 )]
         );
         var a = new WorldStateRow(
@@ -169,7 +169,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 5
+                    Value: CellValue.Int(value: 5L)
                 )]
         );
 
@@ -187,13 +187,13 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                         // reading as false, so this must run NEITHER branch.
                         Condition: new ActionPredicate.CompareValue(
                             Kind: CellKind.Int,
-                            Left: new ValueExpression(Tokens: [
-                                new ValueToken.Constant(Value: 1m),
-                                new ValueToken.State(Name: "flag"),
-                                new ValueToken.Divide(),
+                            Left: new ExpressionProgram(Instructions: [
+                                Instruction.Constant(value: 1m),
+                                Instruction.Operand(name: "flag"),
+                                Instruction.Of(operation: ExpressionOp.Divide),
                             ]),
                             Comparison: ActionStateComparison.Equal,
-                            Right: new ValueExpression(Tokens: [new ValueToken.Constant(Value: 1m)])
+                            Right: new ExpressionProgram(Instructions: [Instruction.Constant(value: 1m)])
                         ),
                         Then: [new ActionEffect.SetState(
                                 State: "a",
@@ -232,7 +232,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             ),
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         using var live = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
@@ -262,7 +262,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
         )! with {
             Cells = [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: liveValueAtSave!.Value
+                    Value: CellValue.Int(value: liveValueAtSave!.Value)
                 )],
         };
         var savedDocument = live.Server.Definition.WithWorldState(rows: [settledRow]);

@@ -8,12 +8,37 @@ namespace Puck.World.Tests;
 public sealed class WorldKeyedDrawLawTests {
     private static StateCell Cell(string key, long value = 0) => new(
         Name(value: key),
-        value
+        CellValue.Int(value: value)
     );
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(
         document.State,
         row
     )!;
+    // A mutation submission carries an operation id: the ingress door binds one to the stamped actor and the
+    // canonical payload, and refuses an envelope that leaves it empty before anything composes.
+    private static WorldMutationOutcome Generate(WorldFixture fixture, long sequence, IReadOnlyList<string>? keys = null) {
+        WorldSubmissionResult? result = null;
+
+        fixture.Server.Submit(
+            new(
+                SubmissionEnvelope.LocalConnectionId,
+                0,
+                sequence,
+                sequence,
+                WorldPrincipal.Console,
+                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
+                    WorldPrincipal.Console,
+                    "dice",
+                    keys
+                )),
+                Guid.NewGuid()
+            ),
+            completed => result = completed
+        );
+        fixture.Step();
+
+        return Assert.IsType<WorldSubmissionResult.Mutation>(@object: result).Outcome;
+    }
     private static StateGenerator Markov() => new(
         Source: GeneratorSource.Markov,
         Start: Name(value: "start"),
@@ -75,23 +100,16 @@ public sealed class WorldKeyedDrawLawTests {
         ).Cells!.Select(selector: c => c.Value).ToArray();
 
         using var fixture = Fixtures.FreshServer(definition: rolled);
-
-        fixture.Server.Submit(
-            new(
-                SubmissionEnvelope.LocalConnectionId,
-                0,
-                1,
-                1,
-                WorldPrincipal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
-                    WorldPrincipal.Console,
-                    "dice",
-                    ["d2", "d4"]
-                ))
-            ),
-            _ => { }
+        var held = Generate(
+            fixture: fixture,
+            keys: ["d2", "d4"],
+            sequence: 1
         );
-        fixture.Step();
+
+        Assert.True(
+            condition: held.Applied,
+            userMessage: held.Detail
+        );
 
         var dice = Find(
             document: fixture.Server.Definition,
@@ -117,23 +135,16 @@ public sealed class WorldKeyedDrawLawTests {
         );
 
         using var twin = Fixtures.FreshServer(definition: rolled);
-
-        twin.Server.Submit(
-            new(
-                SubmissionEnvelope.LocalConnectionId,
-                0,
-                1,
-                1,
-                WorldPrincipal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
-                    WorldPrincipal.Console,
-                    "dice",
-                    ["d2", "d4"]
-                ))
-            ),
-            _ => { }
+        var replayed = Generate(
+            fixture: twin,
+            keys: ["d2", "d4"],
+            sequence: 1
         );
-        twin.Step();
+
+        Assert.True(
+            condition: replayed.Applied,
+            userMessage: replayed.Detail
+        );
         Assert.Equal(
             after,
             Find(
@@ -142,21 +153,15 @@ public sealed class WorldKeyedDrawLawTests {
             ).Cells!.Select(selector: c => c.Value)
         );
 
-        fixture.Server.Submit(
-            new(
-                SubmissionEnvelope.LocalConnectionId,
-                0,
-                2,
-                2,
-                WorldPrincipal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
-                    WorldPrincipal.Console,
-                    "dice"
-                ))
-            ),
-            _ => { }
+        var whole = Generate(
+            fixture: fixture,
+            sequence: 2
         );
-        fixture.Step();
+
+        Assert.True(
+            condition: whole.Applied,
+            userMessage: whole.Detail
+        );
         Assert.Equal(
             12L,
             Find(
@@ -165,22 +170,14 @@ public sealed class WorldKeyedDrawLawTests {
             ).DrawCursor
         );
 
-        fixture.Server.Submit(
-            new(
-                SubmissionEnvelope.LocalConnectionId,
-                0,
-                3,
-                3,
-                WorldPrincipal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
-                    WorldPrincipal.Console,
-                    "dice",
-                    ["d9"]
-                ))
-            ),
-            _ => { }
+        // A key the tray does not carry redraws nothing, so the stream stays where the last emission left it.
+        var unknown = Generate(
+            fixture: fixture,
+            keys: ["d9"],
+            sequence: 3
         );
-        fixture.Step();
+
+        Assert.True(condition: unknown.Refused);
         Assert.Equal(
             12L,
             Find(
@@ -197,7 +194,7 @@ public sealed class WorldKeyedDrawLawTests {
                 Name(value: "names"),
                 CellKind.Text,
                 Capacity: 3,
-                Cells: [Cell("a"), Cell("b")],
+                Cells: [new StateCell(Name(value: "a"), CellValue.Text(value: "")), new StateCell(Name(value: "b"), CellValue.Text(value: ""))],
                 Draw: new Draw(
                     Generator: Markov(),
                     Timing: DrawTiming.Event
@@ -272,7 +269,7 @@ public sealed class WorldKeyedDrawLawTests {
         Assert.All(
             dice.Cells!,
             c => Assert.InRange(
-                c.Value,
+                c.Value.AsInt,
                 1L,
                 6L
             )

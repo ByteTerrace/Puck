@@ -1,7 +1,7 @@
 # Search possible moves
 
 Search repeatedly asks a set of rules to judge possible changes to a
-[frame](frames.md). It can enumerate legal moves or compare futures.
+[candidate scope](frames.md). It can enumerate legal moves or compare futures.
 A **candidate** is one proposed change; a **ply** is one move deeper into
 a future. The installed state stays under the host's control.
 
@@ -9,10 +9,10 @@ a future. The installed state stays under the host's control.
 
 ```mermaid
 flowchart LR
-    Base["Load inputs into a frame<br/>and read the SearchPlan"] --> Candidate["Apply a candidate<br/>and run judge rules"]
+    Base["Resolve the SearchPlan<br/>against the arena"] --> Candidate["Open a scope, apply a candidate<br/>and run judge rules"]
     Candidate --> Result["Check verdict and turn;<br/>record result or explore replies"]
     Result -- "quota spent" --> Resume["Checkpoint progress;<br/>resume next tick"]
-    Result -- "walk complete" --> Writes["Produce SearchWrites<br/>for host installation"]
+    Result -- "walk complete" --> Writes["Produce ArenaSearchWrites<br/>for host installation"]
 ```
 
 The acceptance convention is explicit: the judge must leave the verdict slot
@@ -77,25 +77,32 @@ does not invoke a live generator to discover them.
 
 ## Keep work and progress deterministic
 
-`Nodes` limits the candidate work performed each tick. The runtime suspends
-its explicit search stack and resumes it on later ticks rather than making a
-decision according to elapsed wall-clock time. Relevant input changes restart
-the job so a finished answer does not describe an abandoned position.
+`Nodes` limits the candidate work performed each tick. No search blocks a
+tick: the runtime suspends its explicit search stack and resumes it on later
+ticks rather than making a decision according to elapsed wall-clock time.
+Relevant input changes restart the job so a finished answer does not describe
+an abandoned position. A candidate is a journal scope on the arena, never a
+copy of it — see [candidates](frames.md).
+
+A game is a judge, and a ply is a candidate state the judge accepts and that
+changes the turn slot; an interaction-shaped host fits the same definition
+with its gates standing in for the judge.
 
 Unlike a rule scheduling cache, search progress is simulation state: node
-cursors, frames, depth passes, stored position results, and tree progress
+cursors, scopes, depth passes, stored position results, and tree progress
 participate in hashes and checkpoints. Persist it when continuation must resume
-the same work. A finished job emits `SearchWrite.Cell` and
-`SearchWrite.ClearBoard`; the host translates those writes into its own
+the same work. A finished job emits `ArenaSearchWrite.Cell` and
+`ArenaSearchWrite.ClearBoard`; the host translates those writes into its own
 validated mutation pipeline.
 
 ## Search (`Search/`)
 
-`SearchRuntime`—negamax with alpha-beta and a
-transposition table, or UCB1 tree search, walking every (shape, token,
-target or direction) candidate a `SearchPlan` declares and judging each
-through a document project's own compiled rules over a `StateFrame`; a
-finished job lands as `SearchWrite`s (`Cell`, `ClearBoard`), never a
+`SearchPlan` declares every (shape, token, target or direction) candidate a job
+walks. `ArenaSearchPlan` resolves those names against a catalog and
+`ArenaSearch` (in `Puck.State.Search`) walks them—negamax with alpha-beta and a
+transposition table, or UCB1 tree search—judging each through a document
+project's own compiled rules over a journal scope on the arena; a
+finished job lands as `ArenaSearchWrite`s (`Cell`, `ClearBoard`), never a
 document project's own mutation vocabulary. `SearchShapePlan`/`SearchShapeKind`
 compile the six candidate shapes (relocate, drop, jump, promote, pair,
 transfer); `SearchCapacity` holds its bounds. A document project resolves

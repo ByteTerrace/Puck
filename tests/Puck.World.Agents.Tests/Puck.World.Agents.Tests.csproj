@@ -13,8 +13,10 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.World.AgentBridge\Puck.World.AgentBridge.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.AgentHarness\Puck.World.AgentHarness.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Machines\Puck.World.Machines.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

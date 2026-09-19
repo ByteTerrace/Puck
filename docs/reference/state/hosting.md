@@ -106,14 +106,14 @@ package:
 - A `RuleCompileContext` is derived to anchor what only the document knows
   (`FindTopology` in a placement's frame, `FindDraw` through a lattice fill)
   and to carry the per-compile scope the families cache into.
-- A host implements `IRuleHost`—`IRuleReader` widened with the mutation
-  door (`TryApply`, composing privately under `BeginPreflight`/`EndPreflight`
-  or installing), `FireEffect` for the effect arms it registered,
-  `TryEvaluateOwn` for the rule kinds only it understands (which run each
-  evaluation back through `RuleEvaluator.EvaluateOnce`, so latch, trace, and
-  ledger stay one mechanism), and `RefusalRecorded`—and widens the reader
-  further to whatever its registered operands read through; a compiled fact
-  casts the reader it is handed. A host owns one `RuleEvaluator` and one
+- A host implements `IEffectHost` — `IStateReader` widened with the arena
+  door (`Apply`, journalled by the firing's own scope), `Fire` for the effect
+  arms it registered, and `Committed` — plus `IRuleOwner` for the rule kinds
+  only it understands (which run each evaluation back through
+  `RuleEvaluator.EvaluateOnce`, so latch, trace, and ledger stay one mechanism)
+  and `IRuleRefusalSink` for the refusal ledger. It implements one facet
+  (`IFacet`) per family of facts it serves; a compiled fact receives the facet
+  its own declaration names. A host owns one `RuleEvaluator` and one
   `RuleLatch` per family it evaluates.
 - `CompiledRule` is non-sealed: a document project's rule overrides
   `CollectReads`, `CollectWrites`, and `Cost` to add the branches it alone
@@ -125,9 +125,9 @@ package:
 
 ## What stays a host's
 
-Composing a `StateMutation` against a row—eviction, a numeric upsert's
+Applying a `Mutation` against a row—eviction, a numeric upsert's
 advance/dynamics rebase, envelope validation, the journal—is each host's
-door; the pieces are here (`StateCellWriter`, `StateAdvance`,
+door; the pieces are here (`StateArena`, `StateAdvance`,
 `StateRow.ClampToEnvelope`), the pipeline is not. Pairwise interactions and
 timed decisions are host-evaluated kinds until a pair domain over rows is
 designed.
@@ -149,18 +149,34 @@ expression dependencies.
 Rule budgeting currently uses heuristic work units. `RuleCost` separates the
 checks every candidate may perform from effects that fire, allowing mutually
 exclusive effects to share a budget without discarding closed-gate work.
-`CostModel` defines a portable abstract service policy; its reference operation
-and memory coefficients remain uncalibrated and return `CostBound.Unmodeled`.
-Heuristic weights cannot be converted to reference cycles. The
-[costing brief](../../plans/abstract-machine-costing.md) describes the
-portable capability baseline and evidence needed before cycle-based admission.
+`CostModel` defines a portable abstract service policy. Its coefficients are
+read from the reference schedule's one owning evidence manifest,
+`src/Puck.State/ReferenceSchedule.json`, which pins the offline evidence
+targets, the per-target instruction service, the reference kernels with the
+source digests their evidence was read against, and the memory-service profile.
+`ReferenceSchedule.OperationCostBound` answers a reference-cycle price only for
+an operation the manifest prices, and `CostBound.Unmodeled` with the recorded
+reason everywhere else; the memory coefficients are unmodeled throughout, so
+`CostModel.MemoryCycles` prices only a proved empty operation. Heuristic
+weights cannot be converted to reference cycles, and admission still runs on
+them. The [costing brief](../../plans/abstract-machine-costing.md) describes
+the evidence needed before cycle-based admission.
+
+`StateRow.MaxRows` (document size) and `RuleCapacity.MaxWorkUnitsPerTick`
+(static per-tick work) are structural ceilings, never a fixed-size buffer or
+a per-world tunable. Several content lanes that each fit comfortably under
+both ceilings in isolation can still sum past one or both once merged into a
+single document — a document-capacity collision the per-lane work could not
+see, not a defect in any one lane's own design. The fix for a genuine
+collision is to widen the ceiling that was hit, never to cut a lane to fit
+under an unchanged one.
 
 ## Where the rest lives
 
-The world's registered families (`WorldRuleVocabulary`, `WorldRuleCompileContext`,
-`IWorldRuleReader`), its rule and decision records, and the validators live in
-[`src/Puck.World.Schema`](../../../src/Puck.World.Schema/README.md); `WorldServer` is the
-host (`WorldServer.RuleHost.cs` in
+The world's registered families (`WorldFactsVocabulary`, `WorldFactsCompileContext`,
+`IWorldFacts`), its rule and decision records, and the validators live in
+[`src/Puck.World.Schema`](../../../src/Puck.World.Schema/README.md); `WorldRuleHost` is the
+host (`WorldRuleHost.cs` in
 [`src/Puck.World.Server`](../../../src/Puck.World.Server/README.md)).
 `tests/Puck.State.Tests` proves the expression syntax, the function families,
 the hex topology, the evaluator, and the search runtime over a headless host
@@ -170,8 +186,8 @@ document section (`WorldSearchSection`/`WorldSearchRow`/`WorldSearchShape`)
 and the compiler that resolves it into a `SearchPlan` (`WorldSearchCompilation`,
 reading the document's placements and topologies to fill in what a row leaves
 implicit) live in `src/Puck.World.Schema`; `WorldServer` holds the runtime and
-translates its landed `SearchWrite`s into the world's own mutation door
-(`WorldServer.cs`, `WorldServer.Step.cs` in
+translates its landed `ArenaSearchWrite`s into the world's own mutation door
+(`WorldServer.cs`, `WorldTick.Step.cs` in
 [`src/Puck.World.Server`](../../../src/Puck.World.Server/README.md)); the game laws that
 boot a server stay in `tests/Puck.World.Tests`.
 

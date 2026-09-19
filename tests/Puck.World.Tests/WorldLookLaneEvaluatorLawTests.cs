@@ -14,7 +14,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
     [Fact]
     public void ALiteralExpressionEvaluatesToItsOwnValue() {
         var definition = Fixtures.BuildDocument();
-        var expression = ValueExpression.Parse(text: "0.5");
+        var expression = ExpressionProgram.Parse(text: "0.5");
 
         var value = WorldLookLaneEvaluator.Evaluate(
             bodyIndex: -1,
@@ -49,9 +49,9 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         // popCount is state-only vocabulary (bitboards) — outside the restricted arithmetic subset this
         // presentation-layer evaluator supports.
         var definition = Fixtures.BuildDocument();
-        var expression = new ValueExpression(Tokens: [
-            new ValueToken.Constant(Value: 7m),
-            new ValueToken.PopCount(),
+        var expression = new ExpressionProgram(Instructions: [
+            Instruction.Constant(value: 7m),
+            Instruction.Of(operation: ExpressionOp.PopCount),
         ]);
 
         var value = WorldLookLaneEvaluator.Evaluate(
@@ -69,7 +69,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
     [Fact]
     public void ArithmeticOverLiteralsEvaluatesExactly() {
         var definition = Fixtures.BuildDocument();
-        var expression = ValueExpression.Parse(text: "clamp(0.2 + 0.9, 0, 1)");
+        var expression = ExpressionProgram.Parse(text: "clamp(0.2 + 0.9, 0, 1)");
 
         var value = WorldLookLaneEvaluator.Evaluate(
             bodyIndex: -1,
@@ -86,7 +86,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
     [Fact]
     public void DivisionByZeroReadsZeroRatherThanThrowing() {
         var definition = Fixtures.BuildDocument();
-        var expression = ValueExpression.Parse(text: "1 / 0");
+        var expression = ExpressionProgram.Parse(text: "1 / 0");
 
         var value = WorldLookLaneEvaluator.Evaluate(
             bodyIndex: -1,
@@ -102,7 +102,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
     }
     [Fact]
     public void FourAnonymousLanesPreserveInteriorGapsAndTheFourthValue() {
-        ValueExpression?[] lanes = [ValueExpression.Parse(text: "0.25"), null, ValueExpression.Parse(text: "0.75"), ValueExpression.Parse(text: "1")];
+        ExpressionProgram?[] lanes = [ExpressionProgram.Parse(text: "0.25"), null, ExpressionProgram.Parse(text: "0.75"), ExpressionProgram.Parse(text: "1")];
 
         Assert.Equal(
             new System.Numerics.Vector4(
@@ -121,11 +121,11 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         var options = new System.Text.Json.JsonSerializerOptions();
 
         options.Converters.Add(item: new WorldRenderLanesConverter());
-        var encoded = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ValueExpression?>>(
+        var encoded = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ExpressionProgram?>>(
             options: options,
             value: lanes
         );
-        var decoded = System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ValueExpression?>>(
+        var decoded = System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ExpressionProgram?>>(
             json: encoded,
             options: options
         );
@@ -135,7 +135,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
             decoded!.Count
         );
         Assert.Null(@object: decoded[1]);
-        var trimmed = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ValueExpression?>>(
+        var trimmed = System.Text.Json.JsonSerializer.Serialize<IReadOnlyList<ExpressionProgram?>>(
             [lanes[0], null, null, null],
             options
         );
@@ -146,7 +146,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
             json.RootElement.GetArrayLength()
         );
         Assert.Throws<System.Text.Json.JsonException>(testCode: () =>
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ValueExpression?>>(
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<ExpressionProgram?>>(
             json: "[null,null,null,null,null]",
             options: options
         ));
@@ -158,7 +158,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         Assert.Equal(
             0f,
             WorldLookLaneEvaluator.Evaluate(
-                ValueExpression.Parse(text: expression),
+                ExpressionProgram.Parse(text: expression),
                 Fixtures.BuildDocument(),
                 0,
                 -1
@@ -171,7 +171,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
                 "probe",
                 new WorldLookSource.Catalog(Index: 0),
                 1f,
-                WorldLookMotion.Default with { Lanes = [ValueExpression.Parse(text: "0.6"), null, ValueExpression.Parse(text: "1")] }
+                WorldLookMotion.Default with { Lanes = [ExpressionProgram.Parse(text: "0.6"), null, ExpressionProgram.Parse(text: "1")] }
             )]),
         };
         var json = System.Text.Json.JsonSerializer.Serialize(

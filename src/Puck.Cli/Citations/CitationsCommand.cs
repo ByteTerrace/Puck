@@ -470,45 +470,15 @@ internal static class CitationsCommand {
         enumerated = new HashSet<string>(comparer: StringComparer.Ordinal);
         error = string.Empty;
 
-        var worldProject = Path.Combine(
-            path1: root,
-            path2: "src",
-            path3: "Puck.World",
-            path4: "Puck.World.csproj"
-        );
-        var artifact = Path.Combine(paths: [root, "src", "Puck.World", "bin", "Release", "net10.0", "Puck.World.dll"]);
-
-        Console.WriteLine(value: "citations: building Puck.World once (Release) to boot its live console vocabulary.");
-
-        CliProcessResult build;
-
-        try {
-            build = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
-                input: string.Empty,
-                timeout: TimeSpan.FromSeconds(value: 300)
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            error = $"could not start the Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        if (
-            build.TimedOut ||
-            (build.ExitCode != 0)
-        ) {
-            error = (build.TimedOut
-                ? "the Puck.World build timed out."
-                : $"the Puck.World build exited {build.ExitCode}."
-            );
-
-            return false;
-        }
-        if (!File.Exists(path: artifact)) {
-            error = $"the Puck.World build exited 0 but did not produce the exact artifact {artifact}.";
-
+        if (!WorldArtifactBuild.TryBuild(
+            artifact: out var artifact,
+            build: out _,
+            error: out error,
+            outputDirectory: null,
+            repositoryRoot: root,
+            timeout: TimeSpan.FromSeconds(value: 300),
+            verb: "citations"
+        )) {
             return false;
         }
 

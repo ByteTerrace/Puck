@@ -112,7 +112,7 @@ public sealed class ReplayRateStampLawTests {
     public void MidCaptureRebuildChangingRate_StopsTheRecordingAndKeepsTheRecordStartHeaderRate() {
         Fixtures.SkipIfReplayDirectoryUnwritable();
 
-        using var fixture = Fixtures.FreshServer();
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
             liveServer: fixture.Server,
@@ -132,7 +132,7 @@ public sealed class ReplayRateStampLawTests {
             userMessage: $"refused to arm: {refusal}"
         );
 
-        // One ordinary tick at the record-start rate (240 Hz, Fixtures.BuildDocument's unauthored default).
+        // One ordinary tick at the record-start rate this law authors by name.
         fixture.Step();
         tape.NoteTick();
 
@@ -199,7 +199,7 @@ public sealed class ReplayRateStampLawTests {
         // disagreement does.
         Fixtures.SkipIfReplayDirectoryUnwritable();
 
-        using var fixture = Fixtures.FreshServer();
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
             liveServer: fixture.Server,
@@ -223,7 +223,7 @@ public sealed class ReplayRateStampLawTests {
         tape.NoteTick();
 
         // A same-rate rebuild — same 240 Hz, otherwise identical document.
-        var (path, contentHash) = WriteTempWorldFile(definition: Fixtures.BuildDocument());
+        var (path, contentHash) = WriteTempWorldFile(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
 
         try {
             fixture.Server.EnqueueRebuild(

@@ -58,7 +58,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     }
     private static StateCell TextCell(string key) => new(
         Key: CellName.Parse(candidate: key),
-        Text: key
+        Value: CellValue.Text(value: key)
     );
     private static WorldStateRow AccountsRow(params string[] keys) => new(
         Name: CellName.Parse(candidate: RowName),
@@ -475,7 +475,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
                 Capacity: 4,
                 Cells: [new StateCell(
                         Key: CellName.Parse(candidate: "c"),
-                        Value: 2L
+                        Value: CellValue.Int(value: 2L)
                     )]
             ),
             template: Template(deal: new WorldPlacementDeal(

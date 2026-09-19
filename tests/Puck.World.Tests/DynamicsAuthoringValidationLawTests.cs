@@ -383,7 +383,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0)
                     )],
                 Advance: new StateAdvance(
                     PerSecondNumerator: 1,
@@ -402,7 +402,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0)
                     )],
                 Dynamics: new StateDynamics(
                     Row: "chase"
@@ -440,7 +440,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0)
                     )],
                 Dynamics: new StateDynamics(
                     Row: "missing"
@@ -455,7 +455,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                 Kind: CellKind.Int,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: CellValue.Int(value: 0)
                     )],
                 Dynamics: new StateDynamics(
                     Row: "chase"

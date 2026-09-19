@@ -1874,7 +1874,15 @@
           "value": null,
           "target": "Self",
           "key": "activeOption",
-          "expression": "solitaireKlondike[option]"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "option"
+              }
+            ]
+          }
         },
         {
           "$type": "setState",
@@ -2263,7 +2271,22 @@
               "value": null,
               "target": "Self",
               "key": "deals",
-              "expression": "solitaireKlondike[deals] + 1"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "deals"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 1
+                  },
+                  {
+                    "op": "Add"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -2278,7 +2301,15 @@
               "value": null,
               "target": "Self",
               "key": "applied",
-              "expression": "solitaireKlondike[request]"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "request"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -2396,7 +2427,15 @@
           "value": null,
           "target": "Self",
           "key": "sourceOk",
-          "expression": "$match:solitaireKlondikeRun:$zones[solitaireKlondike[from]][solitaireKlondike[card]]"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$match:solitaireKlondikeRun:$zones[solitaireKlondike[from]]",
+                "key": "$cell:solitaireKlondike:card"
+              }
+            ]
+          }
         },
         {
           "$type": "setState",
@@ -2404,7 +2443,15 @@
           "value": null,
           "target": "Self",
           "key": "runLength",
-          "expression": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix",
+                "key": "$cell:solitaireKlondike:card"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -2485,7 +2532,15 @@
           "value": null,
           "target": "Self",
           "key": "sourceOk",
-          "expression": "$match:solitaireKlondikeSingle:$zones[solitaireKlondike[from]][solitaireKlondike[card]]"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$match:solitaireKlondikeSingle:$zones[solitaireKlondike[from]]",
+                "key": "$cell:solitaireKlondike:card"
+              }
+            ]
+          }
         },
         {
           "$type": "setState",
@@ -2493,7 +2548,15 @@
           "value": null,
           "target": "Self",
           "key": "runLength",
-          "expression": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix",
+                "key": "$cell:solitaireKlondike:card"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -2579,7 +2642,40 @@
           "value": null,
           "target": "Self",
           "key": "targetOk",
-          "expression": "$reduce:count:$zones[solitaireKlondike[to]] == 0 ? (solitaireKlondikeRank[solitaireKlondike[card]] == 13) : $match:solitaireKlondikeLanding:$zones[solitaireKlondike[to]]"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$reduce:count:$zones[solitaireKlondike[to]]"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondikeRank",
+                "key": "$cell:solitaireKlondike:card"
+              },
+              {
+                "op": "Constant",
+                "value": 13
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Operand",
+                "name": "$match:solitaireKlondikeLanding:$zones[solitaireKlondike[to]]"
+              },
+              {
+                "op": "Select"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -2660,7 +2756,67 @@
           "value": null,
           "target": "Self",
           "key": "targetOk",
-          "expression": "(solitaireKlondike[runLength] == 1) * (solitaireKlondikeSuit[solitaireKlondike[card]] == solitaireKlondike[to] - 10) * (solitaireKlondikeRank[solitaireKlondike[card]] == $reduce:count:$zones[solitaireKlondike[to]] + 1)"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "runLength"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondikeSuit",
+                "key": "$cell:solitaireKlondike:card"
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "to"
+              },
+              {
+                "op": "Constant",
+                "value": 10
+              },
+              {
+                "op": "Subtract"
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Multiply"
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondikeRank",
+                "key": "$cell:solitaireKlondike:card"
+              },
+              {
+                "op": "Operand",
+                "name": "$reduce:count:$zones[solitaireKlondike[to]]"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Multiply"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -2762,7 +2918,22 @@
               "value": null,
               "target": "Self",
               "key": "moves",
-              "expression": "solitaireKlondike[moves] + 1"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "moves"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 1
+                  },
+                  {
+                    "op": "Add"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -2777,7 +2948,86 @@
               "value": null,
               "target": "Self",
               "key": "score",
-              "expression": "maximum(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Constant",
+                    "value": 0
+                  },
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "score"
+                  },
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "to"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 10
+                  },
+                  {
+                    "op": "GreaterOrEqual"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 10
+                  },
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "from"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 10
+                  },
+                  {
+                    "op": "GreaterOrEqual"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": -15
+                  },
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "from"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 1
+                  },
+                  {
+                    "op": "Equal"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 5
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 0
+                  },
+                  {
+                    "op": "Select"
+                  },
+                  {
+                    "op": "Select"
+                  },
+                  {
+                    "op": "Select"
+                  },
+                  {
+                    "op": "Add"
+                  },
+                  {
+                    "op": "Maximum"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -2792,7 +3042,15 @@
               "value": null,
               "target": "Self",
               "key": "applied",
-              "expression": "solitaireKlondike[request]"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "request"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -2860,9 +3118,25 @@
           },
           {
             "$type": "compareValue",
-            "left": "solitaireKlondike[from]",
+            "left": {
+              "instructions": [
+                {
+                  "op": "Operand",
+                  "name": "solitaireKlondike",
+                  "key": "from"
+                }
+              ]
+            },
             "comparison": "NotEqual",
-            "right": "solitaireKlondike[to]",
+            "right": {
+              "instructions": [
+                {
+                  "op": "Operand",
+                  "name": "solitaireKlondike",
+                  "key": "to"
+                }
+              ]
+            },
             "kind": "Int"
           }
         ]
@@ -2904,7 +3178,22 @@
               "value": null,
               "target": "Self",
               "key": "drawLeft",
-              "expression": "minimum(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "activeOption"
+                  },
+                  {
+                    "op": "Operand",
+                    "name": "$reduce:count:solitaireKlondikePile0"
+                  },
+                  {
+                    "op": "Minimum"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -3005,7 +3294,22 @@
               "value": null,
               "target": "Self",
               "key": "drawLeft",
-              "expression": "solitaireKlondike[drawLeft] - 1"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "drawLeft"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 1
+                  },
+                  {
+                    "op": "Subtract"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -3050,7 +3354,22 @@
               "value": null,
               "target": "Self",
               "key": "moves",
-              "expression": "solitaireKlondike[moves] + 1"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "moves"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 1
+                  },
+                  {
+                    "op": "Add"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -3065,7 +3384,15 @@
               "value": null,
               "target": "Self",
               "key": "applied",
-              "expression": "solitaireKlondike[request]"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "request"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -3114,7 +3441,22 @@
           "value": null,
           "target": "Self",
           "key": "passes",
-          "expression": "solitaireKlondike[passes] + 1"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "passes"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -3283,7 +3625,22 @@
               "value": null,
               "target": "Self",
               "key": "moves",
-              "expression": "solitaireKlondike[moves] + 1"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "moves"
+                  },
+                  {
+                    "op": "Constant",
+                    "value": 1
+                  },
+                  {
+                    "op": "Add"
+                  }
+                ]
+              }
             },
             {
               "$type": "setState",
@@ -3298,7 +3655,15 @@
               "value": null,
               "target": "Self",
               "key": "applied",
-              "expression": "solitaireKlondike[request]"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "request"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -3339,7 +3704,41 @@
           "value": null,
           "target": "Self",
           "key": "dealStep",
-          "expression": "solitaireKlondike[stage] == 0 ? 0 : solitaireKlondike[dealStep] + 1"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "stage"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "dealStep"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Select"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -3401,7 +3800,15 @@
               "value": null,
               "target": "Self",
               "key": "applied",
-              "expression": "solitaireKlondike[request]"
+              "expression": {
+                "instructions": [
+                  {
+                    "op": "Operand",
+                    "name": "solitaireKlondike",
+                    "key": "request"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -3561,7 +3968,48 @@
           "value": null,
           "target": "Self",
           "key": "gatherStep",
-          "expression": "solitaireKlondike[stage] == 0 ? 0 : minimum(11, solitaireKlondike[gatherStep] + 1)"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "stage"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Constant",
+                "value": 11
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "gatherStep"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Minimum"
+              },
+              {
+                "op": "Select"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -3606,7 +4054,41 @@
           "value": null,
           "target": "Self",
           "key": "attributeStep",
-          "expression": "solitaireKlondike[stage] == 0 ? 0 : solitaireKlondike[attributeStep] + 1"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "stage"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Constant",
+                "value": 0
+              },
+              {
+                "op": "Operand",
+                "name": "solitaireKlondike",
+                "key": "attributeStep"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Select"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -3651,7 +4133,53 @@
           "value": null,
           "target": "Self",
           "key": "status",
-          "expression": "($reduce:count:solitaireKlondikePile10 + $reduce:count:solitaireKlondikePile11 + $reduce:count:solitaireKlondikePile12 + $reduce:count:solitaireKlondikePile13) == 52 ? 2 : 1"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "$reduce:count:solitaireKlondikePile10"
+              },
+              {
+                "op": "Operand",
+                "name": "$reduce:count:solitaireKlondikePile11"
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Operand",
+                "name": "$reduce:count:solitaireKlondikePile12"
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Operand",
+                "name": "$reduce:count:solitaireKlondikePile13"
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Constant",
+                "value": 52
+              },
+              {
+                "op": "Equal"
+              },
+              {
+                "op": "Constant",
+                "value": 2
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Select"
+              }
+            ]
+          }
         }
       ],
       "gate": {
@@ -3704,7 +4232,14 @@
         }
       },
       "maxStates": 64,
-      "value": "1"
+      "value": {
+        "instructions": [
+          {
+            "op": "Constant",
+            "value": 1
+          }
+        ]
+      }
     },
     {
       "name": "solitaireKlondikeSingle",
@@ -3720,7 +4255,14 @@
         "$type": "any"
       },
       "maxStates": 64,
-      "value": "1"
+      "value": {
+        "instructions": [
+          {
+            "op": "Constant",
+            "value": 1
+          }
+        ]
+      }
     },
     {
       "name": "solitaireKlondikeRun",
@@ -3754,7 +4296,75 @@
         ]
       },
       "maxStates": 64,
-      "value": "solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))"
+      "value": {
+        "instructions": [
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeFace",
+            "key": "$token"
+          },
+          {
+            "op": "Constant",
+            "value": 1
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeRank",
+            "key": "$token"
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeRank",
+            "key": "$previous"
+          },
+          {
+            "op": "Constant",
+            "value": 1
+          },
+          {
+            "op": "Subtract"
+          },
+          {
+            "op": "Equal"
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeSuit",
+            "key": "$token"
+          },
+          {
+            "op": "Constant",
+            "value": 2
+          },
+          {
+            "op": "Modulo"
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeSuit",
+            "key": "$previous"
+          },
+          {
+            "op": "Constant",
+            "value": 2
+          },
+          {
+            "op": "Modulo"
+          },
+          {
+            "op": "NotEqual"
+          },
+          {
+            "op": "Multiply"
+          },
+          {
+            "op": "Add"
+          },
+          {
+            "op": "Multiply"
+          }
+        ]
+      }
     },
     {
       "name": "solitaireKlondikeLanding",
@@ -3782,7 +4392,60 @@
         ]
       },
       "maxStates": 64,
-      "value": "(solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)"
+      "value": {
+        "instructions": [
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeRank",
+            "key": "$token"
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeRank",
+            "key": "$cell:solitaireKlondike:card"
+          },
+          {
+            "op": "Constant",
+            "value": 1
+          },
+          {
+            "op": "Add"
+          },
+          {
+            "op": "Equal"
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeSuit",
+            "key": "$token"
+          },
+          {
+            "op": "Constant",
+            "value": 2
+          },
+          {
+            "op": "Modulo"
+          },
+          {
+            "op": "Operand",
+            "name": "solitaireKlondikeSuit",
+            "key": "$cell:solitaireKlondike:card"
+          },
+          {
+            "op": "Constant",
+            "value": 2
+          },
+          {
+            "op": "Modulo"
+          },
+          {
+            "op": "NotEqual"
+          },
+          {
+            "op": "Multiply"
+          }
+        ]
+      }
     }
   ],
   "documentId": null,

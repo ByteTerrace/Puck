@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// <summary>Authoring, frozen-image steering, cadence, lifecycle, and checkpoint evidence for local flocks.</summary>
 public sealed class FlockLawTests {
     private static WorldDefinition Document(WorldFlockProfile profile, bool targeted = false, BodyTargetSource? target = null) {
-        var definition = Fixtures.BuildDocument();
+        var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
 
         targeted |= (target is not null);
         var producer = new BodyMotionProgram(
@@ -169,7 +169,7 @@ public sealed class FlockLawTests {
 
         for (var step = 0; (step < expected.Length); step++) {
             fixture.Step();
-            expected[step] = WorldRuntimeStateHash.HashAuthoritative(
+            expected[step] = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: ((ulong)step)
             );
@@ -179,7 +179,7 @@ public sealed class FlockLawTests {
             fixture.Step();
             Assert.Equal(
                 expected[step],
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: ((ulong)step)
                 )
@@ -189,9 +189,11 @@ public sealed class FlockLawTests {
     [Fact]
     public void CohesionUsesOneFrozenImageAndZeroWeightIsDiscriminatingControl() {
         foreach (var enabled in new[] { true, false }) {
-            using var fixture = Fixtures.FreshServer(Document(Profile() with { Cohesion = (enabled
+            using var fixture = Fixtures.FreshServer(Document(Profile() with {
+                Cohesion = (enabled
                 ? 1
-                : 0) }));
+                : 0),
+            }));
             var left = Join(
                 fixture,
                 0,
@@ -421,11 +423,11 @@ public sealed class FlockLawTests {
     public void SensedTargetAndNeighborsShareOneBudgetIncludingRejectedCandidates() {
         using var fixture = Fixtures.FreshServer(Document(
             Profile(cadence: 60) with {
-            CandidateBudget = 2,
-            MaxNeighbors = 1,
-            HalfAngleDegrees = 1,
-            Goal = 1,
-        },
+                CandidateBudget = 2,
+                MaxNeighbors = 1,
+                HalfAngleDegrees = 1,
+                Goal = 1,
+            },
             target: new BodyTargetSource.Sensed(
                 HalfAngleDegrees: 1,
                 Range: 20,
@@ -439,7 +441,8 @@ public sealed class FlockLawTests {
             0,
             Position(0)
         );
-        for (var index = 1; (index < 4); index++) { _ = Join(
+        for (var index = 1; (index < 4); index++) {
+            _ = Join(
             fixture,
             index,
             Position(
@@ -447,7 +450,8 @@ public sealed class FlockLawTests {
                 z: index
             ),
             flock: false
-        ); }
+        );
+        }
         fixture.Step();
         Assert.Equal(
             2,
@@ -537,7 +541,7 @@ public sealed class FlockLawTests {
 
         for (var tick = 0; (tick < expected.Length); tick++) {
             fixture.Step();
-            expected[tick] = WorldRuntimeStateHash.HashAuthoritative(
+            expected[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: fixture.Server,
                 tick: ((ulong)tick)
             );
@@ -547,7 +551,7 @@ public sealed class FlockLawTests {
             fixture.Step();
             Assert.Equal(
                 expected[tick],
-                WorldRuntimeStateHash.HashAuthoritative(
+                WorldStateHashComposition.HashAuthoritative(
                     server: fixture.Server,
                     tick: ((ulong)tick)
                 )

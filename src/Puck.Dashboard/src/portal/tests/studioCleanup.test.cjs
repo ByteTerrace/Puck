@@ -45,12 +45,15 @@ test('JSON typing, apply, undo, redo and saved-text detection agree on one appli
   assert.equal(repaired.validation, 'pending');
 });
 
-test('state comparison preserves bigint precision, cell identity and text', () => {
-  const cells = [{ key: 'x', value: 9223372036854775807n, text: 'one' }];
+test('state comparison preserves bigint precision, cell identity and the carried case', () => {
+  const cells = [{ key: 'x', value: { kind: 'Int', value: 9223372036854775807n } }];
   assert.equal(sameCells(cells, [{ ...cells[0] }]), true);
-  assert.equal(sameCells(cells, [{ ...cells[0], value: 9223372036854775806n }]), false);
+  assert.equal(sameCells(cells, [{ ...cells[0], value: { kind: 'Int', value: 9223372036854775806n } }]), false);
   assert.equal(sameCells(cells, [{ ...cells[0], key: 'y' }]), false);
-  assert.equal(sameCells(cells, [{ ...cells[0], text: 'two' }]), false);
+  assert.equal(sameCells(cells, [{ key: 'x', value: { kind: 'Text', value: 'one' } }]), false);
+  // The same 64-bit word under another kind is a different value, which the sibling-nullable shape could not say.
+  assert.equal(sameCells([{ key: 'f', value: { kind: 'Int', value: 1n } }], [{ key: 'f', value: { kind: 'Bool', value: true } }]), false);
+  assert.equal(sameCells([{ key: 'f', value: null }], [{ key: 'f', value: null }]), true);
 });
 
 test('an unreadable draft library is reported without discarding it or crashing the editor', () => {
@@ -80,7 +83,7 @@ test('large irregular projections retain ordinal identity without argument-count
 
 const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle');
 const hasBundle = fs.existsSync(path.join(bundle, 'main.mjs'));
-const fixture = JSON.stringify({ schema: 'puck.world.def.v1', documentId: 'cleanup-fixture', state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] } });
+const fixture = JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'cleanup-fixture', state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] } });
 let engine;
 before(async () => { if (hasBundle) engine = await bootEngineFromLocalBundle(bundle); });
 const native = (name, run) => test(name, { skip: hasBundle ? false : 'Publish Puck.World.Browser to run the real-engine cleanup regressions.' }, run);
@@ -126,7 +129,7 @@ native('typing during validation is retained and preview compiles applied text o
   await idle(actor);
   assert.equal(actor.getSnapshot().context.document.text, '{ unfinished draft');
   const preview = await previewEvent(actor, { type: 'PREVIEW_START' });
-  assert.equal(preview.rows[0].cells[0].value, 0n);
+  assert.equal(preview.rows[0].cells[0].value.value, 0n);
   actor.send({ type: 'SAVE_DRAFT', id: 'unfinished' });
   await idle(actor);
   assert.equal(selectIsDirty(actor.getSnapshot()), false);
@@ -152,10 +155,10 @@ native('history replays the selected tick and a new write discards the abandoned
   await previewEvent(actor, { type: 'PREVIEW_TICK' });
   let current = await previewEvent(actor, { type: 'PREVIEW_UNDO' });
   assert.equal(current.tick, 1n);
-  assert.equal(current.rows[0].cells[0].value, 3n);
+  assert.equal(current.rows[0].cells[0].value.value, 3n);
   current = await previewEvent(actor, { type: 'PREVIEW_REDO' });
   assert.equal(current.tick, 2n);
-  assert.equal(current.rows[0].cells[0].value, 7n);
+  assert.equal(current.rows[0].cells[0].value.value, 7n);
   await previewEvent(actor, { type: 'PREVIEW_UNDO' });
   const refused = await previewEvent(actor, { type: 'PREVIEW_WRITE', row: 'missing-row', value: 9n, write: 'set' });
   assert.equal(refused.snapshots.length, 3);
@@ -172,7 +175,7 @@ native('history replays the selected tick and a new write discards the abandoned
   assert.match(html, /changed/);
   await previewEvent(actor, { type: 'PREVIEW_UNDO' });
   current = await previewEvent(actor, { type: 'PREVIEW_REDO' });
-  assert.equal(current.rows[0].cells[0].value, 9n);
+  assert.equal(current.rows[0].cells[0].value.value, 9n);
 });
 
 native('cancelling compilation releases the handle when the engine eventually answers', async () => {

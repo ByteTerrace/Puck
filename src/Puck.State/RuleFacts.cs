@@ -10,9 +10,9 @@ namespace Puck.State;
 /// spell, so a reserved channel can never be shadowed by (or mistaken for) a real row — the validator refuses such a
 /// row before a rule could ever resolve ambiguously.</remarks>
 public static class RuleFacts {
-    /// <summary>The prefix of a rule-scoped bound value: <c>$bind:&lt;name&gt;</c> reads the value the enclosing
-    /// rule's same-named binding computed for this evaluation.</summary>
-    public const string BindPrefix = "$bind:";
+    /// <summary>The prefix of a rule-scoped local value: <c>$local:&lt;name&gt;</c> reads the value the enclosing
+    /// rule's same-named local computed for this evaluation.</summary>
+    public const string LocalPrefix = "$local:";
     /// <summary>The prefix a cell KEY may carry in place of a literal: <c>$cell:&lt;row&gt;:&lt;key&gt;</c> resolves, at
     /// every read and every firing, to the integer value of that cell spelled as a key — so an effect or operand
     /// addresses "the cell named by another cell" (the target a body's <c>target</c> cell currently names). Admitted
@@ -20,18 +20,20 @@ public static class RuleFacts {
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
     /// <summary>The prefix of a key computed by an expression — <c>row[from + 1]</c> in the infix spelling — which
-    /// compiles to an implicit rule binding evaluated before the gate and read back as the cell key; the text after
+    /// compiles to an implicit rule local evaluated before the gate and read back as the cell key; the text after
     /// the prefix is the expression's canonical infix spelling.</summary>
     public const string ExpressionKeyPrefix = "$expr:";
     /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
     /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>
     public const string ForEachZones = "$zones";
     /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
-    /// history row (0 is the latest), or the ring's empty value past what it holds; age is 0..capacity-1.</summary>
+    /// history row (0 is the latest), or the ring's empty value past what it holds. The age is everything after the
+    /// second colon: a whole number in 0..capacity-1, bounded when the rule compiles, or an int expression evaluated
+    /// per read, whose result outside that range reads the empty value rather than refusing.</summary>
     public const string HistoryPrefix = "$history:";
     /// <summary>The prefix a row position may carry in place of a literal row name: <c>$zones[&lt;index&gt;]</c>
     /// selects, before each read or firing, the entry of the enclosing rule's <see cref="Rule.Zones"/> table the
-    /// index names. The index is an infix cell key — <c>game[from]</c>, <c>$each</c>, <c>$bind:&lt;name&gt;</c>, or
+    /// index names. The index is an infix cell key — <c>game[from]</c>, <c>$each</c>, <c>$local:&lt;name&gt;</c>, or
     /// any expression — never a literal number, which would only name a row the long way. Admitted wherever a row is
     /// named: a <c>compareState</c> <c>state</c>/<c>comparandState</c>, a <c>$reduce:</c> or <c>$match:</c> row, a
     /// <c>$zone:</c> endpoint's zone, a transfer's <c>from</c>/<c>to</c>, and an expression's row. An index outside

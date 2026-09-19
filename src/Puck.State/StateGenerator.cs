@@ -201,6 +201,34 @@ public sealed record StateGenerator(
     /// numeric source carrying anything else is refused against this constant rather than left to parse and then be
     /// ignored.</summary>
     public const int DefaultBound = 1;
+
+    /// <summary>Determines whether a source of <paramref name="source"/> shape may exhaust — carry a
+    /// <see cref="GeneratorMode"/> other than <see cref="GeneratorMode.WithReplacement"/> and persist drawn masks
+    /// on its site.</summary>
+    /// <param name="source">The source shape.</param>
+    /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="GeneratorSource.Markov"/>,
+    /// <see cref="GeneratorSource.WeightedNumeric"/> and <see cref="GeneratorSource.SymmetryOrbit"/>.</returns>
+    public static bool Exhausts(GeneratorSource source) => (source is GeneratorSource.Markov or GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit);
+    /// <summary>Returns how many drawn masks a site drawing from <paramref name="generator"/> persists: one per
+    /// context for an exhausting Markov walk, one for an exhausting weighted numeric or symmetry orbit source, and
+    /// none for a source that never exhausts.</summary>
+    /// <param name="generator">The site's resolved source.</param>
+    /// <returns>The mask count.</returns>
+    public static int MaskCount(StateGenerator generator) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        if (
+            !Exhausts(source: generator.Source) ||
+            (generator.Mode == GeneratorMode.WithReplacement)
+        ) {
+            return 0;
+        }
+
+        return ((generator.Source == GeneratorSource.Markov)
+            ? (generator.Contexts?.Count ?? 0)
+            : 1
+        );
+    }
 }
 /// <summary>One row of the document's <c>generators</c> section: a stochastic source declared under a name, so that
 /// any number of <see cref="Draw"/> sites may reference it (<see cref="Draw.Source"/>). Declaring a source

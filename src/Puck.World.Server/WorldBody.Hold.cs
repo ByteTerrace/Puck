@@ -58,7 +58,7 @@ public sealed partial class WorldBody {
             var slot = HoldSpendSlot(hold: in hold);
 
             return ((slot >= 0)
-                ? m_actionStateValues[slot]
+                ? StateCounter(slot: slot)
                 : null
             );
         }
@@ -167,7 +167,7 @@ public sealed partial class WorldBody {
 
         return (
             (slot < 0) ||
-            (m_actionStateValues[slot] > FixedQ4816.Zero)
+            (StateCounter(slot: slot) > FixedQ4816.Zero)
         );
     }
     // Drains one step of what the current hold spends. The remainder carries in the hold's own accumulator, so a
@@ -193,7 +193,7 @@ public sealed partial class WorldBody {
 
         ApplyRawState(
             reason: hold.Name,
-            requested: (m_actionStateValues[slot] - drained).Value,
+            requested: (StateCounter(slot: slot) - drained).Value,
             slot: slot,
             writer: "hold"
         );

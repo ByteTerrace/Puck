@@ -1,0 +1,64 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/freecell.world.json",
+  "host": {
+    "kind": "spliced",
+    "stateRows": [
+      {
+        "name": "solitaire",
+        "kind": "int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 3
+          }
+        ]
+      }
+    ]
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "solitaireFreecell",
+        "key": "action",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireFreecell",
+        "key": "from",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireFreecell",
+        "key": "to",
+        "value": -1
+      }
+    },
+    {
+      "set": {
+        "row": "solitaireFreecell",
+        "key": "card",
+        "value": -1
+      }
+    },
+    {
+      "add": {
+        "row": "solitaireFreecell",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 600
+    }
+  ]
+}

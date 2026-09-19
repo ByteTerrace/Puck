@@ -189,7 +189,7 @@ public sealed class WorldMediumLawTests {
             Collider: null
         );
 
-        return Fixtures.BuildDocument() with {
+        return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             ChannelsRaw = channels,
             BodyMotionProgramsRaw = [hold, roam],
             KitRowsRaw = [kit],
@@ -296,7 +296,7 @@ public sealed class WorldMediumLawTests {
             Capacity: 8,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: cellValue.Value
+                    Value: CellValue.Fixed(rawBits: cellValue.Value)
                 )]
         );
 
@@ -514,7 +514,7 @@ public sealed class WorldMediumLawTests {
             Color: "#112233",
             Medium: new WorldLatticeMedium()
         );
-        var document = Fixtures.BuildDocument() with {
+        var document = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             StateRaw = new WorldStateSection(
             World: [new WorldStateRow(
                     Name: CellName.Parse(candidate: "medium"),
@@ -658,7 +658,7 @@ public sealed class WorldMediumLawTests {
     public void MediumOutsideTheLatticeTraitRefusesByName() {
         // The document below is a VALID medium row — the sabotage moves "medium" from inside "field" to a
         // sibling of it, proving medium can only ever be authored through the field trait's own JSON shape.
-        var definition = Fixtures.BuildDocument() with {
+        var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             StateRaw = new WorldStateSection(
             World: [
                     new WorldStateRow(
@@ -726,7 +726,7 @@ public sealed class WorldMediumLawTests {
     }
     [Fact]
     public void MediumWithHeightScaleZeroIsRefusedByName() {
-        var definition = Fixtures.BuildDocument() with {
+        var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
             StateRaw = new WorldStateSection(
             World: [
                     new WorldStateRow(

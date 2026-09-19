@@ -148,7 +148,7 @@ value" convention `$region:`/`$machine:` already set — NOT the inverted
 `s_noBodyDistance` sentinel `$distance:` uses, since `0` is the correct
 "never gate open on a body that was never parked" answer here).
 `WorldServer.ReadParkedRemaining`/`WorldPopulation.ParkedRemainingTicks` is
-the runtime read; `WorldRuleCompiler`'s `ResolveOperand` is the compile-time
+the runtime read; `WorldFactsCompiler`'s `ResolveOperand` is the compile-time
 parse (`WorldRuleRefusal.ParkedChannelMalformed` on a bad spelling).
 
 ## Read-back: `world.parked`

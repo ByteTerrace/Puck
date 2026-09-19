@@ -120,7 +120,7 @@ public sealed class InhabitCountLawTests {
                 Max: 100,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: initial
+                        Value: CellValue.Int(value: initial)
                     )]
             ),
             ]),
@@ -191,7 +191,7 @@ public sealed class InhabitCountLawTests {
             Max: 100,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: value
+                    Value: CellValue.Int(value: value)
                 )]
         ),
             ],

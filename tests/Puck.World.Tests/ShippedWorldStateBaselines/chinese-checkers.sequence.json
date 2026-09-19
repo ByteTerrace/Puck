@@ -1,0 +1,33 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/chinese-checkers.world.json",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 30
+    },
+    {
+      "set": {
+        "row": "pieceCell",
+        "key": "s0p1",
+        "value": 14
+      }
+    },
+    {
+      "advance": 60
+    },
+    {
+      "set": {
+        "row": "pieceCell",
+        "key": "s0p0",
+        "value": 30
+      }
+    },
+    {
+      "advance": 510
+    }
+  ]
+}

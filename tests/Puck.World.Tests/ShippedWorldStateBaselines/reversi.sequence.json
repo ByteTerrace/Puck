@@ -1,0 +1,115 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/reversi.world.json",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "reversiMoveCell",
+        "key": "$value",
+        "value": 19
+      }
+    },
+    {
+      "add": {
+        "row": "reversiMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "reversiMoveCell",
+        "key": "$value",
+        "value": 20
+      }
+    },
+    {
+      "add": {
+        "row": "reversiMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "reversiMoveCell",
+        "key": "$value",
+        "value": 37
+      }
+    },
+    {
+      "add": {
+        "row": "reversiMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "reversiMoveCell",
+        "key": "$value",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "reversiMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "reversiMoveCell",
+        "key": "$value",
+        "value": 44
+      }
+    },
+    {
+      "add": {
+        "row": "reversiMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "reversiMoveCell",
+        "key": "$value",
+        "value": 21
+      }
+    },
+    {
+      "add": {
+        "row": "reversiMoveRequest",
+        "key": "$value",
+        "value": 1
+      }
+    },
+    {
+      "advance": 470
+    }
+  ]
+}

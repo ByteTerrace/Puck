@@ -9,7 +9,7 @@ public sealed class BackgammonLawTests {
     private static long Cell(WorldFixture fixture, string row, string key) => Row(
         fixture: fixture,
         name: row
-    ).Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+    ).Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
     private static WorldDefinition Load() {
         var path = Path.Combine(
             RepoRoot(),
@@ -51,38 +51,38 @@ public sealed class BackgammonLawTests {
             if (rows[index].Name.Value == "checkerPoint") {
                 rows[index] = rows[index] with { Cells = [new StateCell(
                         CellName.Parse(candidate: "w0"),
-                        w0
+                        CellValue.Int(value: w0)
                     ), new StateCell(
                         CellName.Parse(candidate: "w1"),
-                        w1
+                        CellValue.Int(value: w1)
                     ), new StateCell(
                         CellName.Parse(candidate: "b0"),
-                        3
+                        CellValue.Int(value: 3)
                     ), new StateCell(
                         CellName.Parse(candidate: "b1"),
-                        1
+                        CellValue.Int(value: 1)
                     )] };
             } else if (rows[index].Name.Value == "origPoint") {
                 rows[index] = rows[index] with { Cells = [new StateCell(
                         CellName.Parse(candidate: "w0"),
-                        w0
+                        CellValue.Int(value: w0)
                     ), new StateCell(
                         CellName.Parse(candidate: "w1"),
-                        w1
+                        CellValue.Int(value: w1)
                     ), new StateCell(
                         CellName.Parse(candidate: "b0"),
-                        3
+                        CellValue.Int(value: 3)
                     ), new StateCell(
                         CellName.Parse(candidate: "b1"),
-                        1
+                        CellValue.Int(value: 1)
                     )] };
             } else if (rows[index].Name.Value == "dice") {
                 rows[index] = rows[index] with { Cells = [new StateCell(
                         CellName.Parse(candidate: "d1"),
-                        d1
+                        CellValue.Int(value: d1)
                     ), new StateCell(
                         CellName.Parse(candidate: "d2"),
-                        d2
+                        CellValue.Int(value: d2)
                     )] };
             }
         }
@@ -120,7 +120,7 @@ public sealed class BackgammonLawTests {
         rows: fixture.Server.Definition.State,
         name: name
     )!;
-    private static SearchStatus Settle(WorldFixture fixture, int maxTicks = 4000) {
+    private static ArenaSearchStatus Settle(WorldFixture fixture, int maxTicks = 4000) {
         var status = fixture.Server.SearchStatus()[0];
 
         for (var tick = 0; ((tick < maxTicks) && !status.Done); tick++) {

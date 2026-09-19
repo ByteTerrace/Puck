@@ -2,36 +2,112 @@ using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>The infix spelling is syntax over the postfix tokens: C precedence parses to the tokens an author would
-/// write by hand, and every token kind prints to a spelling that parses back to itself with only the parentheses
+/// <summary>The infix spelling is syntax over the IR: C precedence parses to the instructions an author would write
+/// by hand, and every instruction prints to a spelling that parses back to itself with only the parentheses
 /// precedence needs. The world document's converter and schema facts live in <c>tests/Puck.World.Schema.Tests</c>.</summary>
 public sealed class ExpressionSpellingLawTests {
-    private static ValueToken C(decimal value) => new ValueToken.Constant(Value: value);
-    private static IReadOnlyList<ValueToken> Parse(string text) {
+    private static Instruction C(decimal value) => Instruction.Constant(value: value);
+    private static IReadOnlyList<Instruction> Parse(string text) {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
-                text: text,
-                tokens: out var tokens
+                program: out var parsed,
+                text: text
             ),
             userMessage: error
         );
-        return tokens;
+        return parsed.Instructions;
     }
-    private static ValueToken S(string name, string? key = null) => new ValueToken.State(
-        Key: key,
-        Name: name
+    private static Instruction S(string name, string? key = null) => Instruction.Operand(
+        key: key,
+        name: name
     );
-    private static string Spell(ValueToken token) => token switch {
-        ValueToken.State state => state.Name,
-        ValueToken.Constant constant => constant.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-        _ => (char.ToLowerInvariant(c: token.GetType().Name[0]) + token.GetType().Name[1..]),
+    private static string Spell(Instruction token) => token switch {
+        { Payload: InstructionPayload.State state } => state.Name,
+        { Payload: InstructionPayload.Constant constant } => constant.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+        _ => (char.ToLowerInvariant(c: token.Operation.ToString()[0]) + token.Operation.ToString()[1..]),
     };
 
+    // Printing is the inverse of parsing even where a name would bind differently bare: a row sharing the fold
+    // binder's name, and a row named like a function the parser reads before it considers a row.
+    [Theory]
+    [InlineData("sum(samples, x -> `x`)")]
+    [InlineData("sum(samples, x -> `x`[k] + x)")]
+    [InlineData("`sum` + 1")]
+    [InlineData("`count` * `any`")]
+    [InlineData("`dot` - `boardShift`")]
+    [InlineData("`vector` + `embed`")]
+    public void ANameThatWouldBindDifferentlyBareKeepsItsBackquotes(string text) {
+        Assert.True(
+            condition: ExpressionSpelling.TryParse(
+                error: out var error,
+                program: out var program,
+                text: text
+            ),
+            userMessage: error
+        );
+        Assert.True(condition: ExpressionSpelling.TryPrint(
+            program: program,
+            text: out var printed
+        ));
+        Assert.Equal(
+            actual: printed,
+            expected: text
+        );
+        Assert.True(
+            condition: ExpressionSpelling.TryParse(
+                error: out error,
+                program: out var reparsed,
+                text: printed
+            ),
+            userMessage: error
+        );
+        Assert.Equal(
+            actual: reparsed.Instructions,
+            expected: program.Instructions
+        );
+        Assert.Equal(
+            actual: reparsed.Subprograms.Select(selector: static subprogram => subprogram.Instructions),
+            expected: program.Subprograms.Select(selector: static subprogram => subprogram.Instructions)
+        );
+    }
+    // A fold binder is one plain variable: the parser refuses a dotted, reserved, or function-named one, and the
+    // printer refuses a program carrying one rather than print text the parser would reject.
+    [Theory]
+    [InlineData("sum(samples, a.b -> a.b)")]
+    [InlineData("sum(samples, count -> 1)")]
+    [InlineData("sum(samples, minimum -> 1)")]
+    public void ABinderTheParserWouldRefuseNeitherParsesNorPrints(string text) {
+        Assert.False(condition: ExpressionSpelling.TryParse(
+            error: out var error,
+            program: out _,
+            text: text
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "bare, undotted, unreserved name"
+        );
+        Assert.False(condition: ExpressionSpelling.TryPrint(
+            program: new ExpressionProgram(Instructions: [Instruction.Fold(
+                binder: "a.b",
+                family: "samples",
+                operation: ExpressionOp.Sum,
+                subprogram: 0
+            )]) {
+                Subprograms = [new Subprogram(
+                    Arity: 0,
+                    Instructions: [Instruction.Of(operation: ExpressionOp.Member)],
+                    Name: "sum"
+                )],
+            },
+            text: out _
+        ));
+    }
     [Fact]
     public void AMalformedPostfixListDoesNotPrint() {
         Assert.False(condition: ExpressionSpelling.TryPrint(
-            [new ValueToken.Add()],
+            [Instruction.Of(operation: ExpressionOp.Add)],
             out _
         ));
         Assert.False(condition: ExpressionSpelling.TryPrint(
@@ -54,7 +130,7 @@ public sealed class ExpressionSpellingLawTests {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
             text: text,
-            tokens: out _
+            program: out _
         ));
         Assert.Contains(
             actualString: error,
@@ -62,7 +138,7 @@ public sealed class ExpressionSpellingLawTests {
             expectedSubstring: expected
         );
     }
-    // row.key and row[key] must parse to the identical token: dot access is syntax over the same ValueToken.State,
+    // row.key and row[key] must parse to the identical instruction: dot access is syntax over the same state read,
     // never a second representation.
     [Fact]
     public void ADottedReadParsesToTheIdenticalTokenAsItsBracketForm() {
@@ -87,7 +163,7 @@ public sealed class ExpressionSpellingLawTests {
             Parse(text: "0.25")
         );
         Assert.Equal(
-            [S("a"), C(value: 0.25m), new ValueToken.Add()],
+            [S("a"), C(value: 0.25m), Instruction.Of(operation: ExpressionOp.Add)],
             Parse(text: "a + 0.25")
         );
     }
@@ -96,12 +172,12 @@ public sealed class ExpressionSpellingLawTests {
     [Fact]
     public void AReservedNameKeepsItsDottedSegmentsUnchanged() {
         Assert.Equal(
-            [S("$bind:x.y")],
-            Parse(text: "$bind:x.y")
+            [S("$local:x.y")],
+            Parse(text: "$local:x.y")
         );
         Assert.Equal(
-            "$bind:x.y",
-            ExpressionSpelling.Print(tokens: [S("$bind:x.y")])
+            "$local:x.y",
+            ExpressionSpelling.Print(instructions: [S("$local:x.y")])
         );
     }
     // A backquoted name is never split at a dot, even one carrying a literal dot character.
@@ -113,7 +189,7 @@ public sealed class ExpressionSpellingLawTests {
         );
         Assert.Equal(
             "`seat.one`",
-            ExpressionSpelling.Print(tokens: [S("seat.one")])
+            ExpressionSpelling.Print(instructions: [S("seat.one")])
         );
     }
     // The key half of a dotted read may be a numeric key, exactly as bracket form admits one.
@@ -138,7 +214,7 @@ public sealed class ExpressionSpellingLawTests {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
             text: "vitals.",
-            tokens: out _
+            program: out _
         ));
         Assert.Contains(
             actualString: error,
@@ -152,7 +228,7 @@ public sealed class ExpressionSpellingLawTests {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
             text: "vitals.mana.max",
-            tokens: out _
+            program: out _
         ));
         Assert.Contains(
             actualString: error,
@@ -172,7 +248,7 @@ public sealed class ExpressionSpellingLawTests {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
             text: "hp.$each",
-            tokens: out _
+            program: out _
         ));
         Assert.Contains(
             actualString: error,
@@ -180,15 +256,13 @@ public sealed class ExpressionSpellingLawTests {
             expectedSubstring: "hp[$each]"
         );
     }
-    // ExpressionSpelling.Print always emits bracket form, even when the tokens were parsed from a dotted spelling —
-    // there is exactly one canonical PRINTED form, though two admitted PARSED ones.
+    // Print always emits bracket form, even for a program parsed from a dotted spelling: there is exactly one
+    // canonical printed form, though two admitted parsed ones.
     [Fact]
     public void PrintAlwaysEmitsBracketFormForADottedRead() {
-        var tokens = Parse(text: "vitals.mana");
-
         Assert.Equal(
             "vitals[mana]",
-            ExpressionSpelling.Print(tokens: tokens)
+            ExpressionSpelling.Print(instructions: Parse(text: "vitals.mana"))
         );
     }
     // ExpressionSpelling.TrySplitDottedName is the same one-dot split ParsePrimary performs, exposed for a caller
@@ -202,12 +276,12 @@ public sealed class ExpressionSpellingLawTests {
             row: out var row
         ));
         Assert.Equal(
-            "vitals",
-            row
+            actual: row,
+            expected: "vitals"
         );
         Assert.Equal(
-            "mana",
-            key
+            actual: key,
+            expected: "mana"
         );
         Assert.False(condition: ExpressionSpelling.TrySplitDottedName(
             key: out _,
@@ -222,34 +296,31 @@ public sealed class ExpressionSpellingLawTests {
     }
     [Fact]
     public void EveryContextFreeTokenHasOneRoundTrippingSpellingAndCompiles() {
-        var context = new RuleCompileContext(
+        var context = new Rules.RuleCompileContext(
             null,
             StateCatalog.Compile(section: null),
             null,
             null,
             null,
             240,
-            RuleVocabulary.Core
+            Rules.RuleVocabulary.Core
         );
-        var types = typeof(ValueToken).GetNestedTypes().Where(predicate: type => (type.IsSubclassOf(c: typeof(ValueToken)) && (type.GetConstructor(types: Type.EmptyTypes) is not null))).ToArray();
-        // The other opcodes carry literal, operand, or topology payloads.
-        Assert.Equal(
-            (Enum.GetValues<ExpressionOp>().Length - 5),
-            types.Length
-        );
-        foreach (var type in types) {
-            var token = ((ValueToken)Activator.CreateInstance(type: type)!);
-            IReadOnlyList<ValueToken>? expression = null;
+        // Member reads the family a fold bound, so it has no spelling and no kind outside a fold body.
+        var operations = Enum.GetValues<ExpressionOp>().Where(predicate: static operation => ((ExpressionOperators.PayloadOf(operation: operation) == PayloadShape.None) && (operation != ExpressionOp.Member))).ToArray();
+
+        foreach (var operation in operations) {
+            var token = Instruction.Of(operation: operation);
+            IReadOnlyList<Instruction>? expression = null;
 
             for (var arity = 1; (arity <= 4); arity++) {
-                ValueToken[] candidate = [.. Enumerable.Repeat(
+                Instruction[] candidate = [.. Enumerable.Repeat(
                         S("v"),
                         arity
                     ), token];
 
                 if (!ExpressionSpelling.TryPrint(
-                    text: out var text,
-                    tokens: candidate
+                    instructions: candidate,
+                    text: out var text
                 )) { continue; }
                 Assert.Equal(
                     candidate,
@@ -263,8 +334,8 @@ public sealed class ExpressionSpellingLawTests {
 
             foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
                 try {
-                    _ = RuleCompiler.CompileExpression(
-                        new ValueExpression(Tokens: [.. expression.Select(selector: item => ((item is ValueToken.State)
+                    _ = Rules.RuleCompiler.CompileExpression(
+                        new ExpressionProgram(Instructions: [.. expression.Select(selector: item => ((item.Payload is InstructionPayload.State)
                         ? C(value: 1)
                         : item))]),
                         kind,
@@ -277,7 +348,7 @@ public sealed class ExpressionSpellingLawTests {
             }
             Assert.True(
                 condition: admitted,
-                userMessage: $"No numeric kind admits {type.Name}"
+                userMessage: $"No numeric kind admits {operation}"
             );
         }
     }
@@ -298,24 +369,24 @@ public sealed class ExpressionSpellingLawTests {
             Parse(text: "`seat-1`[0]")
         );
         Assert.Equal(
-            [S("$table:armor:$each"), C(value: 2m), new ValueToken.Multiply()],
+            [S("$table:armor:$each"), C(value: 2m), Instruction.Of(operation: ExpressionOp.Multiply)],
             Parse(text: "$table:armor:$each * 2")
         );
         Assert.Equal(
-            [S("$board:mask:board:-6:-6"), C(value: 1m), new ValueToken.Subtract()],
+            [S("$board:mask:board:-6:-6"), C(value: 1m), Instruction.Of(operation: ExpressionOp.Subtract)],
             Parse(text: "$board:mask:board:-6:-6 - 1")
         );
         Assert.Equal(
             "$board:mask:board:-6:-6 - 1",
-            ExpressionSpelling.Print(tokens: [S("$board:mask:board:-6:-6"), C(value: 1m), new ValueToken.Subtract()])
+            ExpressionSpelling.Print(instructions: [S("$board:mask:board:-6:-6"), C(value: 1m), Instruction.Of(operation: ExpressionOp.Subtract)])
         );
         Assert.Equal(
             [S("$table:armor:$each")],
             Parse(text: "$table:armor[$each]")
         );
         Assert.Equal(
-            [S("$table:moves:power:$bind:move")],
-            Parse(text: "$table:moves:power[$bind:move]")
+            [S("$table:moves:power:$local:move")],
+            Parse(text: "$table:moves:power[$local:move]")
         );
         Assert.Equal(
             [S("$table:moves:power:$cell:turn:move")],
@@ -345,54 +416,54 @@ public sealed class ExpressionSpellingLawTests {
         );
         Assert.Equal(
             "buffs[minion[$each]]",
-            ExpressionSpelling.Print(tokens: [S(
+            ExpressionSpelling.Print(instructions: [S(
                     key: "$cell:minion:$each",
                     name: "buffs"
                 )])
         );
         Assert.Equal(
-            "$table:moves:power[$bind:move] + $table:armor[7]",
-            ExpressionSpelling.Print(tokens: [S("$table:moves:power:$bind:move"), S("$table:armor:7"), new ValueToken.Add()])
+            "$table:moves:power[$local:move] + $table:armor[7]",
+            ExpressionSpelling.Print(instructions: [S("$table:moves:power:$local:move"), S("$table:armor:7"), Instruction.Of(operation: ExpressionOp.Add)])
         );
         Assert.Equal(
-            [S("damage"), S("hp"), new ValueToken.Min()],
+            [S("damage"), S("hp"), Instruction.Of(operation: ExpressionOp.Minimum)],
             Parse(text: "minimum(damage, hp)")
         );
         Assert.Equal(
-            [S("v"), C(value: 0m), C(value: 10m), new ValueToken.Clamp()],
+            [S("v"), C(value: 0m), C(value: 10m), Instruction.Of(operation: ExpressionOp.Clamp)],
             Parse(text: "clamp(v, 0, 10)")
         );
         Assert.Equal(
-            [S("v"), C(value: 8m), C(value: 4m), new ValueToken.BitField()],
+            [S("v"), C(value: 8m), C(value: 4m), Instruction.Of(operation: ExpressionOp.BitField)],
             Parse(text: "bitField(v, 8, 4)")
         );
         Assert.Equal(
-            [S("m"), new ValueToken.BoardShift(
-                    Direction: "north",
-                    Topology: "board"
+            [S("m"), Instruction.Board(operation: ExpressionOp.BoardShift,
+                    index: "north",
+                    topology: "board"
                 )],
             Parse(text: "boardShift(m, board, north)")
         );
         Assert.Equal(
-            [S("m"), new ValueToken.BoardFill(
-                    Direction: "north",
-                    Topology: "board"
+            [S("m"), Instruction.Board(operation: ExpressionOp.BoardFill,
+                    index: "north",
+                    topology: "board"
                 )],
             Parse(text: "boardFill(m, board, north)")
         );
         Assert.Equal(
-            [S("m"), new ValueToken.BoardImage(
-                    Element: "rot180",
-                    Topology: "board"
+            [S("m"), Instruction.Board(operation: ExpressionOp.BoardImage,
+                    index: "rot180",
+                    topology: "board"
                 )],
             Parse(text: "boardImage(m, board, rot180)")
         );
         Assert.Equal(
-            [S("m"), new ValueToken.PopCount()],
+            [S("m"), Instruction.Of(operation: ExpressionOp.PopCount)],
             Parse(text: "setBitCount(m)")
         );
         Assert.Equal(
-            [S("c"), S("a"), S("b"), new ValueToken.Select()],
+            [S("c"), S("a"), S("b"), Instruction.Of(operation: ExpressionOp.Select)],
             Parse(text: "select(c, a, b)")
         );
     }
@@ -425,12 +496,12 @@ public sealed class ExpressionSpellingLawTests {
     [InlineData("boardShift($board:mask, board, north) & ~boardImage(m, board, rot180)")]
     [InlineData("clamp(v, 0, 10) >> setBitCount(m) == 3 ? 0.5 : 1.25")]
     [InlineData("bitInsert(v, f, 8, 4) | parallelBitExtract(v, 0xFF)")]
-    [InlineData("$table:moves:power[$bind:move] * $table:armor[$each]")]
+    [InlineData("$table:moves:power[$local:move] * $table:armor[$each]")]
     [InlineData("buffs[minion[$each]] + $table:t[minion[owner]]")]
     [Theory]
     public void PrintingIsTheInverseOfParsingWithOnlyTheParenthesesPrecedenceNeeds(string text) {
-        var tokens = Parse(text: text);
-        var printed = ExpressionSpelling.Print(tokens: tokens);
+        var parsed = Parse(text: text);
+        var printed = ExpressionSpelling.Print(instructions: parsed);
 
         Assert.Equal(
             text.Replace(
@@ -441,23 +512,23 @@ public sealed class ExpressionSpellingLawTests {
             printed
         );
         Assert.Equal(
-            tokens,
+            parsed,
             Parse(text: printed)
         );
     }
     [Fact]
     public void TernaryIsSelectAndAssociatesRight() {
         Assert.Equal(
-            [S("c"), S("a"), S("b"), new ValueToken.Select()],
+            [S("c"), S("a"), S("b"), Instruction.Of(operation: ExpressionOp.Select)],
             Parse(text: "c ? a : b")
         );
         Assert.Equal(
-            [S("c"), S("a"), S("d"), S("b"), S("e"), new ValueToken.Select(), new ValueToken.Select()],
+            [S("c"), S("a"), S("d"), S("b"), S("e"), Instruction.Of(operation: ExpressionOp.Select), Instruction.Of(operation: ExpressionOp.Select)],
             Parse(text: "c ? a : d ? b : e")
         );
         Assert.Equal(
-            [S("$bind:x"), C(value: 1m), C(value: 0m), new ValueToken.Select()],
-            Parse(text: "$bind:x ? 1 : 0")
+            [S("$local:x"), C(value: 1m), C(value: 0m), Instruction.Of(operation: ExpressionOp.Select)],
+            Parse(text: "$local:x ? 1 : 0")
         );
     }
     [Fact]
@@ -471,15 +542,15 @@ public sealed class ExpressionSpellingLawTests {
             Parse(text: "-0.25")
         );
         Assert.Equal(
-            [S("a"), new ValueToken.Negate()],
+            [S("a"), Instruction.Of(operation: ExpressionOp.Negate)],
             Parse(text: "-a")
         );
         Assert.Equal(
-            [S("a"), new ValueToken.BitNot()],
+            [S("a"), Instruction.Of(operation: ExpressionOp.BitNot)],
             Parse(text: "~a")
         );
         Assert.Equal(
-            [S("a"), C(value: -1m), new ValueToken.Multiply()],
+            [S("a"), C(value: -1m), Instruction.Of(operation: ExpressionOp.Multiply)],
             Parse(text: "a * -1")
         );
         Assert.Equal(

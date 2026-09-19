@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 public sealed class WorldBoardMaskLawTests {
     private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(
-            condition: WorldStateTransforms.TryApply(
+            condition: WorldArenaTransforms.TryApply(
                 definition,
                 transform,
                 WorldPrincipal.World,
@@ -26,7 +26,7 @@ public sealed class WorldBoardMaskLawTests {
     }
     private static StateCell Cell(string key, long value = 1) => new(
         Name(value: key),
-        value
+        CellValue.Int(value: value)
     );
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, PatternRow[]? patterns = null, LatticeTopology[]? lattices = null) => Fixtures.BuildDocument() with {
         StateRaw = new(
@@ -59,7 +59,7 @@ public sealed class WorldBoardMaskLawTests {
         (Find(
             document: document,
             row: row
-        ).Cells ?? []).Where(predicate: c => (c.Value != 0L)).Select(selector: c => c.Key.Value).ToArray();
+        ).Cells ?? []).Where(predicate: c => (c.Value.Raw != 0L)).Select(selector: c => c.Key.Value).ToArray();
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Shift(CompiledTopology topology, long mask, int direction) {
         var result = 0L;
@@ -83,7 +83,7 @@ public sealed class WorldBoardMaskLawTests {
         CellKind.Int,
         Cells: [new StateCell(
                 WorldStateRow.SlotKey,
-                value
+                CellValue.Int(value: value)
             )]
     );
     private static long Value(WorldFixture fixture, string row) =>
@@ -93,7 +93,7 @@ public sealed class WorldBoardMaskLawTests {
                 row
             )!.Cells,
             key: WorldStateRow.SlotKey
-        )!.Value;
+        )!.Value.Raw;
 
     [Fact]
     public void ASetLandsBackOnTheBoardThroughWriteSetAndBitAlgebraComposesTwoBoardsIntoOne() {
@@ -139,8 +139,8 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "both"),
                     [new ActionEffect.SetState(
                             State: "both",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:100"), new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitAnd(),
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:100"), Instruction.Operand(name: "$board:mask:other:1:100"), Instruction.Of(operation: ExpressionOp.BitAnd),
             ])
                         )]
                 ),
@@ -148,8 +148,8 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "either"),
                     [new ActionEffect.SetState(
                             State: "either",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:100"), new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitOr(),
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:100"), Instruction.Operand(name: "$board:mask:other:1:100"), Instruction.Of(operation: ExpressionOp.BitOr),
             ])
                         )]
                 ),
@@ -157,8 +157,8 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "onlyLeft"),
                     [new ActionEffect.SetState(
                             State: "onlyLeft",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:100"), new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitNot(), new ValueToken.BitAnd(),
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:100"), Instruction.Operand(name: "$board:mask:other:1:100"), Instruction.Of(operation: ExpressionOp.BitNot), Instruction.Of(operation: ExpressionOp.BitAnd),
             ])
                         )]
                 ),
@@ -166,8 +166,8 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "complement"),
                     [new ActionEffect.SetState(
                             State: "complement",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitNot(),
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:other:1:100"), Instruction.Of(operation: ExpressionOp.BitNot),
             ])
                         )]
                 ),
@@ -192,21 +192,21 @@ public sealed class WorldBoardMaskLawTests {
             StateRows.FindCell(
                 cells: cells,
                 key: Name(value: "1")
-            )!.Value
+            )!.Value.Raw
         );
         Assert.Equal(
             7L,
             StateRows.FindCell(
                 cells: cells,
                 key: Name(value: "3")
-            )!.Value
+            )!.Value.Raw
         );
         Assert.Equal(
             1L,
             StateRows.FindCell(
                 cells: cells,
                 key: Name(value: "0")
-            )!.Value
+            )!.Value.Raw
         );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -331,10 +331,10 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "shift"),
                     [new ActionEffect.SetState(
                             State: "mask",
-                            Expression: new ValueExpression(Tokens: [
-            new ValueToken.Constant(Value: 1m), new ValueToken.BoardShift(
-                                    Direction: "E",
-                                    Topology: "big"
+                            Expression: new ExpressionProgram(Instructions: [
+            Instruction.Constant(value: 1m), Instruction.Board(index: "E",
+                                    operation: ExpressionOp.BoardShift,
+                                    topology: "big"
                                 ),
         ])
                         )]
@@ -372,13 +372,15 @@ public sealed class WorldBoardMaskLawTests {
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: mixed with { Rules = [new WorldRule(
+            definition: mixed with {
+                Rules = [new WorldRule(
                     Name(value: "bad"),
                     [new ActionEffect.TransformState(Transform: new StateTransform.WriteSet(
                             "wide",
                             "mask"
                         ))]
-                )] },
+                )],
+            },
             reason: out var setReason
         ));
         Assert.Contains(
@@ -420,10 +422,10 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "east"),
                     [new ActionEffect.SetState(
                             State: "east",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:1"), new ValueToken.BoardShift(
-                                    Direction: "E",
-                                    Topology: "map"
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:1"), Instruction.Board(index: "E",
+                                    operation: ExpressionOp.BoardShift,
+                                    topology: "map"
                                 ),
             ])
                         )]
@@ -432,10 +434,10 @@ public sealed class WorldBoardMaskLawTests {
                     Name(value: "north"),
                     [new ActionEffect.SetState(
                             State: "north",
-                            Expression: new ValueExpression(Tokens: [
-                new ValueToken.State(Name: "$board:mask:board:1:1"), new ValueToken.BoardShift(
-                                    Direction: "N",
-                                    Topology: "map"
+                            Expression: new ExpressionProgram(Instructions: [
+                Instruction.Operand(name: "$board:mask:board:1:1"), Instruction.Board(index: "N",
+                                    operation: ExpressionOp.BoardShift,
+                                    topology: "map"
                                 ),
             ])
                         )]

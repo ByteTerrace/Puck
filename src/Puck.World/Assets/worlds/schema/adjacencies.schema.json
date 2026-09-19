@@ -32,7 +32,7 @@
             "description": "The boundary rectangle\u0027s center in this world\u0027s coordinates."
           },
           "outwardYawDegrees": {
-            "description": "The outward heading, in degrees (0 = \u002BZ, 90 = \u002BX).",
+            "description": "The outward heading, in degrees (0 = \u002BZ, 90 = \u002BX). It also fixes the rectangle\u0027s own right axis, which is the yaw\u0027s horizontal right whatever the pitch \u2014 so on a face lying flat, where the heading contributes nothing to the outward direction, this is the rectangle\u0027s roll about the vertical and the arrival turn it gives the seam is still counterpartYaw - thisYaw - 180 (MapVector). An untwisted seam therefore authors its two yaws 180 degrees apart whether it stands as a wall or lies flat as a floor.",
             "type": "number"
           },
           "outwardPitchDegrees": {

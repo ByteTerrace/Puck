@@ -1,0 +1,651 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 224,
+  "engineTick": 376320,
+  "hashes": {
+    "authoritative": "d82785601df4cecd",
+    "capture": "30d6777a1c000a9e",
+    "pose": "4fc7a1cae087a921",
+    "world": "e94c9d329e444a7d"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "arenaFighter",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "arenaPickup",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "arenaPickupClock",
+        "kind": "Int",
+        "min": 0,
+        "max": 504000,
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "arenaHealth",
+        "kind": "Int",
+        "min": 0,
+        "max": 100,
+        "capacity": 2,
+        "overflow": "Saturate",
+        "cells": [
+          {
+            "key": "0",
+            "value": 40,
+            "clock": {
+              "epochTick": 153,
+              "epochEngineTick": 257040
+            }
+          },
+          {
+            "key": "1",
+            "value": 0,
+            "clock": {
+              "epochTick": 153,
+              "epochEngineTick": 257040
+            }
+          }
+        ],
+        "advance": {
+          "perSecondNumerator": 6,
+          "perSecondDenominator": 1
+        }
+      },
+      {
+        "name": "arenaAlive",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "arenaRespawn",
+        "kind": "Int",
+        "min": 0,
+        "max": 504000,
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "arenaFrags",
+        "kind": "Int",
+        "min": 0,
+        "max": 99,
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "arenaDeaths",
+        "kind": "Int",
+        "min": 0,
+        "max": 99,
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "name": "arenaTaken",
+        "kind": "Int",
+        "min": 0,
+        "max": 99,
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "arenaMomentum",
+        "kind": "Fixed",
+        "min": "-1",
+        "max": "1",
+        "cells": [
+          {
+            "key": "0",
+            "value": "-1",
+            "dynamics": {
+              "row": "arenaMomentum"
+            },
+            "clock": {
+              "epochTick": 153,
+              "epochEngineTick": 257040,
+              "y0": "1.0786285400390625",
+              "v0": "-0.451995849609375"
+            }
+          }
+        ]
+      },
+      {
+        "name": "arenaEnter",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "arenaJoined",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "arenaRoster",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 2
+      },
+      {
+        "name": "arenaShots",
+        "kind": "Int",
+        "min": 0,
+        "max": 999,
+        "value": 8
+      },
+      {
+        "name": "arenaRefused",
+        "kind": "Int",
+        "min": 0,
+        "max": 999,
+        "value": 3
+      },
+      {
+        "name": "arenaSpawns",
+        "kind": "Int",
+        "min": 0,
+        "max": 999,
+        "value": 2
+      },
+      {
+        "name": "arenaItemSpawns",
+        "kind": "Int",
+        "min": 0,
+        "max": 999,
+        "value": 1
+      },
+      {
+        "name": "arenaOver",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "arenaWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "arenaFighter",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaPickup",
+      "cells": [
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaPickupClock",
+      "cells": [
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaHealth",
+      "cells": [
+        {
+          "key": "0",
+          "value": 54,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 14,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaAlive",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaRespawn",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaFrags",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaDeaths",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaTaken",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaMomentum",
+      "cells": [
+        {
+          "key": "0",
+          "value": -65536,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaEnter",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaJoined",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaRoster",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaShots",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaRefused",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaSpawns",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaItemSpawns",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaOver",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "arenaWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

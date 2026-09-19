@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "moth-courtyard.world.json",
+  "simulationRateHz": 30,
+  "ticks": 600,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 1,
+      "interactionRows": 0,
+      "evaluationSlots": 1,
+      "workUnitsPerTick": 517,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 1,
+      "interactionRows": 0,
+      "evaluationSlots": 1,
+      "workUnitsPerTick": 517,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

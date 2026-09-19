@@ -30,7 +30,7 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
         ).ConfigureAwait(continueOnCapturedContext: false); } catch (Exception error) when ((error is ObjectDisposedException or InvalidOperationException or OperationCanceledException)) { /* Retirement discards the row and its peer table. */ }
     }
     private static bool IsRemoteCommand(string name) => (name is "world.wait" or "world.peers" or "world.admission" or "world.links" or
-        "world.state" or "world.state.cell.set" or "world.state.cell.remove");
+        "world.state" or "world.state.cell.set" or "world.state.cell.remove" or "world.state.similar");
 
     /// <inheritdoc/>
     public ValueTask<IControlSession> AttachAsync(string target, ControlIdentity identity, CancellationToken cancellationToken) {

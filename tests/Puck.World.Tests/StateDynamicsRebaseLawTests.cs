@@ -6,7 +6,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>Proves an explicit write against a cell carrying a <see cref="StateDynamics"/> easing trait
-/// rebases the trait to the applying tick (<c>Server.WorldServer.RebaseCellTraits</c>) rather than replacing it
+/// rebases the trait to the applying tick (<c>StateArena.TryWriteLive</c>) rather than replacing it
 /// wholesale: the follower keeps chasing from wherever it actually was, receives a velocity kick signed by the
 /// referenced <c>dynamics</c> row's own <c>r</c>, and <c>world.undo</c> rebases the same way.</summary>
 public sealed class StateDynamicsRebaseLawTests {
@@ -38,7 +38,7 @@ public sealed class StateDynamicsRebaseLawTests {
             Cells: [
                 new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: 0,
+                    Value: CellValue.Int(value: 0L),
                     Dynamics: new StateDynamics(Row: dynamicsRow)
                 ),
             ]
@@ -169,7 +169,7 @@ public sealed class StateDynamicsRebaseLawTests {
             expected: 600L
         );
     }
-    // A rule's AddState effect compiles to the same WorldMutation.UpsertStateCell RebaseCellTraits switches on
+    // A rule's AddState effect reaches the same arena write door a submitted UpsertStateCell does
     // (Server.WorldServer.Step's Write arm), so a rule-authored write rebases exactly like a directly-submitted one.
     [Fact]
     public void RuleAddState_FromRest_AlsoRebasesAndKicksTheVelocity() {
@@ -180,7 +180,7 @@ public sealed class StateDynamicsRebaseLawTests {
             Cells: [
                 new StateCell(
                     Key: CellName.Parse(candidate: "0"),
-                    Value: 0,
+                    Value: CellValue.Int(value: 0L),
                     Dynamics: new StateDynamics(Row: "kickPos")
                 ),
             ]
@@ -190,7 +190,7 @@ public sealed class StateDynamicsRebaseLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 0
+                    Value: CellValue.Int(value: 0L)
                 )]
         );
         var document = (Fixtures.BuildDocument().WithWorldState(rows: [gauge, trigger]) with {

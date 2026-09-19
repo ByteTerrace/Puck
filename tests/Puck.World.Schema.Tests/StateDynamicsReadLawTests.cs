@@ -5,7 +5,7 @@ namespace Puck.World.Schema.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: <see cref="WorldStateReader.TryReadEased"/>/<see cref="WorldStateReader.TryEvaluateDynamics"/>
 /// — the closed-form second-order read a <see cref="StateDynamics"/> trait drives. <see cref="WorldStateReader.TryRead"/>
-/// (truth) is proved unaffected by a trait's presence; the mutation-side rebase (<c>Server.WorldServer.RebaseCellTraits</c>)
+/// (truth) is proved unaffected by a trait's presence; the mutation-side rebase (the arena a write composes through)
 /// is out of reach here (this project carries no <c>WorldServer</c>) and is proved by <c>StateDynamicsRebaseLawTests</c>
 /// in <c>Puck.World.Tests</c> instead.
 /// </summary>
@@ -36,7 +36,7 @@ public sealed class StateDynamicsReadLawTests {
         Max: 1000,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 300
+                Value: CellValue.Int(value: 300)
             )],
         Dynamics: new StateDynamics(Row: dynamicsRow)
     );
@@ -49,7 +49,7 @@ public sealed class StateDynamicsReadLawTests {
         Max: 1000,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 300,
+                Value: CellValue.Int(value: 300),
                 Clock: new StateCellClock(
                     Y0: y0,
                     V0: v0
@@ -64,7 +64,7 @@ public sealed class StateDynamicsReadLawTests {
         Max: 1000,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: 300
+                Value: CellValue.Int(value: 300)
             )]
     );
 

@@ -379,7 +379,7 @@ public static class OfficialCanonicalizer {
 
     /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
     /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
-    /// <see cref="DocumentCanonicalizer.Canonicalize{TDocument}(TDocument)"/>.</summary>
+    /// <see cref="DocumentCanonicalizer.Canonicalize{TDocument}(TDocument, System.Text.Json.JsonSerializerOptions?)"/>.</summary>
     /// <param name="document">The document to canonicalize.</param>
     /// <param name="source">An optional source label for a validation-failure message.</param>
     /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>

@@ -1,7 +1,5 @@
 using Puck.World.Transpiler.Decompiler;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 using Xunit;
 
@@ -20,26 +18,19 @@ public class LinterCoverageTests {
         );
 
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            File.ReadAllText(path: fullPath),
-            diagnostics: diagnostics
-        );
-
-        Assert.NotNull(@object: parseResult.Value);
-
         var sourceMap = new SourceMap();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
+        var loweringResult = WorldCompiler.Compile(
             basePath: Path.GetDirectoryName(path: fullPath),
-            sourceMap: sourceMap,
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: File.ReadAllText(path: fullPath),
+            sourceMap: sourceMap
         );
 
-        Assert.NotNull(@object: loweringResult.Value);
+        Assert.NotNull(@object: loweringResult.Json);
 
         PuckLinter.LintReferences(
-            loweringResult.Value,
+            loweringResult.Json,
             sourceMap,
             diagnostics,
             sourcePath: fullPath
@@ -66,26 +57,19 @@ public class LinterCoverageTests {
         var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
 
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            decompiled,
-            diagnostics: diagnostics
-        );
-
-        Assert.NotNull(@object: parseResult.Value);
-
         var sourceMap = new SourceMap();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
+        var loweringResult = WorldCompiler.Compile(
             basePath: Path.GetDirectoryName(path: fullPath),
-            sourceMap: sourceMap,
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: decompiled,
+            sourceMap: sourceMap
         );
 
-        Assert.NotNull(@object: loweringResult.Value);
+        Assert.NotNull(@object: loweringResult.Json);
 
         PuckLinter.LintReferences(
-            loweringResult.Value,
+            loweringResult.Json,
             sourceMap,
             diagnostics,
             sourcePath: fullPath
@@ -116,27 +100,20 @@ public class LinterCoverageTests {
         var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
 
         var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            decompiled,
-            diagnostics: diagnostics
-        );
-
-        Assert.NotNull(@object: parseResult.Value);
-
         var sourceMap = new SourceMap();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
+        var loweringResult = WorldCompiler.Compile(
             basePath: Path.GetDirectoryName(path: fullPath),
-            sourceMap: sourceMap,
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: diagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: decompiled,
+            sourceMap: sourceMap
         );
 
-        Assert.NotNull(@object: loweringResult.Value);
-        Assert.Null(@object: loweringResult.Value["basis"]);
+        Assert.NotNull(@object: loweringResult.Json);
+        Assert.Null(@object: loweringResult.Json["basis"]);
 
         PuckLinter.LintReferences(
-            loweringResult.Value,
+            loweringResult.Json,
             sourceMap,
             diagnostics,
             sourcePath: fullPath
@@ -193,30 +170,22 @@ public class LinterCoverageTests {
             str2: decompiled.AsSpan(start: (typoAt + Original.Length))
         );
 
-        var parseDiagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            mutated,
-            diagnostics: parseDiagnostics
-        );
-
-        Assert.NotNull(@object: parseResult.Value);
-
         var sourceMap = new SourceMap();
         var loweringDiagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
+        var loweringResult = WorldCompiler.Compile(
             basePath: Path.GetDirectoryName(path: fullPath),
-            sourceMap: sourceMap,
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: mutated,
+            sourceMap: sourceMap
         );
 
-        Assert.NotNull(@object: loweringResult.Value);
+        Assert.NotNull(@object: loweringResult.Json);
 
         var referenceDiagnostics = new DiagnosticBag();
 
         PuckLinter.LintReferences(
-            loweringResult.Value,
+            loweringResult.Json,
             sourceMap,
             referenceDiagnostics,
             sourcePath: fullPath
@@ -266,38 +235,30 @@ public class LinterCoverageTests {
             str2: decompiled.AsSpan(start: (typoAt + Original.Length))
         );
 
-        var parseDiagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            mutated,
-            diagnostics: parseDiagnostics
-        );
-
-        Assert.NotNull(@object: parseResult.Value);
-
         var sourceMap = new SourceMap();
         var loweringDiagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            parseResult.Value,
+        var loweringResult = WorldCompiler.Compile(
             basePath: Path.GetDirectoryName(path: fullPath),
-            sourceMap: sourceMap,
+            cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
-            cancellationToken: TestContext.Current.CancellationToken
+            source: mutated,
+            sourceMap: sourceMap
         );
 
-        Assert.NotNull(@object: loweringResult.Value);
-        Assert.Null(@object: loweringResult.Value["basis"]);
-        Assert.True(condition: WorldSemanticValidator.IsRootDocument(loweredJson: loweringResult.Value));
+        Assert.NotNull(@object: loweringResult.Json);
+        Assert.Null(@object: loweringResult.Json["basis"]);
+        Assert.True(condition: WorldSemanticValidator.IsRootDocument(loweredJson: loweringResult.Json));
 
         var diagnostics = new DiagnosticBag();
 
         PuckLinter.LintReferences(
-            loweringResult.Value,
+            loweringResult.Json,
             sourceMap,
             diagnostics,
             sourcePath: fullPath
         );
         WorldSemanticValidator.ValidateComposedWorld(
-            loweringResult.Value,
+            loweringResult.Json,
             sourceMap,
             diagnostics,
             sourcePath: fullPath
@@ -324,6 +285,55 @@ public class LinterCoverageTests {
                 comparisonType: StringComparison.Ordinal,
                 value: "checkerPointXTYPO"
             ))
+        );
+    }
+
+    // A fold names its family on the instruction and reads rows from a subprogram body, so the reference check
+    // reaches both or a misbound fold lints clean.
+    [Fact]
+    public void AFoldsFamilyAndItsBodysReadsAreResolvedLikeAnyOtherRead() {
+        var document = System.Text.Json.Nodes.JsonNode.Parse(json: /*lang=json*/ """
+            {
+              "schema": "puck.world.definition.v1",
+              "state": { "world": [ { "name": "score", "kind": "Int", "value": 0 } ] },
+              "rules": [
+                {
+                  "name": "tally",
+                  "effects": [
+                    {
+                      "$type": "setState",
+                      "state": "score",
+                      "expression": {
+                        "instructions": [ { "op": "Count", "family": "handXTYPO", "binder": "c", "subprogram": 0 } ],
+                        "subprograms": [ { "name": "c", "arity": 0, "instructions": [ { "op": "Operand", "name": "bonusXTYPO" } ] } ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+            """)!.AsObject();
+        var diagnostics = new DiagnosticBag();
+
+        PuckLinter.LintReferences(
+            document,
+            null,
+            diagnostics,
+            sourcePath: "fold.puck"
+        );
+
+        var messages = diagnostics
+            .Where(predicate: static finding => (finding.Code == PuckDiagnosticCodes.LintUnresolvedState))
+            .Select(selector: static finding => finding.Message)
+            .ToList();
+
+        Assert.Contains(
+            collection: messages,
+            expected: "Unresolved state row 'handXTYPO'."
+        );
+        Assert.Contains(
+            collection: messages,
+            expected: "Unresolved state row 'bonusXTYPO'."
         );
     }
 

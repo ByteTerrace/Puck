@@ -1,0 +1,13 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "pipeline.world.json",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": false,
+  "steps": [
+    {
+      "advance": 600
+    }
+  ]
+}

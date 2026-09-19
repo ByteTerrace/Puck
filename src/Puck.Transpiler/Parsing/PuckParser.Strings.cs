@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.State;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Ast;
 
@@ -11,90 +12,188 @@ namespace Puck.Transpiler.Parsing;
 public static partial class PuckParser {
     private const string RawFence = "\"\"\"";
 
-    /// <summary>Reads a string in any of its forms, yielding an expression node: a literal when nothing
-    /// interpolates, an <see cref="InterpolatedStringNode"/> when something does.</summary>
-    private static bool TryReadStringExpression(ParseContext context, out ExpressionNode? node) {
+    /// <summary>The spellings a name read admits. A read takes the first form the text actually starts with, and
+    /// fails without consuming anything when that form is not among the admitted ones.</summary>
+    [Flags]
+    private enum NameForms {
+        /// <summary>A bare identifier: letters, digits, <c>_</c>, and <c>$</c>.</summary>
+        Identifier = 1,
+        /// <summary>A quoted string, plain or raw.</summary>
+        String = 2,
+        /// <summary>A <c>$"…"</c> string, whose holes read as expressions.</summary>
+        Interpolated = 4,
+        /// <summary>A reserved-channel name, on <c>ExpressionSpelling</c>'s own terms.</summary>
+        Extended = 8,
+    }
+    /// <summary>How a name was written, for a printer that must write it back the same way.</summary>
+    /// <param name="Quoted">Whether the name arrived as a quoted string rather than as a bare word.</param>
+    /// <param name="Expression">The node a quoted or interpolated read also yields, or <see langword="null"/>.</param>
+    private readonly record struct NameSpelling(bool Quoted, ExpressionNode? Expression);
+
+    /// <summary>Reads a name in whichever of its spellings <paramref name="admitted"/> allows: a bare identifier, a
+    /// reserved-channel name, a quoted string (plain or raw), or a <c>$"…"</c> interpolation.</summary>
+    /// <param name="context">The parse context.</param>
+    /// <param name="admitted">The spellings this position accepts.</param>
+    /// <param name="text">The name's own text, decoded; the raw interpolation body for an interpolated read.</param>
+    /// <param name="spelling">How the name was written.</param>
+    /// <returns><see langword="true"/> when a name was read.</returns>
+    private static bool TryReadName(ParseContext context, NameForms admitted, out string text, out NameSpelling spelling) {
         SkipWhiteSpace(context: context);
 
         var cursor = context.Scanner.Cursor;
         var buffer = context.Scanner.Buffer;
+
+        text = string.Empty;
+        spelling = default;
+
+        if (cursor.Eof) {
+            return false;
+        }
+
+        var startPosition = cursor.Position;
         var startOffset = cursor.Offset;
-
-        var (line, col) = GetLineAndColumn(
-            buffer: buffer,
-            offset: startOffset
-        );
-        var interpolating = (cursor.Current == '$');
-        var quoteOffset = (interpolating
-            ? (startOffset + 1)
-            : startOffset
+        var interpolating = (
+            (cursor.Current == '$') &&
+            ((startOffset + 1) < buffer.Length) &&
+            (buffer[(startOffset + 1)] == '"')
         );
 
-        node = null;
+        if (interpolating || (cursor.Current == '"')) {
+            if ((admitted & (interpolating
+                ? NameForms.Interpolated
+                : NameForms.String
+            )) == 0) {
+                return false;
+            }
+
+            var (line, col) = GetLineAndColumn(
+                buffer: buffer,
+                offset: startOffset
+            );
+            var quoteOffset = (interpolating
+                ? (startOffset + 1)
+                : startOffset
+            );
+
+            if (Matches(
+                buffer: buffer,
+                offset: quoteOffset,
+                token: RawFence
+            )) {
+                if (!TryReadRawString(
+                    context: context,
+                    quoteOffset: quoteOffset,
+                    text: out text
+                )) {
+                    throw CreateException(
+                        context: context,
+                        message: "Unterminated raw string literal"
+                    );
+                }
+            } else {
+                if (!PuckStrings.TryRead(
+                    end: out var closed,
+                    error: out var failure,
+                    offset: quoteOffset,
+                    source: buffer,
+                    value: out text
+                )) {
+                    if (interpolating) {
+                        throw CreateException(
+                            context: context,
+                            message: $"Malformed interpolated string literal: {failure}"
+                        );
+                    }
+                    cursor.ResetPosition(position: startPosition);
+                    throw CreateException(
+                        context: context,
+                        message: $"Malformed string literal: {failure}"
+                    );
+                }
+                cursor.Advance(count: (closed - startOffset));
+            }
+
+            var span = new SourceSpan(
+                startOffset,
+                (cursor.Offset - startOffset),
+                line,
+                col
+            );
+
+            var fenced = Matches(
+                buffer: buffer,
+                offset: quoteOffset,
+                token: RawFence
+            );
+
+            spelling = new NameSpelling(
+                Expression: (interpolating
+                    ? (BuildInterpolation(
+                        span: span,
+                        text: text
+                    ) with { RawFenced = fenced })
+                    : new LiteralExpressionNode(
+                        Value: text,
+                        Unit: null,
+                        Offset: span.Offset,
+                        Length: span.Length,
+                        Line: line,
+                        Column: col
+                    ) { RawFenced = fenced }),
+                Quoted: true
+            );
+
+            return true;
+        }
+
+        // The reserved-channel walk is ExpressionSpelling's own — `:name` continuations, signed `:-N` segments, and
+        // a folded `$zones[...]` group — never a copy of it, and it subsumes the plain identifier it starts from.
+        if ((admitted & NameForms.Extended) != 0) {
+            var length = ExpressionSpelling.ScanBareName(
+                start: startOffset,
+                text: buffer
+            );
+
+            if (length == 0) {
+                return false;
+            }
+
+            text = buffer[startOffset..(startOffset + length)];
+            cursor.Advance(count: length);
+
+            return true;
+        }
+
+        if ((admitted & NameForms.Identifier) == 0) {
+            return false;
+        }
+
+        var first = cursor.Current;
 
         if (
-            (quoteOffset >= buffer.Length) ||
-            (buffer[quoteOffset] != '"')
+            !char.IsLetter(c: first) &&
+            (first != '_') &&
+            (first != '$')
         ) {
             return false;
         }
 
-        string text;
+        cursor.Advance();
+        while (!cursor.Eof) {
+            var current = cursor.Current;
 
-        if (Matches(
-            buffer: buffer,
-            offset: quoteOffset,
-            token: RawFence
-        )) {
-            if (!TryReadRawString(
-                context: context,
-                quoteOffset: quoteOffset,
-                text: out text
-            )) {
-                throw CreateException(
-                    context: context,
-                    message: "Unterminated raw string literal"
-                );
+            if (
+                !char.IsLetterOrDigit(c: current) &&
+                (current != '_') &&
+                (current != '$')
+            ) {
+                break;
             }
-        } else if (interpolating) {
             cursor.Advance();
-
-            if (!TryReadString(
-                context: context,
-                text: out text
-            )) {
-                throw CreateException(
-                    context: context,
-                    message: "Malformed interpolated string literal"
-                );
-            }
-        } else if (!TryReadString(
-            context: context,
-            text: out text
-        )) {
-            return false;
         }
-
-        var span = new SourceSpan(
-            startOffset,
-            (cursor.Offset - startOffset),
-            line,
-            col
-        );
-
-        node = (interpolating
-            ? BuildInterpolation(
-                span: span,
-                text: text
-            )
-            : new LiteralExpressionNode(
-                Value: text,
-                Unit: null,
-                Offset: span.Offset,
-                Length: span.Length,
-                Line: line,
-                Column: col
-            )
+        text = buffer.Substring(
+            length: (cursor.Offset - startOffset),
+            startIndex: startOffset
         );
 
         return true;
@@ -166,7 +265,7 @@ public static partial class PuckParser {
     }
     // Splits interpolation text into its literal runs and its holes. `{{` and `}}` stand for one brace each, so a
     // literal brace never needs a different string form.
-    private static ExpressionNode BuildInterpolation(string text, SourceSpan span) {
+    private static InterpolatedStringNode BuildInterpolation(string text, SourceSpan span) {
         var segments = new List<InterpolationSegment>();
         var literal = new System.Text.StringBuilder();
 

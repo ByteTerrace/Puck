@@ -160,7 +160,7 @@ public sealed class MachineCartridgeLawTests {
         return Assert.Single(
             collection: (row!.Cells ?? []),
             predicate: static cell => (cell.Key == WorldStateRow.SlotKey)
-        ).Value;
+        ).Value.Raw;
     }
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();

@@ -20,7 +20,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (
                 (row?.Value is { } value) &&
-                (value.Tokens is not { Count: > 0 })
+                (value.Instructions is not { Count: > 0 })
             ) {
                 errors.Add(item: $"patterns[{index}] ('{row.Name}') value expression carries no tokens.");
             }

@@ -68,7 +68,7 @@ incarnation and path. These verbs require the host Console principal and work
 without restarting World.
 
 The Operator attachment uses the
-[control transport](../Puck.Hosting/README.md#local-console-attachment) to authenticate loopback using a
+[control transport](../../docs/reference/hosting.md#local-console-attachment) to authenticate loopback using a
 protected per-user capability file. Do not share its contents. The operator has
 the full existing Console registry and ordinary host permissions. There is no
 MCP verb allowlist or per-command approval layer. Participant profiles remain
@@ -200,6 +200,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 |---|---|---|
 | `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`. Empty output is `submitted`, not authoritative application. |
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. |
+| `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`) and `timeoutMs`, same range/default. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
 
 For HTTP, add the required `attachmentId` to these arguments. Call serially per
 attachment; concurrent calls return busy. Capture enters this session's
@@ -274,7 +275,7 @@ the adapter during the wait, reconnect with the same file, then capture again.
 Stopping control must remove discovery without stopping World; headless hosts
 must refuse capture. These checks run the ordinary engine, with no alternate
 simulation loop. See the
-[remaining plan](../../docs/plans/mcp-integration.md).
+[play programme](../../docs/plans/play.md#mcp--the-local-surface).
 
 ## Documentation
 

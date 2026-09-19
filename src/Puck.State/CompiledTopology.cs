@@ -30,10 +30,11 @@ public sealed partial class CompiledTopology {
     private readonly Dictionary<(int, int, int), int>? m_coordinateIndex;
     private readonly ulong[]? m_directionShiftMasks;
 
-    internal CompiledTopology(TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
+    internal CompiledTopology(LatticeTopology source, TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, int radius, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
         int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames, FixedVector3[]? cellCentres = null,
         (int X, int Y, int Z)[]? coordinates = null) {
+        Source = source;
         m_cellCentres = cellCentres;
         m_coordinates = coordinates;
         if (coordinates is not null) {
@@ -116,6 +117,10 @@ public sealed partial class CompiledTopology {
     /// <param name="cell">The cell ordinal.</param>
     public CellName NameOf(int cell) => m_names[cell];
 
+    /// <summary>Gets the authored topology this compiled from. Two compiles of one authored topology differ only in
+    /// the world origin an anchor translates them by, so this is the board's identity across anchorings and is what
+    /// a reader compares to decide that a query and a row address the same board.</summary>
+    public LatticeTopology Source { get; }
     /// <summary>Gets the shape.</summary>
     public TopologyKind Kind { get; }
     /// <summary>Gets the number of cells.</summary>
@@ -646,10 +651,12 @@ public sealed partial class CompiledTopology {
         }
         for (var a = 0; (a < axisCount); a++) {
             for (var b = (a + 1); (b < axisCount); b++) {
-                if (extents[a] == extents[b]) { generators.Add(item: SwapAxes(
+                if (extents[a] == extents[b]) {
+                    generators.Add(item: SwapAxes(
                     a: a,
                     b: b
-                )); }
+                ));
+                }
             }
         }
         var elements = new List<AxisMap> { AxisMap.Identity };

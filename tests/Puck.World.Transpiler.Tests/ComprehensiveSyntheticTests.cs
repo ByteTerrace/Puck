@@ -1,12 +1,21 @@
+using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Documents;
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
 public class ComprehensiveSyntheticTests {
+    private static string CanonicalText(JsonObject node) =>
+        Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
+    private static JsonObject Compile(string source, string? defaultSchema = null) =>
+        WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            defaultSchema: defaultSchema,
+            source: source
+        ).RequireJson();
+
     [Fact]
     public void TestCartridgeDocumentRoundTrip() {
         const string CartPuck = """
@@ -21,11 +30,10 @@ public class ComprehensiveSyntheticTests {
             }
             """;
 
-        var ast = PuckParser.ParseDocument(
-            CartPuck,
-            defaultSchema: "puck.cartridge.v1"
+        var json = Compile(
+            defaultSchema: "puck.cartridge.v1",
+            source: CartPuck
         );
-        var json = WorldDocumentEmitter.Lower(ast);
 
         Assert.Equal(
             "puck.cartridge.v1",
@@ -70,14 +78,12 @@ public class ComprehensiveSyntheticTests {
             expectedSubstring: "title: \"Tetris AGB\""
         );
 
-        var recompAst = PuckParser.ParseDocument(
-            decompiled,
-            defaultSchema: "puck.cartridge.v1"
-        );
-
         Assert.Equal(
-            WorldDocumentEmitter.CompileToJson(recompAst),
-            WorldDocumentEmitter.CompileToJson(ast)
+            CanonicalText(node: Compile(
+                defaultSchema: "puck.cartridge.v1",
+                source: decompiled
+            )),
+            CanonicalText(node: json)
         );
     }
     [Fact]
@@ -197,20 +203,8 @@ public class ComprehensiveSyntheticTests {
             }
             """;
 
-        // 1. Parse .puck into AST
-        var ast = PuckParser.ParseDocument(ComprehensivePuck);
-
-        Assert.Equal(
-            "puck.world.definition.v1",
-            ast.Schema
-        );
-        Assert.Equal(
-            "worlds/standard.basis.json",
-            ast.Basis
-        );
-
-        // 2. Lower AST into JsonObject
-        var json = WorldDocumentEmitter.Lower(ast);
+        // 1. Compile .puck into its document
+        var json = Compile(source: ComprehensivePuck);
 
         // Assert schema, basis, documentId
         Assert.Equal(
@@ -369,7 +363,7 @@ public class ComprehensiveSyntheticTests {
         );
 
         // 3. Compile to canonical JSON
-        var canonicalJson = WorldDocumentEmitter.CompileToJson(ast);
+        var canonicalJson = CanonicalText(node: json);
 
         Assert.NotEmpty(collection: canonicalJson);
 
@@ -415,15 +409,12 @@ public class ComprehensiveSyntheticTests {
         );
 
         // 5. Round-trip: transpile decompiled .puck back to JSON
-        var roundTripAst = PuckParser.ParseDocument(decompiledPuck);
-        var roundTripJson = WorldDocumentEmitter.Lower(roundTripAst);
+        var roundTripJson = Compile(source: decompiledPuck);
 
         // 6. Canonical JSON equality
-        var roundTripCanonical = WorldDocumentEmitter.CompileToJson(roundTripAst);
-
         Assert.Equal(
-            WorldDocumentEmitter.CompileToJson(PuckParser.ParseDocument(WorldDecompiler.Decompile(root: roundTripJson))),
-            roundTripCanonical
+            CanonicalText(node: Compile(source: WorldDecompiler.Decompile(root: roundTripJson))),
+            CanonicalText(node: roundTripJson)
         );
     }
     [Fact]
@@ -452,11 +443,10 @@ public class ComprehensiveSyntheticTests {
             }
             """;
 
-        var ast = PuckParser.ParseDocument(
-            CreationPuck,
-            defaultSchema: "puck.creation.v1"
+        var json = Compile(
+            defaultSchema: "puck.creation.v1",
+            source: CreationPuck
         );
-        var json = WorldDocumentEmitter.Lower(ast);
 
         Assert.Equal(
             "puck.creation.v1",
@@ -518,15 +508,12 @@ public class ComprehensiveSyntheticTests {
         );
 
         // Round-trip
-        var recompAst = PuckParser.ParseDocument(
-            decompiled,
-            defaultSchema: "puck.creation.v1"
-        );
-        var recompJson = WorldDocumentEmitter.Lower(recompAst);
-
         Assert.Equal(
-            WorldDocumentEmitter.CompileToJson(recompAst),
-            WorldDocumentEmitter.CompileToJson(ast)
+            CanonicalText(node: Compile(
+                defaultSchema: "puck.creation.v1",
+                source: decompiled
+            )),
+            CanonicalText(node: json)
         );
     }
 }

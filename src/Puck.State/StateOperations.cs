@@ -58,6 +58,10 @@ public enum BoardCombineOp : byte {
 [JsonDerivedType(typeof(StateTransform.Push), "push")]
 [JsonDerivedType(typeof(StateTransform.ClearEnclosed), "clearEnclosed")]
 [JsonDerivedType(typeof(StateTransform.Observe), "observe")]
+[JsonDerivedType(typeof(StateTransform.Mix), "mix")]
+[JsonDerivedType(typeof(StateTransform.Mean), "mean")]
+[JsonDerivedType(typeof(StateTransform.Nearest), "nearest")]
+[JsonDerivedType(typeof(StateTransform.Remember), "remember")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record StateTransform {
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
@@ -100,8 +104,8 @@ public abstract record StateTransform {
     /// <param name="By">The attribute keys, 1..<c>MaxSortKeys</c> distinct numeric rows
     /// keyed over the zone's token domain, in precedence order; each carries its own direction.</param>
     public sealed record SortZone(string Row, IReadOnlyList<SortKey> By) : StateTransform;
-    /// <summary>Reorders a keyed numeric row by its own cell values, stably.</summary>
-    /// <param name="Row">The keyed numeric row.</param>
+    /// <summary>Reorders a keyed or ordered numeric row by its own cell values, stably.</summary>
+    /// <param name="Row">Any ordered zone or keyed numeric row.</param>
     /// <param name="Descending">Whether the greatest value comes first.</param>
     public sealed record SortKeyed(string Row, bool Descending = false) : StateTransform;
     /// <summary>Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state
@@ -137,10 +141,22 @@ public abstract record StateTransform {
     /// <param name="FromKey">The cell of that row, or null for its slot cell.</param>
     public sealed record Arrange(string Row, string From, string? FromKey = null) : StateTransform;
     /// <summary>Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and
-    /// advances its cursor by one.</summary>
+    /// advances its cursor by one. The value comes from the spellings <see cref="ActionEffect.PushState"/> takes:
+    /// the raw literal, a live cell, or an expression evaluated in the ring's kind.</summary>
     /// <param name="Row">The history row.</param>
-    /// <param name="Value">The raw value pushed, in the row's kind.</param>
-    public sealed record Push(string Row, long Value) : StateTransform;
+    /// <param name="Value">The raw value pushed, in the row's kind; read only when neither
+    /// <paramref name="FromState"/> nor <paramref name="Expression"/> is named, and refused as ambiguous when a
+    /// live source is named beside a non-zero literal.</param>
+    /// <param name="FromState">A state row or reserved channel read live at every firing.</param>
+    /// <param name="FromKey">The cell of <paramref name="FromState"/>, or null for its slot.</param>
+    /// <param name="Expression">A bounded numeric expression evaluated in the row's kind.</param>
+    public sealed record Push(
+        string Row,
+        long Value = 0L,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
+    ) : StateTransform;
     /// <summary>Clears every group of cells valued <see cref="Lower"/>..<see cref="Upper"/> beside the cell
     /// <see cref="From"/> names that has no empty cell beside it, writing the board's empty value over their members.
     /// The write-path twin of <c>$board:enclosedAt</c>, applied after the value lands.</summary>
@@ -149,9 +165,39 @@ public abstract record StateTransform {
     /// <param name="Lower">The enclosed range's inclusive low end; the board's empty value lies outside it.</param>
     /// <param name="Upper">The enclosed range's inclusive high end.</param>
     public sealed record ClearEnclosed(string Row, string From, long Lower, long Upper) : StateTransform;
+    /// <summary>Writes the normalized sum of 1 to 8 weighted vector terms.</summary>
+    /// <param name="Into">The target vector cell or slot.</param>
+    /// <param name="Terms">The weighted vector terms.</param>
+    public sealed record Mix(string Into, IReadOnlyList<VectorTerm> Terms) : StateTransform;
+    /// <summary>Writes the normalized sum of every candidate cell of a table.</summary>
+    /// <param name="From">The source vector table.</param>
+    /// <param name="Into">The target vector cell or slot.</param>
+    /// <param name="Where">Optional boolean filter row.</param>
+    public sealed record Mean(string From, string Into, string? Where = null) : StateTransform;
+    /// <summary>Writes the closest cells of a table.</summary>
+    /// <param name="From">The source vector table.</param>
+    /// <param name="Query">The query vector cell, slot, or literal.</param>
+    /// <param name="Into">The destination table or slot.</param>
+    /// <param name="K">How many nearest results to recall.</param>
+    /// <param name="Threshold">Optional threshold score.</param>
+    /// <param name="Where">Optional boolean row filter.</param>
+    /// <param name="Exclude">Optional key to exclude from candidates.</param>
+    /// <param name="Farthest">Whether to rank lower scores first.</param>
+    public sealed record Nearest(string From, string Query, string Into, int K, string? Threshold = null, string? Where = null, string? Exclude = null, bool Farthest = false) : StateTransform;
+    /// <summary>Stores a vector unless the table already holds a near-duplicate.</summary>
+    /// <param name="Into">The destination vector table.</param>
+    /// <param name="Key">The key to write.</param>
+    /// <param name="From">The source vector.</param>
+    /// <param name="UnlessWithin">Cosine similarity threshold in [0, 1].</param>
+    public sealed record Remember(string Into, string Key, string From, string UnlessWithin) : StateTransform;
 }
 /// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>
 /// <param name="Row">The attribute row.</param>
 /// <param name="Descending">Whether the greatest value comes first under this key.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SortKey(string Row, bool Descending = false);
+/// <summary>One term of a <see cref="StateTransform.Mix"/>: a vector operand with an integer weight.</summary>
+/// <param name="From">The vector operand.</param>
+/// <param name="Weight">The integer weight in [-1000, 1000] and non-zero.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record VectorTerm(string From, int Weight);

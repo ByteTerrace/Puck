@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.State.Generators</AssemblyName>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>The authored-randomness engine of a Puck.State arena: GeneratorEngine draws a site's next value from the Markov, weighted-numeric, symmetry-orbit, and uniform-range source families it and PrivateDraw share, TableDocument/CompiledTable carry a generator's declared table data, and ArenaDraws is the arena-facing door a draw site's cursor and drawn masks read and write through. PenrosePatch's seeded patch draw rides the same seed ladder. Every draw is reproducible: two sites naming one source draw independent sequences, and a document's declared seed reproduces the same draws on every host and backend. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.State.Generators</PackageId>
+        <PackageTags>determinism;generators;randomness;simulation;state</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.State</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Puck.State carries the arena, the catalog, the authored Draw/StateGenerator facet (staying there — see the
+             project README for why), and the lattice topology PenrosePatch's seeded selection walks; Puck.Maths carries
+             the PCG streams and alias-table sampling every source family draws through. Nothing else, and nothing
+             points back. -->
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+    </ItemGroup>
+</Project>

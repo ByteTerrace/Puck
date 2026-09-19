@@ -244,8 +244,8 @@ public sealed class WorldAdjacencyLawTests {
                     val2: neighbour.HysteresisRaw
                 ),
                 val2: Math.Max(
-                    val1: local.SettleDeadbandRaw,
-                    val2: neighbour.SettleDeadbandRaw
+                    val1: local.VerticalOwnershipDeadbandRaw,
+                    val2: neighbour.VerticalOwnershipDeadbandRaw
                 )
             )
         );
@@ -830,16 +830,16 @@ public sealed class WorldAdjacencyLawTests {
         );
     }
     [Fact]
-    public void FloorAdjacencyCarriesTheSettleDeadbandNotTheContactHysteresis() {
+    public void FloorAdjacencyCarriesTheVerticalOwnershipDeadbandNotTheContactHysteresis() {
         var up = Boundary(
             pitch: 90f,
             yaw: 0f
         ).CompileFrame();
-        var definition = Fixtures.BuildDocument();
+        var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
         var hysteresis = FixedQ4816.FromDouble(value: 0.72);
 
         Assert.True(
-            condition: WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            condition: WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
                 definition: definition,
                 depth: out var settle,
                 reason: out var reason
@@ -850,20 +850,22 @@ public sealed class WorldAdjacencyLawTests {
         var threshold = WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in up,
             reciprocalHysteresis: hysteresis,
-            verticalSettleDeadband: settle
+            verticalOwnershipDeadband: settle
         );
 
         Assert.Equal(
             actual: threshold,
             expected: settle
         );
-        // Ascent headroom: the deadband a vertical crossing delays handoff by must stay far below the boundary's own
-        // aperture, which the two-body contact hysteresis a wall carries would not.
-        Assert.True(condition: (threshold < hysteresis));
-        Assert.True(condition: (threshold < (up.HalfHeight / FixedQ4816.FromInteger(value: 100))));
+        // A floor carries the deadband and not the hysteresis, so the two must differ for the equality above to say
+        // anything.
+        Assert.NotEqual(
+            actual: threshold,
+            expected: hysteresis
+        );
     }
     [Fact]
-    public void FloorOwnershipDeadbandHoldsASettlingArrivalAndPassesADeliberateDescent() {
+    public void FloorOwnershipDeadbandHoldsAHoverAtTheSeamAndPassesASustainedDescent() {
         // The destination side of a vertical pair: outward is DOWN, so a body that arrives inside and sags under
         // gravity moves toward this edge. Arrival lands one deadband inside, which is where the reciprocal source
         // threshold hands it over.
@@ -874,7 +876,7 @@ public sealed class WorldAdjacencyLawTests {
         var definition = Fixtures.BuildDocument();
 
         Assert.True(
-            condition: WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            condition: WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
                 definition: definition,
                 depth: out var settle,
                 reason: out var reason
@@ -885,7 +887,7 @@ public sealed class WorldAdjacencyLawTests {
         var threshold = WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in down,
             reciprocalHysteresis: FixedQ4816.FromDouble(value: 0.72),
-            verticalSettleDeadband: settle
+            verticalOwnershipDeadband: settle
         );
         var rate = ((double)definition.SimulationRateHz);
         // The reciprocal source threshold hands over one threshold past its own plane, which maps to one threshold
@@ -896,7 +898,11 @@ public sealed class WorldAdjacencyLawTests {
             val1: 20.0,
             val2: (23.0 / rate)
         ) / rate);
+        // One authority step at the kit's own terminal vertical speed: the largest single step anything in this
+        // document can take toward the plane, which is what a body held hovering at the seam oscillates by. Crossing
+        // back costs both sides' thresholds, so a sustained descent needs several of these steps.
         var commandedDescent = (20.0 / rate);
+        var sustainedDescent = (commandedDescent * 4.0);
 
         var settling = WorldAdjacencyRegion.Sweep(
             frame: down,
@@ -912,7 +918,7 @@ public sealed class WorldAdjacencyLawTests {
             ),
             outwardThreshold: threshold
         );
-        var deliberate = WorldAdjacencyRegion.Sweep(
+        var hover = WorldAdjacencyRegion.Sweep(
             frame: down,
             from: Fixed(
                 x: 0,
@@ -926,14 +932,32 @@ public sealed class WorldAdjacencyLawTests {
             ),
             outwardThreshold: threshold
         );
+        var sustained = WorldAdjacencyRegion.Sweep(
+            frame: down,
+            from: Fixed(
+                x: 0,
+                y: arrival,
+                z: 0
+            ),
+            to: Fixed(
+                x: 0,
+                y: (arrival - sustainedDescent),
+                z: 0
+            ),
+            outwardThreshold: threshold
+        );
 
         Assert.False(
             condition: settling.Crossed,
             userMessage: "a settling arrival re-crossed its own reciprocal edge under gravity alone"
         );
+        Assert.False(
+            condition: hover.Crossed,
+            userMessage: "one step of the fastest vertical travel carried a fresh arrival back across the seam, so a body held at the plane changes authority every other tick"
+        );
         Assert.True(
-            condition: deliberate.Crossed,
-            userMessage: "a body driven back down at terminal speed was refused its return crossing"
+            condition: sustained.Crossed,
+            userMessage: "a body driven back down for four steps at terminal speed was refused its return crossing"
         );
     }
     [Fact]
@@ -1248,12 +1272,12 @@ public sealed class WorldAdjacencyLawTests {
         var sourceThreshold = WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in source,
             reciprocalHysteresis: hysteresis,
-            verticalSettleDeadband: settle
+            verticalOwnershipDeadband: settle
         );
         var destinationThreshold = WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in destination,
             reciprocalHysteresis: hysteresis,
-            verticalSettleDeadband: settle
+            verticalOwnershipDeadband: settle
         );
 
         var seamZig = WorldAdjacencyRegion.Sweep(
@@ -1721,33 +1745,34 @@ public sealed class WorldAdjacencyLawTests {
         );
     }
     [Fact]
-    public void VerticalSettleDeadbandExceedsOneStepOfFreeFallPlusContactSkin() {
+    public void VerticalOwnershipDeadbandExceedsOneStepOfTheFastestVerticalTravelPlusContactSkin() {
         var definition = Fixtures.BuildDocument();
 
         Assert.True(
-            condition: WorldAdjacencyPolicy.TryVerticalSettleDeadband(
+            condition: WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
                 definition: definition,
-                depth: out var settle,
+                depth: out var deadband,
                 reason: out var reason
             ),
             userMessage: reason
         );
 
-        // The document's own envelope, recomputed independently in double precision: the kit's motion-row fall gravity
-        // over one authority step is the speed a body at rest reaches, and that speed over one more step is the sag.
+        // The document's own envelope, recomputed independently in double precision: a body can travel its kit's
+        // terminal vertical speed in one authority step, or its fall gravity over one step where that is greater,
+        // and the deadband is that distance over one more step.
         var rate = ((double)definition.SimulationRateHz);
-        var sag = (Math.Min(
+        var travel = (Math.Max(
             val1: 20.0,
             val2: (23.0 / rate)
         ) / rate);
         var skin = ((double)definition.Collision.ContactSkin);
 
         Assert.True(
-            (((double)settle) > (sag + skin)),
-            userMessage: $"deadband {((double)settle)} does not exceed one step of sag {sag} plus skin {skin}"
+            (((double)deadband) > (travel + skin)),
+            userMessage: $"deadband {((double)deadband)} does not exceed one step of vertical travel {travel} plus skin {skin}"
         );
         // Bounded above: outward rounding and one raw unit, never a term this derivation does not name.
-        Assert.True(condition: (((double)settle) < ((sag + skin) + 0.001)));
+        Assert.True(condition: (((double)deadband) < ((travel + skin) + 0.001)));
     }
     [Fact]
     public void YawOnlyHysteresisClosesTheDiagonalCornerBetweenPerpendicularBoundaries() {

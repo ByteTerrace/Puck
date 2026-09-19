@@ -356,7 +356,28 @@
         {
           "$type": "setState",
           "state": "look",
-          "expression": "(look + 1) % 8"
+          "expression": {
+            "instructions": [
+              {
+                "op": "Operand",
+                "name": "look"
+              },
+              {
+                "op": "Constant",
+                "value": 1
+              },
+              {
+                "op": "Add"
+              },
+              {
+                "op": "Constant",
+                "value": 8
+              },
+              {
+                "op": "Modulo"
+              }
+            ]
+          }
         },
         {
           "$type": "setIdentityFact",

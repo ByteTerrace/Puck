@@ -228,7 +228,7 @@ public sealed class CartridgeCostMeasurement {
             ? cost.Cycles.ToString()
             : "unmodeled")}";
     }
-    private static CartridgeStatement Set(string target, ExpressionOp? operation, ValueExpression value) =>
+    private static CartridgeStatement Set(string target, ExpressionOp? operation, ExpressionProgram value) =>
         new(
             Kind: "set",
             Target: new CartridgeTarget(State: target),

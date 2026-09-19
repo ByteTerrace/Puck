@@ -185,7 +185,7 @@ public class LspSugarTests {
             .ToHashSet(comparer: StringComparer.Ordinal);
 
         Assert.NotNull(@object: labels);
-        foreach (var keyword in new[] { "when", "and", "or", "not", "bind", "push", "countdown", "remove", "schedule", "transform", "transaction", "onFailure", "decision", "option", "interrupt", "onNoChoice", "rule", "shape", "placements", "placement" }) {
+        foreach (var keyword in new[] { "when", "and", "or", "not", "local", "push", "countdown", "remove", "schedule", "transform", "transaction", "onFailure", "decision", "option", "interrupt", "onNoChoice", "rule", "shape", "placements", "placement" }) {
             Assert.Contains(
                 expected: keyword,
                 set: labels
@@ -230,7 +230,7 @@ public class LspSugarTests {
         );
 
         Assert.Equal(
-            $"host {{\n{indent}width: 1280,\n{indent}height: 720\n}}\n",
+            $"host {{\n{indent}width: 1280\n{indent}height: 720\n}}\n",
             response["result"]?[0]?["newText"]?.ToString()
         );
     }
@@ -240,7 +240,7 @@ public class LspSugarTests {
     [InlineData("let seats = 4\nlabel: \"sea|ts\"\n")]
     [InlineData("let seats = 4\ncount: seats| + 1\n")]
     [InlineData("template tile(size = 2) { width: size }\nwidth: si|ze\n")]
-    [InlineData("rule \"x\" {\nbind amount : Int = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
+    [InlineData("rule \"x\" {\nlocal amount : Int = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
     [InlineData("let data = { exp|onent: 2.7 }\n")]
     [InlineData("schema: \"puck.cartridge.v1\"\nshape Box \"x\" { exp|onent: 2.7 }\n")]
     [InlineData("schema: \"puck.creation.v1\"\nnoise { rough|ness: 0.5 }\n")]
@@ -316,7 +316,7 @@ public class LspSugarTests {
     [InlineData("let item = 99\nvalues: map([1, 2], item => it|em + 1)\n", "item => item + 1", "lambda parameter")]
     [InlineData("let item = 99\nvalues: map([1, 2], item => item + 1)\ncount: it|em\n", "let item = 99", "compile-time constant")]
     [InlineData("for item in range(0, 2) { value: it|em }\n", "for item in range(0, 2)", "loop variable")]
-    [InlineData("rule \"x\" {\nbind amount : Int = 2\nhp += amo|unt\n}\n", "bind amount : Int = 2", "rule binding (Int)")]
+    [InlineData("rule \"x\" {\nlocal amount : Int = 2\nhp += amo|unt\n}\n", "local amount : Int = 2", "rule local (Int)")]
     [InlineData("values: ra|nge(3, 5)\n", "range(start, count)", "count consecutive integers")]
     [InlineData("value: cla|mp(4, 0, 3)\n", "clamp(arg1, arg2, arg3)", "Arguments: 3")]
     [InlineData("let seats = 4\nbroken: [\ncount: sea|ts\n", "let seats = 4", "compile-time constant")]

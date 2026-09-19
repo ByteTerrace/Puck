@@ -52,7 +52,7 @@ public sealed class ModuleExportsLawTests {
 
         Assert.NotNull(@object: found);
 
-        return (found!.Cells?.SingleOrDefault(predicate: cell => (cell.Key.Value == key))?.Value ?? 0L);
+        return (found!.Cells?.SingleOrDefault(predicate: cell => (cell.Key.Value == key))?.Value.Raw ?? 0L);
     }
     private static string ModuleText(string module) =>
         File.ReadAllText(path: Path.Combine(
@@ -168,7 +168,7 @@ public sealed class ModuleExportsLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        for (var tick = 0; (tick < 1); tick++) {
+        for (var tick = 0; (tick < 6); tick++) {
             fixture.Step();
         }
 
@@ -257,7 +257,7 @@ public sealed class ModuleExportsLawTests {
             userMessage: exportedReason
         );
 
-        host[propertyName: "placements"]![propertyName: "rows"]![index: 0]![propertyName: "board"]![propertyName: "occupancy"] = "hexStoneCell";
+        host[propertyName: "placements"]![propertyName: "rows"]![index: 0]![propertyName: "board"]![propertyName: "occupancy"] = "hexStoneCode";
 
         var unexported = files.WriteText(
             name: "unexported.world.json",
@@ -271,7 +271,7 @@ public sealed class ModuleExportsLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "'hexStoneCell'"
+            expectedSubstring: "'hexStoneCode'"
         );
         Assert.Contains(
             actualString: reason,

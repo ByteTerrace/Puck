@@ -17,6 +17,13 @@ public readonly record struct WorldFrameArrival(FixedVector3 Position, FixedQ481
 /// the map is always a yaw rotation about world up composed with the two frames' translation, whatever the
 /// boundaries' own pitch. Walking out of the source face along its outward normal walks IN through the destination
 /// face, which is the half turn <see cref="MapVector"/> folds in.</para>
+/// <para>The turn that half turn leaves is <c>destinationYaw - sourceYaw - 180</c> about world up, where each yaw is
+/// the face's own authored outward heading: two faces pointing at each other are 180 degrees apart and map as the
+/// identity, and every other authored pair turns the traveler by the remainder. A boundary's right axis is its yaw's
+/// horizontal right whatever its pitch, so the formula holds unchanged for a face lying flat, where the heading no
+/// longer participates in the outward direction and becomes the rectangle's roll about the vertical: an untwisted
+/// floor seam authors its two yaws 180 degrees apart exactly as a wall pair does, and a flat pair authored at one
+/// yaw hands the traveler a half turn.</para>
 /// <para>Arrival anchors on the frames' own origins, not on the traveler's swept seam point. The two are the same
 /// map: a source seam at in-plane <c>(u, v)</c> maps to the counterpart's <c>(-u, v)</c> by
 /// <see cref="MapVector"/> applied to <see cref="WorldFaceFrame.Right"/> and <see cref="WorldFaceFrame.Up"/>, so an

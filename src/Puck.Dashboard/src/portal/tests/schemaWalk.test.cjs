@@ -15,7 +15,7 @@ const { resolve, classify, computeArrayMove, computeArmSwitch } = require('../sr
 // The real single-file schema bundle, generated fresh into a scratch temp directory by the
 // installed CLI artifact in CI, or the local CLI during development (never committed).
 // This is the "study its real shape first" requirement made executable: these tests exercise
-// schemaWalk against the genuine `puck.world.def.v1` shape, not a hand-typed stand-in of it.
+// schemaWalk against the genuine `puck.world.definition.v1` shape, not a hand-typed stand-in of it.
 const bundle = readSchemaBundle(__dirname);
 
 test('atPath resolves the root and a plain nested section', () => {

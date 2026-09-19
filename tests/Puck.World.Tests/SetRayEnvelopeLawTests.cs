@@ -14,7 +14,7 @@ public sealed class SetRayEnvelopeLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static StateCell Cell(string key, long value) => new(
         Key: Name(value: key),
-        Value: value
+        Value: CellValue.Int(value: value)
     );
     // A pattern whose single symbol covers every representable value, so the whole ray is always the accepted
     // prefix — the law under test is the write's admission, never the pattern's own reach.
@@ -52,13 +52,7 @@ public sealed class SetRayEnvelopeLawTests {
         name: row
     )!;
     private static bool TrySetRay(WorldDefinition definition, long value, out WorldDefinition changed, out string reason) {
-        Assert.True(condition: CompiledPatterns.TryCompileAll(
-            definition.Patterns,
-            out var patterns,
-            []
-        ));
-
-        return WorldStateTransforms.TryApply(
+        return WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.SetRay(
                 Direction: "E",
@@ -71,8 +65,7 @@ public sealed class SetRayEnvelopeLawTests {
             1,
             "test",
             out changed,
-            out reason,
-            patterns
+            out reason
         );
     }
 
@@ -102,10 +95,10 @@ public sealed class SetRayEnvelopeLawTests {
 
         Assert.True(
             condition: TrySetRay(
-                definition: document,
-                value: 100,
                 changed: out var changed,
-                reason: out var reason
+                definition: document,
+                reason: out var reason,
+                value: 100
             ),
             userMessage: reason
         );
@@ -116,7 +109,7 @@ public sealed class SetRayEnvelopeLawTests {
             actual: Find(
                 document: changed,
                 row: "board"
-            ).Cells!.Single(predicate: cell => (cell.Key.Value == "0")).Value
+            ).Cells!.Single(predicate: cell => (cell.Key.Value == "0")).Value.Raw
         );
         Assert.All(
             collection: Find(
@@ -125,17 +118,17 @@ public sealed class SetRayEnvelopeLawTests {
             ).Cells!.Where(predicate: cell => (cell.Key.Value != "0")),
             action: cell => Assert.Equal(
                 expected: 5L,
-                actual: cell.Value
+                actual: cell.Value.Raw
             )
         );
 
         // The mirror: saturating at the FLOOR.
         Assert.True(
             condition: TrySetRay(
-                definition: document,
-                value: -100,
                 changed: out var floored,
-                reason: out var flooredReason
+                definition: document,
+                reason: out var flooredReason,
+                value: -100
             ),
             userMessage: flooredReason
         );
@@ -146,7 +139,7 @@ public sealed class SetRayEnvelopeLawTests {
             ).Cells!.Where(predicate: cell => (cell.Key.Value != "0")),
             action: cell => Assert.Equal(
                 expected: 0L,
-                actual: cell.Value
+                actual: cell.Value.Raw
             )
         );
     }
@@ -174,24 +167,24 @@ public sealed class SetRayEnvelopeLawTests {
         ));
 
         Assert.False(condition: TrySetRay(
-            definition: document,
-            value: 100,
             changed: out _,
-            reason: out var reason
+            definition: document,
+            reason: out var reason,
+            value: 100
         ));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "does not admit"
+            expectedSubstring: "an admitted replacement"
         );
 
         // Control: the same ray with an in-range value succeeds and writes every affected cell.
         Assert.True(
             condition: TrySetRay(
-                definition: document,
-                value: 5,
                 changed: out var changed,
-                reason: out var controlReason
+                definition: document,
+                reason: out var controlReason,
+                value: 5
             ),
             userMessage: controlReason
         );
@@ -200,7 +193,7 @@ public sealed class SetRayEnvelopeLawTests {
             actual: Find(
                 document: changed,
                 row: "board"
-            ).Cells!.Single(predicate: cell => (cell.Key.Value == "0")).Value
+            ).Cells!.Single(predicate: cell => (cell.Key.Value == "0")).Value.Raw
         );
         Assert.All(
             collection: Find(
@@ -209,7 +202,7 @@ public sealed class SetRayEnvelopeLawTests {
             ).Cells!.Where(predicate: cell => (cell.Key.Value != "0")),
             action: cell => Assert.Equal(
                 expected: 5L,
-                actual: cell.Value
+                actual: cell.Value.Raw
             )
         );
     }

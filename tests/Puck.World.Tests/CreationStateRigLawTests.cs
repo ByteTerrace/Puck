@@ -28,13 +28,13 @@ public sealed class CreationStateRigLawTests {
         Cells: [
             new StateCell(
                 Key: CellName.Parse(candidate: "0"),
-                Value: FixedQ4816.One.Value,
+                Value: CellValue.Fixed(rawBits: FixedQ4816.One.Value),
                 Dynamics: new StateDynamics(Row: EaseRow),
                 Clock: new StateCellClock(Y0: 0L)
             ),
             new StateCell(
                 Key: CellName.Parse(candidate: "1"),
-                Value: FixedQ4816.One.Value
+                Value: CellValue.Fixed(rawBits: FixedQ4816.One.Value)
             ),
         ]
     );

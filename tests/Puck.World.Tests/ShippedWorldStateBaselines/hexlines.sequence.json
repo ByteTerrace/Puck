@@ -1,0 +1,34 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/hexlines.world.json",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-hexlines-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 60
+    },
+    {
+      "pose": {
+        "placement": "hexStoneLight-0",
+        "topology": "hexLinesBoard",
+        "cell": 0
+      }
+    },
+    {
+      "advance": 30
+    },
+    {
+      "pose": {
+        "placement": "hexStoneDark-0",
+        "topology": "hexLinesBoard",
+        "cell": 4
+      }
+    },
+    {
+      "advance": 510
+    }
+  ]
+}

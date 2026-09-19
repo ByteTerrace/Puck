@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Puck.Hosting;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -6,6 +7,15 @@ namespace Puck.Mcp;
 
 /// <summary>A composition-owned source of isolated delegated sessions. The caller owns and disposes each returned session.</summary>
 public abstract class RemoteMcpHost {
+    /// <summary>The tool definition for writing state vectors into admitted vector cells.</summary>
+    public static Tool StateVectorWriteTool { get; } = new() {
+        Name = "puck_state_vector_write",
+        Description = "Writes an admitted unit vector into a vector state cell.",
+        InputSchema = JsonElement.Parse("""{"type":"object","properties":{"row":{"type":"string"},"key":{"type":["string","null"]},"vector":{"type":"string"}},"required":["row","vector"],"additionalProperties":false}"""),
+        OutputSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript"],"additionalProperties":false}"""),
+        Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
+    };
+
     /// <summary>Whether the host is accepting new attachments; health checks never consume a session slot.</summary>
     public abstract bool IsReady { get; }
     /// <summary>Additional explicitly installed service tools. The host must enforce caller-specific grants at dispatch.</summary>

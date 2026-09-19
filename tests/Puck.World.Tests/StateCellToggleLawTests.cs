@@ -24,7 +24,7 @@ public sealed class StateCellToggleLawTests {
         Capacity: 1,
         Cells: [new StateCell(
                 Key: CellName.Parse(candidate: CellKey),
-                Value: initial
+                Value: CellValue.Int(value: initial)
             )]
     );
     private static long ReadNumeric(WorldFixture fixture) {
@@ -79,7 +79,7 @@ public sealed class StateCellToggleLawTests {
             Capacity: 1,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: CellKey),
-                    Text: "crossbar"
+                    Value: CellValue.Text(value: "crossbar")
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));

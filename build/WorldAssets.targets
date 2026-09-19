@@ -6,6 +6,28 @@
     </PropertyGroup>
     <ItemGroup>
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\avatars\moth.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\arena.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\backgammon.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\billiards.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\bowling.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\chess.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\chinese-checkers.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\codenames.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\dominoes.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\freecell.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\hearts.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\hexlines.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\klondike.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\mancala.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\poker.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\pong.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\reversi.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\snake.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\spider.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\stratego.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\tictactoe.puck" />
+        <!-- solitaire imports the klondike, spider, and freecell documents, so it compiles after them. -->
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\solitaire.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\moth-courtyard.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-compare.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-mirror.puck" />

@@ -140,7 +140,7 @@ if (!HAS_FIXTURES) {
     assert.equal(snapshot.context.boot.status, 'ready');
     assert.equal(snapshot.context.boot.refusal, null);
     assert.ok(snapshot.context.boot.build);
-    assert.equal(snapshot.context.boot.build.schemaVersion, 'puck.world.def.v1');
+    assert.equal(snapshot.context.boot.build.schemaVersion, 'puck.world.definition.v1');
     assert.equal(snapshot.context.official.build.commit, snapshot.context.boot.build.commit);
     assert.equal(snapshot.context.engine !== null, true);
   });
@@ -259,7 +259,7 @@ if (!HAS_FIXTURES) {
       type: 'OPEN_TEXT',
       name: 'dup-rule-fixture.world.json',
       text: JSON.stringify({
-        schema: 'puck.world.def.v1',
+        schema: 'puck.world.definition.v1',
         documentId: 'dup-rule-fixture',
         state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] },
         rules: [{ name: 'r1', effects: [{ $type: 'setState', state: 'counter', value: 1 }] }],
@@ -305,7 +305,7 @@ if (!HAS_FIXTURES) {
     rapidActor.send({
       type: 'OPEN_TEXT',
       name: 'rapid-fixture.world.json',
-      text: JSON.stringify({ schema: 'puck.world.def.v1', documentId: 'rapid-fixture', metadata: { custom: { marker: 'initial' } } }),
+      text: JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'rapid-fixture', metadata: { custom: { marker: 'initial' } } }),
     });
     const opened = await waitFor(rapidActor, (s) => s.matches({ ready: { document: 'idle' } }), { timeout: 120_000 });
     assert.equal(opened.context.document.value.metadata.custom.marker, 'initial');
@@ -342,7 +342,7 @@ if (!HAS_FIXTURES) {
       type: 'OPEN_TEXT',
       name: 'paint-fixture.world.json',
       text: JSON.stringify({
-        schema: 'puck.world.def.v1',
+        schema: 'puck.world.definition.v1',
         documentId: 'paint-fixture',
         state: {
           lattices: [{ $type: 'grid', name: 'board', width: 2, depth: 2, cellSize: 1, band: 0.3, origin: [0, 0, 0] }],
@@ -419,7 +419,7 @@ if (!HAS_FIXTURES) {
     // bare fragment before the island fix.
     const bareRootName = '$bare-basis-probe-root.json';
     const bareRootJson = JSON.stringify({
-      schema: 'puck.world.def.v1',
+      schema: 'puck.world.definition.v1',
       basis: 'standard.basis.json',
       imports: [{ document: 'games/billiards.world.json', as: null }],
     });
@@ -496,7 +496,7 @@ if (!HAS_FIXTURES) {
       type: 'OPEN_TEXT',
       name: 'preview-fixture.world.json',
       text: JSON.stringify({
-        schema: 'puck.world.def.v1',
+        schema: 'puck.world.definition.v1',
         documentId: 'preview-fixture',
         state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] },
       }),
@@ -513,7 +513,7 @@ if (!HAS_FIXTURES) {
     assert.ok(row, 'the fixture carries one scalar Int row');
     // Write a value guaranteed to differ from whatever the row already holds, so the hash change
     // this test checks for cannot be a false negative from writing the row's own current value.
-    const nextValue = (row.cells[0]?.value ?? 0n) + 1n;
+    const nextValue = (row.cells[0]?.value?.value ?? 0n) + 1n;
 
     previewActor.send({ type: 'PREVIEW_WRITE', row: row.name, value: nextValue, write: 'set' });
     await waitFor(previewActor, (s) => s.matches({ ready: { preview: 'ready' } }) && s.context.preview.script.length === 1, { timeout: 120_000 });
@@ -578,7 +578,7 @@ if (!HAS_FIXTURES) {
     // content by the tictactoe fragment tests above.
     draftActor.send({
       type: 'OPEN_TEXT',
-      text: JSON.stringify({ schema: 'puck.world.def.v1', documentId: 'draft-fixture' }),
+      text: JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'draft-fixture' }),
       name: 'draft-fixture.world.json',
     });
     await waitFor(draftActor, (s) => s.matches({ ready: { document: 'idle' } }), { timeout: 120_000 });
@@ -620,7 +620,7 @@ if (!HAS_FIXTURES) {
         return diskFetch(input).then(async (response) => {
           if (!response.ok) return response;
           const text = await response.text();
-          const tampered = text.replace('"puck.world.def.v1"', '"not.the.real.schema"');
+          const tampered = text.replace('"puck.world.definition.v1"', '"not.the.real.schema"');
           return { ok: true, status: 200, text: async () => tampered, arrayBuffer: async () => new TextEncoder().encode(tampered).buffer };
         });
       }
@@ -635,7 +635,7 @@ if (!HAS_FIXTURES) {
     assert.equal(snapshot.context.engine, null);
 
     // Editing continues in refused: OPEN_TEXT needs no engine at all.
-    refusedActor.send({ type: 'OPEN_TEXT', text: JSON.stringify({ schema: 'puck.world.def.v1', documentId: 'standalone' }), name: 'standalone.json' });
+    refusedActor.send({ type: 'OPEN_TEXT', text: JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'standalone' }), name: 'standalone.json' });
     const opened = await waitFor(refusedActor, (s) => s.matches({ ready: { document: 'idle' } }), { timeout: 120_000 });
     assert.equal(opened.context.document.name, 'standalone.json');
     assert.equal(opened.context.document.role, 'world');
