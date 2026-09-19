@@ -54,9 +54,9 @@ Everything below has landed on `main`.
   rule's, and both root dispatches switch over the arm the table names. The
   kind-conditional admission is a row facet every emitter site reads, and
   `draw`, `deal` and `shuffle` are described as rows rather than recorded as
-  another vocabulary's. Owed: `PuckLinter.References`
-  resolves a row name on a `state`, `comparandState`, `fromState` or operand
-  field and inside a transform arm, and nowhere else.
+  another vocabulary's. `PuckLinter.References` resolves a row name at every
+  site `WorldNameRegistry` registers, read by the site's role, so it holds no
+  field list of its own.
 - **S5** is landed: a migration is a named rewrite over the
   syntax tree (`src/Puck.Transpiler/Rewriting`), and `puck migrate` applies
   one to a directory, stages every write, compiles each source before and

@@ -631,15 +631,18 @@ composing and validating a document as a world. The one check that ignores this 
 scoped to sibling shapes in the same `shapes` array, a purely local scope no basis or importer could change, so it
 always runs and always reports. Every other check is Information severity; the shape-parent check is Warning:
 
-- `PUCK_LINT_005`—a `state`/`comparandState`/`fromState` name, a `State` token inside a `compareValue`
-  predicate's `left`/`right` operand or any `expression`/`score` operand, or a row-naming field of a
-  `StateTransform` arm, that resolves to no declared `state.*[].name` row. `left`/`right` are checked ONLY on a
-  `compareValue`-discriminated object—every other `left`/`right` pair in the document model (e.g. an interaction
-  row's property/placement-id pair) is a different name kind and is never read as an expression. An arm's fields
-  are read only where the arm sits, as the value of a `transform` key, and only the fields whose value is a row
-  name: a cell key, a slot or cell spelling, a literal, and a row of another vocabulary are all left alone.
+- `PUCK_LINT_005`—a state row's name that resolves to no declared `state.*[].name` row, wherever the document
+  holds one. The sites are not listed here: `WorldNameRegistry` registers every member that carries a state or zone
+  name, `WorldModuleNamespace.Visit` walks the lowered tree by the document model's own types and hands each one
+  back, and the lint reads it by its registered role—a name or a list of names, an expression (its IR's state
+  reads, folds and vector cells, or infix text parsed by `ExpressionSpelling`), a `$expr:` cell key, a
+  `state.<row>` binding, or a template's `{state.<row>}` placeholders. [The registry's
+  rendering](../../docs/world-name-registry.md) is the list. A `state`/`comparandState`/`fromState` field the
+  registry excludes sits at body scope and names a per-body slot; it resolves against the same catalog, which
+  holds every lane's names.
 - `PUCK_LINT_006`—a `prototypeId` that resolves to no `prototypes[].id`.
-- `PUCK_LINT_007`—a placement row's `parent` that resolves to no `placements.rows[].id`.
+- `PUCK_LINT_007`—a placement row's `parent`, or a `Region` interaction's `right`, that resolves to no
+  `placements.rows[].id`.
 - `PUCK_LINT_008`—a `camera`/`spawnPoint` reference that resolves to no `cameras[].name`/`spawnPoints[].id`.
 - `PUCK_LINT_009`—a `$`-prefixed operand name one edit apart from a `RuleFacts` channel prefix (`$tabl:` for
   `$table:`)—deliberately narrow: a real extension prefix (`$board`, `$physics`, ...) sits far from every
