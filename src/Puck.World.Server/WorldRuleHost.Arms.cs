@@ -60,6 +60,8 @@ public sealed partial class WorldRuleHost {
                     preflight: firing.Preflight,
                     refusal: out refusal
                 );
+            case WorldPoseCellEffect cellPose:
+                return FirePoseCell(cellPose, firing.Preflight, out refusal);
             case WorldPoseEffect pose:
                 return FirePose(
                     effect: pose,
@@ -347,6 +349,23 @@ public sealed partial class WorldRuleHost {
     }
     // Body state, not document state: the same WorldBody.Pose door body.pose uses, as the world's own act — no
     // drive-gate or grant check, since a gated body is one a rule still needs to move.
+    private bool FirePoseCell(WorldPoseCellEffect effect, bool preflight, out EffectRefusal refusal) {
+        var index = ResolveWorldBodyRef(effect.Body);
+        var topology = WorldTopologyCompilation.Find(Host.Definition, effect.Topology);
+        if (Host.Body(index: index) is not { } body) {
+            return Refuse(code: WorldRuleEffectRefusal.BodyInactive, reason: $"body:{index} is inactive", refusal: out refusal);
+        }
+        if (topology is null || !RuleExpressions.TryEvaluate(fault: out _, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell) || cell < 0 || cell >= topology.CellCount) {
+            return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
+        }
+        refusal = EffectRefusal.None;
+        if (!preflight) {
+            var centre = topology.CellCentre((int)cell);
+            body.Pose(position: new FixedVector3(centre.X + effect.Offset.X, centre.Y + effect.Offset.Y, centre.Z + effect.Offset.Z),
+                yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        }
+        return true;
+    }
     private bool FirePose(WorldPoseEffect effect, bool preflight, out EffectRefusal refusal) {
         var bodyIndex = ((effect.KeyFrom is { } keyFrom)
             ? ResolveBodyKeyIndex(

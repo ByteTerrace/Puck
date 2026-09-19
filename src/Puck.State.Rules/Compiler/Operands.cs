@@ -720,3 +720,14 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
         );
     }
 }
+
+/// <summary>The candidate depth supplied by a search host, or zero on a live host.</summary>
+public sealed class SearchPlyOperand : RuleOperand {
+    /// <summary>The shared instance.</summary>
+    public static readonly SearchPlyOperand Instance = new();
+    private SearchPlyOperand() : base(valueKind: CellKind.Int) { }
+    /// <inheritdoc/>
+    public override long Cost(IRuleCostContext context) => 1L;
+    /// <inheritdoc/>
+    public override RuleFact Read(IStateReader reader) => RuleFact.Finite(kind: CellKind.Int, value: reader.SearchPly);
+}

@@ -159,6 +159,8 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// seat's gain is another's loss (max-n); mutually exclusive with <see cref="SearchPlan.Scored"/>, and, since the
 /// outcome the tree method backpropagates alternates sign along the path, not authored with
 /// <see cref="SearchMethod.Tree"/>.</param>
+/// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
+/// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 public sealed record SearchPlan(
     string Name,
     string Tokens,
@@ -181,7 +183,9 @@ public sealed record SearchPlan(
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 0,
     SearchChancePlan? Chance = null,
-    string? Scores = null
+    string? Scores = null,
+    string? Enabled = null,
+    string? Revision = null
 ) {
     /// <summary>Gets a value indicating whether the job compares plies by a score its judge reads.</summary>
     public bool Scored { get; init; }

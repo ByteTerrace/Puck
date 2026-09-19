@@ -5,20 +5,20 @@
   "ticks": 600,
   "workUnits": {
     "boot": {
-      "ruleRows": 20,
+      "ruleRows": 98,
       "interactionRows": 0,
-      "evaluationSlots": 82,
-      "workUnitsPerTick": 96160,
+      "evaluationSlots": 473,
+      "workUnitsPerTick": 449018,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,
       "decisionGridPointsPerTick": 0
     },
     "final": {
-      "ruleRows": 20,
+      "ruleRows": 98,
       "interactionRows": 0,
-      "evaluationSlots": 82,
-      "workUnitsPerTick": 96160,
+      "evaluationSlots": 473,
+      "workUnitsPerTick": 449018,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,

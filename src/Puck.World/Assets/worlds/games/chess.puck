@@ -1,8 +1,5 @@
-// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
-// compile, never the '.world.json' beside it.
-//
-// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
-// 'for' in it, none of which the document carries.
+// Physical chess: validate each settled observation against the last legal board.
+// This source is canonical; compile it to regenerate the world document.
 
 schema: "puck.world.definition.v1"
 basis: "../standard.basis.json"
@@ -110,86 +107,28 @@ gravity {
   uniform [0, -46, 0]
 }
 
+let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
+let pieceLooks = concat(
+  map(pieceTypes, kind => $"piece_white_{kind}"),
+  map(pieceTypes, kind => $"piece_black_{kind}")
+)
+
 looks {
-  rows [
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_white_pawn"
-      scale: 1
-      source: creation(prototypeId: "piece_white_pawn")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_white_knight"
-      scale: 1
-      source: creation(prototypeId: "piece_white_knight")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_white_bishop"
-      scale: 1
-      source: creation(prototypeId: "piece_white_bishop")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_white_rook"
-      scale: 1
-      source: creation(prototypeId: "piece_white_rook")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_white_queen"
-      scale: 1
-      source: creation(prototypeId: "piece_white_queen")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_white_king"
-      scale: 1
-      source: creation(prototypeId: "piece_white_king")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_black_pawn"
-      scale: 1
-      source: creation(prototypeId: "piece_black_pawn")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_black_knight"
-      scale: 1
-      source: creation(prototypeId: "piece_black_knight")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_black_bishop"
-      scale: 1
-      source: creation(prototypeId: "piece_black_bishop")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_black_rook"
-      scale: 1
-      source: creation(prototypeId: "piece_black_rook")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_black_queen"
-      scale: 1
-      source: creation(prototypeId: "piece_black_queen")
-    }
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "piece_black_king"
-      scale: 1
-      source: creation(prototypeId: "piece_black_king")
-    }
-  ]
+  rows: map(pieceLooks, name => {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: name
+    scale: 1
+    source: creation(prototypeId: name)
+  }
+  )
 }
 
 let boardCoords = [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7]
 let backRankTypes = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"]
-let squareTypes = ["boardSquareLight", "boardSquareDark"]
+let squareTypes = ["boardSquareDark", "boardSquareLight"]
+let backRankCodes = [4, 2, 3, 5, 6, 3, 2, 4]
+let initialBoard = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 32), i => 0), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
+let initialPieceCodes = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
 
 template piecePlacement(name, prototypeName, x, z) {
   placement name {
@@ -287,7 +226,6 @@ template squareProto(name, colorKey) {
   }
 }
 
-// Extract kits and patterns from header_section
 kits {
   rows [
     {
@@ -335,20 +273,12 @@ kits {
   ]
 }
 
-patterns [
-  {
-    kind: "Int"
-    name: "chessRayEmpty"
-    pattern: star(item: symbol(name: "empty"))
-    symbols [
-      {
-        max: 0
-        min: 0
-        name: "empty"
-      }
-    ]
+pattern chessRayEmpty: Int {
+  symbols {
+    vacant = 0
   }
-]
+  match: vacant*
+}
 
 placements {
   placement "tabletop" {
@@ -443,190 +373,412 @@ rule "tabletop-settle-hold-reset" {
   settleHold = 0
 }
 
-rule "tabletop-derive-cell-upright" {
-  when settleHold == 60 and $upright:placement:$each >= 0.5
+// Keep the established rule names while sharing the settled-board gate and edge mode.
+rules "" when settleHold == 60 {
   mode: "Edge"
-  forEach: "pieceCode"
-  pieceCell[$each] = $board:cellOf:board:placement:$each
-}
+  rule "tabletop-derive-cell-upright" {
+    when $upright:placement:$each >= 0.5
+    forEach: "pieceCode"
+    pieceCell[$each] = $board:cellOf:board:placement:$each
+  }
 
-rule "tabletop-derive-cell-tilted" {
-  when settleHold == 60 and not $upright:placement:$each >= 0.5
-  mode: "Edge"
-  forEach: "pieceCode"
-  pieceCell[$each] = -1
-}
+  rule "tabletop-derive-cell-tilted" {
+    when not $upright:placement:$each >= 0.5
+    forEach: "pieceCode"
+    pieceCell[$each] = -1
+  }
 
-rule "tabletop-board-collisions" {
-  when settleHold == 60
-  mode: "Edge"
-  boardCollisions = $reduce:count:pieceCell:between:0:63 + setBitCount($board:mask:board:0:0) - 64
-}
+  rule "tabletop-board-collisions" {
+    boardCollisions = $reduce:count:pieceCell:between:0:63 + setBitCount($board:mask:board:0:0) - 64
+  }
 
-rule "tabletop-game-start-snapshot" {
-  when settleHold == 60 and gameStarted == 0 and boardCollisions == 0
-  mode: "Edge"
-  transform boardCombine(left: "board", operation: "Copy", row: "lastLegal")
-}
-
-rule "tabletop-candidate-cells" {
-  when settleHold == 60
-  local ownBefore: Int = turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1
-  local ownAfter: Int = turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1
-  local sources: Int = $local:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)
-  local destinations: Int = $local:ownAfter & ~$local:ownBefore
-  local kingBefore: Int = turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6
-  local kingAfter: Int = turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6
-  local target: Int = ($local:sources & $local:kingBefore) != 0 ? $local:destinations & $local:kingAfter : $local:destinations
-  mode: "Edge"
-  move[from] = $local:sources == 0 ? -1 : trailingZeroCount(($local:sources & $local:kingBefore) != 0 ? $local:sources & $local:kingBefore : $local:sources)
-  move[to] = $local:target == 0 ? -1 : trailingZeroCount($local:target)
-}
-
-rule "tabletop-candidate-move" {
-  when settleHold == 60
-  local mover: Int = lastLegal[move[from]]
-  local kind: Int = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? MoveKind.Illegal : (absolute($local:mover) == PieceKind.King) & (absolute(move[to] - move[from]) == 2) ? MoveKind.Castle : (absolute($local:mover) == PieceKind.Pawn) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? MoveKind.EnPassant : lastLegal[move[to]] != 0 ? MoveKind.Capture : MoveKind.Quiet
-  mode: "Edge"
-  move[mover] = $local:mover
-  move[kind] = $local:kind
-  move[captured] = $local:kind == MoveKind.EnPassant ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]
-}
-
-rule "tabletop-candidate-match" {
-  when settleHold == 60
-  local changed: Int = (($board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6) ^ ($board:mask:lastLegal:-3:-2 | $board:mask:lastLegal:1:2 | $board:mask:lastLegal:5:6)) | (($board:mask:board:-5:-3 | $board:mask:board:2:5) ^ ($board:mask:lastLegal:-5:-3 | $board:mask:lastLegal:2:5)) | (($board:mask:board:-4:3) ^ ($board:mask:lastLegal:-4:3)) | (($board:mask:board:0:7) ^ ($board:mask:lastLegal:0:7))
-  local from: Int = move[from]
-  local to: Int = move[to]
-  local sign: Int = 1 - 2 * turn
-  local clear: Int = move[kind] == MoveKind.Castle ? ($local:from & 56) + ($local:to > $local:from ? 7 : 0) : move[kind] == MoveKind.EnPassant ? $local:to - 8 * $local:sign : -1
-  local rook: Int = move[kind] == MoveKind.Castle ? (($local:from + $local:to) >> 1) : -1
-  local clearUnique: Int = ($local:clear >= 0) & ($local:clear < 64) & ($local:clear != $local:from) & ($local:clear != $local:to)
-  local rookUnique: Int = ($local:rook >= 0) & ($local:rook < 64) & ($local:rook != $local:from) & ($local:rook != $local:to) & ($local:rook != $local:clear)
-  local footprint: Int = (($local:from >= 0) * (1 << maximum($local:from, 0))) | (($local:to >= 0) * (1 << maximum($local:to, 0))) | ($local:clearUnique * (1 << clamp($local:clear, 0, 63))) | ($local:rookUnique * (1 << clamp($local:rook, 0, 63)))
-  local landed: Int = (absolute(move[mover]) == PieceKind.Pawn) & ($local:to / 8 == (turn == TurnColor.White ? 7 : 0)) ? board[move[to]] : move[mover]
-  mode: "Edge"
-  boardMismatch = setBitCount($local:changed & ~$local:footprint) + ($local:from >= 0) * (board[move[from]] != 0) + ($local:to >= 0) * (board[move[to]] != $local:landed) + $local:clearUnique * (board[($local:clear)] != 0) + $local:rookUnique * (board[($local:rook)] != 4 * $local:sign)
-  boardChanged = setBitCount($local:changed)
-}
-
-rule "tabletop-castle-transit-attacked" {
-  when settleHold == 60 and move[kind] == MoveKind.Castle
-  mode: "Edge"
-  castleTransitAttacked[wk] = (($board:mask:lastLegal:-1:-1 & 0x5000) != 0) | (($board:mask:lastLegal:-2:-2 & 0x508800) != 0) | (($board:mask:lastLegal:-6:-6 & 0x7050) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]
-  castleTransitAttacked[wq] = (($board:mask:lastLegal:-1:-1 & 0x1400) != 0) | (($board:mask:lastLegal:-2:-2 & 0x142200) != 0) | (($board:mask:lastLegal:-6:-6 & 0x1C14) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]
-  castleTransitAttacked[bk] = (($board:mask:lastLegal:1:1 & byteSwap(0x5000)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x508800)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x7050)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[61] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[61] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[61]
-  castleTransitAttacked[bq] = (($board:mask:lastLegal:1:1 & byteSwap(0x1400)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x142200)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x1C14)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[59] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[59] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[59]
-}
-
-rule "tabletop-castle-legal" {
-  when settleHold == 60
-  local sign: Int = 1 - 2 * turn
-  local home: Int = 4 + 56 * turn
-  local direction: Int = move[to] > move[from] ? 1 : -1
-  local rook: Int = $local:home + ($local:direction == 1 ? 3 : -4)
-  local right: Int = ($local:direction == 1 ? 2 : 1) << (2 * turn)
-  local path: Int = $local:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]
-  local attacked: Int = turn == TurnColor.White ? ($local:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($local:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
-  mode: "Edge"
-  castleLegal = (move[kind] == MoveKind.Castle) & (move[from] == $local:home) & (move[to] == $local:home + 2 * $local:direction) & ((castleRights & $local:right) == 0) & (lastLegal[($local:rook)] == PieceKind.Rook * $local:sign) & ($local:path == $local:rook) & (previousInCheck[turn[$value]] == 0) & ($local:attacked == 0)
-}
-
-rule "tabletop-shape-final" {
-  when settleHold == 60
-  local piece: Int = absolute(move[mover])
-  local dx: Int = absolute(move[to] % 8 - move[from] % 8)
-  local dy: Int = (move[to] / 8 - move[from] / 8) * (1 - 2 * turn)
-  local straight: Int = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])
-  local diagonal: Int = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])
-  local middle: Int = move[from] + 8 * (1 - 2 * turn)
-  local pawn: Int = ($local:dx == 0) & (lastLegal[move[to]] == 0) & maximum($local:dy == 1, ($local:dy == 2) & (move[from] / 8 == (turn == TurnColor.White ? 1 : 6)) & (lastLegal[($local:middle)] == 0)) | ($local:dx == 1) & ($local:dy == 1) & maximum(move[kind] == MoveKind.Capture, (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))
-  mode: "Edge"
-  shapeLegal = $local:piece == PieceKind.Pawn ? $local:pawn : $local:piece == PieceKind.Knight ? $local:dx * absolute($local:dy) == 2 : $local:piece == PieceKind.Bishop ? $local:diagonal : $local:piece == PieceKind.Rook ? $local:straight : $local:piece == PieceKind.Queen ? maximum($local:diagonal, $local:straight) : $local:piece == PieceKind.King ? maximum((maximum($local:dx, absolute($local:dy)) == 1) & (move[kind] != MoveKind.Castle), castleLegal) : 0
-}
-
-rule "tabletop-check-white" {
-  when settleHold == 60
-  local kingMask: Int = lowestSetBit($board:mask:board:6:6)
-  local kingSquare: Int = $local:kingMask == 0 ? -1 : trailingZeroCount($local:kingMask)
-  local nearFiles: Int = boardShift($local:kingMask, chessBoard, E) | boardShift($local:kingMask, chessBoard, W)
-  local farFiles: Int = (boardShift($local:nearFiles, chessBoard, E) | boardShift($local:nearFiles, chessBoard, W)) & ~$local:kingMask
-  local kingBand: Int = $local:kingMask | $local:nearFiles
-  local closeHit: Int = ((boardShift($local:nearFiles, chessBoard, S) & $board:mask:board:-1:-1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:board:-6:-6)) != 0
-  local knightHit: Int = ((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:board:-2:-2) != 0
-  local slideHit: Int = ($local:kingMask != 0) & (`$board:attacks:board:-5:-4:N,S,E,W`[($local:kingSquare)] | `$board:attacks:board:-3:-3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:board:-5:-5:NE,SE,SW,NW`[($local:kingSquare)])
-  mode: "Edge"
-  inCheck[0] = $local:closeHit | $local:knightHit | $local:slideHit
-}
-
-rule "tabletop-check-black" {
-  when settleHold == 60
-  local kingMask: Int = lowestSetBit($board:mask:board:-6:-6)
-  local kingSquare: Int = $local:kingMask == 0 ? -1 : trailingZeroCount($local:kingMask)
-  local nearFiles: Int = boardShift($local:kingMask, chessBoard, E) | boardShift($local:kingMask, chessBoard, W)
-  local farFiles: Int = (boardShift($local:nearFiles, chessBoard, E) | boardShift($local:nearFiles, chessBoard, W)) & ~$local:kingMask
-  local kingBand: Int = $local:kingMask | $local:nearFiles
-  local closeHit: Int = ((boardShift($local:nearFiles, chessBoard, N) & $board:mask:board:1:1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:board:6:6)) != 0
-  local knightHit: Int = ((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:board:2:2) != 0
-  local slideHit: Int = ($local:kingMask != 0) & (`$board:attacks:board:4:5:N,S,E,W`[($local:kingSquare)] | `$board:attacks:board:3:3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:board:5:5:NE,SE,SW,NW`[($local:kingSquare)])
-  mode: "Edge"
-  inCheck[1] = $local:closeHit | $local:knightHit | $local:slideHit
-}
-
-rule "tabletop-game-start-check" {
-  when settleHold == 60 and gameStarted == 0 and boardCollisions == 0
-  mode: "Edge"
-  previousInCheck[0] = inCheck[0]
-  previousInCheck[1] = inCheck[1]
-  gameStarted = 1
-}
-
-rule "tabletop-verdict" {
-  when settleHold == 60
-  local sign: Int = 1 - 2 * turn
-  local promotes: Int = (absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))
-  local replacement: Int = $local:promotes ? (board[move[to]] * $local:sign >= PieceKind.Knight) & (board[move[to]] * $local:sign <= PieceKind.Queen) : board[move[to]] == move[mover]
-  local kings: Int = (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)
-  mode: "Edge"
-  verdict = (move[kind] >= MoveKind.Quiet) & (move[kind] <= MoveKind.Castle) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $local:replacement & (move[mover] * $local:sign > 0) & (move[captured] * $local:sign <= 0) & (inCheck[turn[$value]] == 0) & $local:kings
-  promotionPending[0] = boardChanged == 0 ? -1 : promotionPending[0]
-  promotionPending[1] = boardChanged == 0 ? -1 : promotionPending[1]
-}
-
-rule "tabletop-promotion-pending" {
-  when settleHold == 60 and verdict == 0 and (((absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)) == 1 : Int)
-  mode: "Edge"
-  promotionPending[turn[$value]] = move[to]
-}
-
-rule "tabletop-advance-turn" {
-  when settleHold == 60 and verdict == 1 and move[kind] != MoveKind.Illegal
-  local lostRooks: Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
-  local lostKings: Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
-  mode: "Edge"
-  transaction {
-    castleRights = castleRights | parallelBitExtract($local:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($local:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
+  rule "tabletop-game-start-snapshot" {
+    when gameStarted == 0 and boardCollisions == 0
     transform boardCombine(left: "board", operation: "Copy", row: "lastLegal")
+  }
+
+  rule "tabletop-candidate-cells" {
+    local ownBefore: Int = turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1
+    local ownAfter: Int = turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1
+    local sources: Int = $local:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)
+    local destinations: Int = $local:ownAfter & ~$local:ownBefore
+    local kingBefore: Int = turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6
+    local kingAfter: Int = turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6
+    local target: Int = ($local:sources & $local:kingBefore) != 0 ? $local:destinations & $local:kingAfter : $local:destinations
+    move[from] = $local:sources == 0 ? -1 : trailingZeroCount(($local:sources & $local:kingBefore) != 0 ? $local:sources & $local:kingBefore : $local:sources)
+    move[to] = $local:target == 0 ? -1 : trailingZeroCount($local:target)
+  }
+
+  rule "tabletop-candidate-move" {
+    local mover: Int = lastLegal[move[from]]
+    local kind: Int = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? MoveKind.Illegal : (absolute($local:mover) == PieceKind.King) & (absolute(move[to] - move[from]) == 2) ? MoveKind.Castle : (absolute($local:mover) == PieceKind.Pawn) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? MoveKind.EnPassant : lastLegal[move[to]] != 0 ? MoveKind.Capture : MoveKind.Quiet
+    move[mover] = $local:mover
+    move[kind] = $local:kind
+    move[captured] = $local:kind == MoveKind.EnPassant ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]
+  }
+
+  // Search relocates the primary token; these hypothetical-only rules complete
+  // the compound move before the same validator used for physical play judges it.
+  rule "tabletop-search-en-passant" {
+    when ((($search:ply > 0) & (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (pieceCell[$each] == move[to] - 8 * (1 - 2 * turn))) == 1 : Int)
+    forEach: "pieceCode"
+    pieceCell[$each] = -1
+  }
+
+  rule "tabletop-search-castle" {
+    when ((($search:ply > 0) & (move[kind] == MoveKind.Castle) & (pieceCell[$each] == (move[from] & 56) + (move[to] > move[from] ? 7 : 0)) & (pieceCode[$each] == 4 * (1 - 2 * turn))) == 1 : Int)
+    forEach: "pieceCode"
+    pieceCell[$each] = (move[from] + move[to]) >> 1
+  }
+
+  rule "tabletop-search-promotion" {
+    when ((($search:ply > 0) & (absolute(move[mover]) == PieceKind.Pawn) & (pieceCell[$each] == move[to]) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))) == 1 : Int)
+    forEach: "pieceCode"
+    pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
+  }
+
+  rule "tabletop-candidate-match" {
+    local changed: Int = (($board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6) ^ ($board:mask:lastLegal:-3:-2 | $board:mask:lastLegal:1:2 | $board:mask:lastLegal:5:6)) | (($board:mask:board:-5:-3 | $board:mask:board:2:5) ^ ($board:mask:lastLegal:-5:-3 | $board:mask:lastLegal:2:5)) | (($board:mask:board:-4:3) ^ ($board:mask:lastLegal:-4:3)) | (($board:mask:board:0:7) ^ ($board:mask:lastLegal:0:7))
+    local from: Int = move[from]
+    local to: Int = move[to]
+    local sign: Int = 1 - 2 * turn
+    local clear: Int = move[kind] == MoveKind.Castle ? ($local:from & 56) + ($local:to > $local:from ? 7 : 0) : move[kind] == MoveKind.EnPassant ? $local:to - 8 * $local:sign : -1
+    local rook: Int = move[kind] == MoveKind.Castle ? (($local:from + $local:to) >> 1) : -1
+    local clearUnique: Int = ($local:clear >= 0) & ($local:clear < 64) & ($local:clear != $local:from) & ($local:clear != $local:to)
+    local rookUnique: Int = ($local:rook >= 0) & ($local:rook < 64) & ($local:rook != $local:from) & ($local:rook != $local:to) & ($local:rook != $local:clear)
+    local footprint: Int = (($local:from >= 0) * (1 << maximum($local:from, 0))) | (($local:to >= 0) * (1 << maximum($local:to, 0))) | ($local:clearUnique * (1 << clamp($local:clear, 0, 63))) | ($local:rookUnique * (1 << clamp($local:rook, 0, 63)))
+    local landed: Int = (absolute(move[mover]) == PieceKind.Pawn) & ($local:to / 8 == (turn == TurnColor.White ? 7 : 0)) ? board[move[to]] : move[mover]
+    boardMismatch = setBitCount($local:changed & ~$local:footprint) + ($local:from >= 0) * (board[move[from]] != 0) + ($local:to >= 0) * (board[move[to]] != $local:landed) + $local:clearUnique * (board[($local:clear)] != 0) + $local:rookUnique * (board[($local:rook)] != 4 * $local:sign)
+    boardChanged = setBitCount($local:changed)
+  }
+
+  rule "tabletop-castle-transit-attacked" {
+    when move[kind] == MoveKind.Castle
+    castleTransitAttacked[wk] = 0
+    castleTransitAttacked[wq] = 0
+    castleTransitAttacked[bk] = 0
+    castleTransitAttacked[bq] = 0
+    if turn == TurnColor.White and move[to] > move[from] {
+      castleTransitAttacked[wk] = (($board:mask:lastLegal:-1:-1 & 0x5000) != 0) | (($board:mask:lastLegal:-2:-2 & 0x508800) != 0) | (($board:mask:lastLegal:-6:-6 & 0x7050) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]
+    } else if turn == TurnColor.White {
+      castleTransitAttacked[wq] = (($board:mask:lastLegal:-1:-1 & 0x1400) != 0) | (($board:mask:lastLegal:-2:-2 & 0x142200) != 0) | (($board:mask:lastLegal:-6:-6 & 0x1C14) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]
+    } else if move[to] > move[from] {
+      castleTransitAttacked[bk] = (($board:mask:lastLegal:1:1 & byteSwap(0x5000)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x508800)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x7050)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[61] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[61] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[61]
+    } else {
+      castleTransitAttacked[bq] = (($board:mask:lastLegal:1:1 & byteSwap(0x1400)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x142200)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x1C14)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[59] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[59] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[59]
+    }
+  }
+
+  rule "tabletop-castle-legal" {
+    local sign: Int = 1 - 2 * turn
+    local home: Int = 4 + 56 * turn
+    local direction: Int = move[to] > move[from] ? 1 : -1
+    local rook: Int = $local:home + ($local:direction == 1 ? 3 : -4)
+    local right: Int = ($local:direction == 1 ? 2 : 1) << (2 * turn)
+    local attacked: Int = turn == TurnColor.White ? ($local:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($local:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
+    castleLegal = 0
+    if move[kind] == MoveKind.Castle {
+      castleLegal = (move[kind] == MoveKind.Castle) & (move[from] == $local:home) & (move[to] == $local:home + 2 * $local:direction) & ((castleRights & $local:right) == 0) & (lastLegal[($local:rook)] == PieceKind.Rook * $local:sign) & (($local:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]) == $local:rook) & (previousInCheck[turn[$value]] == 0) & ($local:attacked == 0)
+    }
+  }
+
+  rule "tabletop-shape-final" {
+    local piece: Int = absolute(move[mover])
+    local dx: Int = absolute(move[to] % 8 - move[from] % 8)
+    local dy: Int = (move[to] / 8 - move[from] / 8) * (1 - 2 * turn)
+    local middle: Int = move[from] + 8 * (1 - 2 * turn)
+    shapeLegal = 0
+    if $local:piece == PieceKind.Pawn {
+      shapeLegal = ($local:dx == 0) & (lastLegal[move[to]] == 0) & maximum($local:dy == 1, ($local:dy == 2) & (move[from] / 8 == (turn == TurnColor.White ? 1 : 6)) & (lastLegal[($local:middle)] == 0)) | ($local:dx == 1) & ($local:dy == 1) & maximum(move[kind] == MoveKind.Capture, (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))
+    } else if $local:piece == PieceKind.Knight {
+      shapeLegal = $local:dx * absolute($local:dy) == 2
+    } else if $local:piece == PieceKind.King {
+      shapeLegal = maximum((maximum($local:dx, absolute($local:dy)) == 1) & (move[kind] != MoveKind.Castle), castleLegal)
+    } else {
+      if $local:piece == PieceKind.Rook or $local:piece == PieceKind.Queen {
+        shapeLegal = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])
+      }
+      if $local:piece == PieceKind.Bishop or $local:piece == PieceKind.Queen {
+        shapeLegal = shapeLegal | (maximum(maximum(maximum($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from]))
+      }
+    }
+  }
+
+  rule "tabletop-check-white" {
+    local kingMask: Int = lowestSetBit($board:mask:board:6:6)
+    local kingSquare: Int = $local:kingMask == 0 ? -1 : trailingZeroCount($local:kingMask)
+    local nearFiles: Int = boardShift($local:kingMask, chessBoard, E) | boardShift($local:kingMask, chessBoard, W)
+    local farFiles: Int = (boardShift($local:nearFiles, chessBoard, E) | boardShift($local:nearFiles, chessBoard, W)) & ~$local:kingMask
+    local kingBand: Int = $local:kingMask | $local:nearFiles
+    local closeHit: Int = ((boardShift($local:nearFiles, chessBoard, S) & $board:mask:board:-1:-1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:board:-6:-6)) != 0
+    local knightHit: Int = ((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:board:-2:-2) != 0
+    local slideHit: Int = ($local:kingMask != 0) & (`$board:attacks:board:-5:-4:N,S,E,W`[($local:kingSquare)] | `$board:attacks:board:-3:-3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:board:-5:-5:NE,SE,SW,NW`[($local:kingSquare)])
+    inCheck[0] = $local:closeHit | $local:knightHit | $local:slideHit
+  }
+
+  rule "tabletop-check-black" {
+    local kingMask: Int = lowestSetBit($board:mask:board:-6:-6)
+    local kingSquare: Int = $local:kingMask == 0 ? -1 : trailingZeroCount($local:kingMask)
+    local nearFiles: Int = boardShift($local:kingMask, chessBoard, E) | boardShift($local:kingMask, chessBoard, W)
+    local farFiles: Int = (boardShift($local:nearFiles, chessBoard, E) | boardShift($local:nearFiles, chessBoard, W)) & ~$local:kingMask
+    local kingBand: Int = $local:kingMask | $local:nearFiles
+    local closeHit: Int = ((boardShift($local:nearFiles, chessBoard, N) & $board:mask:board:1:1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:board:6:6)) != 0
+    local knightHit: Int = ((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:board:2:2) != 0
+    local slideHit: Int = ($local:kingMask != 0) & (`$board:attacks:board:4:5:N,S,E,W`[($local:kingSquare)] | `$board:attacks:board:3:3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:board:5:5:NE,SE,SW,NW`[($local:kingSquare)])
+    inCheck[1] = $local:closeHit | $local:knightHit | $local:slideHit
+  }
+
+  rule "tabletop-game-start-check" {
+    when gameStarted == 0 and boardCollisions == 0
     previousInCheck[0] = inCheck[0]
     previousInCheck[1] = inCheck[1]
-    enPassantTarget = (absolute(move[mover]) == PieceKind.Pawn) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
-    turn = 1 - turn
-    promotionPending[0] = -1
-    promotionPending[1] = -1
+    gameStarted = 1
+    historyPending = 1
+    historyReset = 1
+  }
+
+  rule "tabletop-verdict" {
+    local sign: Int = 1 - 2 * turn
+    local promotes: Int = (absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))
+    local replacement: Int = $local:promotes ? (board[move[to]] * $local:sign >= PieceKind.Knight) & (board[move[to]] * $local:sign <= PieceKind.Queen) : board[move[to]] == move[mover]
+    local kings: Int = (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)
+    verdict = (halfmoveClock < 150) & (move[kind] >= MoveKind.Quiet) & (move[kind] <= MoveKind.Castle) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $local:replacement & (move[mover] * $local:sign > 0) & (move[captured] * $local:sign <= 0) & (inCheck[turn[$value]] == 0) & $local:kings
+    promotionPending[0] = boardChanged == 0 ? -1 : promotionPending[0]
+    promotionPending[1] = boardChanged == 0 ? -1 : promotionPending[1]
+  }
+
+  rule "tabletop-promotion-pending" {
+    when verdict == 0 and (((absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)) == 1 : Int)
+    promotionPending[turn[$value]] = move[to]
+  }
+
+  rule "tabletop-advance-turn" {
+    when verdict == 1 and move[kind] != MoveKind.Illegal
+    local lostRooks: Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
+    local lostKings: Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
+    local lostRights: Int = parallelBitExtract($local:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($local:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
+    transaction {
+      // A pawn move, capture or lost castling right makes every earlier position unreachable.
+      historyReset = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | (($local:lostRights & ~castleRights) != 0)
+      halfmoveClock = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) ? 0 : halfmoveClock + 1
+      historyPending = 1
+      castleRights = castleRights | $local:lostRights
+      transform boardCombine(left: "board", operation: "Copy", row: "lastLegal")
+      previousInCheck[0] = inCheck[0]
+      previousInCheck[1] = inCheck[1]
+      enPassantTarget = (absolute(move[mover]) == PieceKind.Pawn) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
+      turn = 1 - turn
+      promotionPending[0] = -1
+      promotionPending[1] = -1
+    }
+  }
+
+  // Exact position identity: four injective piece-code bitplanes, plus side to
+  // move, castling rights, and an en-passant target only when a legal capture exists.
+  // The 75-move limit ends play after 150 reversible plies, so 151 positions
+  // include the initial position and every possible repetition without eviction.
+  rule "tabletop-history-prepare" {
+    when historyPending == 1
+    repetitionEnPassant = -1
+    if historyReset == 1 {
+      historyLength = 0
+    }
+  }
+
+  rule "tabletop-history-en-passant-west" {
+    when historyPending == 1 and enPassantTarget >= 0
+    local sign: Int = 1 - 2 * turn
+    local source: Int = enPassantTarget - 8 * $local:sign + (-1)
+    local victim: Int = enPassantTarget - 8 * $local:sign
+    local kingMask: Int = turn == TurnColor.White ? $board:mask:board:6:6 : $board:mask:board:-6:-6
+    local kingSquare: Int = trailingZeroCount($local:kingMask)
+    local nearFiles: Int = boardShift($local:kingMask, chessBoard, E) | boardShift($local:kingMask, chessBoard, W)
+    local farFiles: Int = (boardShift($local:nearFiles, chessBoard, E) | boardShift($local:nearFiles, chessBoard, W)) & ~$local:kingMask
+    local kingBand: Int = $local:kingMask | $local:nearFiles
+    if ((($local:source >= 0) & ($local:source < 64) & ($local:source / 8 == $local:victim / 8) & (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) & (board[($local:source)] == $local:sign) & (board[($local:victim)] == -$local:sign) & (board[enPassantTarget[$value]] == 0) & (setBitCount($local:kingMask) == 1)) == 1 : Int) {
+      transform boardCombine(left: "board", operation: "Copy", row: "enPassantProbe")
+      enPassantProbe[($local:source)] = 0
+      enPassantProbe[($local:victim)] = 0
+      enPassantProbe[enPassantTarget[$value]] = $local:sign
+      if turn == TurnColor.White {
+        enPassantProbeCheck = ((boardShift($local:nearFiles, chessBoard, S) & $board:mask:enPassantProbe:-1:-1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:enPassantProbe:-6:-6)) != 0
+        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:enPassantProbe:-2:-2) != 0)
+        enPassantProbeCheck = enPassantProbeCheck | `$board:attacks:enPassantProbe:-5:-4:N,S,E,W`[($local:kingSquare)] | `$board:attacks:enPassantProbe:-3:-3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:enPassantProbe:-5:-5:NE,SE,SW,NW`[($local:kingSquare)]
+      } else {
+        enPassantProbeCheck = ((boardShift($local:nearFiles, chessBoard, N) & $board:mask:enPassantProbe:1:1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:enPassantProbe:6:6)) != 0
+        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:enPassantProbe:2:2) != 0)
+        enPassantProbeCheck = enPassantProbeCheck | `$board:attacks:enPassantProbe:4:5:N,S,E,W`[($local:kingSquare)] | `$board:attacks:enPassantProbe:3:3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:enPassantProbe:5:5:NE,SE,SW,NW`[($local:kingSquare)]
+      }
+      if enPassantProbeCheck == 0 {
+        repetitionEnPassant = enPassantTarget
+      }
+    }
+  }
+
+  rule "tabletop-history-en-passant-east" {
+    when historyPending == 1 and enPassantTarget >= 0
+    local sign: Int = 1 - 2 * turn
+    local source: Int = enPassantTarget - 8 * $local:sign + (1)
+    local victim: Int = enPassantTarget - 8 * $local:sign
+    local kingMask: Int = turn == TurnColor.White ? $board:mask:board:6:6 : $board:mask:board:-6:-6
+    local kingSquare: Int = trailingZeroCount($local:kingMask)
+    local nearFiles: Int = boardShift($local:kingMask, chessBoard, E) | boardShift($local:kingMask, chessBoard, W)
+    local farFiles: Int = (boardShift($local:nearFiles, chessBoard, E) | boardShift($local:nearFiles, chessBoard, W)) & ~$local:kingMask
+    local kingBand: Int = $local:kingMask | $local:nearFiles
+    if ((($local:source >= 0) & ($local:source < 64) & ($local:source / 8 == $local:victim / 8) & (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) & (board[($local:source)] == $local:sign) & (board[($local:victim)] == -$local:sign) & (board[enPassantTarget[$value]] == 0) & (setBitCount($local:kingMask) == 1)) == 1 : Int) {
+      transform boardCombine(left: "board", operation: "Copy", row: "enPassantProbe")
+      enPassantProbe[($local:source)] = 0
+      enPassantProbe[($local:victim)] = 0
+      enPassantProbe[enPassantTarget[$value]] = $local:sign
+      if turn == TurnColor.White {
+        enPassantProbeCheck = ((boardShift($local:nearFiles, chessBoard, S) & $board:mask:enPassantProbe:-1:-1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:enPassantProbe:-6:-6)) != 0
+        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:enPassantProbe:-2:-2) != 0)
+        enPassantProbeCheck = enPassantProbeCheck | `$board:attacks:enPassantProbe:-5:-4:N,S,E,W`[($local:kingSquare)] | `$board:attacks:enPassantProbe:-3:-3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:enPassantProbe:-5:-5:NE,SE,SW,NW`[($local:kingSquare)]
+      } else {
+        enPassantProbeCheck = ((boardShift($local:nearFiles, chessBoard, N) & $board:mask:enPassantProbe:1:1) | (($local:kingBand | boardShift($local:kingBand, chessBoard, S) | boardShift($local:kingBand, chessBoard, N)) & $board:mask:enPassantProbe:6:6)) != 0
+        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift($local:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($local:nearFiles, chessBoard, N), chessBoard, N) | boardShift($local:farFiles, chessBoard, S) | boardShift($local:farFiles, chessBoard, N)) & $board:mask:enPassantProbe:2:2) != 0)
+        enPassantProbeCheck = enPassantProbeCheck | `$board:attacks:enPassantProbe:4:5:N,S,E,W`[($local:kingSquare)] | `$board:attacks:enPassantProbe:3:3:NE,SE,SW,NW`[($local:kingSquare)] | `$board:attacks:enPassantProbe:5:5:NE,SE,SW,NW`[($local:kingSquare)]
+      }
+      if enPassantProbeCheck == 0 {
+        repetitionEnPassant = enPassantTarget
+      }
+    }
+  }
+
+  rule "tabletop-board-history" {
+    when historyPending == 1
+    push boardHistory0 = $board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6
+    push boardHistory1 = $board:mask:board:-5:-3 | $board:mask:board:2:5
+    push boardHistory2 = $board:mask:board:-4:3
+    push boardHistory3 = $board:mask:board:0:6
+    push boardHistoryRights = turn | (castleRights << 1) | ((repetitionEnPassant + 1) << 5)
+    historyLength += 1
+    repetitionCount = 1
+  }
+
+  rule "tabletop-history-count" {
+    when historyPending == 1 and historyAges[$each] < historyLength
+    forEach: "historyAges"
+    if ($history:boardHistoryRights:0 == `$history:boardHistoryRights:historyAges[$each]` : Int) and ($history:boardHistory0:0 == `$history:boardHistory0:historyAges[$each]` : Int) and ($history:boardHistory1:0 == `$history:boardHistory1:historyAges[$each]` : Int) and ($history:boardHistory2:0 == `$history:boardHistory2:historyAges[$each]` : Int) and ($history:boardHistory3:0 == `$history:boardHistory3:historyAges[$each]` : Int) {
+      repetitionCount += 1
+    }
+  }
+
+  rule "tabletop-history-finish" {
+    when historyPending == 1
+    historyPending = 0
+  }
+
+  rule "tabletop-apply-illegal" {
+    when verdict == 0 and move[kind] != MoveKind.Illegal and boardMismatch == 0 and promotionPending[0] == -1 and promotionPending[1] == -1
+    illegalCount += 1
   }
 }
 
-rule "tabletop-board-history" {
-  when settleHold == 60 and verdict == 1 and move[kind] != MoveKind.Illegal
-  mode: "Edge"
-  push boardHistory = $board:canonical:board
-  repetitionCount = 1 + ($history:boardHistory:0 == $history:boardHistory:2) + ($history:boardHistory:0 == $history:boardHistory:4) + ($history:boardHistory:0 == $history:boardHistory:6) + ($history:boardHistory:0 == $history:boardHistory:8) + ($history:boardHistory:0 == $history:boardHistory:10)
+rule "chess-ai-evaluate" {
+  when $search:ply > 0
+  mode: "Level"
+  ai[evaluation] = 100 * (setBitCount($board:mask:board:1:1) - setBitCount($board:mask:board:-1:-1))
+  ai[evaluation] += 320 * (setBitCount($board:mask:board:2:2) - setBitCount($board:mask:board:-2:-2))
+  ai[evaluation] += 330 * (setBitCount($board:mask:board:3:3) - setBitCount($board:mask:board:-3:-3))
+  ai[evaluation] += 500 * (setBitCount($board:mask:board:4:4) - setBitCount($board:mask:board:-4:-4))
+  ai[evaluation] += 900 * (setBitCount($board:mask:board:5:5) - setBitCount($board:mask:board:-5:-5))
+  ai[evaluation] += 12 * (setBitCount($board:mask:board:1:3 & 0x00003C3C3C3C0000) - setBitCount($board:mask:board:-3:-1 & 0x00003C3C3C3C0000))
+  ai[evaluation] += 8 * (setBitCount($board:mask:board:1:1 & 0x00FFFFFF00000000) - setBitCount($board:mask:board:-1:-1 & 0x00000000FFFFFF00))
 }
 
-rule "tabletop-apply-illegal" {
-  when settleHold == 60 and verdict == 0 and move[kind] != MoveKind.Illegal and boardMismatch == 0 and promotionPending[0] == -1 and promotionPending[1] == -1
-  mode: "Edge"
-  illegalCount += 1
+// Optional opponent: aiSide = -1 disables it, 0 plays White, 1 plays Black.
+// A completed answer belongs to exactly one settled physical position. Search
+// never moves bodies; the live apply path acts once, then lets physics settle
+// and the ordinary validator accept the resulting board.
+rule "chess-ai-revision" {
+  // Keep identity as well as geometry: exchanging two same-kind pieces still
+  // invalidates a token-indexed answer. A saved piece packs square + 1 in
+  // seven bits and code + 6 above it; metadata also fits in one exact Int.
+  local metadata: Int = turn | (castleRights << 1) | ((enPassantTarget + 1) << 5) | (halfmoveClock << 12) | (repetitionCount << 20) | (previousInCheck[0] << 27) | (previousInCheck[1] << 28)
+  local pieceState: Int = (pieceCell[$each] + 1) | ((pieceCode[$each] + 6) << 7)
+  when settleHold == 60 and $physics:quiescent == 1 and ($local:pieceState != aiBefore[$each] or $local:metadata != ai[metadata])
+  mode: "Level"
+  forEach: "pieceCode"
+  aiBefore[$each] = $local:pieceState
+  ai[metadata] = $local:metadata
+  aiRevision += 1
+}
+
+rule "chess-ai-enable" {
+  mode: "Level"
+  aiEnabled = (aiSide == turn) & ($physics:quiescent == 1) & (settleHold == 60) & (gameStarted == 1) & (boardCollisions == 0) & ((verdict == 1) | (boardChanged == 0)) & (halfmoveClock < 150) & (repetitionCount < 5)
+}
+
+rule "chess-ai-request" {
+  when (((aiEnabled == 1) & (aiBest[revision] == aiRevision) & (aiBest[token] == pieceOrdinal[$each]) & (aiBest[to] >= 0) & (aiBest[to] < 64) & ($physics:quiescent == 1)) == 1 : Int)
+  mode: "Level"
+  forEach: "pieceCode"
+  ai[from] = pieceCell[$each]
+  ai[to] = aiBest[to]
+  ai[mover] = pieceCode[$each]
+  ai[pending] = 1
+}
+
+rule "chess-ai-relocate" {
+  when (((ai[pending] == 1)) == 1 : Int)
+  mode: "Level"
+  forEach: "pieceCode"
+  if (((pieceCell[$each] == ai[to])) == 1 : Int) {
+    pieceCell[$each] = -1
+  } else if (((pieceCell[$each] == ai[from])) == 1 : Int) {
+    pieceCell[$each] = ai[to]
+    if (((absolute(ai[mover]) == PieceKind.Pawn) & (ai[to] / 8 == (turn == TurnColor.White ? 7 : 0))) == 1 : Int) {
+      pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
+    }
+  } else if (((absolute(ai[mover]) == PieceKind.Pawn) & (ai[to] == enPassantTarget) & ((ai[from] & 7) != (ai[to] & 7)) & (pieceCell[$each] == ai[to] - 8 * (1 - 2 * turn))) == 1 : Int) {
+    pieceCell[$each] = -1
+  } else if (((absolute(ai[mover]) == PieceKind.King) & (absolute(ai[to] - ai[from]) == 2) & (pieceCell[$each] == (ai[from] & 56) + (ai[to] > ai[from] ? 7 : 0))) == 1 : Int) {
+    pieceCell[$each] = (ai[from] + ai[to]) >> 1
+  }
+}
+
+for i in range(0, 32) {
+  rule $"chess-ai-place-{i}" {
+    gate: compareValue(kind: "Int", comparison: "Equal", left: $"(ai[pending] == 1) & (pieceCell[piece{i}] != ((aiBefore[piece{i}] & 127) - 1)) & (pieceCell[piece{i}] >= 0)", right: "1")
+    mode: "Level"
+    poseCell(key: $"placement:piece{i}", topology: "chessBoard", expression: $"pieceCell[piece{i}]", offset: [0, 0.3, 0])
+  }
+  rule $"chess-ai-capture-{i}" {
+    gate: compareValue(kind: "Int", comparison: "Equal", left: $"(ai[pending] == 1) & (pieceCell[piece{i}] != ((aiBefore[piece{i}] & 127) - 1)) & (pieceCell[piece{i}] < 0)", right: "1")
+    mode: "Level"
+    // Each captured piece gets its own place beside the board.
+    poseCell(key: $"placement:piece{i}", topology: "chessBoard", expression: "0", offset: [-0.4 - 0.15 * (i % 4), 0.3, 0.18 * (i / 4)])
+  }
+}
+
+rule "chess-ai-finish" {
+  when (((ai[pending] == 1)) == 1 : Int)
+  mode: "Level"
+  aiBest[token] = -1
+  ai[pending] = 0
+  aiEnabled = 0
+  settleHold = 0
+}
+
+
+search {
+  jobs [
+    {
+      name: "chessAI"
+      tokens: "pieceCell"
+      board: "board"
+      turn: "turn"
+      verdict: "verdict"
+      enabled: "aiEnabled"
+      revision: "aiRevision"
+      depth: 1
+      best: "aiBest"
+      // The score is from the side that just moved. One ply, automatic queen
+      // promotion, material first, then central occupation and pawn progress.
+      "score": "(2 * turn - 1) * ai[evaluation]"
+    }
+  ]
 }
 
 state {
@@ -723,264 +875,7 @@ state {
 
     row {
       capacity: 64
-      cells [
-        {
-          key: "0"
-          value: 4
-        }
-        {
-          key: "1"
-          value: 2
-        }
-        {
-          key: "2"
-          value: 3
-        }
-        {
-          key: "3"
-          value: 5
-        }
-        {
-          key: "4"
-          value: 6
-        }
-        {
-          key: "5"
-          value: 3
-        }
-        {
-          key: "6"
-          value: 2
-        }
-        {
-          key: "7"
-          value: 4
-        }
-        {
-          key: "8"
-          value: 1
-        }
-        {
-          key: "9"
-          value: 1
-        }
-        {
-          key: "10"
-          value: 1
-        }
-        {
-          key: "11"
-          value: 1
-        }
-        {
-          key: "12"
-          value: 1
-        }
-        {
-          key: "13"
-          value: 1
-        }
-        {
-          key: "14"
-          value: 1
-        }
-        {
-          key: "15"
-          value: 1
-        }
-        {
-          key: "16"
-          value: 0
-        }
-        {
-          key: "17"
-          value: 0
-        }
-        {
-          key: "18"
-          value: 0
-        }
-        {
-          key: "19"
-          value: 0
-        }
-        {
-          key: "20"
-          value: 0
-        }
-        {
-          key: "21"
-          value: 0
-        }
-        {
-          key: "22"
-          value: 0
-        }
-        {
-          key: "23"
-          value: 0
-        }
-        {
-          key: "24"
-          value: 0
-        }
-        {
-          key: "25"
-          value: 0
-        }
-        {
-          key: "26"
-          value: 0
-        }
-        {
-          key: "27"
-          value: 0
-        }
-        {
-          key: "28"
-          value: 0
-        }
-        {
-          key: "29"
-          value: 0
-        }
-        {
-          key: "30"
-          value: 0
-        }
-        {
-          key: "31"
-          value: 0
-        }
-        {
-          key: "32"
-          value: 0
-        }
-        {
-          key: "33"
-          value: 0
-        }
-        {
-          key: "34"
-          value: 0
-        }
-        {
-          key: "35"
-          value: 0
-        }
-        {
-          key: "36"
-          value: 0
-        }
-        {
-          key: "37"
-          value: 0
-        }
-        {
-          key: "38"
-          value: 0
-        }
-        {
-          key: "39"
-          value: 0
-        }
-        {
-          key: "40"
-          value: 0
-        }
-        {
-          key: "41"
-          value: 0
-        }
-        {
-          key: "42"
-          value: 0
-        }
-        {
-          key: "43"
-          value: 0
-        }
-        {
-          key: "44"
-          value: 0
-        }
-        {
-          key: "45"
-          value: 0
-        }
-        {
-          key: "46"
-          value: 0
-        }
-        {
-          key: "47"
-          value: 0
-        }
-        {
-          key: "48"
-          value: -1
-        }
-        {
-          key: "49"
-          value: -1
-        }
-        {
-          key: "50"
-          value: -1
-        }
-        {
-          key: "51"
-          value: -1
-        }
-        {
-          key: "52"
-          value: -1
-        }
-        {
-          key: "53"
-          value: -1
-        }
-        {
-          key: "54"
-          value: -1
-        }
-        {
-          key: "55"
-          value: -1
-        }
-        {
-          key: "56"
-          value: -4
-        }
-        {
-          key: "57"
-          value: -2
-        }
-        {
-          key: "58"
-          value: -3
-        }
-        {
-          key: "59"
-          value: -5
-        }
-        {
-          key: "60"
-          value: -6
-        }
-        {
-          key: "61"
-          value: -3
-        }
-        {
-          key: "62"
-          value: -2
-        }
-        {
-          key: "63"
-          value: -4
-        }
-      ]
+      cells: map(initialBoard, (code, i) => { key: $"{i}", value: code })
       domain: cellsOf(topology: "chessBoard")
       kind: "Int"
       max: 6
@@ -993,6 +888,35 @@ state {
       domain: cellsOf(topology: "chessBoard")
       kind: "Int"
       name: "plan"
+    }
+
+    table ai: Int {
+      evaluation = 0
+      metadata = -1
+      pending = 0
+      from = -1
+      to = -1
+      mover = 0
+    }
+    slot aiSide: Int = -1 bounds(minimum: -1, maximum: 1)
+    slot aiEnabled: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot aiRevision: Int = 0
+    table aiBest: Int {
+      token = -1
+      to = -1
+      score = 0
+      revision = -1
+    }
+    row {
+      name: "pieceOrdinal"
+      kind: "Int"
+      cells: map(range(0, 32), i => { key: $"piece{i}", value: i })
+    }
+    row {
+      name: "aiBefore"
+      kind: "Int"
+      capacity: 32
+      cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
     }
 
     slot turn: Int = 0 bounds(minimum: 0, maximum: 1)
@@ -1018,74 +942,22 @@ state {
       to = -1
     }
 
-    table pieceCode: Int capacity(32) bounds(minimum: -6, maximum: 6) {
-      piece0 = 4
-      piece1 = 2
-      piece2 = 3
-      piece3 = 5
-      piece4 = 6
-      piece5 = 3
-      piece6 = 2
-      piece7 = 4
-      piece8 = 1
-      piece9 = 1
-      piece10 = 1
-      piece11 = 1
-      piece12 = 1
-      piece13 = 1
-      piece14 = 1
-      piece15 = 1
-      piece16 = -1
-      piece17 = -1
-      piece18 = -1
-      piece19 = -1
-      piece20 = -1
-      piece21 = -1
-      piece22 = -1
-      piece23 = -1
-      piece24 = -4
-      piece25 = -2
-      piece26 = -3
-      piece27 = -5
-      piece28 = -6
-      piece29 = -3
-      piece30 = -2
-      piece31 = -4
+    row {
+      name: "pieceCode"
+      kind: "Int"
+      capacity: 32
+      min: -6
+      max: 6
+      cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
     }
 
-    table pieceCell: Int capacity(32) bounds(minimum: -1, maximum: 63) {
-      piece0 = -1
-      piece1 = -1
-      piece2 = -1
-      piece3 = -1
-      piece4 = -1
-      piece5 = -1
-      piece6 = -1
-      piece7 = -1
-      piece8 = -1
-      piece9 = -1
-      piece10 = -1
-      piece11 = -1
-      piece12 = -1
-      piece13 = -1
-      piece14 = -1
-      piece15 = -1
-      piece16 = -1
-      piece17 = -1
-      piece18 = -1
-      piece19 = -1
-      piece20 = -1
-      piece21 = -1
-      piece22 = -1
-      piece23 = -1
-      piece24 = -1
-      piece25 = -1
-      piece26 = -1
-      piece27 = -1
-      piece28 = -1
-      piece29 = -1
-      piece30 = -1
-      piece31 = -1
+    row {
+      name: "pieceCell"
+      kind: "Int"
+      capacity: 32
+      min: -1
+      max: 63
+      cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
     }
 
     table promotionPending: Int capacity(2) bounds(minimum: -1, maximum: 63) {
@@ -1100,13 +972,36 @@ state {
       "1" = 0
     }
 
-    row {
-      domain: ring(capacity: 12, empty: -1)
-      kind: "Int"
-      name: "boardHistory"
+    for name in ["boardHistory0", "boardHistory1", "boardHistory2", "boardHistory3", "boardHistoryRights"] {
+      row {
+        name: name
+        kind: "Int"
+        domain: ring(capacity: 151, empty: 0)
+      }
     }
 
-    slot repetitionCount: Int = 0 bounds(minimum: 0, maximum: 12)
+    row {
+      name: "historyAges"
+      kind: "Int"
+      cells: map(range(0, 75), i => { key: $"{i}", value: 2 * (i + 1) })
+    }
+
+    row {
+      name: "enPassantProbe"
+      kind: "Int"
+      capacity: 64
+      min: -6
+      max: 6
+      domain: cellsOf(topology: "chessBoard")
+    }
+
+    slot enPassantProbeCheck: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot repetitionEnPassant: Int = -1 bounds(minimum: -1, maximum: 63)
+    slot historyPending: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot historyReset: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot historyLength: Int = 0 bounds(minimum: 0, maximum: 151)
+    slot halfmoveClock: Int = 0 bounds(minimum: 0, maximum: 150)
+    slot repetitionCount: Int = 0 bounds(minimum: 0, maximum: 76)
 
     slot shapeLegal: Int = 0 bounds(minimum: 0, maximum: 1)
 
@@ -1349,5 +1244,89 @@ test "en passant capture records move kind en passant" {
     pieceCell[piece12] == 43
     pieceCell[piece19] == -1
     turn == TurnColor.Black
+  }
+}
+
+
+test "initial position counts in threefold repetition" {
+  when {
+    ticks 400
+    seat1: body.pose -7.7 1.3 11.7 0 0 0 33
+    ticks 400
+    seat1: body.pose -7.7 1.3 12.3 0 0 0 9
+    ticks 400
+    seat1: body.pose -7.5 1.3 11.3 0 0 0 33
+    ticks 400
+    seat1: body.pose -7.5 1.3 12.7 0 0 0 9
+    ticks 400
+    seat1: body.pose -7.7 1.3 11.7 0 0 0 33
+    ticks 400
+    seat1: body.pose -7.7 1.3 12.3 0 0 0 9
+    ticks 400
+    seat1: body.pose -7.5 1.3 11.3 0 0 0 33
+    ticks 400
+    seat1: body.pose -7.5 1.3 12.7 0 0 0 9
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    turn == TurnColor.White
+    repetitionCount == 3
+    historyLength == 9
+    halfmoveClock == 8
+  }
+}
+
+
+test "AI White makes one legal opening move and waits for Black" {
+  given {
+    aiSide = 0
+  }
+  when {
+    ticks 900
+  }
+  expect {
+    turn == TurnColor.Black
+    verdict == 1
+    ai[pending] == 0
+    aiEnabled == 0
+    aiBest[token] == -1
+    boardCollisions == 0
+  }
+}
+
+test "AI Black replies after a human opening" {
+  given {
+    aiSide = 1
+  }
+  when {
+    ticks 400
+    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
+    ticks 900
+  }
+  expect {
+    turn == TurnColor.White
+    ai[pending] == 0
+    aiEnabled == 0
+    aiBest[token] == -1
+    boardCollisions == 0
+  }
+}
+
+test "a stale AI answer cannot move a piece" {
+  given {
+    aiSide = 0
+    aiBest[token] = 12
+    aiBest[to] = 63
+    aiBest[revision] = 0
+  }
+  when {
+    ticks 900
+  }
+  expect {
+    turn == TurnColor.Black
+    pieceCell[piece12] != 63
+    boardCollisions == 0
+    ai[pending] == 0
   }
 }

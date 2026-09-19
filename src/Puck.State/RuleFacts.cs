@@ -82,6 +82,8 @@ public static class RuleFacts {
     /// <summary>Compares the server's own completed-tick counter — <c>compareState("$tick", greaterOrEqual, 600)</c>
     /// is "at 2.5 seconds", with no clock read anywhere.</summary>
     public const string Tick = "$tick";
+    /// <summary>The hypothetical search ply; zero during live rule evaluation.</summary>
+    public const string SearchPly = "$search:ply";
     /// <summary>The dynamic key prefix; <c>$zone:&lt;row&gt;:first|last</c> returns the endpoint member's
     /// original string key from an ordered zone in the active store. An empty zone resolves to the empty key,
     /// which reads absent and cannot address a write. The zone may be a live <c>$zones[&lt;index&gt;]</c>.</summary>

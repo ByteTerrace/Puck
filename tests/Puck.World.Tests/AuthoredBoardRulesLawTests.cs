@@ -48,10 +48,10 @@ public sealed class AuthoredBoardRulesLawTests {
         }
         return false;
     }
-    private static WorldDefinition CastlePosition(long[] before, long[] after, string ruleName, int moveKind = 4) => Fixtures.BuildDocument() with {
+    private static WorldDefinition CastlePosition(long[] before, long[] after, string ruleName, int transit, int moveKind = 4) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(
         World: [.. ChessModule.State.Where(predicate: r => (r.Name.Value is
-            "board" or "pieceCell" or "pieceCode" or "lastLegal" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked")).Select(selector: r => r.Name.Value switch {
+            "board" or "pieceCell" or "pieceCode" or "lastLegal" or "move" or "turn" or "settleHold" or "castleRights" or "castleTransitAttacked")).Select(selector: r => r.Name.Value switch {
                 "pieceCell" => r with { Cells = Tokens(board: after).Cells }, "pieceCode" => r with { Cells = Tokens(board: after).Codes },
                 "lastLegal" => Seed(
                 r,
@@ -60,9 +60,15 @@ public sealed class AuthoredBoardRulesLawTests {
                 r,
                 60
             ),
-                "move" => r with { Cells = [.. r.Cells!.Select(selector: c => c with { Value = CellValue.Int(value: ((c.Key.Value == "kind")
-        ? moveKind
-        : -1)) })] },
+                "turn" => Seed(row: r, values: (transit > 7 ? 1 : 0)),
+                "move" => r with { Cells = [.. r.Cells!.Select(selector: c => c with {
+                    Value = CellValue.Int(value: c.Key.Value switch {
+                        "kind" => moveKind,
+                        "from" => (transit > 7 ? 60 : 4),
+                        "to" => (transit + ((transit % 8 == 5) ? 1 : -1)),
+                        _ => -1,
+                    }),
+                })] },
                 _ => r,
             })],
         Lattices: [ChessModule.StateRaw!.Lattices!.Single(predicate: t => (t.Name == "chessBoard"))]
@@ -251,16 +257,18 @@ public sealed class AuthoredBoardRulesLawTests {
     public void CastleTransitAttacksReadPiecesAtEverySquare(string side, int transit, int sign) {
         var empty = new long[64];
         var fixture = new RuleArenaFixture(definition: CastlePosition(
-            empty,
-            empty,
-            "tabletop-castle-transit-attacked"
+            transit: transit,
+            before: empty,
+            after: empty,
+            ruleName: "tabletop-castle-transit-attacked"
         ));
 
         void Check(long[] board) {
             fixture.Evaluate(position: CastlePosition(
-                board,
-                board,
-                "tabletop-castle-transit-attacked"
+                transit: transit,
+                before: board,
+                after: board,
+                ruleName: "tabletop-castle-transit-attacked"
             ));
             Assert.Equal(
                 (Attacked(

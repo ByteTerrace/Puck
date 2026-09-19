@@ -108,6 +108,12 @@ public static partial class RuleCompiler {
             );
         }
 
+        if (name == RuleFacts.SearchPly) {
+            RefuseKeyOnReservedChannel(key: key, keyFieldLabel: site.KeyFieldLabel, name: name, ruleName: ruleName);
+            context.Needs.MarkVolatile();
+            return new ResolvedOperand(describe: name, operand: SearchPlyOperand.Instance);
+        }
+
         var describe = Describe(
             key: key,
             name: name

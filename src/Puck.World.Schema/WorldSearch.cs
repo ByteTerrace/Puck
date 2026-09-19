@@ -134,6 +134,8 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// seat's own entry rather than negating the reply, so no seat's gain is assumed to be another's loss (max-n).
 /// Exactly one of this and <paramref name="Score"/> is authored when a score is needed; refused with
 /// <see cref="SearchMethod.Tree"/>, whose outcome backprop alternates sign along the path.</param>
+/// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
+/// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -154,7 +156,9 @@ public sealed record WorldSearchRow(
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 256,
     WorldSearchChance? Chance = null,
-    string? Scores = null
+    string? Scores = null,
+    string? Enabled = null,
+    string? Revision = null
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -932,6 +936,16 @@ public static class WorldSearchCompilation {
                 return false;
             }
         }
+        foreach (var input in new[] { row.Enabled, row.Revision }) {
+            if (input is not null && WorldDefinitionRows.FindStateRow(rows: definition.State, name: input) is not { IsKeyed: false, Kind: CellKind.Int }) {
+                reason = $"search '{row.Name}' input '{input}' must be an integer slot";
+                return false;
+            }
+        }
+        if (row.Revision is not null && row.Best is null) {
+            reason = $"search '{row.Name}' revision requires a best output";
+            return false;
+        }
         if (row.Best is { } bestName) {
             if (WorldDefinitionRows.FindStateRow(
                 rows: definition.State,
@@ -942,9 +956,9 @@ public static class WorldSearchCompilation {
                 return false;
             }
 
-            foreach (var cell in new[] { "token", "to", "score" }) {
+            foreach (var cell in (row.Revision is null ? new[] { "token", "to", "score" } : new[] { "token", "to", "score", "revision" })) {
                 if (!bestRow.HasCell(key: cell)) {
-                    reason = $"search '{row.Name}' best '{bestName}' must declare cells 'token', 'to', and 'score'";
+                    reason = $"search '{row.Name}' best '{bestName}' must declare cell '{cell}'";
 
                     return false;
                 }
@@ -1032,6 +1046,8 @@ public static class WorldSearchCompilation {
             Method: row.Method,
             Iterations: row.Iterations,
             Chance: chance,
+            Enabled: row.Enabled,
+            Revision: row.Revision,
             Scores: row.Scores
         ) {
             Scored = (score is not null),

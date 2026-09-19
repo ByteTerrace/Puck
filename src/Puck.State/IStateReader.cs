@@ -39,6 +39,8 @@ public interface IStateReader {
     /// <summary>Gets the simulation tick the evaluation in flight answers as of — what a <see cref="StateCycle"/> or
     /// <see cref="StateDynamics"/> read is computed at.</summary>
     ulong Tick { get; }
+    /// <summary>Gets the hypothetical search ply; zero on a live host.</summary>
+    int SearchPly => 0;
     /// <summary>Gets the clocks and dynamics rows a live cell read is evaluated against. The default carries the
     /// tick pair alone, which is what a section declaring no dynamics row needs; a host whose document declares
     /// dynamics rows answers with them and with the simulation rate.</summary>

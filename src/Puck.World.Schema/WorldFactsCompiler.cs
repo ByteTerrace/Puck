@@ -453,6 +453,16 @@ public static partial class WorldFactsCompiler {
             source: CompiledValueSource.FromExpression(expression: program)
         );
     }
+    internal static IRuleEffect ResolvePoseCell(WorldEffect.PoseCell effect, string ruleName, WorldFactsCompileContext context) {
+        var body = context.ResolveBodyRef(channel: "poseCell.key", ruleName: ruleName, start: 0, tokens: effect.Key.Split(':'));
+        if (WorldTopologyCompilation.Find(context.Definition, effect.Topology) is null ||
+            !float.IsFinite(effect.Offset.X) || !float.IsFinite(effect.Offset.Y) || !float.IsFinite(effect.Offset.Z)) {
+            throw new RuleException(detail: "poseCell requires a declared topology and a finite offset", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
+        }
+        var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
+        return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
+            new FixedVector3(FixedQ4816.FromDouble(effect.Offset.X), FixedQ4816.FromDouble(effect.Offset.Y), FixedQ4816.FromDouble(effect.Offset.Z)));
+    }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;
         var index = -1;

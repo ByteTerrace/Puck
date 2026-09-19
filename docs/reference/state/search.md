@@ -63,6 +63,43 @@ A playout follows one sampled future; it is evidence for a choice, not exhaustiv
 proof that the choice is optimal. The tree has a bounded node pool and an authored
 iteration limit. Per-seat `Scores` and tree search are not combined.
 
+## Apply an opponent's answer
+
+A job can name an integer `enabled` slot. Zero pauses candidate work; changing
+it back to a nonzero value resumes against the current inputs. A job can also
+name an integer `revision` slot. Its `best` row must then include a `revision`
+cell as well as `token`, `to`, and `score`. The runtime copies the input revision
+into the completed answer. Increment the input revision when accepting a new
+position, and apply an answer only while both revisions match. Disabling a job
+does not erase its previous output, so the apply rule must also check the enable
+condition.
+
+Pure judge rules can read `$search:ply`: it is zero on the live world host and
+the candidate's depth on a search host. This lets a game's judge finish compound
+candidates, such as moving the rook for castling, before validating them. Those
+changes remain inside the candidate scope and are rewound with it. Physical
+effects still run only on the live host. The `poseCell` world effect places a
+body at a live topology cell plus an authored offset, resolving the topology's
+current board anchor before moving the body.
+
+### Chess opponent
+
+The chess world keeps two-human play as its default. Set its `aiSide` slot from
+the console to choose the opponent:
+
+```text
+world.state.cell.set aiSide $value 1
+```
+
+Use `0` for an opponent playing White, `1` for Black, or `-1` to disable it.
+The opponent waits for a settled, legal board, evaluates legal moves using
+material, central occupation, and pawn progress, then moves the physical pieces.
+Castling moves both pieces, captures move the victim beside the board, and en
+passant removes the correct pawn. Promotion chooses a queen. The evaluator is
+one ply deep: it is a basic opponent and does not anticipate the opponent's
+reply or search underpromotions. Its promoted pawn retains its physical pawn
+model; `pieceCode` carries the new queen identity.
+
 ## Account for chance
 
 A `SearchChancePlan` supplies a bounded table of possible values and weights.

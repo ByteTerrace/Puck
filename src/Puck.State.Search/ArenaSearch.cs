@@ -217,6 +217,7 @@ public sealed partial class ArenaSearch {
     private bool m_stampFolded;
     private ulong m_stampValue;
     private ulong[] m_stampVersions = [];
+    private CellKey m_bestRevisionKey;
     private CellKey m_bestScoreKey;
     private CellKey m_bestTargetKey;
     private CellKey m_bestTokenKey;
@@ -241,6 +242,8 @@ public sealed partial class ArenaSearch {
     // catalog, so they are re-resolved on every install rather than held from construction.
     private void ResolveCatalogKeys() {
         var keys = m_arena.Catalog.Keys;
+
+        _ = keys.TryResolve(key: out m_bestRevisionKey, name: CellName.Parse(candidate: "revision"));
 
         _ = keys.TryResolve(
             key: out m_bestScoreKey,
@@ -324,7 +327,7 @@ public sealed partial class ArenaSearch {
             }
             if (
                 (plan.BestOrdinal >= 0) &&
-                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid)
+                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid || (plan.RevisionOrdinal >= 0 && !m_bestRevisionKey.IsValid))
             ) {
                 reason = $"search '{plan.Name}' writes a best-move row, and this catalog interns no 'token', 'to', and 'score' keys to address it by";
 
@@ -390,6 +393,9 @@ public sealed partial class ArenaSearch {
         var stamp = Stamp();
 
         foreach (var job in m_jobs) {
+            if (job.Plan.EnabledOrdinal >= 0 && Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L) {
+                continue;
+            }
             if (job.Stamp != stamp) {
                 Restart(
                     job: job,
@@ -506,6 +512,8 @@ public sealed partial class ArenaSearch {
             plan.TokensOrdinal,
             plan.TurnOrdinal,
             plan.VerdictOrdinal,
+            plan.EnabledOrdinal >= 0 ? plan.EnabledOrdinal : plan.TurnOrdinal,
+            plan.RevisionOrdinal >= 0 ? plan.RevisionOrdinal : plan.TurnOrdinal,
             ((plan.ScoresOrdinal >= 0)
                 ? plan.ScoresOrdinal
                 : plan.TurnOrdinal),
@@ -845,6 +853,13 @@ public sealed partial class ArenaSearch {
             }
         }
         if (plan.BestOrdinal >= 0) {
+            if (plan.RevisionOrdinal >= 0) {
+                m_outputs.Add(item: new ArenaSearchWrite.Cell(
+                    Key: m_bestRevisionKey,
+                    RowOrdinal: plan.BestOrdinal,
+                    Value: Slot(rowOrdinal: plan.RevisionOrdinal)
+                ));
+            }
             m_outputs.Add(item: new ArenaSearchWrite.Cell(
                 Key: m_bestTokenKey,
                 RowOrdinal: plan.BestOrdinal,

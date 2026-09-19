@@ -49,6 +49,8 @@ public sealed record ArenaSearchChancePlan(int RowOrdinal, int AtDepth, int Cell
 /// <param name="ScoresOrdinal">The keyed row holding one score per seat, in the turn row's own ordinal order, or
 /// <c>-1</c>; a level maximizes the mover seat's own entry rather than negating the reply.</param>
 /// <param name="DrawSeed">The draw stream a <see cref="SearchMethod.Tree"/> job's playouts advance from.</param>
+/// <param name="EnabledOrdinal">The enabling slot, or -1 for always enabled.</param>
+/// <param name="RevisionOrdinal">The position revision slot copied into the best output, or -1.</param>
 public sealed record ArenaSearchPlan(
     string Name,
     int TokensOrdinal,
@@ -74,7 +76,9 @@ public sealed record ArenaSearchPlan(
     int Iterations = 0,
     ArenaSearchChancePlan? Chance = null,
     int ScoresOrdinal = -1,
-    ulong DrawSeed = 0UL
+    ulong DrawSeed = 0UL,
+    int EnabledOrdinal = -1,
+    int RevisionOrdinal = -1
 ) {
     private static bool TryRow(StateCatalog catalog, string job, string? name, out int ordinal, out string reason) {
         ordinal = -1;
@@ -131,6 +135,8 @@ public sealed record ArenaSearchPlan(
             return false;
         }
         if (
+            !TryRow(catalog: catalog, job: plan.Name, name: plan.Enabled, ordinal: out var enabled, reason: out reason) ||
+            !TryRow(catalog: catalog, job: plan.Name, name: plan.Revision, ordinal: out var revision, reason: out reason) ||
             !TryRow(
             catalog: catalog,
             job: plan.Name,
@@ -276,6 +282,8 @@ public sealed record ArenaSearchPlan(
             LegalOrdinal: legal,
             Method: plan.Method,
             ReachOrdinal: reach,
+            EnabledOrdinal: enabled,
+            RevisionOrdinal: revision,
             ScoresOrdinal: scores
         );
         reason = string.Empty;
