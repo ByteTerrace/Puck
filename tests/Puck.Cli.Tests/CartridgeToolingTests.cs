@@ -106,10 +106,13 @@ public sealed class CartridgeToolingTests {
         input.Write(buffer: body);
         input.Position = 0;
         using var output = new MemoryStream();
+        // The server `puck lsp` builds: a source's declared schema selects its vocabulary, and a vocabulary other
+        // than the world's is diagnosed by the dispatcher.
         var server = new PuckLanguageServer(
-            input,
-            output,
-            CartridgeLanguageServices.Diagnose
+            diagnoseDocument: CartridgeLanguageServices.Diagnose,
+            input: input,
+            output: output,
+            vocabularyResolver: Puck.Cli.Transpiler.CliVocabularyResolver.Instance
         );
 
         await server.RunAsync(cancellationToken: TestContext.Current.CancellationToken);
