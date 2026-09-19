@@ -130,8 +130,10 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <param name="router">The input router that mints the session's fixed simulation ingress.</param>
     /// <param name="slot">The local seat slot.</param>
     /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
+    /// <param name="dueNextTick">Whether a simulation-routed line is due in the next tick that snapshots input
+    /// rather than at the capture clock's now (<see cref="TextCommandSession.DueNextTick"/>).</param>
     /// <returns>A text sink permanently stamped as <see cref="CommandPrincipal.Seat"/> for <paramref name="slot"/>.</returns>
-    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null) {
+    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null, bool dueNextTick = false) {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
 
@@ -146,10 +148,11 @@ public sealed class TextCommandSource : ITextCommandSink {
         }
 
         return CreateSession(
-            principal: CommandPrincipal.Seat(slot: slot),
+            dueNextTick: dueNextTick,
             onResult: onResult,
-            slot: slot,
-            simulationSink: router.CreateSeatTextSink(slot: slot)
+            principal: CommandPrincipal.Seat(slot: slot),
+            simulationSink: router.CreateSeatTextSink(slot: slot),
+            slot: slot
         );
     }
     /// <summary>Creates a text session over this source's shared queue and registry — the general form: a plain
@@ -169,9 +172,12 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <returns>A text sink permanently stamped with <paramref name="principal"/>.</returns>
     /// <param name="authorize">Optional command-metadata predicate checked before session dispatch; false refuses
     /// the command. Null adds no session-specific authorization predicate.</param>
-    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null) {
+    /// <param name="dueNextTick">Whether a simulation-routed line is due in the next tick that snapshots input
+    /// rather than at the capture clock's now (<see cref="TextCommandSession.DueNextTick"/>).</param>
+    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null, bool dueNextTick = false) {
         return new TextCommandSession(
             authorize: authorize,
+            dueNextTick: dueNextTick,
             hold: hold,
             onResult: onResult,
             principal: principal,

@@ -263,6 +263,68 @@ public sealed class TextCommandSessionTests {
         );
     }
 
+    // The capture clock is wall time. A simulation running behind it snapshots a window that closes before the
+    // clock's now, so an ordinary session's line waits for simulation time to catch up, which is a different number
+    // of ticks on every run. A scripted session's line is due in the next snapshot whatever the clock reads.
+    [Fact]
+    public void AScriptedSessionsLineIsDueInTheNextTickHoweverFarTheSimulationLagsTheClock() {
+        var seen = new List<CommandContext>();
+        var registry = new CommandRegistry(modules: [new SessionModule(seen: seen)]);
+        var clock = new LaggedClock { NowTicks = 1_000_000UL };
+        var router = new InputRouter(
+            bindings: new EmptyBindings(),
+            clock: clock,
+            principalResolver: new SeatPrincipal(),
+            registry: registry
+        );
+        var source = new TextCommandSource(registry: registry);
+
+        using var ordinary = source.CreateSeatSession(
+            router: router,
+            slot: 0
+        );
+        using var scripted = source.CreateSeatSession(
+            dueNextTick: true,
+            router: router,
+            slot: 1
+        );
+
+        Assert.False(condition: ordinary.DueNextTick);
+        Assert.True(condition: scripted.DueNextTick);
+
+        ordinary.Enqueue(line: "simulate");
+        scripted.Enqueue(line: "simulate");
+        source.Collect();
+
+        // The window closes long before the clock's now: the simulation is behind.
+        var lagging = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: 500UL
+        );
+
+        registry.ApplySnapshot(snapshot: in lagging);
+
+        Assert.Equal(
+            actual: Assert.Single(collection: seen).Slot,
+            expected: 1
+        );
+
+        var caughtUp = router.SnapshotForTick(
+            tick: 2UL,
+            windowEndTick: 2_000_000UL
+        );
+
+        registry.ApplySnapshot(snapshot: in caughtUp);
+
+        Assert.Equal(
+            actual: seen.Select(selector: static context => context.Slot),
+            expected: [1, 0]
+        );
+    }
+
+    private sealed class LaggedClock : IInputClock {
+        public ulong NowTicks { get; set; }
+    }
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }

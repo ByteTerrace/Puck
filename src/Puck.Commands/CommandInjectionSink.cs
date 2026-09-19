@@ -27,7 +27,9 @@ public sealed class CommandInjectionSink {
 
     // Queues one pre-resolved command under this sink's bound identity and lane. Internal: the registry's text path is
     // the only producer, and admitting an external one would mean admitting whatever principal it asserted.
-    internal void Inject(ushort commandId, CommandValue value, CommandPhase phase, string? text, TextSubmissionBarrier? submissionBarrier = null) {
+    // `captureTick` of zero lets the router stamp the capture clock's now; any other value is the explicit stamp a
+    // scripted ingress supplies so its landing tick does not depend on wall time.
+    internal void Inject(ushort commandId, CommandValue value, CommandPhase phase, string? text, TextSubmissionBarrier? submissionBarrier = null, ulong captureTick = 0UL) {
         m_router.Enqueue(injection: new CommandInjection(
             CommandId: commandId,
             Value: value,
@@ -35,7 +37,8 @@ public sealed class CommandInjectionSink {
             Origin: CommandOrigin.Text,
             Principal: m_principal,
             Slot: m_slot,
-            Text: text
+            Text: text,
+            CaptureTick: captureTick
         ) {
             SubmissionBarrier = submissionBarrier,
         });

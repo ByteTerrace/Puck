@@ -31,7 +31,8 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         Action<string, CommandResult>? onResult,
         Func<bool>? hold = null,
         Func<IDisposable>? scope = null,
-        Func<CommandMetadata, bool>? authorize = null
+        Func<CommandMetadata, bool>? authorize = null,
+        bool dueNextTick = false
     ) {
         m_onResult = onResult;
         m_source = source;
@@ -41,6 +42,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         SimulationSink = simulationSink;
         Slot = slot;
         Authorize = authorize;
+        DueNextTick = dueNextTick;
     }
 
     internal Func<CommandMetadata, bool>? Authorize { get; }
@@ -57,6 +59,11 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     internal Func<IDisposable>? Scope { get; }
     internal CommandInjectionSink? SimulationSink { get; }
 
+    /// <summary>Gets a value indicating whether a simulation-routed line from this ingress is due in the first tick
+    /// that snapshots input after it was submitted, whatever the capture clock reads. A scripted ingress sets it:
+    /// the capture clock is wall time, and a simulation running behind it would otherwise take the line up a
+    /// varying number of ticks later.</summary>
+    public bool DueNextTick { get; }
     /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>
     public CommandPrincipal Principal { get; }
     /// <summary>Gets the logical player slot this ingress targets.</summary>

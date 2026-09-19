@@ -118,6 +118,10 @@ grants [
 A step whose seat lacks a grant is not granted one: the run records the refusal
 and the test fails on it.
 
+A step is submitted when its tick completes and takes effect in the next one,
+on every run and on any machine: a scheduled step does not wait on the wall
+clock the way a line typed at a console does.
+
 A step's command must open with a verb a schedule admits — the state, transform,
 body and session verbs a seat can submit at an exact tick. Every verb that
 touches the process, the clock, the file system or the grant table is refused

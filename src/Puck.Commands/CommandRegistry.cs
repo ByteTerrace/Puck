@@ -1032,6 +1032,10 @@ public sealed class CommandRegistry {
 
         try {
             sink.Inject(
+                captureTick: ((session?.DueNextTick ?? false)
+                    ? InputRouter.EarliestCaptureTick
+                    : 0UL
+                ),
                 commandId: commandId,
                 value: value,
                 phase: CommandPhase.Started,
