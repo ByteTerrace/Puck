@@ -1,36 +1,16 @@
-// Hearts — four seats, one deal, a pass and thirteen tricks.
-//
-// The rules implemented are the standard four-player game as stated by Pagat
-// (https://www.pagat.com/reverse/hearts.html): a full 52-card deal, a three-card
-// pass rotating left/right/across/hold by hand number, the two of clubs leading
-// the first trick, follow suit if you can, no point card on the first trick, no
-// heart led until hearts are broken, the highest card of the led suit takes the
-// trick, one point per heart, thirteen for the queen of spades, and shooting the
-// moon (26 to one seat scores that seat zero and every other seat 26).
-//
-// A card is its own key: card id `i` is suit `i / 13` (0 clubs, 1 diamonds,
-// 2 hearts, 3 spades) and rank `i % 13 + 2` (2..14, ace high). The two of clubs
-// is card 0 and the queen of spades is card 49.
-//
-// Every rule that judges a move reads the acting seat's hand as a 52-bit mask
-// (`heartsHandMask`) rather than probing the zone for a key that may not be
-// there, so an illegal request is an ordinary closed gate and never a missing
-// table key. The mask rules stand first in the rule array and clear
-// `maskPending` in the same tick, so a judging rule gated on `maskPending == 0`
-// always reads a mask rebuilt from the hands as they folded last tick.
-//
-// The array order is the schedule: every flag is consumed by a rule declared
-// above the rule that sets it, so a stage's transforms always read a folded
-// frame rather than one this tick's earlier effect is still composing.
-
+// Physical Hearts: four seats, deterministic deals, passing, tricks and a match to 100.
+// Variant: no first-trick points unless only points remain; moon adds 26 to opponents.
+// Tied low scores share the win. The open tabletop is for local play/spectating;
+// AI decisions read only their own hand and public trick information.
 schema: "puck.world.definition.v1"
+basis: "../standard.basis.json"
 documentId: "hearts"
 
 host {
-  presentation: "None"
+  presentation: "Windowed"
   backend: "auto"
-  width: 64
-  height: 64
+  width: 1280
+  height: 960
   surfaceFormat: "r8g8b8a8"
   fullscreen: false
   presentMode: "Immediate"
@@ -38,74 +18,272 @@ host {
   exitAfterSeconds: 0
   rayQuery: false
   timing: false
-  genlock: null
-  listen: null
 }
 
+grants [
+  {
+    capability: "Mutate"
+    principal: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: "Edit"
+    principal: "seat1"
+    subject: "all"
+  }
+  {
+    capability: "Control"
+    principal: "seat1"
+    subject: "all"
+  }
+  {
+    capability: "Drive"
+    principal: "seat1"
+    subject: "all"
+  }
+]
+
 simulation {
-  rateHz: 30
+  rateHz: 60
 }
+
+channels [
+  { name: "forward", role: "MoveAdvance", shape: "Bipolar", frame: "Heading" }
+  { name: "strafe", role: "MoveStrafe", shape: "Bipolar", frame: "Heading" }
+  { name: "turn", role: "Turn", shape: "Bipolar" }
+]
+
+views {
+  layout "action" {
+    seatCount: 0
+    slots [
+      { camera: "table", height: 1, width: 1, x: 0, y: 0 }
+    ]
+    transitionRenderScale: 0.5
+    transitionSeconds: 0.4
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: "World"
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626, pitch: 0.4145, yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599)
+    ]
+  }
+}
+
+bodies {
+  capacity: 64
+  localSeats: 1
+}
+
+cameras [{
+    name: "table"
+    renderWidth: 1280
+    renderHeight: 960
+    rig {
+      name: "table"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 7.8, -5.4]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0.2]))
+        fieldOfView(fieldOfViewRadians: 0.66)
+      ]
+    }
+  }
+]
+
+bodyMotionPrograms [
+  {
+    kind: "Motion"
+    name: "walk"
+    operations [
+      "ResolveYawAttitudeAndPlanarFrame"
+      "ResolveHold"
+      "ComputePlanarTargetVelocity"
+      "ShapeVelocity"
+      "SnapYawToPlanarIntent"
+      "RunActionTriggers"
+      "ApplyHold"
+      "IntegratePlanarAndVerticalVelocity"
+      "CommitPose"
+    ]
+    version: "puck.body.program.v1"
+  }
+]
+
+collision {
+  contactSkin: 0.002
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements [
+    "SmoothUnionContact"
+  ]
+}
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: "Pairwise"
+  uniform [0, -9.8, 0]
+}
+
+kits {
+  rows [
+    {
+      bodyContact: "Solid"
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.075, 0.012, 0.105], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: "Free"
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: "Gravity"
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "piece"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.8
+        linearDamping: 0.05
+        mass: 0.02
+        restitution: 0
+        rollingFriction: 0.15
+      }
+    }
+  ]
+}
+
 
 generation {
   worldSeed: 195103
 }
 
+let seats = range(1, 4)
+let cards = range(0, 52)
+// Cell ordinals: hands 0..51, pass trays 52..63, trick 64..67, archive 68..119.
+// Archived cards have distinct spaces, avoiding unstable tall stacks.
+let seatFrame = [[0, -1.8, 1, 0], [1.8, 0, 0, 1], [0, 1.8, -1, 0], [-1.8, 0, 0, -1]]
+let handCells = reduce(range(0, 4), [], (all, seat) => concat(all, map(range(0, 13), i => {
+  id: seat * 13 + i, x: seatFrame[seat][0] + (i - 6) * 0.2 * seatFrame[seat][2],
+  z: seatFrame[seat][1] + (i - 6) * 0.25 * seatFrame[seat][3]
+}
+)
+)
+)
+let passCells = reduce(range(0, 4), [], (all, seat) => concat(all, map(range(0, 3), i => {
+  id: 52 + seat * 3 + i, x: seatFrame[seat][0] * 0.67 + (i - 1) * 0.2 * seatFrame[seat][2],
+  z: seatFrame[seat][1] * 0.67 + (i - 1) * 0.25 * seatFrame[seat][3]
+}
+)
+)
+)
+let trickCells = map(range(0, 4), seat => { id: 64 + seat, x: seatFrame[seat][0] * 0.25, z: seatFrame[seat][1] * 0.25 })
+let archiveCells = map(cards, i => { id: 68 + i, x: (i % 13 - 6) * 0.2, z: 2.35 + floor(i / 13) * 0.25 })
+let places = concat(handCells, passCells, trickCells, archiveCells)
+let ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+let suits = ["C", "D", "H", "S"]
+
+// Locals supply the candidate. Human admission and AI use the same predicate.
+derive heartsCanPlay = ($local:actor == heartsTable[turn]) * select(heartsTable[inTrick] == 0, 1, select($local:suit == heartsTable[ledSuit], 1, $local:hasLed == 0)) * select(heartsTable[inTrick] != 0, 1, select($local:suit != 2, 1, select(heartsTable[broken] == 1, 1, $local:onlyHearts))) * select(heartsTable[trickNo] != 0, 1, select($local:points == 0, 1, $local:onlyPoints)) * select(heartsTable[trickNo] != 0, 1, select(heartsTable[inTrick] != 0, 1, $local:card == 0))
+derive heartsIdle = (heartsTable[maskPending] == 0) * (heartsTable[sortPending] == 0) * (heartsTable[openPending] == 0) * (heartsTable[trickReady] == 0) * (heartsTable[collectPending] == 0) * (heartsTable[passReady] == 0) * (heartsTable[deliverPending] == 0) * (heartsAct[ready] == 0) * (heartsAct[request] == heartsAct[applied])
+
 state {
+  lattices [graph(name: "heartsPlaces", origin: [0, 0.835, 0], cellSize: 0.18,
+      cells: map(places, p => { id: $"{p[\"id\"]}", centre [p["x"], 0, p["z"]] }), directions: [{ name: "E", opposite: "W" }, { name: "W", opposite: "E" }], edges: []
+    )
+  ]
   world {
+    row {
+      name: "heartsSurface"
+      kind: "Int"
+      capacity: 120
+      domain: cellsOf(topology: "heartsPlaces")
+    }
+    for (name, index) in ["heartsExpected", "heartsPlaced", "heartsObserved", "heartsOwner", "heartsPlayedBy"] {
+      row {
+        name: name
+        kind: "Int"
+        capacity: 52
+        cells: map(cards, i => { key: $"{i}", value: select(index == 0, 68 + i, -1) })
+      }
+    }
+    table heartsOptions: Int capacity(4) {
+      aiMask = 14
+      autoDeal = 0
+      target = 100
+      pace = 30
+    }
+    table heartsPhysical: Int capacity(15) {
+      blocked = 0
+      attemptCard = -1
+      attemptTo = -1
+      settle = 0
+      changed = 0
+      card = -1
+      to = -1
+      seat = 0
+      valid = 0
+      accepted = -1
+      hand = -1
+      stage = -1
+      trick = -1
+      layout = 0
+      cursor = 0
+    }
+    table heartsPassCount: Int capacity(4) {
+      "1" = 0
+      "2" = 0
+      "3" = 0
+      "4" = 0
+    }
+    table heartsAi: Int capacity(8) {
+      candidate = -1
+      card = -1
+      seat = 0
+      score = -100000
+      clock = 0
+      moves = 0
+      to = -1
+      stamp = -1
+    }
+
     // The token domain: card id 0..51, its own key, its own value.
-    table heartsCards: Int capacity(52) {
-      "0" = 0
-      "1" = 1
-      "2" = 2
-      "3" = 3
-      "4" = 4
-      "5" = 5
-      "6" = 6
-      "7" = 7
-      "8" = 8
-      "9" = 9
-      "10" = 10
-      "11" = 11
-      "12" = 12
-      "13" = 13
-      "14" = 14
-      "15" = 15
-      "16" = 16
-      "17" = 17
-      "18" = 18
-      "19" = 19
-      "20" = 20
-      "21" = 21
-      "22" = 22
-      "23" = 23
-      "24" = 24
-      "25" = 25
-      "26" = 26
-      "27" = 27
-      "28" = 28
-      "29" = 29
-      "30" = 30
-      "31" = 31
-      "32" = 32
-      "33" = 33
-      "34" = 34
-      "35" = 35
-      "36" = 36
-      "37" = 37
-      "38" = 38
-      "39" = 39
-      "40" = 40
-      "41" = 41
-      "42" = 42
-      "43" = 43
-      "44" = 44
-      "45" = 45
-      "46" = 46
-      "47" = 47
-      "48" = 48
-      "49" = 49
-      "50" = 50
-      "51" = 51
+    row {
+      name: "heartsCards"
+      kind: "Int"
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: i })
     }
 
     // 0 clubs, 1 diamonds, 2 hearts, 3 spades.
@@ -166,59 +344,12 @@ state {
     }
 
     // The undealt pack, in card order until the deal shuffles it.
-    pile heartsDeck of heartsCards capacity(52) {
-      "0"
-      "1"
-      "2"
-      "3"
-      "4"
-      "5"
-      "6"
-      "7"
-      "8"
-      "9"
-      "10"
-      "11"
-      "12"
-      "13"
-      "14"
-      "15"
-      "16"
-      "17"
-      "18"
-      "19"
-      "20"
-      "21"
-      "22"
-      "23"
-      "24"
-      "25"
-      "26"
-      "27"
-      "28"
-      "29"
-      "30"
-      "31"
-      "32"
-      "33"
-      "34"
-      "35"
-      "36"
-      "37"
-      "38"
-      "39"
-      "40"
-      "41"
-      "42"
-      "43"
-      "44"
-      "45"
-      "46"
-      "47"
-      "48"
-      "49"
-      "50"
-      "51"
+    row {
+      name: "heartsDeck"
+      kind: "Bool"
+      capacity: 52
+      domain: keysOf(ordered: true, row: "heartsCards")
+      cells: map(range(0, 52), i => { key: $"{i}", value: true })
     }
 
     pile heartsHand[1..4] of heartsCards capacity(13)
@@ -226,40 +357,15 @@ state {
     // The three cards a seat has chosen to pass. `phaseOf` names the pass
     // protocol, so an outside gameplay transform against a pass zone carries the
     // pass generation or is refused by name.
-    row {
-      name: "heartsPass1"
-      kind: "Bool"
-      domain: keysOf(ordered: true, row: "heartsCards")
-      capacity: 3
-      cells []
-      phaseOf: "heartsPassPhase"
-    }
-
-    row {
-      name: "heartsPass2"
-      kind: "Bool"
-      domain: keysOf(ordered: true, row: "heartsCards")
-      capacity: 3
-      cells []
-      phaseOf: "heartsPassPhase"
-    }
-
-    row {
-      name: "heartsPass3"
-      kind: "Bool"
-      domain: keysOf(ordered: true, row: "heartsCards")
-      capacity: 3
-      cells []
-      phaseOf: "heartsPassPhase"
-    }
-
-    row {
-      name: "heartsPass4"
-      kind: "Bool"
-      domain: keysOf(ordered: true, row: "heartsCards")
-      capacity: 3
-      cells []
-      phaseOf: "heartsPassPhase"
+    for seat in range(1, 4) {
+      row {
+        name: $"heartsPass{seat}"
+        kind: "Bool"
+        capacity: 3
+        domain: keysOf(ordered: true, row: "heartsCards")
+        cells []
+        phaseOf: "heartsPassPhase"
+      }
     }
 
     // The cards on the table, in play order. Tagged with the trick protocol.
@@ -365,11 +471,6 @@ state {
     // The one door a player acts through: name a seat and a card, then bump the
     // request counter. `result` answers 1 accepted or -1 refused.
     //
-    // The cells below `ready` are the request resolved into plain literal-keyed
-    // numbers by `hearts-resolve`, so the rules that judge the move read no
-    // computed cell key at all. That is not decoration: a rule's declared
-    // bindings and the implicit ones a computed key mints share one sixteen-wide
-    // scratch, and only the declared half is priced (see the games README).
     table heartsAct: Int capacity(24) {
       seat = 0
       card = -1
@@ -389,9 +490,9 @@ state {
       inHand = 0
     }
 
-    table heartsTable: Int capacity(32) {
+    table heartsTable: Int capacity(40) {
       stage = 0
-      deal = 0
+      deal = 1
       handNo = 0
       passDir = 0
       turn = 0
@@ -417,6 +518,8 @@ state {
       canonRank = 0
       collectPending = 0
       moon = 0
+      winnerMask = 0
+      matchOver = 0
     }
   }
 }
@@ -430,32 +533,13 @@ rule "hearts-mask-reset" {
   heartsHandMask[4] = 0
 }
 
-rule "hearts-mask-1" {
-  when heartsTable[maskPending] == 1
-  mode: "Level"
-  forEach: "heartsHand1"
-  heartsHandMask[1] = heartsHandMask[1] | (1 << heartsCards[$each])
-}
-
-rule "hearts-mask-2" {
-  when heartsTable[maskPending] == 1
-  mode: "Level"
-  forEach: "heartsHand2"
-  heartsHandMask[2] = heartsHandMask[2] | (1 << heartsCards[$each])
-}
-
-rule "hearts-mask-3" {
-  when heartsTable[maskPending] == 1
-  mode: "Level"
-  forEach: "heartsHand3"
-  heartsHandMask[3] = heartsHandMask[3] | (1 << heartsCards[$each])
-}
-
-rule "hearts-mask-4" {
-  when heartsTable[maskPending] == 1
-  mode: "Level"
-  forEach: "heartsHand4"
-  heartsHandMask[4] = heartsHandMask[4] | (1 << heartsCards[$each])
+for seat in range(1, 4) {
+  rule $"hearts-mask-{seat}" {
+    when heartsTable[maskPending] == 1
+    mode: "Level"
+    forEach: $"heartsHand{seat}"
+    setState(state: "heartsHandMask", key: $"{seat}", expression: $"heartsHandMask[({seat})] | (1 << heartsCards[$each])")
+  }
 }
 
 rule "hearts-mask-done" {
@@ -464,60 +548,20 @@ rule "hearts-mask-done" {
   heartsTable[maskPending] = 0
 }
 
-rule "hearts-sort-hand-1" {
-  when heartsTable[sortPending] == 1
-  mode: "Level"
-  transform sortZone(row: "heartsHand1", by: [
-    {
-      row: "heartsSuit"
-    }
-    {
-      row: "heartsRank"
-    }
-  ]
-  )
-}
-
-rule "hearts-sort-hand-2" {
-  when heartsTable[sortPending] == 1
-  mode: "Level"
-  transform sortZone(row: "heartsHand2", by: [
-    {
-      row: "heartsSuit"
-    }
-    {
-      row: "heartsRank"
-    }
-  ]
-  )
-}
-
-rule "hearts-sort-hand-3" {
-  when heartsTable[sortPending] == 1
-  mode: "Level"
-  transform sortZone(row: "heartsHand3", by: [
-    {
-      row: "heartsSuit"
-    }
-    {
-      row: "heartsRank"
-    }
-  ]
-  )
-}
-
-rule "hearts-sort-hand-4" {
-  when heartsTable[sortPending] == 1
-  mode: "Level"
-  transform sortZone(row: "heartsHand4", by: [
-    {
-      row: "heartsSuit"
-    }
-    {
-      row: "heartsRank"
-    }
-  ]
-  )
+for seat in range(1, 4) {
+  rule $"hearts-sort-hand-{seat}" {
+    when heartsTable[sortPending] == 1
+    mode: "Level"
+    transform sortZone(row: $"heartsHand{seat}", by: [
+      {
+        row: "heartsSuit"
+      }
+      {
+        row: "heartsRank"
+      }
+    ]
+    )
+  }
 }
 
 rule "hearts-sort-done" {
@@ -537,32 +581,13 @@ rule "hearts-open" {
   heartsTable[openPending] = 0
 }
 
-rule "hearts-log-win-1" {
-  when heartsTable[logSeat] == 1
-  mode: "Level"
-  transform push(row: "heartsEvents", value: 1)
-  heartsTable[logSeat] = 0
-}
-
-rule "hearts-log-win-2" {
-  when heartsTable[logSeat] == 2
-  mode: "Level"
-  transform push(row: "heartsEvents", value: 2)
-  heartsTable[logSeat] = 0
-}
-
-rule "hearts-log-win-3" {
-  when heartsTable[logSeat] == 3
-  mode: "Level"
-  transform push(row: "heartsEvents", value: 3)
-  heartsTable[logSeat] = 0
-}
-
-rule "hearts-log-win-4" {
-  when heartsTable[logSeat] == 4
-  mode: "Level"
-  transform push(row: "heartsEvents", value: 4)
-  heartsTable[logSeat] = 0
+for seat in range(1, 4) {
+  rule $"hearts-log-win-{seat}" {
+    when heartsTable[logSeat] == seat
+    mode: "Level"
+    transform push(row: "heartsEvents", value: seat)
+    heartsTable[logSeat] = 0
+  }
 }
 
 // The capture standings: most tricks first, ties in seat order.
@@ -684,11 +709,17 @@ rule "hearts-pass-arrange" {
 }
 
 rule "hearts-play" {
-  when heartsTable[stage] == 3 and heartsAct[ready] == 1 and $local:legal == 1
-  local follows: Int = heartsTable[inTrick] == 0 ? 1 : (heartsAct[cardSuit] == heartsTable[ledSuit] ? 1 : ((heartsAct[mask] & heartsAct[ledMask]) == 0 ? 1 : 0))
-  local leadOk: Int = heartsTable[inTrick] != 0 ? 1 : (heartsAct[cardSuit] != 2 ? 1 : (heartsTable[broken] == 1 ? 1 : ((heartsAct[mask] & heartsSuitMask[2]) == heartsAct[mask] ? 1 : 0)))
-  local pointOk: Int = heartsTable[trickNo] != 0 ? 1 : (heartsAct[cardPoints] == 0 ? 1 : ((heartsAct[mask] & heartsPointMask) == heartsAct[mask] ? 1 : 0))
-  local legal: Int = heartsAct[seatOk] & heartsAct[inHand] & (heartsAct[seat] == heartsTable[turn] ? 1 : 0) & $local:follows & $local:leadOk & $local:pointOk & ((heartsTable[trickNo] == 0) & (heartsTable[inTrick] == 0) ? (heartsAct[safeCard] == 0 ? 1 : 0) : 1)
+  when heartsTable[stage] == 3 and heartsAct[ready] == 1 and $local:legal == 1 and heartsTable[trickNo] < 13
+  local card: Int = heartsAct[safeCard]
+  local actor: Int = heartsAct[safeSeat]
+  local mask: Int = heartsAct[mask]
+  local suit: Int = heartsAct[cardSuit]
+  local points: Int = heartsAct[cardPoints]
+  local ledMask: Int = heartsAct[ledMask]
+  local hasLed: Int = $local:mask & $local:ledMask
+  local onlyHearts: Int = ($local:mask & heartsSuitMask[2]) == $local:mask
+  local onlyPoints: Int = ($local:mask & heartsPointMask) == $local:mask
+  local legal: Int = heartsCanPlay & heartsAct[seatOk] & heartsAct[inHand]
   local takesLead: Int = (heartsTable[inTrick] == 0) | ((heartsAct[cardSuit] == heartsTable[ledSuit]) & (heartsAct[cardRank] > heartsTable[bestRank]))
   mode: "Level"
   zones [
@@ -700,6 +731,7 @@ rule "hearts-play" {
   ]
   transaction {
     transform transfer(from: "$zones[heartsAct[safeSeat]]", to: "heartsTrick", selector: "Key", key: "$cell:heartsAct:card")
+    heartsPlayedBy[(heartsAct[safeCard])] = heartsAct[safeSeat]
     heartsTable[ledSuit] = heartsTable[inTrick] == 0 ? heartsAct[cardSuit] : heartsTable[ledSuit]
     heartsTable[bestSeat] = $local:takesLead == 1 ? heartsAct[safeSeat] : heartsTable[bestSeat]
     heartsTable[bestRank] = $local:takesLead == 1 ? heartsAct[cardRank] : heartsTable[bestRank]
@@ -727,11 +759,6 @@ rule "hearts-play-refuse" {
   heartsTable[refused] += 1
 }
 
-// `held` names all four pass zones rather than selecting one through
-// `$zones[...]`: a binding whose value comes from a live zone is memoized
-// against the rows the selection resolved to LAST time, so moving the selection
-// to another seat's zone re-serves the previous seat's count and refuses a legal
-// pick (see the games README).
 rule "hearts-pass-pick" {
   when heartsTable[stage] == 1 and heartsAct[ready] == 1 and $local:legal == 1
   local held: Int = heartsAct[safeSeat] == 1 ? $reduce:count:heartsPass1 : (heartsAct[safeSeat] == 2 ? $reduce:count:heartsPass2 : (heartsAct[safeSeat] == 3 ? $reduce:count:heartsPass3 : $reduce:count:heartsPass4))
@@ -752,6 +779,7 @@ rule "hearts-pass-pick" {
   ]
   transaction {
     transform transfer(from: "$zones[heartsAct[safeSeat]]", to: "$zones[(4 + heartsAct[safeSeat])]", selector: "Key", key: "$cell:heartsAct:card")
+    heartsPassCount[(heartsAct[safeSeat])] += 1
     heartsTable[passReady] = $local:lastPick
     heartsTable[accepted] += 1
     heartsTable[maskPending] = 1
@@ -782,10 +810,6 @@ rule "hearts-stale-request" {
   heartsTable[refused] += 1
 }
 
-// The request resolved: the seat and card the door names become plain numbers
-// under literal keys, one tick before any rule judges them. Nothing downstream
-// spells a computed cell key, which is what keeps every judging rule inside the
-// sixteen-binding scratch.
 rule "hearts-resolve" {
   when heartsAct[request] != heartsAct[applied] and heartsAct[ready] == 0 and heartsTable[maskPending] == 0 and heartsTable[trickReady] == 0 and heartsTable[collectPending] == 0 and heartsTable[passReady] == 0 and heartsTable[deliverPending] == 0
   local seatOk: Int = (heartsAct[seat] >= 1) & (heartsAct[seat] <= 4)
@@ -833,6 +857,10 @@ rule "hearts-deal" {
     transform transfer(count: 13, from: "heartsDeck", selector: "First", to: "heartsHand2")
     transform transfer(count: 13, from: "heartsDeck", selector: "First", to: "heartsHand3")
     transform transfer(count: 13, from: "heartsDeck", selector: "First", to: "heartsHand4")
+    heartsPassCount[1] = 0
+    heartsPassCount[2] = 0
+    heartsPassCount[3] = 0
+    heartsPassCount[4] = 0
     heartsTable[handNo] += 1
     heartsTable[passDir] = $local:direction
     heartsTable[stage] = 1
@@ -867,4 +895,371 @@ rule "hearts-shuffle" {
     heartsTable[deal] = 0
     heartsTable[stage] = 5
   }
+}
+
+// A completed match latches all tied lowest scorers. Scores change only at hand end.
+rule "hearts-match-finish" {
+  when heartsTable[stage] == 4 and heartsTable[matchOver] == 0
+  local low: Int = minimum(minimum(heartsScore[1], heartsScore[2]), minimum(heartsScore[3], heartsScore[4]))
+  mode: "Level"
+  if (maximum(maximum(heartsScore[1], heartsScore[2]), maximum(heartsScore[3], heartsScore[4])) >= heartsOptions[target] : Int) {
+    heartsTable[matchOver] = 1
+    heartsTable[winnerMask] = (heartsScore[1] == $local:low) | ((heartsScore[2] == $local:low) << 1) | ((heartsScore[3] == $local:low) << 2) | ((heartsScore[4] == $local:low) << 3)
+  }
+}
+for seat in seats {
+  rule $"hearts-gather-{seat}" {
+    when heartsTable[stage] == 4 and heartsTable[matchOver] == 0 and (heartsTable[deal] == 1 or heartsOptions[autoDeal] == 1)
+    mode: "Level"
+    forEach: $"heartsWon{seat}"
+    transform transfer(from: $"heartsWon{seat}", selector: "Key", key: "$each", to: "heartsDeck")
+  }
+}
+rule "hearts-next-hand" {
+  when heartsTable[stage] == 4 and heartsTable[matchOver] == 0 and $reduce:count:heartsDeck == 52
+  mode: "Level"
+  heartsTable[stage] = 0
+  heartsTable[deal] = 1
+}
+
+// Layout changes are published before poseCell reads them on the following tick.
+// An illegal physical edit alone never triggers a layout or moves a legal card.
+for card in cards {
+  rule $"hearts-place-{card}" {
+    when heartsPhysical[layout] == 1 and heartsExpected[(card)] != heartsPlaced[(card)]
+    mode: "Level"
+    poseCell(key: $"placement:card{card}", topology: "heartsPlaces", expression: $"heartsExpected[{card}]", offset: [0, 0.025, 0])
+    setState(state: "heartsPlaced", key: $"{card}", expression: $"heartsExpected[({card})]")
+  }
+}
+rule "hearts-layout-done" {
+  when heartsPhysical[layout] == 1
+  mode: "Level"
+  heartsPhysical[layout] = 0
+  heartsPhysical[settle] = 0
+}
+rule "hearts-layout-request" {
+  when (heartsIdle == 1 : Int) and (heartsPhysical[accepted] != heartsTable[accepted] or heartsPhysical[hand] != heartsTable[handNo] or heartsPhysical[stage] != heartsTable[stage] or heartsPhysical[trick] != heartsTable[trickNo])
+  mode: "Level"
+  heartsPhysical[layout] = 1
+  heartsPhysical[accepted] = heartsTable[accepted]
+  heartsPhysical[hand] = heartsTable[handNo]
+  heartsPhysical[stage] = heartsTable[stage]
+  heartsPhysical[trick] = heartsTable[trickNo]
+  heartsPhysical[valid] = 0
+}
+rules "" when heartsPhysical[layout] == 1 {
+  mode: "Level"
+  rule "hearts-layout-archive" {
+    forEach: "heartsCards"
+    heartsExpected[$each] = 68 + heartsCards[$each]
+    heartsOwner[$each] = 0
+  }
+}
+for seat in seats {
+  rules "" when heartsPhysical[layout] == 1 {
+    mode: "Level"
+    rule $"hearts-layout-hand-reset-{seat}" {
+      heartsPhysical[cursor] = 0
+    }
+    rule $"hearts-layout-hand-{seat}" {
+      forEach: $"heartsHand{seat}"
+      heartsExpected[$each] = (seat - 1) * 13 + heartsPhysical[cursor]
+      heartsOwner[$each] = seat
+      heartsPhysical[cursor] += 1
+    }
+    rule $"hearts-layout-pass-reset-{seat}" {
+      heartsPhysical[cursor] = 0
+    }
+    rule $"hearts-layout-pass-{seat}" {
+      forEach: $"heartsPass{seat}"
+      heartsExpected[$each] = 52 + (seat - 1) * 3 + heartsPhysical[cursor]
+      heartsPhysical[cursor] += 1
+    }
+  }
+}
+rules "" when heartsPhysical[layout] == 1 {
+  mode: "Level"
+  rule "hearts-layout-trick" {
+    forEach: "heartsTrick"
+    heartsExpected[$each] = 63 + heartsPlayedBy[$each]
+  }
+}
+rule "hearts-rest" {
+  mode: "Level"
+  if $physics:quiescent == 1 and heartsPhysical[layout] == 0 {
+    heartsPhysical[settle] = minimum(30, heartsPhysical[settle] + 1)
+  } else {
+    heartsPhysical[settle] = 0
+    heartsPhysical[valid] = 0
+  }
+}
+rules "" when heartsPhysical[settle] == 30 and heartsPhysical[layout] == 0 and (heartsIdle == 1 : Int) {
+  mode: "Edge"
+  rule "hearts-observe-reset" {
+    heartsPhysical[changed] = 0
+    heartsPhysical[blocked] = 0
+  }
+}
+for card in cards {
+  rules "" when heartsPhysical[settle] == 30 and heartsPhysical[layout] == 0 and (heartsIdle == 1 : Int) {
+    mode: "Edge"
+    rule $"hearts-observe-{card}" {
+      setState(state: "heartsObserved", key: $"{card}", expression: $"$board:cellOf:heartsSurface:placement:card{card}")
+      if heartsObserved[(card)] != heartsExpected[(card)] {
+        heartsPhysical[changed] += 1
+        heartsPhysical[card] = card
+        heartsPhysical[to] = heartsObserved[(card)]
+        heartsPhysical[seat] = heartsOwner[(card)]
+      }
+    }
+  }
+}
+rules "" when heartsPhysical[settle] == 30 and heartsPhysical[layout] == 0 and (heartsIdle == 1 : Int) {
+  mode: "Edge"
+  rule "hearts-physical-blockers" {
+    forEach: "heartsExpected"
+    if heartsCards[$each] != heartsPhysical[card] and heartsExpected[$each] == heartsPhysical[to] {
+      heartsPhysical[blocked] += 1
+    }
+  }
+  rule "hearts-physical-submit" {
+    heartsPhysical[valid] = heartsPhysical[changed] == 0
+    if heartsPhysical[changed] == 0 {
+      heartsPhysical[attemptCard] = -1
+      heartsPhysical[attemptTo] = -1
+    }
+    if (heartsPhysical[card] != heartsPhysical[attemptCard] or heartsPhysical[to] != heartsPhysical[attemptTo]) and heartsPhysical[changed] == 1 and heartsPhysical[blocked] == 0 and heartsPhysical[seat] >= 1 and heartsPhysical[seat] <= 4 {
+      if (heartsTable[stage] == 1 and (heartsPhysical[to] >= 52 + (heartsPhysical[seat] - 1) * 3 : Int) and (heartsPhysical[to] < 55 + (heartsPhysical[seat] - 1) * 3 : Int)) or (heartsTable[stage] == 3 and (heartsPhysical[to] == 63 + heartsPhysical[seat] : Int)) {
+        heartsPhysical[attemptCard] = heartsPhysical[card]
+        heartsPhysical[attemptTo] = heartsPhysical[to]
+        heartsAct[seat] = heartsPhysical[seat]
+        heartsAct[card] = heartsPhysical[card]
+        heartsAct[request] += 1
+        // Retry only after a physical change/rest cycle, never once per tick.
+        heartsPhysical[settle] = 0
+      }
+    }
+  }
+}
+
+// The AI chooses in O(52) work, once per paced action. It dumps points when
+// safely off suit, ducks a winning rank when possible, and sheds high cards
+// on point-free last plays. Passing sheds dangerous high cards and short suits.
+// There is no access to another seat's hand in this policy.
+for card in cards {
+  rule $"hearts-ai-place-{card}" {
+    when (((heartsOptions[aiMask] >> (maximum(1, heartsAi[seat]) - 1)) & 1) == 1 : Int) and (heartsTable[stage] == 1 or (heartsTable[stage] == 3 and heartsTable[turn] == heartsAi[seat])) and heartsAi[card] == card and heartsAi[stamp] == heartsTable[accepted] and (heartsIdle == 1 : Int) and heartsPhysical[valid] == 1 and heartsPhysical[settle] == 30 and $physics:quiescent == 1
+    mode: "Level"
+    poseCell(key: $"placement:card{card}", topology: "heartsPlaces", expression: "heartsAi[to]", offset: [0, 0.025, 0])
+    heartsAi[card] = -1
+    heartsAi[clock] = 0
+    heartsAi[moves] += 1
+    heartsPhysical[settle] = 0
+    heartsPhysical[valid] = 0
+  }
+}
+rule "hearts-ai-clock" {
+  mode: "Level"
+  if heartsPhysical[valid] == 1 and (heartsIdle == 1 : Int) and heartsAi[card] == -1 {
+    heartsAi[clock] = minimum(heartsOptions[pace], heartsAi[clock] + 1)
+  } else {
+    heartsAi[clock] = 0
+  }
+  if (((heartsOptions[aiMask] >> (maximum(1, heartsAi[seat]) - 1)) & 1) == 0 : Int) or (heartsTable[stage] == 3 and heartsTable[turn] != heartsAi[seat]) or (heartsTable[stage] != 1 and heartsTable[stage] != 3) or heartsAi[stamp] != heartsTable[accepted] or (heartsIdle == 0 : Int) {
+    heartsAi[card] = -1
+  }
+}
+for seat in seats {
+  rules "" when heartsAi[clock] >= heartsOptions[pace] and heartsAi[card] == -1 and (heartsIdle == 1 : Int) and heartsPhysical[valid] == 1 and (((heartsOptions[aiMask] >> (seat - 1)) & 1) == 1 : Int) and ((heartsTable[stage] == 1 and heartsPassCount[(seat)] < 3) or (heartsTable[stage] == 3 and heartsTable[turn] == seat and heartsTable[trickNo] < 13)) {
+    mode: "Level"
+    rule $"hearts-ai-reset-{seat}" {
+      heartsAi[score] = -100000
+      heartsAi[candidate] = -1
+    }
+    rule $"hearts-ai-select-{seat}" {
+      forEach: $"heartsHand{seat}"
+      local card: Int = heartsCards[$each]
+      local actor: Int = seat
+      local suit: Int = heartsSuit[$each]
+      local rank: Int = heartsRank[$each]
+      local points: Int = heartsPenalty[$each]
+      local mask: Int = heartsHandMask[(seat)]
+      local ledMask: Int = heartsSuitMask[(maximum(0, heartsTable[ledSuit]))]
+      local hasLed: Int = $local:mask & $local:ledMask
+      local onlyHearts: Int = ($local:mask & heartsSuitMask[2]) == $local:mask
+      local onlyPoints: Int = ($local:mask & heartsPointMask) == $local:mask
+      local legal: Int = heartsCanPlay
+      local suitCount: Int = setBitCount($local:mask & heartsSuitMask[($local:suit)])
+      local risk: Int = $local:points * 30 + $local:rank * 2 + ($local:suit == 3 ? maximum(0, $local:rank - 11) * 25 : 0)
+      local score: Int = heartsTable[stage] == 1 ? $local:risk + (13 - $local:suitCount) * 5 : (heartsTable[inTrick] == 0 ? -$local:rank : ($local:suit != heartsTable[ledSuit] ? 1000 + $local:risk : ($local:rank < heartsTable[bestRank] ? 500 + $local:rank : ((heartsTable[inTrick] == 3) & (heartsTable[trickPoints] == 0) & ($local:points == 0) ? 200 + $local:rank : -$local:risk))))
+      if (heartsTable[stage] == 3 and $local:legal == 1) or (heartsTable[stage] == 1 and heartsTable[passDir] != 0) {
+        if $local:score > heartsAi[score] {
+          heartsAi[score] = $local:score
+          heartsAi[candidate] = $local:card
+          heartsAi[seat] = seat
+          heartsAi[stamp] = heartsTable[accepted]
+          heartsAi[to] = heartsTable[stage] == 1 ? 52 + (seat - 1) * 3 + heartsPassCount[(seat)] : 63 + seat
+        }
+      }
+    }
+    rule $"hearts-ai-commit-{seat}" {
+      heartsAi[card] = heartsAi[candidate]
+    }
+  }
+}
+
+looks {
+  rows: map(cards, card => {
+    name: $"card{card}", scale: 1, source: creation(prototypeId: $"card{card}")
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  }
+  )
+}
+placements {
+  placement "heartsTabletop" {
+    prototype: "heartsTabletop"
+    position [0, 0, 0]
+    solid
+  }
+  for card in cards {
+    placement $"card{card}" {
+      prototype: $"card{card}"
+      position [archiveCells[card]["x"], 0.86, archiveCells[card]["z"]]
+      inhabit {
+        count: 1
+        kit: "piece"
+        look: $"card{card}"
+        source: "Idle"
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.001)
+        }
+      }
+    }
+  }
+}
+prototypes {
+  prototype "heartsTabletop" {
+    document {
+      schema: "puck.creation.v1"
+      name: "Hearts table"
+      palette [{ color: "#513729", roughness: 0.7 }, { color: "#17564B", roughness: 0.95 }, { color: "#CBB889", roughness: 0.7 }]
+      shape Box "wood" {
+        material: 0
+        position [0, 0.72, -0.65]
+        scale [2.15, 0.09, 2.75]
+      }
+      shape Box "felt" {
+        material: 1
+        position [0, 0.805, -0.65]
+        scale [2.08, 0.01, 2.68]
+      }
+      for p in concat(passCells, trickCells) {
+        shape Box $"tray{p[\"id\"]}" {
+          material: 2
+          position [-p["x"], 0.817, -p["z"]]
+          scale [0.085, 0.002, 0.115]
+        }
+      }
+      textRuns [
+        { text: "HEARTS", position [0, 0.821, 0.10], rotation [-0.70710678, 0, 0, 0.70710678], emHeight: 0.10, depth: 0.001, material: 2, align: "center" }
+        { text: "PASS", position [0, 0.821, 1.01], rotation [-0.70710678, 0, 0, 0.70710678], emHeight: 0.06, depth: 0.001, material: 2, align: "center" }
+      ]
+    }
+  }
+  for card in cards {
+    prototype $"card{card}" {
+      document {
+        schema: "puck.creation.v1"
+        name: $"{ranks[card % 13]} {suits[floor(card / 13)]}"
+        palette [{ color: "#F4EEDC", roughness: 0.55 }, { color: select((floor(card / 13) == 1) + (floor(card / 13) == 2), "#B52E39", "#202A31"), roughness: 0.6 }, { color: "#293D70", roughness: 0.65 }]
+        shape Box "card" {
+          material: 0
+          position [0, 0, 0]
+          scale [0.075, 0.012, 0.105]
+        }
+        shape Box "back" {
+          material: 2
+          position [0, -0.012, 0]
+          scale [0.066, 0.001, 0.096]
+        }
+        // Raised suit pips remain recognizable at the full-table camera distance.
+        for mark in filter([
+          { suit: 0, x: 0, z: -0.024 }, { suit: 0, x: -0.022, z: 0.006 }, { suit: 0, x: 0.022, z: 0.006 },
+          { suit: 2, x: -0.016, z: -0.023 }, { suit: 2, x: 0.016, z: -0.023 },
+          { suit: 3, x: -0.016, z: 0.012 }, { suit: 3, x: 0.016, z: 0.012 }
+        ], mark => mark["suit"] == floor(card / 13)
+        ) {
+          shape Cylinder {
+            material: 1
+            position [mark["x"], 0.014, mark["z"]]
+            scale [0.022, 0.001, 0.022]
+          }
+        }
+        for pip in filter(range(0, 4), suit => (suit == floor(card / 13)) * (suit != 0)) {
+          shape Box "diamond" {
+            material: 1
+            position [0, 0.014, -0.005]
+            rotation [0, 0.38268343, 0, 0.92387953]
+            scale [0.025, 0.001, 0.025]
+          }
+        }
+        for stem in filter(range(0, 4), suit => (suit == floor(card / 13)) * ((suit == 0) + (suit == 3))) {
+          shape Box "stem" {
+            material: 1
+            position [0, 0.014, 0.036]
+            scale [0.007, 0.001, 0.015]
+          }
+        }
+        textRuns [
+          { text: $"{ranks[card % 13]}{suits[floor(card / 13)]}", position [0, 0.013, 0.067], rotation [-0.70710678, 0, 0, 0.70710678], emHeight: 0.045, depth: 0.001, material: 1, align: "center" }
+        ]
+      }
+    }
+  }
+}
+
+test "deal and physical cards settle" {
+  given {
+    heartsOptions[aiMask] = 0
+  }
+  when {
+    ticks 500
+  }
+  expect {
+    heartsTable[stage] == 1
+    heartsTable[handNo] == 1
+    $reduce:count:heartsHand1 == 13
+    $reduce:count:heartsHand2 == 13
+    $reduce:count:heartsHand3 == 13
+    $reduce:count:heartsHand4 == 13
+    heartsPhysical[valid] == 1
+    heartsPhysical[changed] == 0
+  }
+}
+test "four AI seats pass and play tricks" {
+  given {
+    heartsOptions[aiMask] = 15
+    heartsOptions[pace] = 1
+  }
+  when {
+    ticks 3000
+  }
+  expect {
+    heartsTable[stage] == 3
+    heartsTable[trickNo] >= 1
+    heartsTable[accepted] >= 16
+    heartsTable[refused] == 0
+    (heartsRound[1] + heartsRound[2] + heartsRound[3] + heartsRound[4] <= 26 : Int)
+  }
+}
+
+text {
+  defaultFont: "inter"
+  fonts [{ name: "inter", source: "fonts/inter-regular.ttf", hash: "sha256-64/47e488e1fc92d640", codePointRanges ["U+0020-U+007E"] }]
 }

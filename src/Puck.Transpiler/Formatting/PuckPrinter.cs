@@ -731,10 +731,14 @@ public static class PuckPrinter {
                     }
                 case DerivedStateNode derived: {
                         m_builder.Append(value: "derive ").Append(value: derived.Name).Append(value: " = ");
-                        Expression(
-                            expression: derived.Expression,
-                            level: level
-                        );
+                        // Lowering consumes this operand spelling. In a call, the generic
+                        // expression tree can mistake a reserved channel's colon for a named
+                        // argument; printing that tree would split "$local:name".
+                        if (derived.RawExpression is { } operand) {
+                            m_builder.Append(value: operand);
+                        } else {
+                            Expression(expression: derived.Expression, level: level);
+                        }
 
                         break;
                     }

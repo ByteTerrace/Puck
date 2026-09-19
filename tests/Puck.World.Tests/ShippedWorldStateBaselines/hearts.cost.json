@@ -1,24 +1,24 @@
 {
   "schema": "puck.world.state-baseline-cost.v1",
   "world": "games/hearts.world.json",
-  "simulationRateHz": 30,
-  "ticks": 288,
+  "simulationRateHz": 60,
+  "ticks": 3000,
   "workUnits": {
     "boot": {
-      "ruleRows": 33,
+      "ruleRows": 232,
       "interactionRows": 0,
-      "evaluationSlots": 81,
-      "workUnitsPerTick": 397253,
+      "evaluationSlots": 693,
+      "workUnitsPerTick": 2341328,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,
       "decisionGridPointsPerTick": 0
     },
     "final": {
-      "ruleRows": 33,
+      "ruleRows": 232,
       "interactionRows": 0,
-      "evaluationSlots": 81,
-      "workUnitsPerTick": 397253,
+      "evaluationSlots": 693,
+      "workUnitsPerTick": 2341328,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,

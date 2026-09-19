@@ -378,84 +378,66 @@ records the export after the committed sequence: twelve requests, nine of them
 accepted, three of those nine strikes—one won, one lost, one mutual—and three
 refused outright, a Bomb asked to move, a move into a lake, and a move onto one's
 own piece.
-## Hearts—the pile-ordering probe
+## Hearts—physical cards, passing and AI
 
-[hearts.puck](hearts.puck) is a standalone, self-contained document (its own
-`documentId`, headless `host.presentation: "None"`) rather than an importable
-module: four seats, one deal, a three-card pass and thirteen tricks, played
-through one console door. It is the market's probe for the four transforms that
-order a pile—`sortZone`, `sortKeyed`, `arrange`, and the history-ring
-`push`—and for the `phase`/`phaseOf` submission-protocol pair.
+[hearts.puck](hearts.puck) boots a felt table with 52 movable, rigid cards and
+four thirteen-card hands. It deals automatically. Seats two through four are
+AI opponents by default; seat one is human. This is an open table for local
+play and spectating, without private network hands. The AI reads only its own
+hand and public trick information, regardless of what the camera shows.
 
-The rules are the standard four-player game as
-[Pagat](https://www.pagat.com/reverse/hearts.html) states them: a full 52-card
-deal, a three-card pass rotating left, right, across and hold by hand number,
-the two of clubs leading the first trick, follow suit if you can, no point card
-on the first trick, no heart led until hearts are broken, the highest card of
-the led suit taking the trick, one point per heart, thirteen for the queen of
-spades, and shooting the moon. A card is its own key: card `i` is suit `i / 13`
-(0 clubs, 1 diamonds, 2 hearts, 3 spades) and rank `i % 13 + 2`, so the two of
-clubs is 0 and the queen of spades is 49. The deal is a `shuffle` over the
-`heartsStream` stream draw, the engine's own deterministic generator; nothing
-else in the document is unordered.
+The rules follow [American Hearts](https://www.pagat.com/reverse/hearts.html).
+The two of clubs opens; players follow suit when possible; hearts cannot be
+led before being broken unless only hearts remain. Highest in the led suit
+wins. Hearts score one each, the queen of spades thirteen. The chosen variants
+forbid first-trick points unless only penalty cards remain, give every opponent
+26 for shooting the moon, and share a match win among tied lowest scores.
+The match ends when any score reaches 100 at hand end.
 
-A player names a seat and a card in `heartsAct` and increments `request`;
-`result` answers `1` accepted or `-1` refused, and `heartsTable` counts both:
+Passing cycles left, right, across and hold. All four players select before
+any pass arrives. Move one card into its owner's gold pass tray, or into that
+seat's central trick space during play. After half a second of rest, the
+observer checks the whole layout and submits the card to the rules. An illegal
+move preserves the legal hand and turn; return the card or correct its target.
+Accepted actions arrange the cards into their hand, pass, trick and archive
+spaces. Finished tricks go to the archive at the far end of the table.
+
+The console also accepts actions. Write `seat` and `card`, then increment
+`request` last. `result` is 1 accepted or -1 refused:
 
 ```text
-world.state.cell.set heartsTable deal 1
-world.wait 20
-world.state.cell.set heartsAct seat 3
+world.state.cell.set heartsAct seat 1
 world.state.cell.set heartsAct card 0
 world.state.cell.set heartsAct request 1 add
 world.wait 8
 world.state heartsAct result
-world.state heartsTable
 ```
 
-Where each transform earns its keep. `sortZone` orders a hand by
-`heartsSuit` then `heartsRank` after the deal and again after the pass lands.
-`sortKeyed` keeps `heartsTricks` in capture order and `heartsScore` in match
-order. `arrange` at rank zero—the token domain's own order—normalizes a pass
-zone, so the receiving seat learns nothing from the order its neighbour picked,
-and normalizes a finished trick, so the winner's pile records cards rather than
-play order. `push` writes the winning seat into the `heartsEvents` ring, one
-cell per trick. `phase` carries the pass and trick submission generations, and
-the pass zones and the trick declare `phaseOf` against them, so an outside
-gameplay transform against those rows carries the generation or is refused by
-name.
+This example requires seat one to hold card zero and the stage to allow it.
+Card id is `suit * 13 + rank - 2`, with clubs, diamonds, hearts and spades
+numbered 0–3 and ranks 2–14. Placements are `card0` through `card51`; their
+faces label rank and suit. `heartsExpected` maps cards to `heartsPlaces` slots:
+hands 0–51, pass trays 52–63, trick spaces 64–67, archive 68–119.
 
-Two authoring constraints this document works inside, both engine behavior
-rather than style:
+`heartsTable` reports stage (1 passing, 3 playing, 4 finished hand), turn,
+trick and scoring. At hand end, set its `deal` cell to 1 to gather and shuffle
+again, keeping match scores. The deterministic deal stream continues.
+`matchOver` latches the result; `winnerMask` has bits 0–3 for seats 1–4.
 
-- **A rule's bindings are sixteen wide, and only the declared half is priced.**
-  `RuleCompiler.CompileBindings` checks the authored count against
-  `RuleCapacity.MaxBindingsPerRule`; the implicit bindings a computed cell key
-  mints while that same binding's expression compiles are appended without a
-  second check, so a rule can compile past the ceiling and
-  `RuleEvaluator.EvaluateOnce` then throws `IndexOutOfRangeException` writing
-  `m_bindingValues[ordinal]`. `hearts-resolve` exists for this reason: it turns
-  the request into plain literal-keyed cells one tick ahead, so the rules that
-  judge a move spell no computed key at all.
-- **A binding whose value comes from a live zone is memoized against the rows
-  the selection last resolved to.** Moving `$zones[...]` to another seat's zone
-  re-serves the previous seat's answer, which reads as a legal move refused.
-  `hearts-pass-pick` therefore names all four pass zones in its `held` binding
-  instead of selecting one; live zones stay in the effects, where each firing
-  resolves them afresh.
+`heartsOptions[aiMask]` is 0 for four humans, 14 for the default opponents,
+and 15 for a full AI table. `pace` controls quiet ticks between decisions;
+`autoDeal = 1` continues through hands until match end. The AI scans its own
+hand once per action, preferring safe discards, low winning risk, and dangerous
+cards to pass. It is a deterministic heuristic, without hidden-hand inspection
+or game-tree search. It moves a physical card and waits for normal admission.
 
-Three deliberate reductions, stated rather than left to be discovered: the
-document plays one hand rather than a match to a hundred; a seat that cannot
-follow suit may discard anything, with no further discard restriction past the
-first trick; and the pass is all-or-nothing—every seat picks three cards before
-any of them travel, rather than each pass landing as it completes.
+Compile-time collections generate cards, slots and repeated seat rules;
+`derive` shares legality and scoped `rules` share stage gates. Piles retain
+sorting, canonical arrangement, trick history and phase tags.
+[HeartsLawTests](../../../../../tests/Puck.World.Tests/HeartsLawTests.cs) compare
+admission to an independent oracle and cover scoring and physical AI play.
+Run `puck test` on the source for deterministic real-host scenarios.
 
-[hearts.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/hearts.sequence.json)
-drives a real hand through that door: the full twelve-card pass, two complete
-tricks, and four moves the rules refuse—passing a card another seat holds,
-playing out of turn, leading a heart before hearts are broken, and discarding a
-heart while still holding the suit led. The recorded export carries the queen of
-spades on seat 3's pile for thirteen points.
 ## Snake—a ring body on a tick-indexed beat
 
 [snake.puck](snake.puck) is a module, not a bootable document: it declares the

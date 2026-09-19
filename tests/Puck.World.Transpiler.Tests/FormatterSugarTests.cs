@@ -57,6 +57,14 @@ public class FormatterSugarTests {
     }
 
     [Fact]
+    public void DerivedOperandsKeepReservedChannelsInsideCalls() {
+        const string Source = "derive legal = select($local:actor == turn, select($local:suit == led, 1, $local:void), 0)\n";
+        var formatted = PuckFormat.Format(Source);
+        Assert.Equal(Source.Trim(), formatted.Trim());
+        Assert.Equal(formatted, PuckFormat.Format(formatted));
+    }
+
+    [Fact]
     public void FormattingIsIdempotentOnAGateWithMixedChannelsAndKindSuffix() {
         var source = "rule \"r\" {\n    when solitaireFreecell[from] != solitaireFreecell[to] : Int\n}\n";
         var pass1 = PuckFormat.Format(source);

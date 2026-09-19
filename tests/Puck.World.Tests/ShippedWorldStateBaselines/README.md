@@ -113,7 +113,7 @@ with — optionally adding rows a sibling district would have supplied
 | codenames | `games/codenames.world.json` | fixture `minimal-codenames-host.world.json` | 162 | yes |
 | dominoes | `games/dominoes.world.json` | spliced | 600 | no |
 | freecell | `games/freecell.world.json` | spliced | 610 | yes |
-| hearts | `games/hearts.world.json` | document | 288 | yes |
+| hearts | `games/hearts.world.json` | document | 3000 | yes |
 | hexlines | `games/hexlines.world.json` | fixture `minimal-hexlines-host.world.json` | 600 | yes |
 | klondike | `games/klondike.world.json` | spliced | 680 | yes |
 | mancala | `games/mancala.world.json` | spliced | 590 | yes |
