@@ -474,5 +474,37 @@ public class AuthoringSugarTests {
             expectedSubstring: "PUCK002"
         );
     }
+    [Fact]
+    public void EnumResolvesInRuleLocalExpressions() {
+        var (json, diag) = Lower(body: """
+            state {
+                enum MoveKind {
+                    None
+                    Quiet
+                    Capture
+                }
+                world {
+                    slot kind : Int = 0
+                }
+            }
+
+            rule "setKind" {
+                local k: Int = MoveKind.Capture
+                kind = $local:k
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var rules = Assert.IsType<JsonArray>(@object: json["rules"]);
+        var rule = Assert.IsType<JsonObject>(@object: rules[0]);
+        var locals = Assert.IsType<JsonArray>(@object: rule["locals"]);
+        var local = Assert.IsType<JsonObject>(@object: locals[0]);
+        var expr = Assert.IsType<JsonObject>(@object: local["expression"]);
+        var instructions = Assert.IsType<JsonArray>(@object: expr["instructions"]);
+        var instr = Assert.IsType<JsonObject>(@object: instructions[0]);
+
+        Assert.Equal("Constant", instr["op"]?.ToString());
+        Assert.Equal(2m, instr["value"]?.GetValue<decimal>());
+    }
 }
 

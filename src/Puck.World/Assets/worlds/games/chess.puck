@@ -486,11 +486,11 @@ rule "tabletop-candidate-cells" {
 rule "tabletop-candidate-move" {
   when settleHold == 60
   local mover: Int = lastLegal[move[from]]
-  local kind: Int = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (absolute($local:mover) == 6) & (absolute(move[to] - move[from]) == 2) ? 4 : (absolute($local:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1
+  local kind: Int = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? MoveKind.Illegal : (absolute($local:mover) == PieceKind.King) & (absolute(move[to] - move[from]) == 2) ? MoveKind.Castle : (absolute($local:mover) == PieceKind.Pawn) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? MoveKind.EnPassant : lastLegal[move[to]] != 0 ? MoveKind.Capture : MoveKind.Quiet
   mode: "Edge"
-  setState(expression: "$local:mover", key: "mover", state: "move")
-  setState(expression: "$local:kind", key: "kind", state: "move")
-  move[captured] = $local:kind == 3 ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]
+  move[mover] = $local:mover
+  move[kind] = $local:kind
+  move[captured] = $local:kind == MoveKind.EnPassant ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]
 }
 
 rule "tabletop-candidate-match" {
@@ -499,19 +499,19 @@ rule "tabletop-candidate-match" {
   local from: Int = move[from]
   local to: Int = move[to]
   local sign: Int = 1 - 2 * turn
-  local clear: Int = move[kind] == 4 ? ($local:from & 56) + ($local:to > $local:from ? 7 : 0) : move[kind] == 3 ? $local:to - 8 * $local:sign : -1
-  local rook: Int = move[kind] == 4 ? (($local:from + $local:to) >> 1) : -1
+  local clear: Int = move[kind] == MoveKind.Castle ? ($local:from & 56) + ($local:to > $local:from ? 7 : 0) : move[kind] == MoveKind.EnPassant ? $local:to - 8 * $local:sign : -1
+  local rook: Int = move[kind] == MoveKind.Castle ? (($local:from + $local:to) >> 1) : -1
   local clearUnique: Int = ($local:clear >= 0) & ($local:clear < 64) & ($local:clear != $local:from) & ($local:clear != $local:to)
   local rookUnique: Int = ($local:rook >= 0) & ($local:rook < 64) & ($local:rook != $local:from) & ($local:rook != $local:to) & ($local:rook != $local:clear)
   local footprint: Int = (($local:from >= 0) * (1 << maximum($local:from, 0))) | (($local:to >= 0) * (1 << maximum($local:to, 0))) | ($local:clearUnique * (1 << clamp($local:clear, 0, 63))) | ($local:rookUnique * (1 << clamp($local:rook, 0, 63)))
-  local landed: Int = (absolute(move[mover]) == 1) & ($local:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]
+  local landed: Int = (absolute(move[mover]) == PieceKind.Pawn) & ($local:to / 8 == (turn == TurnColor.White ? 7 : 0)) ? board[move[to]] : move[mover]
   mode: "Edge"
   boardMismatch = setBitCount($local:changed & ~$local:footprint) + ($local:from >= 0) * (board[move[from]] != 0) + ($local:to >= 0) * (board[move[to]] != $local:landed) + $local:clearUnique * (board[($local:clear)] != 0) + $local:rookUnique * (board[($local:rook)] != 4 * $local:sign)
   boardChanged = setBitCount($local:changed)
 }
 
 rule "tabletop-castle-transit-attacked" {
-  when settleHold == 60 and move[kind] == 4
+  when settleHold == 60 and move[kind] == MoveKind.Castle
   mode: "Edge"
   castleTransitAttacked[wk] = (($board:mask:lastLegal:-1:-1 & 0x5000) != 0) | (($board:mask:lastLegal:-2:-2 & 0x508800) != 0) | (($board:mask:lastLegal:-6:-6 & 0x7050) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]
   castleTransitAttacked[wq] = (($board:mask:lastLegal:-1:-1 & 0x1400) != 0) | (($board:mask:lastLegal:-2:-2 & 0x142200) != 0) | (($board:mask:lastLegal:-6:-6 & 0x1C14) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]
@@ -527,9 +527,9 @@ rule "tabletop-castle-legal" {
   local rook: Int = $local:home + ($local:direction == 1 ? 3 : -4)
   local right: Int = ($local:direction == 1 ? 2 : 1) << (2 * turn)
   local path: Int = $local:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]
-  local attacked: Int = turn == 0 ? ($local:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($local:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
+  local attacked: Int = turn == TurnColor.White ? ($local:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($local:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
   mode: "Edge"
-  castleLegal = (move[kind] == 4) & (move[from] == $local:home) & (move[to] == $local:home + 2 * $local:direction) & ((castleRights & $local:right) == 0) & (lastLegal[($local:rook)] == 4 * $local:sign) & ($local:path == $local:rook) & (previousInCheck[turn[$value]] == 0) & ($local:attacked == 0)
+  castleLegal = (move[kind] == MoveKind.Castle) & (move[from] == $local:home) & (move[to] == $local:home + 2 * $local:direction) & ((castleRights & $local:right) == 0) & (lastLegal[($local:rook)] == PieceKind.Rook * $local:sign) & ($local:path == $local:rook) & (previousInCheck[turn[$value]] == 0) & ($local:attacked == 0)
 }
 
 rule "tabletop-shape-final" {
@@ -540,9 +540,9 @@ rule "tabletop-shape-final" {
   local straight: Int = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])
   local diagonal: Int = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])
   local middle: Int = move[from] + 8 * (1 - 2 * turn)
-  local pawn: Int = ($local:dx == 0) & (lastLegal[move[to]] == 0) & maximum($local:dy == 1, ($local:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($local:middle)] == 0)) | ($local:dx == 1) & ($local:dy == 1) & maximum(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))
+  local pawn: Int = ($local:dx == 0) & (lastLegal[move[to]] == 0) & maximum($local:dy == 1, ($local:dy == 2) & (move[from] / 8 == (turn == TurnColor.White ? 1 : 6)) & (lastLegal[($local:middle)] == 0)) | ($local:dx == 1) & ($local:dy == 1) & maximum(move[kind] == MoveKind.Capture, (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))
   mode: "Edge"
-  shapeLegal = $local:piece == 1 ? $local:pawn : $local:piece == 2 ? $local:dx * absolute($local:dy) == 2 : $local:piece == 3 ? $local:diagonal : $local:piece == 4 ? $local:straight : $local:piece == 5 ? maximum($local:diagonal, $local:straight) : $local:piece == 6 ? maximum((maximum($local:dx, absolute($local:dy)) == 1) & (move[kind] != 4), castleLegal) : 0
+  shapeLegal = $local:piece == PieceKind.Pawn ? $local:pawn : $local:piece == PieceKind.Knight ? $local:dx * absolute($local:dy) == 2 : $local:piece == PieceKind.Bishop ? $local:diagonal : $local:piece == PieceKind.Rook ? $local:straight : $local:piece == PieceKind.Queen ? maximum($local:diagonal, $local:straight) : $local:piece == PieceKind.King ? maximum((maximum($local:dx, absolute($local:dy)) == 1) & (move[kind] != MoveKind.Castle), castleLegal) : 0
 }
 
 rule "tabletop-check-white" {
@@ -584,28 +584,23 @@ rule "tabletop-game-start-check" {
 rule "tabletop-verdict" {
   when settleHold == 60
   local sign: Int = 1 - 2 * turn
-  local promotes: Int = (absolute(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))
-  local replacement: Int = $local:promotes ? (board[move[to]] * $local:sign >= 2) & (board[move[to]] * $local:sign <= 5) : board[move[to]] == move[mover]
+  local promotes: Int = (absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))
+  local replacement: Int = $local:promotes ? (board[move[to]] * $local:sign >= PieceKind.Knight) & (board[move[to]] * $local:sign <= PieceKind.Queen) : board[move[to]] == move[mover]
   local kings: Int = (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)
   mode: "Edge"
-  verdict = (move[kind] >= 1) & (move[kind] <= 4) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $local:replacement & (move[mover] * $local:sign > 0) & (move[captured] * $local:sign <= 0) & (inCheck[turn[$value]] == 0) & $local:kings
+  verdict = (move[kind] >= MoveKind.Quiet) & (move[kind] <= MoveKind.Castle) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $local:replacement & (move[mover] * $local:sign > 0) & (move[captured] * $local:sign <= 0) & (inCheck[turn[$value]] == 0) & $local:kings
   promotionPending[0] = boardChanged == 0 ? -1 : promotionPending[0]
   promotionPending[1] = boardChanged == 0 ? -1 : promotionPending[1]
 }
 
 rule "tabletop-promotion-pending" {
-  gate: all(predicates: [
-    compareState(comparison: "Equal", state: "settleHold", value: 60)
-    compareState(comparison: "Equal", state: "verdict", value: 0)
-    compareValue(comparison: "Equal", kind: "Int", left: "(absolute(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)", right: "1")
-  ]
-  )
+  when settleHold == 60 and verdict == 0 and (((absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)) == 1 : Int)
   mode: "Edge"
   promotionPending[turn[$value]] = move[to]
 }
 
 rule "tabletop-advance-turn" {
-  when settleHold == 60 and verdict == 1 and move[kind] != 0
+  when settleHold == 60 and verdict == 1 and move[kind] != MoveKind.Illegal
   local lostRooks: Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
   local lostKings: Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
   mode: "Edge"
@@ -614,7 +609,7 @@ rule "tabletop-advance-turn" {
     transform boardCombine(left: "board", operation: "Copy", row: "lastLegal")
     previousInCheck[0] = inCheck[0]
     previousInCheck[1] = inCheck[1]
-    enPassantTarget = (absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
+    enPassantTarget = (absolute(move[mover]) == PieceKind.Pawn) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
     turn = 1 - turn
     promotionPending[0] = -1
     promotionPending[1] = -1
@@ -622,19 +617,42 @@ rule "tabletop-advance-turn" {
 }
 
 rule "tabletop-board-history" {
-  when settleHold == 60 and verdict == 1 and move[kind] != 0
+  when settleHold == 60 and verdict == 1 and move[kind] != MoveKind.Illegal
   mode: "Edge"
   push boardHistory = $board:canonical:board
   repetitionCount = 1 + ($history:boardHistory:0 == $history:boardHistory:2) + ($history:boardHistory:0 == $history:boardHistory:4) + ($history:boardHistory:0 == $history:boardHistory:6) + ($history:boardHistory:0 == $history:boardHistory:8) + ($history:boardHistory:0 == $history:boardHistory:10)
 }
 
 rule "tabletop-apply-illegal" {
-  when settleHold == 60 and verdict == 0 and move[kind] != 0 and boardMismatch == 0 and promotionPending[0] == -1 and promotionPending[1] == -1
+  when settleHold == 60 and verdict == 0 and move[kind] != MoveKind.Illegal and boardMismatch == 0 and promotionPending[0] == -1 and promotionPending[1] == -1
   mode: "Edge"
   illegalCount += 1
 }
 
 state {
+  enum PieceKind {
+    None
+    Pawn
+    Knight
+    Bishop
+    Rook
+    Queen
+    King
+  }
+
+  enum MoveKind {
+    Illegal
+    Quiet
+    Capture
+    EnPassant
+    Castle
+  }
+
+  enum TurnColor {
+    White
+    Black
+  }
+
   lattices [
     grid(band: 0.3, cellSize: 0.2, depth: 8, directions: [
       {
@@ -1075,18 +1093,7 @@ state {
       "1" = -1
     }
 
-    row {
-      cells [
-        {
-          key: "$value"
-          value: -1
-        }
-      ]
-      kind: "Int"
-      max: 63
-      min: -1
-      name: "enPassantTarget"
-    }
+    slot enPassantTarget: Int = -1 bounds(minimum: -1, maximum: 63)
 
     table inCheck: Int capacity(2) bounds(minimum: 0, maximum: 1) {
       "0" = 0
@@ -1099,44 +1106,11 @@ state {
       name: "boardHistory"
     }
 
-    row {
-      cells [
-        {
-          key: "$value"
-          value: 0
-        }
-      ]
-      kind: "Int"
-      max: 12
-      min: 0
-      name: "repetitionCount"
-    }
+    slot repetitionCount: Int = 0 bounds(minimum: 0, maximum: 12)
 
-    row {
-      cells [
-        {
-          key: "$value"
-          value: 0
-        }
-      ]
-      kind: "Int"
-      max: 1
-      min: 0
-      name: "shapeLegal"
-    }
+    slot shapeLegal: Int = 0 bounds(minimum: 0, maximum: 1)
 
-    row {
-      cells [
-        {
-          key: "$value"
-          value: 0
-        }
-      ]
-      kind: "Int"
-      max: 1
-      min: 0
-      name: "castleLegal"
-    }
+    slot castleLegal: Int = 0 bounds(minimum: 0, maximum: 1)
 
     table boardColors: Text {
       light = "#F0D9B5"
@@ -1171,7 +1145,7 @@ test "pieces settle and derive initial board cells" {
   }
   expect {
     pieceCell[piece12] == 12
-    pieceCode[piece12] == 1
+    pieceCode[piece12] == PieceKind.Pawn
   }
 }
 
@@ -1184,7 +1158,7 @@ test "e2e4 records legal" {
   expect {
     verdict == 1
     pieceCell[piece12] == 28
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1200,7 +1174,7 @@ test "illegal knight move records illegal then legal succeeds" {
     verdict == 1
     illegalCount == 1
     pieceCell[piece6] == 21
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1216,10 +1190,10 @@ test "king step records legal and multi step refused" {
   expect {
     verdict == 1
     illegalCount == 1
-    move[kind] == 1
-    move[mover] == 6
+    move[kind] == MoveKind.Quiet
+    move[mover] == PieceKind.King
     pieceCell[piece4] == 12
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1233,11 +1207,11 @@ test "knight capture records move kind two" {
   }
   expect {
     verdict == 1
-    move[kind] == 2
+    move[kind] == MoveKind.Capture
     move[captured] == -1
     pieceCell[piece1] == 18
     pieceCell[piece16] == -1
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1251,12 +1225,12 @@ test "pawn diagonal capture records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == 2
+    move[kind] == MoveKind.Capture
     move[captured] == -1
-    move[mover] == 1
+    move[mover] == PieceKind.Pawn
     pieceCell[piece12] == 19
     pieceCell[piece19] == -1
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1269,10 +1243,10 @@ test "queen diagonal slide records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == 1
-    move[mover] == 5
+    move[kind] == MoveKind.Quiet
+    move[mover] == PieceKind.Queen
     pieceCell[piece3] == 39
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1291,14 +1265,14 @@ test "white kingside castle records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == 4
-    move[mover] == 6
+    move[kind] == MoveKind.Castle
+    move[mover] == PieceKind.King
     move[from] == 4
     move[to] == 6
     pieceCell[piece4] == 6
     pieceCell[piece7] == 5
     castleRights == 3
-    turn == 1
+    turn == TurnColor.Black
   }
 }
 
@@ -1315,7 +1289,7 @@ test "castle cannot cross knight attack" {
   expect {
     castleTransitAttacked[wk] == 1
     verdict == 0
-    turn == 0
+    turn == TurnColor.White
     castleRights == 0
   }
 }
@@ -1333,7 +1307,47 @@ test "castle safe when knight does not attack transit" {
   expect {
     castleTransitAttacked[wk] == 0
     verdict == 1
-    turn == 1
+    turn == TurnColor.Black
     castleRights == 3
+  }
+}
+
+test "move leaving king in check is refused" {
+  when {
+    ticks 400
+    seat1: body.pose -7.7 1.3 11.7 0 0 0 9
+    ticks 400
+    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
+    ticks 400
+  }
+  expect {
+    inCheck[0] == 1
+    verdict == 0
+    turn == TurnColor.White
+  }
+}
+
+test "en passant capture records move kind en passant" {
+  when {
+    ticks 400
+    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
+    ticks 400
+    seat1: body.pose -8.7 1.3 12.3 0 0 0 23
+    ticks 400
+    seat1: body.pose -7.9 1.3 12.1 0 0 0 27
+    ticks 400
+    seat1: body.pose -8.1 1.3 12.1 0 0 0 20
+    ticks 400
+    seat1: body.pose -7.1 1.3 11.7 0 0 0 20
+    seat1: body.pose -8.1 1.3 12.3 0 0 0 27
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    move[kind] == MoveKind.EnPassant
+    move[captured] == -1
+    pieceCell[piece12] == 43
+    pieceCell[piece19] == -1
+    turn == TurnColor.Black
   }
 }

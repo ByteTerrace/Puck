@@ -168,7 +168,7 @@ public static partial class WorldDocumentEmitter {
                     break;
 
                 case LocalStatementNode local:
-                    locals.Add(item: LowerLocal(local: local));
+                    locals.Add(item: LowerLocal(local: local, scope: scope));
                     break;
 
                 case PropertyNode property:
