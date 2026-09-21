@@ -12,13 +12,17 @@ internal static class LspCommand {
         );
 
         command.SetAction(action: async _ => {
+            var machines = CliWorldVocabulary.EnsureInstalled();
+
             using var stdin = Console.OpenStandardInput();
             using var stdout = Console.OpenStandardOutput();
 
             var server = new PuckLanguageServer(
+                catalogFingerprint: CliWorldVocabulary.Fingerprint(catalog: machines),
                 completeDocument: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Completions,
                 diagnoseDocument: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose,
                 input: stdin,
+                machines: machines,
                 output: stdout,
                 vocabularyResolver: CliVocabularyResolver.Instance
             );

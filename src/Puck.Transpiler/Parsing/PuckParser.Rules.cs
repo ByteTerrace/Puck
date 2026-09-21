@@ -1,12 +1,14 @@
 using Parlot.Fluent;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 
 namespace Puck.Transpiler.Parsing;
 
 // `rule "name" { }` and everything inside it (§2, §3): local/decision/option/interrupt/onNoChoice, and the effect
-// statements (set/add/push/countdown/remove/schedule/transform/transaction). These bodies are parsed by a dedicated
+// statements (set/add/push/remove/schedule/transform/transaction). These bodies are parsed by a dedicated
 // dispatcher rather than the shared ParseStatement, because `identifier[...]` already means an inline array
 // property there (§2.2) — the two productions never share a parse context, so no backtracking is needed to
 // disambiguate them.
@@ -17,7 +19,83 @@ public static partial class PuckParser {
     // `in` closes a `schedule <row> in <delay>` row reference; nothing else terminates one but the statement itself.
     private static readonly HashSet<string> ScheduleStopKeywords = new(comparer: StringComparer.Ordinal) { "in" };
 
+    // The names a block declares with `local` at its own depth, read ahead of the block's statements because a gate
+    // may read a local declared after it. A local of an enclosing scope stays in force.
+    private static HashSet<string> DeclaredLocals(string buffer, int offset) {
+        var names = new HashSet<string>(
+            collection: (ExpressionSpelling.CurrentLocals ?? ((IReadOnlySet<string>)new HashSet<string>())),
+            comparer: StringComparer.Ordinal
+        );
+        var depth = 0;
+
+        for (var index = offset; (index < buffer.Length); index++) {
+            var character = buffer[index];
+
+            if (character == '"') {
+                for (index++; ((index < buffer.Length) && (buffer[index] != '"')); index++) {
+                    if (buffer[index] == '\\') {
+                        index++;
+                    }
+                }
+            } else if ((character == '/') && ((index + 1) < buffer.Length) && (buffer[(index + 1)] == '/')) {
+                while ((index < buffer.Length) && (buffer[index] != '\n')) {
+                    index++;
+                }
+            } else if ((character == '/') && ((index + 1) < buffer.Length) && (buffer[(index + 1)] == '*')) {
+                var close = buffer.IndexOf(
+                    comparisonType: StringComparison.Ordinal,
+                    startIndex: (index + 2),
+                    value: "*/"
+                );
+
+                index = ((close < 0)
+                    ? buffer.Length
+                    : (close + 1)
+                );
+            } else if (character == '{') {
+                depth++;
+            } else if (character == '}') {
+                if (--depth <= 0) {
+                    break;
+                }
+            } else if (
+                (depth == 1) &&
+                (character == 'l') &&
+                (string.CompareOrdinal(
+                    indexA: index,
+                    indexB: 0,
+                    length: 6,
+                    strA: buffer,
+                    strB: "local "
+                ) == 0) &&
+                ((index == 0) || !(char.IsLetterOrDigit(c: buffer[(index - 1)]) || (buffer[(index - 1)] is '_' or '$' or '.' or ':')))
+            ) {
+                var start = (index + 6);
+
+                while ((start < buffer.Length) && (buffer[start] == ' ')) {
+                    start++;
+                }
+
+                var end = start;
+
+                while ((end < buffer.Length) && (char.IsLetterOrDigit(c: buffer[end]) || (buffer[end] == '_'))) {
+                    end++;
+                }
+                if (end > start) {
+                    _ = names.Add(item: buffer[start..end]);
+                }
+
+                index = end;
+            }
+        }
+
+        return names;
+    }
     private static RuleBlockNode ParseRuleBlock(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        using var locals = ExpressionSpelling.WithLocals(locals: DeclaredLocals(
+            buffer: context.Scanner.Buffer,
+            offset: context.Scanner.Cursor.Offset
+        ));
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
@@ -60,8 +138,30 @@ public static partial class PuckParser {
 
         WhenStatementNode? headerWhen = null;
         var sawWhen = false;
+        string? poolForEach = null;
+        string? poolBinding = null;
 
         SkipWhiteSpace(context: context);
+
+        if (TryMatchKeyword(context: context, keyword: "for")) {
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "each")) {
+                throw CreateException(context: context, message: "Expected 'each <binding> in <pool>' after 'for' in a rule header");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out poolBinding)) {
+                throw CreateException(context: context, message: "Expected a binding after 'for each' in a rule header");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "in")) {
+                throw CreateException(context: context, message: "Expected 'in <pool>' after a rule iteration binding");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out poolForEach)) {
+                throw CreateException(context: context, message: "Expected a pool after 'in' in a rule header");
+            }
+            SkipWhiteSpace(context: context);
+        }
 
         if (TryMatchKeyword(context: context, keyword: "when")) {
             var whenStart = cursor.Offset;
@@ -163,6 +263,8 @@ public static partial class PuckParser {
             Name: name,
             NameExpression: nameExpression,
             Offset: startOffset,
+            PoolBinding: poolBinding,
+            PoolForEach: poolForEach,
             Statements: statements
         );
     }
@@ -170,7 +272,7 @@ public static partial class PuckParser {
     // A rule's own wire fields. `mode = Edge` reads exactly like a cell assignment to the effect dispatcher, so
     // these names are routed to the property path first; a state row genuinely called one of them is backquoted.
     private static readonly HashSet<string> RuleBodyPropertyNames = new(comparer: StringComparer.Ordinal) {
-        "name", "gate", "mode", "forEach", "zones", "locals", "effects", "decision",
+        "name", "gate", "mode", "forEach", "poolForEach", "zones", "locals", "effects", "decision",
     };
 
     // Whether the next token is one of `names` used as a property (followed by ':', '=', '{' or '[').
@@ -276,6 +378,51 @@ public static partial class PuckParser {
             message: $"Unexpected token '{cursor.Current}' inside rule body"
         );
     }
+    // A local's kind is inferred from its expression (see WorldDocumentEmitter's kind inference) rather than
+    // authored, so a `: Kind`/`as Kind` clause is refused by name and consumed — the rest of the statement still
+    // parses.
+    private static void RefuseLocalKindAnnotation(ParseContext context, DiagnosticBag? diagnostics, string name) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+        var matchedColon = TryConsume(
+            c: ':',
+            context: context
+        );
+        var matchedAs = (!matchedColon && TryMatchKeyword(
+            context: context,
+            keyword: "as"
+        ));
+
+        if (!matchedColon && !matchedAs) {
+            cursor.ResetPosition(position: saved);
+
+            return;
+        }
+
+        SkipWhiteSpace(context: context);
+
+        var (kindLine, kindCol) = GetLineAndColumn(
+            buffer: context.Scanner.Buffer,
+            offset: cursor.Offset
+        );
+
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var word)) {
+            cursor.ResetPosition(position: saved);
+
+            return;
+        }
+
+        diagnostics?.ReportError(
+            code: PuckDiagnosticCodes.LocalKindAnnotated,
+            message: $"'local {name}' spells its kind explicitly as '{(matchedColon ? ":" : "as")} {word}' — the kind is inferred from its expression; write 'local {name} = ...' and drop the annotation",
+            span: new SourceSpan(
+                cursor.Offset,
+                1,
+                kindLine,
+                kindCol
+            )
+        );
+    }
     private static LocalStatementNode ParseLocalStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;
 
@@ -288,38 +435,7 @@ public static partial class PuckParser {
         }
 
         SkipWhiteSpace(context: context);
-        string? kind = null;
-
-        if (
-            TryConsume(
-            c: ':',
-            context: context
-        ) ||
-            TryMatchKeyword(
-            context: context,
-            keyword: "as"
-        )
-        ) {
-            SkipWhiteSpace(context: context);
-            kind = TryMatchKindKeyword(context: context);
-        }
-        if (kind is null) {
-            var (kLine, kCol) = GetLineAndColumn(
-                buffer: context.Scanner.Buffer,
-                offset: cursor.Offset
-            );
-            diagnostics?.ReportError(
-                code: PuckDiagnosticCodes.LocalKindMissing,
-                message: $"'local {name}' is missing its required ': Int' or ': Fixed' kind annotation",
-                span: new SourceSpan(
-                    cursor.Offset,
-                    1,
-                    kLine,
-                    kCol
-                )
-            );
-            kind = "Int";
-        }
+        RefuseLocalKindAnnotation(context: context, diagnostics: diagnostics, name: name);
 
         SkipWhiteSpace(context: context);
         if (!TryConsume(
@@ -344,8 +460,7 @@ public static partial class PuckParser {
 
             return new LocalStatementNode(
                 Column: col,
-                ExpressionText: string.Empty,
-                Kind: kind,
+                Expression: CreateOperand(text: string.Empty, form: DocumentValueForm.Expression),
                 Length: missingLen,
                 Line: line,
                 Name: name,
@@ -372,6 +487,7 @@ public static partial class PuckParser {
             oCol
         );
 
+        var operand = CreateOperand(span: span, text: text);
         if (text.Length == 0) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.LocalInitializerMissing,
@@ -379,19 +495,14 @@ public static partial class PuckParser {
                 span: span
             );
         } else {
-            ValidateOperandText(
-                diagnostics: diagnostics,
-                span: span,
-                text: text
-            );
+            ValidateOperand(diagnostics: diagnostics, operand: operand);
         }
 
         var len = (cursor.Offset - startOffset);
 
         return new LocalStatementNode(
             Column: col,
-            ExpressionText: text,
-            Kind: kind,
+            Expression: operand,
             Length: len,
             Line: line,
             Name: name,
@@ -738,19 +849,15 @@ public static partial class PuckParser {
                 oCol
             );
 
-            ValidateOperandText(
-                diagnostics: diagnostics,
-                span: span,
-                text: text
-            );
+            var operand = ValidatedOperand(diagnostics: diagnostics, span: span, text: text);
             var len = (cursor.Offset - startOffset);
 
             return new ScoreStatementNode(
                 Column: col,
+                Expression: operand,
                 Length: len,
                 Line: line,
-                Offset: startOffset,
-                Text: text
+                Offset: startOffset
             );
         }
 
@@ -777,7 +884,7 @@ public static partial class PuckParser {
             message: $"Unexpected token '{cursor.Current}' inside option body"
         );
     }
-    /// <summary>Tries to parse one effect statement (§2): <c>push</c>, <c>countdown</c>, <c>remove</c>,
+    /// <summary>Tries to parse one effect statement (§2): <c>push</c>, <c>remove</c>,
     /// <c>schedule</c>, <c>transform</c>, <c>transaction</c>, a <c>row[key] (= | +=) rhs</c> cell assignment, or a
     /// call-form statement (<c>generate(...)</c> and every <c>Puck.World.Schema</c> extension arm). Returns
     /// <see langword="null"/> — consuming nothing — when none of these match, so the caller can fall back to an
@@ -785,12 +892,132 @@ public static partial class PuckParser {
     private static StatementNode? ParseEffectStatement(ParseContext context, DiagnosticBag? diagnostics, bool insideTransaction = false) {
         SkipWhiteSpace(context: context);
         var cursor = context.Scanner.Cursor;
+        var effectStartPosition = cursor.Position;
         var startOffset = cursor.Offset;
 
         var (line, col) = GetLineAndColumn(
             buffer: context.Scanner.Buffer,
             offset: startOffset
         );
+
+        if (TryMatchKeyword(context: context, keyword: "claim")) {
+            SkipWhiteSpace(context: context);
+            if (TryMatchKeyword(context: context, keyword: "pair")) {
+                SkipWhiteSpace(context: context);
+                if (TryMatchKeyword(context: context, keyword: "as")) {
+                    SkipWhiteSpace(context: context);
+                    if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var ordinaryAlias)) {
+                        throw CreateException(context: context, message: "Expected an alias after 'claim pair as'");
+                    }
+                    SkipWhiteSpace(context: context);
+                    if (!TryConsume(c: '{', context: context)) {
+                        throw CreateException(context: context, message: "Expected '{' starting a claim body");
+                    }
+                    var ordinaryBody = ParseEffectStatementList(context: context, diagnostics: diagnostics, insideTransaction: insideTransaction);
+
+                    if (!TryConsume(c: '}', context: context)) {
+                        throw CreateException(context: context, message: "Expected '}' closing a claim body");
+                    }
+                    return new ClaimStatementNode("pair", ordinaryAlias, ordinaryBody, startOffset, (cursor.Offset - startOffset), line, col);
+                }
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var pairPool)) {
+                    throw CreateException(context: context, message: "Expected a pair-pool name after 'claim pair'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryMatchKeyword(context: context, keyword: "between")) {
+                    throw CreateException(context: context, message: "Expected 'between <left>, <right>' after a pair-pool name");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var left)) {
+                    throw CreateException(context: context, message: "Expected the left endpoint alias after 'between'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: ',', context: context)) {
+                    throw CreateException(context: context, message: "Expected ',' between pair endpoint aliases");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var right)) {
+                    throw CreateException(context: context, message: "Expected the right endpoint alias after ','");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryMatchKeyword(context: context, keyword: "as")) {
+                    throw CreateException(context: context, message: "Expected 'as <alias>' after pair endpoints");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var pairAlias)) {
+                    throw CreateException(context: context, message: "Expected a binding alias after 'claim pair ... as'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '{', context: context)) {
+                    throw CreateException(context: context, message: "Expected '{' starting a pair claim body");
+                }
+                var pairBody = ParseEffectStatementList(context: context, diagnostics: diagnostics, insideTransaction: insideTransaction);
+
+                if (!TryConsume(c: '}', context: context)) {
+                    throw CreateException(context: context, message: "Expected '}' closing a pair claim body");
+                }
+                return new ClaimPairStatementNode(pairPool, left, right, pairAlias, pairBody, startOffset, (cursor.Offset - startOffset), line, col);
+            }
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var pool)) {
+                throw CreateException(context: context, message: "Expected a pool name after 'claim'");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "as")) {
+                throw CreateException(context: context, message: "Expected 'as <alias>' after a pool name");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var alias)) {
+                throw CreateException(context: context, message: "Expected an alias after 'claim <pool> as'");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: '{', context: context)) {
+                throw CreateException(context: context, message: "Expected '{' starting a claim body");
+            }
+            var body = ParseEffectStatementList(context: context, diagnostics: diagnostics, insideTransaction: insideTransaction);
+
+            if (!TryConsume(c: '}', context: context)) {
+                throw CreateException(context: context, message: "Expected '}' closing a claim body");
+            }
+            return new ClaimStatementNode(pool, alias, body, startOffset, (cursor.Offset - startOffset), line, col);
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "release")) {
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var alias)) {
+                throw CreateException(context: context, message: "Expected an alias after 'release'");
+            }
+            return new ReleaseStatementNode(alias, startOffset, (cursor.Offset - startOffset), line, col);
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "for")) {
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "each")) {
+                cursor.ResetPosition(position: effectStartPosition);
+            } else {
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var alias)) {
+                    throw CreateException(context: context, message: "Expected an alias after 'for each'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryMatchKeyword(context: context, keyword: "in")) {
+                    throw CreateException(context: context, message: "Expected 'in <pool>' after a foreach alias");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var pool)) {
+                    throw CreateException(context: context, message: "Expected a pool name after 'for each <alias> in'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '{', context: context)) {
+                    throw CreateException(context: context, message: "Expected '{' starting a pool foreach body");
+                }
+                var body = ParseEffectStatementList(context: context, diagnostics: diagnostics, insideTransaction: insideTransaction);
+
+                if (!TryConsume(c: '}', context: context)) {
+                    throw CreateException(context: context, message: "Expected '}' closing a pool foreach body");
+                }
+                return new PoolForEachStatementNode(pool, alias, body, startOffset, (cursor.Offset - startOffset), line, col);
+            }
+        }
 
         if (TryMatchKeyword(
             context: context,
@@ -836,29 +1063,14 @@ public static partial class PuckParser {
             context: context,
             keyword: "countdown"
         )) {
-            if (
-                !TryReadRowRefOperand(
-                context,
-                diagnostics,
-                stopKeywords: null,
-                out var target
-            ) ||
-                (target is null)
+            throw new PuckParseException(
+                "'countdown' is refused: write a due tick with 'schedule row in Ns' and read it back by comparing '$tick' against the row",
+                startOffset,
+                line,
+                col
             ) {
-                throw CreateException(
-                    context: context,
-                    message: "Expected a state row reference after 'countdown'"
-                );
-            }
-            var len = (cursor.Offset - startOffset);
-
-            return new CountdownStatementNode(
-                Column: col,
-                Length: len,
-                Line: line,
-                Offset: startOffset,
-                Target: target
-            );
+                Code = PuckDiagnosticCodes.CountdownStatementRetired,
+            };
         }
 
         if (TryMatchKeyword(
@@ -920,7 +1132,7 @@ public static partial class PuckParser {
             }
             SkipWhiteSpace(context: context);
             var literal = ParseNumberWithOptionalUnit(context: context);
-            var delay = LiteralToDecimal(value: literal.Value);
+            var delay = DecimalValues.FromLiteral(literal: literal);
 
             if (literal.Unit is null) {
                 diagnostics?.ReportError(
@@ -939,7 +1151,7 @@ public static partial class PuckParser {
                 literal.Unit,
                 out var seconds
             )) {
-                delay = ((decimal)seconds);
+                delay = DecimalValues.FromDouble(value: seconds);
             } else {
                 var accepted = string.Join(
                     "/",
@@ -1669,7 +1881,7 @@ public static partial class PuckParser {
                         );
                     }
                     return new RhsSecondsNode(
-                        LiteralToDecimal(value: literal.Value),
+                        DecimalValues.FromLiteral(literal: literal),
                         literal.Offset,
                         literal.Length,
                         literal.Line,
@@ -1680,7 +1892,7 @@ public static partial class PuckParser {
                     var text = context.Scanner.Buffer[literal.Offset..(literal.Offset + literal.Length)];
 
                     return new RhsOperandNode(
-                        text,
+                        CreateOperand(text: text, span: literal.Span),
                         literal.Offset,
                         literal.Length,
                         literal.Line,
@@ -1710,13 +1922,9 @@ public static partial class PuckParser {
             oCol
         );
 
-        ValidateOperandText(
-            diagnostics: diagnostics,
-            span: opSpan,
-            text: opText
-        );
+        var operand = ValidatedOperand(diagnostics: diagnostics, span: opSpan, text: opText);
         return new RhsOperandNode(
-            opText,
+            operand,
             opStart,
             opSpan.Length,
             oLine,
@@ -1767,7 +1975,7 @@ public static partial class PuckParser {
                 startOffset: startOffset
             );
 
-            var value = ParseExpression(context: context);
+            var value = ParseMemberValue(context: context);
             var len = (cursor.Offset - startOffset);
 
             return new PropertyNode(

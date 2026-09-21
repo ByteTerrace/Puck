@@ -2,6 +2,7 @@ using System.Numerics;
 
 using Puck.Assets.Documents;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
@@ -14,6 +15,76 @@ namespace Puck.World.Tests;
 /// <summary>Laws for the rigid-dynamics facet (<see cref="WorldRigid"/>): pair-contact momentum conservation and
 /// checkpoint/restore bit-exactness across a rigid body's own state.</summary>
 public sealed class WorldRigidDynamicsLawTests {
+    [Theory]
+    [InlineData(0.05f)]
+    [InlineData(0.06f)]
+    [InlineData(0.15f)]
+    public void ASphereSpawnedAtOrAboveItsFloorCannotFallThrough(float height) {
+        using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var ball = fixture.Server.Body(index: 0)!;
+        Assert.True(condition: ball.IsRigid);
+        ball.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: height, yawRadians: 0f, z: 0f);
+        for (var tick = 0; (tick < 180); tick++) {
+            fixture.Step();
+            Assert.True(condition: (ball.FixedPosition.Y >= FixedQ4816.FromDouble(value: 0.049d)),
+                userMessage: $"Spawn {height}, tick {tick}: position {ball.FixedPosition}, velocity {ball.RigidVelocity}, contact {ball.RigidGroundContacting}");
+        }
+        Assert.True(condition: (ball.RigidGroundContacting || ball.Resting));
+        Assert.True(condition: ball.Grounded);
+        Assert.True(condition: ((ball.Facts & BodyFacts.Grounded) != 0));
+    }
+
+    [Fact]
+    public void AFallingRigidSphereReportsAirborneAndFalling() {
+        using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var ball = fixture.Server.Body(index: 0)!;
+        Assert.True(condition: ball.IsRigid);
+        ball.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 2f, yawRadians: 0f, z: 0f);
+        fixture.Step();
+        Assert.True(condition: (ball.RigidVelocity.Y < FixedQ4816.Zero));
+        Assert.False(condition: ball.Grounded);
+        Assert.True(condition: ((ball.Facts & BodyFacts.Airborne) != 0));
+        Assert.True(condition: ((ball.Facts & BodyFacts.Falling) != 0));
+    }
+
+    [Fact]
+    public void RestingSphereReleasesAndReacquiresItsGroundedFactAfterAnImpulse() {
+        using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var ball = fixture.Server.Body(index: 0)!;
+        ball.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: FloorTopY, yawRadians: 0f, z: 0f);
+        for (var tick = 0; ((tick < 600) && !ball.Resting); tick++) {
+            fixture.Step();
+        }
+        Assert.True(condition: ball.Resting);
+        Assert.True(condition: ball.Grounded);
+
+        Assert.True(condition: ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.Zero),
+            velocityCeiling: FixedQ4816.FromInteger(value: 100)));
+        fixture.Step();
+        Assert.False(condition: ball.Resting);
+        Assert.False(condition: ball.Grounded);
+        Assert.True(condition: ((ball.Facts & BodyFacts.Airborne) != 0));
+        Assert.True(condition: ((ball.Facts & BodyFacts.Rising) != 0));
+
+        var fellWhileAirborne = false;
+        for (var tick = 0; ((tick < 600) && !ball.Resting); tick++) {
+            fixture.Step();
+            fellWhileAirborne |= (!ball.Grounded && ((ball.Facts & BodyFacts.Falling) != 0));
+        }
+        Assert.True(condition: fellWhileAirborne);
+        Assert.True(condition: ball.Resting);
+        Assert.True(condition: ball.Grounded);
+        Assert.True(condition: ((ball.Facts & BodyFacts.Grounded) != 0));
+        Assert.True(condition: ((ball.Facts & (BodyFacts.Airborne | BodyFacts.Rising | BodyFacts.Falling)) == 0));
+    }
+
     private static WorldDefinition BoxOnFloorDocument() {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var shape = new ShapeDocument(

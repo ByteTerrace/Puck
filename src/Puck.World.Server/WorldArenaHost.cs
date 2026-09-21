@@ -38,9 +38,10 @@ public sealed class WorldArenaHost : ArenaEffectHost {
     );
     /// <inheritdoc/>
     /// <remarks>This is the door that makes "a rule's firing wrote this" checkable: a write to any cell of a verdict
-    /// row stamps <see cref="WorldVerdict.FiredTickKey"/> with the firing's tick, and a row that already fired
-    /// <see cref="WorldVerdict.Fail"/> on an earlier tick absorbs later writes so its first failing tick and the
-    /// values its gate saw then are what the export carries.</remarks>
+    /// row, or of a witness of one, stamps the verdict's <see cref="WorldVerdict.FiredTickKey"/> with the firing's
+    /// tick, and a verdict that already fired <see cref="WorldVerdict.Fail"/> on an earlier tick absorbs later writes
+    /// to itself and its witnesses, so its first failing tick and the values its gate saw then are what the export
+    /// carries.</remarks>
     public override bool Apply(in Mutation mutation, out EffectRefusal refusal) {
         var ordinal = mutation.RowOrdinal;
 
@@ -48,7 +49,8 @@ public sealed class WorldArenaHost : ArenaEffectHost {
             (m_verdicts is not { } verdicts) ||
             !verdicts.TryResolve(
             rowOrdinal: ordinal,
-            status: out var status
+            status: out var status,
+            verdictOrdinal: out var verdictOrdinal
         )
         ) {
             return base.Apply(
@@ -59,7 +61,7 @@ public sealed class WorldArenaHost : ArenaEffectHost {
 
         if (WorldVerdictStamp.IsSettled(
             arena: Arena,
-            rowOrdinal: ordinal,
+            rowOrdinal: verdictOrdinal,
             status: status,
             tick: Tick
         )) {
@@ -78,7 +80,7 @@ public sealed class WorldArenaHost : ArenaEffectHost {
         if (refusal.Code is null) {
             _ = WorldVerdictStamp.Stamp(
                 arena: Arena,
-                rowOrdinal: ordinal,
+                rowOrdinal: verdictOrdinal,
                 tick: Tick
             );
         }

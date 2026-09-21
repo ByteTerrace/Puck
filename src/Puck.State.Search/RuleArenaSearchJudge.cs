@@ -18,6 +18,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     private readonly Puck.State.Rules.RuleLatch m_latch = new();
     private readonly Puck.State.Rules.CompiledRule[] m_rules;
     private readonly Puck.State.Rules.CompiledExpressionToken[]? m_score;
+    private readonly bool m_readsTick;
 
     /// <summary>Initializes a judge over the rules one search job judges its candidates with.</summary>
     /// <param name="host">The host every rule fires through; its arena is the one the search scopes.</param>
@@ -38,6 +39,10 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
             rules: rules,
             score: score
         );
+        m_readsTick = ReadsTickOf(
+            rules: rules,
+            score: score
+        );
     }
 
     /// <inheritdoc/>
@@ -45,12 +50,15 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     /// <inheritdoc/>
     public IReadOnlyList<int> KeyRows => m_keyRows;
     /// <inheritdoc/>
+    public bool ReadsTick => m_readsTick;
+    /// <inheritdoc/>
     public int RuleCount => m_rules.Length;
     /// <inheritdoc/>
     public bool Scores => (m_score is not null);
 
     /// <inheritdoc/>
     public bool Judge(in ArenaSearchView view) {
+        m_host.SearchPly = view.Ply;
         m_host.Advance(
             engineTick: view.EngineTick,
             tick: view.Tick
@@ -75,6 +83,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
             return 0L;
         }
 
+        m_host.SearchPly = view.Ply;
         m_host.Advance(
             engineTick: view.EngineTick,
             tick: view.Tick
@@ -96,6 +105,10 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
         foreach (var rule in m_rules) {
+            if (ContainsTurnRewind(effects: rule.Effects)) {
+                refusal = $"search '{plan.Name}' judges with rule '{rule.Name}', whose rewindTurn effect requires a settled authoritative turn boundary";
+                return false;
+            }
             if (!RuleNeeds.Admit(
                 needs: rule.Needs,
                 reader: m_host,
@@ -112,6 +125,15 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         return true;
     }
 
+    private static bool ContainsTurnRewind(IEnumerable<Puck.State.Rules.IRuleEffect> effects) {
+        foreach (var effect in effects) {
+            if (effect is Puck.State.Rules.RewindTurnEffect) { return true; }
+            foreach (var arm in effect.Arms) {
+                if (ContainsTurnRewind(effects: arm)) { return true; }
+            }
+        }
+        return false;
+    }
     // Every row a verdict can depend on: what the rules read, what they write (a judge rule's own scratch row is a
     // later rule's input), and what the score reads.
     private static int[] KeyRowsOf(Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledExpressionToken[]? score) {
@@ -144,5 +166,35 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         }
 
         return [.. rows];
+    }
+    // Tick is an operand rather than a state row, so the row reach above cannot express this dependency. Rules
+    // carry compiler-owned needs; a standalone score has no rule needs, so walk its already-bounded token DAG.
+    private static bool ReadsTickOf(Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledExpressionToken[]? score) {
+        if (rules.Any(predicate: static rule => rule.Needs.ReadsTick)) {
+            return true;
+        }
+
+        return ContainsTick(tokens: score);
+    }
+    private static bool ContainsTick(Puck.State.Rules.CompiledExpressionToken[]? tokens) {
+        foreach (var token in (tokens ?? [])) {
+            if (token.Operand is Puck.State.Rules.TickOperand) {
+                return true;
+            }
+            if (
+                (token.Fold is { } fold) &&
+                ContainsTick(tokens: fold.Body)
+            ) {
+                return true;
+            }
+            if (
+                (token.Call is { } call) &&
+                ContainsTick(tokens: call.Body)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

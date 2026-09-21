@@ -253,7 +253,7 @@ public static class CartridgeDocumentEmitter {
         }
 
         var value = CartridgeOperand.FromText(
-            text: operand.Text,
+            text: operand.Expression.Text,
             scope: scope,
             reason: out var valueReason
         );
@@ -424,12 +424,12 @@ public static class CartridgeDocumentEmitter {
                     }
 
                     var left = CartridgeOperand.FromText(
-                        text: comparison.LeftText,
+                        text: comparison.Left.Text,
                         scope: scope,
                         reason: out var leftReason
                     );
                     var right = CartridgeOperand.FromText(
-                        text: comparison.RightText,
+                        text: comparison.Right.Text,
                         scope: scope,
                         reason: out var rightReason
                     );

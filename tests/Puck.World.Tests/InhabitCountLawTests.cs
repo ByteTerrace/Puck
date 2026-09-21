@@ -339,6 +339,29 @@ public sealed class InhabitCountLawTests {
         );
         Assert.False(condition: fixture.Server.Population.IsActive(index: before[2]));
     }
+    // The live path the isolated laws here stand in for: a rule writes the count cell, the tick's export installs it,
+    // and the placement's bodies are admitted that same tick.
+    [Fact]
+    public void ARuleThatRaisesTheCellAdmitsBodiesTheTickItFires() {
+        using var fixture = Fixtures.FreshServer(definition: (Document(initial: 0) with {
+            Rules = [new WorldRule(
+                    CellName.Parse(candidate: "fill-court"),
+                    [new ActionEffect.SetState(
+                            State: CountRow,
+                            Value: 2m
+                        )]
+                )],
+        }));
+
+        Assert.Empty(collection: Inhabitants(fixture: fixture));
+
+        fixture.Step();
+
+        Assert.Equal(
+            actual: Inhabitants(fixture: fixture).Length,
+            expected: 2
+        );
+    }
     [Fact]
     public void RaisingTheCellAdmitsBodiesAtTheDistributionsNextOffsets() {
         using var fixture = Fixtures.FreshServer(definition: Document(initial: 0));

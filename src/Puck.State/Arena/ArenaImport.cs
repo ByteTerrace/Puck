@@ -21,45 +21,38 @@ public sealed partial class StateArena {
     /// <para>A load is a birth: an imported cell whose effective behavior is timed and which carries no clock of
     /// its own settles to <paramref name="time"/>, so it turns, accumulates, or eases from the tick it was
     /// installed at rather than from the origin. An imported clock is loaded as it stands.</para>
-    /// <para>A refused load interns nothing: the admission pass resolves the keys the catalog already holds and
+    /// <para>A refused load interns nothing: the admission pass resolves the keys the arena already holds and
     /// counts the distinct new names against the key table's remaining room, and only the apply pass interns, so
-    /// the key ordinals a hash folds never record a load that did not land.</para>
+    /// the retained key ledger never records a load that did not land.</para>
     /// </remarks>
     public bool TryLoad(IReadOnlyList<StateRow>? rows, in ArenaTime time, out string reason) {
-        var admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
-        var pending = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var seen = new bool[m_layout.RowCount];
-
-        foreach (var row in (rows ?? [])) {
-            if (!TryAdmitImport(
-                pending: pending,
-                reason: out reason,
-                row: row,
-                rowOrdinal: out var rowOrdinal
-            )) {
-                return false;
-            }
-            if (seen[rowOrdinal]) {
-                reason = $"row '{row!.Name.Value}' is imported twice, and a second load would land on the first one's cells";
-
-                return false;
-            }
-
-            seen[rowOrdinal] = true;
-            admitted.Add(item: (rowOrdinal, row!));
+        if (!TryValidateLoad(
+            admitted: out var admitted,
+            reason: out reason,
+            rows: rows,
+            visibilityBytes: out var visibilityBytes
+        )) {
+            return false;
         }
 
-        foreach (var (rowOrdinal, row) in admitted) {
-            var layout = m_layout[rowOrdinal];
+        // Admission proved the complete replacement. A later row may release visibility storage used by keys
+        // imported into an earlier row, so intern against the final payload rather than a transient prefix.
+        m_importVisibilityBytes = visibilityBytes;
+        try {
+            foreach (var (rowOrdinal, row) in admitted) {
+                ref readonly var layout = ref m_layout[rowOrdinal];
 
-            if (layout.IsStored) {
-                LoadRow(
-                    layout: layout,
-                    row: row,
-                    rowOrdinal: rowOrdinal,
-                    time: in time
-                );
+                if (layout.IsStored) {
+                    LoadRow(
+                        layout: layout,
+                        row: row,
+                        rowOrdinal: rowOrdinal,
+                        time: in time
+                    );
+                }
             }
+        } finally {
+            m_importVisibilityBytes = -1L;
         }
 
         for (var rowOrdinal = 0; (rowOrdinal < m_layout.RowCount); rowOrdinal++) {
@@ -72,7 +65,63 @@ public sealed partial class StateArena {
 
         return true;
     }
+    /// <summary>Determines whether <see cref="TryLoad"/> would admit every named row without moving the arena,
+    /// interning a key, or opening a journal scope.</summary>
+    /// <param name="rows">The rows to validate; a row the list omits keeps what the arena holds.</param>
+    /// <param name="reason">Why the load would be refused, or empty when it would be admitted.</param>
+    /// <returns><see langword="true"/> when the rows can be loaded as the arena stands now.</returns>
+    /// <remarks>The result is a point-in-time preflight. A caller that mutates the arena before loading must
+    /// validate again.</remarks>
+    public bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out string reason) => TryValidateLoad(
+        admitted: out _,
+        reason: out reason,
+        rows: rows,
+        visibilityBytes: out _
+    );
 
+    private bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out List<(int RowOrdinal, StateRow Row)> admitted, out long visibilityBytes, out string reason) {
+        admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
+        var pending = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seen = new bool[m_layout.RowCount];
+
+        visibilityBytes = m_visibilityBytes;
+
+        foreach (var row in (rows ?? [])) {
+            if (!TryAdmitImport(
+                pending: pending,
+                reason: out reason,
+                row: row,
+                rowOrdinal: out var rowOrdinal,
+                visibilityBytes: out var importedVisibilityBytes
+            )) {
+                return false;
+            }
+            if (seen[rowOrdinal]) {
+                reason = $"row '{row!.Name.Value}' is imported twice, and a second load would land on the first one's cells";
+
+                return false;
+            }
+
+            seen[rowOrdinal] = true;
+            visibilityBytes -= VisibilityBytes(rowOrdinal: rowOrdinal);
+            visibilityBytes += importedVisibilityBytes;
+            admitted.Add(item: (rowOrdinal, row!));
+        }
+
+        var keyBytes = m_keys.Bytes;
+
+        foreach (var name in pending) {
+            keyBytes += CellKeyTable.EntryBytes(name: CellName.Parse(candidate: name));
+        }
+        if ((((m_layout.Bytes + m_declarationVisibilityBytes) + visibilityBytes) + keyBytes) > ArenaCapacity.MaxBytes) {
+            reason = $"the imported rows bring the arena's retained keys or live visibility payload past the {ArenaCapacity.MaxBytes}-byte ceiling";
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     // The time traits are declaration, not state: the arena stores a cell's clock and reads the trait off the
     // authored row, so an imported row or cell whose trait differs from the declaration names a disagreement the
     // arena cannot carry.
@@ -285,10 +334,16 @@ public sealed partial class StateArena {
             );
         }
         if (cell.Visibility is { } visibility) {
+            _ = StateVisibilityStorage.TryNormalize(
+                bytes: out _,
+                normalized: out var normalized,
+                reason: out _,
+                value: visibility
+            );
             WriteReference(
                 column: ArenaColumn.Visibility,
                 index: slot,
-                value: visibility
+                value: normalized
             );
         }
         if (cell.Observation is { } observation) {
@@ -319,7 +374,7 @@ public sealed partial class StateArena {
                 continue;
             }
 
-            var slot = (layout.CellStart + ((layout.Shape is (RowShape.Slot or RowShape.Keyed or RowShape.Ordered))
+            var slot = (layout.CellStart + ((!m_catalog.IsPoolRow(rowOrdinal: rowOrdinal) && (layout.Shape is (RowShape.Slot or RowShape.Keyed or RowShape.Ordered)))
                 ? members
                 : position
             ));
@@ -328,7 +383,7 @@ public sealed partial class StateArena {
                 WriteNumber(
                     column: ArenaColumn.MemberKey,
                     index: slot,
-                    value: m_catalog.Keys.Intern(name: cell!.Key).Ordinal
+                    value: m_keys.Intern(name: cell!.Key).Ordinal
                 );
 
                 members++;
@@ -359,7 +414,7 @@ public sealed partial class StateArena {
         // A slot's one cell is addressable whether or not it holds a value, so its reserved key stays in the
         // column and the index even when the loaded row carries no cell.
         if (layout.Shape == RowShape.Slot) {
-            var key = m_catalog.Keys.Intern(name: StateRow.SlotKey);
+            var key = m_keys.Intern(name: StateRow.SlotKey);
 
             WriteNumber(
                 column: ArenaColumn.MemberKey,
@@ -424,7 +479,8 @@ public sealed partial class StateArena {
     }
     // The position a cell key names within its row, or -1 when the row's shape addresses no such position. Every
     // caller of the apply pass has already had the same answer admitted.
-    private static int ImportPosition(in ArenaRowLayout layout, StateCell cell) => (layout.Shape switch {
+    private int ImportPosition(in ArenaRowLayout layout, StateCell cell) => (layout.Shape switch {
+        _ when m_catalog.IsPoolRow(rowOrdinal: layout.Ordinal) => ((m_keys.TryResolve(name: cell.Key, key: out var poolKey) && m_catalog.TryGetPoolSlot(keyOrdinal: poolKey.Ordinal, slot: out var poolSlot) && (((uint)poolSlot) < ((uint)layout.CellCapacity))) ? poolSlot : -1),
         RowShape.Slot => ((cell.Key == StateRow.SlotKey)
             ? 0
             : -1
@@ -452,18 +508,15 @@ public sealed partial class StateArena {
     private bool TryAdmitKey(StateRow row, CellName name, HashSet<string> pending, out string reason) {
         reason = string.Empty;
 
-        if (m_catalog.Keys.TryResolve(
-            key: out _,
-            name: name
-        )) {
+        if (m_keys.ContainsLocal(name: name)) {
             return true;
         }
 
         if (
             pending.Add(item: name.Value) &&
-            ((m_catalog.Keys.Count + pending.Count) > StateCapacity.MaxCellKeys)
+            ((m_keys.Count + pending.Count) > StateCapacity.MaxCellKeys)
         ) {
-            reason = $"row '{row.Name.Value}' cell '{name.Value}' cannot be interned: the catalog already holds {StateCapacity.MaxCellKeys} distinct keys";
+            reason = $"row '{row.Name.Value}' cell '{name.Value}' cannot be interned: the arena already holds {StateCapacity.MaxCellKeys} distinct keys";
 
             return false;
         }
@@ -531,8 +584,9 @@ public sealed partial class StateArena {
 
         return true;
     }
-    private bool TryAdmitImport(StateRow? row, HashSet<string> pending, out int rowOrdinal, out string reason) {
+    private bool TryAdmitImport(StateRow? row, HashSet<string> pending, out int rowOrdinal, out long visibilityBytes, out string reason) {
         rowOrdinal = -1;
+        visibilityBytes = 0L;
 
         if (row is null) {
             reason = "an imported row carries no declaration";
@@ -552,9 +606,23 @@ public sealed partial class StateArena {
 
         rowOrdinal = handle.Ordinal;
 
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{row.Name.Value}' is owned by a state pool";
+            return false;
+        }
+
         var descriptor = m_catalog.Descriptors[rowOrdinal];
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
         var cells = (row.Cells ?? []);
+
+        if (!StateVisibilityStorage.TryMeasure(
+            bytes: out _,
+            reason: out var rowVisibilityReason,
+            value: row.Visibility
+        )) {
+            reason = $"row '{row.Name.Value}' {rowVisibilityReason}";
+            return false;
+        }
 
         if (descriptor.Kind != row.Kind) {
             reason = $"row '{row.Name.Value}' stores {descriptor.Kind}, which an imported {row.Kind} row does not carry";
@@ -643,7 +711,8 @@ public sealed partial class StateArena {
 
                 return false;
             }
-            if (!TryAdmitKey(
+            // Ring slots resolve through catalog symbols and never enter the retained key ledger.
+            if ((layout.Shape != RowShape.Ring) && !TryAdmitKey(
                 name: cell.Key,
                 pending: pending,
                 reason: out reason,
@@ -651,6 +720,21 @@ public sealed partial class StateArena {
             )) {
                 return false;
             }
+            if ((cell.Provenance?.Length ?? 0) > StateCapacity.MaxProvenanceLength) {
+                reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' carries a provenance of {cell.Provenance!.Length} characters, past the {StateCapacity.MaxProvenanceLength}-character limit";
+
+                return false;
+            }
+            if (!StateVisibilityStorage.TryMeasure(
+                bytes: out var cellVisibilityBytes,
+                reason: out var visibilityReason,
+                value: cell.Visibility
+            )) {
+                reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' {visibilityReason}";
+                return false;
+            }
+
+            visibilityBytes += cellVisibilityBytes;
             if (!TraitsAgree(
                 cell: cell,
                 declared: declared,
@@ -675,5 +759,15 @@ public sealed partial class StateArena {
         reason = string.Empty;
 
         return true;
+    }
+    private long VisibilityBytes(int rowOrdinal) {
+        ref readonly var layout = ref m_layout[rowOrdinal];
+        var bytes = 0L;
+
+        for (var position = 0; (position < layout.CellCapacity); position++) {
+            bytes += StateVisibilityStorage.RetainedBytes(value: m_visibilities?[(layout.CellStart + position)]);
+        }
+
+        return bytes;
     }
 }

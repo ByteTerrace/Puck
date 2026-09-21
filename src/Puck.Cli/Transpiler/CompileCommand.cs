@@ -8,22 +8,22 @@ using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler;
-using Puck.World.Transpiler.Validation;
 
 namespace Puck.Cli.Transpiler;
 
 /// <summary>
-/// The <c>puck compile</c> verb: compiles a <c>.puck</c> DSL source file into a canonical JSON world definition.
+/// The <c>puck compile</c> verb: compiles <c>.puck</c> DSL sources into canonical JSON definitions in input order.
 /// Supports resilient diagnostics, dependency resolution, engine schema validation, and watch mode.
 /// </summary>
-internal static class CompileCommand {
+internal static partial class CompileCommand {
     internal static int Run(
         string path,
         string? output,
         bool watch,
         bool strict,
         bool validate,
-        bool bundle
+        bool bundle,
+        bool updateAssets = false
     ) {
         var fullPath = Path.GetFullPath(path: path);
 
@@ -43,6 +43,7 @@ internal static class CompileCommand {
                 outputPath: outputPath,
                 sourcePath: fullPath,
                 strict: strict,
+                updateAssets: updateAssets,
                 validate: validate
             );
         }
@@ -52,6 +53,7 @@ internal static class CompileCommand {
             outputPath: outputPath,
             sourcePath: fullPath,
             strict: strict,
+            updateAssets: updateAssets,
             validate: validate
         );
     }
@@ -61,7 +63,8 @@ internal static class CompileCommand {
         string? outputPath,
         bool strict,
         bool validate,
-        bool bundle
+        bool bundle,
+        bool updateAssets = false
     ) {
         var diagnostics = new DiagnosticBag();
         string sourceText;
@@ -86,6 +89,14 @@ internal static class CompileCommand {
             : ImportHandling.Validate
         );
 
+        if (!isCartridge) {
+            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate);
+        }
+        if (updateAssets) {
+            Console.Error.WriteLine(value: "error: --update-assets applies to world asset references; cartridge sources do not use a world asset lock.");
+            return 1;
+        }
+
         var (effectiveAst, loweredJson) = CompileSource(
             diagnostics: diagnostics,
             imports: imports,
@@ -109,35 +120,12 @@ internal static class CompileCommand {
 
         // A module is a fragment whichever root imports it supplies fields for, so validating one as a world
         // reports refusals that belong to that root, not to this file. `lint` applies the same rule.
-        if (
-            validate &&
-            !diagnostics.HasErrors &&
-            isCartridge
-        ) {
+        if (validate && !diagnostics.HasErrors) {
             CartridgeLanguageServices.Validate(
                 jsonObject,
                 sourceMap,
                 diagnostics,
                 effectiveAst.Span
-            );
-        }
-
-        if (
-            validate &&
-            !diagnostics.HasErrors &&
-            !isCartridge &&
-            WorldSemanticValidator.IsRootDocument(loweredJson: jsonObject)
-        ) {
-            var machineCatalog = CliWorldVocabulary.EnsureInstalled();
-            var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machineCatalog);
-
-            WorldSemanticValidator.ValidateComposedWorld(
-                catalogFingerprint: catalogFingerprint,
-                diagnostics: diagnostics,
-                loweredJson: jsonObject,
-                machines: machineCatalog,
-                sourceMap: sourceMap,
-                sourcePath: sourcePath
             );
         }
 
@@ -304,7 +292,8 @@ internal static class CompileCommand {
         string? outputPath,
         bool strict,
         bool validate,
-        bool bundle
+        bool bundle,
+        bool updateAssets = false
     ) {
         Console.WriteLine(value: $"[puck watch] Monitoring '{sourcePath}' for changes (Ctrl+C to stop)...");
 
@@ -314,6 +303,7 @@ internal static class CompileCommand {
             outputPath: outputPath,
             sourcePath: sourcePath,
             strict: strict,
+            updateAssets: updateAssets,
             validate: validate
         );
 
@@ -344,6 +334,7 @@ internal static class CompileCommand {
                 outputPath: outputPath,
                 sourcePath: sourcePath,
                 strict: strict,
+                updateAssets: updateAssets,
                 validate: validate
             );
         }
@@ -369,11 +360,11 @@ internal static class CompileCommand {
     }
 
     public static Command Create() {
-        var pathArgument = new Argument<string>(name: "path") { Description = "Path to the .puck source file to compile." };
+        var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.OneOrMore, Description = "Paths to .puck sources, compiled in input order in one process. Stops on the first failure." };
         var outputOption = new Option<string?>(
             name: "--output",
             aliases: ["-o"]
-        ) { Description = "Destination JSON path (defaults to .cartridge.json for cartridges, .world.json for worlds)." };
+        ) { Description = "Destination JSON path, or destination directory for a source with world declarations." };
         var watchOption = new Option<bool>(
             name: "--watch",
             aliases: ["-w"]
@@ -381,9 +372,10 @@ internal static class CompileCommand {
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
         var bundleOption = new Option<bool>(name: "--bundle") { Description = "Inline and bundle all imported .puck module ASTs into a single standalone document." };
+        var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
 
         var command = new Command(
-            description: "Compile a .puck source file into a canonical JSON world definition.",
+            description: "Compile .puck source files into canonical JSON world or cartridge definitions.",
             name: "compile"
         ) {
             pathArgument,
@@ -392,16 +384,32 @@ internal static class CompileCommand {
             strictOption,
             validateOption,
             bundleOption,
+            assetsOption,
         };
 
-        command.SetAction(action: parseResult => Run(
-            bundle: parseResult.GetValue(option: bundleOption),
-            output: parseResult.GetValue(option: outputOption),
-            path: parseResult.GetRequiredValue(argument: pathArgument),
-            strict: parseResult.GetValue(option: strictOption),
-            validate: parseResult.GetValue(option: validateOption),
-            watch: parseResult.GetValue(option: watchOption)
-        ));
+        command.Validators.Add(item: result => {
+            if (result.GetValue(option: assetsOption) && result.GetValue(option: watchOption)) { result.AddError(errorMessage: "--update-assets cannot be combined with --watch; asset changes must be accepted explicitly."); }
+            if ((result.GetValue(argument: pathArgument)?.Length > 1) &&
+                ((result.GetValue(option: outputOption) is not null) || result.GetValue(option: watchOption))) {
+                result.AddError(errorMessage: "--output and --watch require exactly one source file.");
+            }
+        });
+        command.SetAction(action: parseResult => {
+            foreach (var path in parseResult.GetRequiredValue(argument: pathArgument)) {
+                var exitCode = Run(
+                    bundle: parseResult.GetValue(option: bundleOption),
+                    output: parseResult.GetValue(option: outputOption),
+                    path: path,
+                    strict: parseResult.GetValue(option: strictOption),
+                    validate: parseResult.GetValue(option: validateOption),
+                    watch: parseResult.GetValue(option: watchOption),
+                    updateAssets: parseResult.GetValue(option: assetsOption)
+                );
+
+                if (exitCode != 0) { return exitCode; }
+            }
+            return 0;
+        });
 
         return command;
     }

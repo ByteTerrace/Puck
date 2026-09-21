@@ -1,0 +1,7 @@
+{
+  "schema": "puck.parity.contract.v1",
+  "tileSize": 16,
+  "stations": {
+    "paths": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 5500, "1": 2800, "2": 5000 } }
+  }
+}

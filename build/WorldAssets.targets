@@ -10,12 +10,9 @@
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\backgammon.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\billiards.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\bowling.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\chess.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\chinese-checkers.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\codenames.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\dominoes.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\freecell.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\hearts.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\hexlines.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\klondike.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\mancala.puck" />
@@ -37,6 +34,7 @@
             Condition="'$(DesignTimeBuild)' != 'true'"
             Inputs="@(PuckGeneratedWorldSource);@(ReferenceCopyLocalPaths);$(TargetPath);$(MSBuildThisFileFullPath)"
             Outputs="@(PuckGeneratedWorldSource -> '%(RootDir)%(Directory)%(Filename).world.json')">
-        <Exec Command="dotnet &quot;$(TargetPath)&quot; compile &quot;%(PuckGeneratedWorldSource.FullPath)&quot; --output &quot;%(PuckGeneratedWorldSource.RootDir)%(PuckGeneratedWorldSource.Directory)%(PuckGeneratedWorldSource.Filename).world.json&quot;" />
+        <!-- Preserve dependency order, but pay compiler/JIT/schema initialization once for the whole batch. -->
+        <Exec Command="dotnet &quot;$(TargetPath)&quot; compile @(PuckGeneratedWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
     </Target>
 </Project>

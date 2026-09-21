@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler.Decompiler;
+using Puck.State;
 using Puck.Transpiler.Diagnostics;
 using Xunit;
 
@@ -16,15 +18,278 @@ public class AuthoringSugarTests {
 
         return (compilation.Json, compilation.Diagnostics);
     }
+
+    [Fact]
+    public void RuntimeRecordEnumIsMaterializedAtItsFieldDeclaration() {
+        var (json, diagnostics) = Lower(body: """
+            state {
+                enum Facing { North South }
+                record Unit { facing: Facing = North }
+                pool units of Unit capacity(1)
+            }
+            """);
+
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var state = Assert.IsType<JsonObject>(@object: json["state"]);
+        var runtimeEnum = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: state["enums"])));
+
+        Assert.Equal("Facing", runtimeEnum["name"]?.ToString());
+        Assert.Equal(["North", "South"], Assert.IsType<JsonArray>(@object: runtimeEnum["members"]).Select(selector: static member => member!.ToString()));
+    }
+    [Fact]
+    public void PoolNamedPairUsesOrdinaryClaimSyntax() {
+        var (json, diagnostics) = Lower(body: """
+            state {
+                record Item { value: Int }
+                pool pair of Item capacity(1)
+            }
+            rule "take" { claim pair as item { item.value = 1 } }
+            """);
+
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rule = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0]);
+
+        Assert.Equal("claim", Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["effects"])[0])["$type"]?.ToString());
+    }
+    [Fact]
+    public void BoundsAdmitOnlyTheCanonicalRangeSpelling() {
+        var (closed, closedDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(0..10) } }");
+        var (minimumOnly, minimumDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(0..) } }");
+        var (maximumOnly, maximumDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(..10) } }");
+        var (_, namedDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(minimum: 0, maximum: 10) } }");
+
+        Assert.False(condition: closedDiagnostics.HasErrors, userMessage: closedDiagnostics.FormatReport(""));
+        Assert.False(condition: minimumDiagnostics.HasErrors, userMessage: minimumDiagnostics.FormatReport(""));
+        Assert.False(condition: maximumDiagnostics.HasErrors, userMessage: maximumDiagnostics.FormatReport(""));
+        Assert.Equal(0L, WorldRows(json: closed)[0]!["min"]!.GetValue<long>());
+        Assert.Equal(10L, WorldRows(json: closed)[0]!["max"]!.GetValue<long>());
+        Assert.Null(@object: WorldRows(json: minimumOnly)[0]!["max"]);
+        Assert.Null(@object: WorldRows(json: maximumOnly)[0]!["min"]);
+        Assert.True(condition: namedDiagnostics.HasErrors);
+    }
+
     private static JsonArray WorldRows(JsonObject json) =>
         Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["state"])["world"]);
 
+    [Fact]
+    public void RecordAndPoolDeclarationsLowerTypedSeeds() {
+        var (json, diag) = Lower(body: """
+            state {
+                record Player {
+                    name: Text = "guest"
+                    score: Int bounds(0..10) advance(perSecond: -1)
+                }
+                pool players of Player capacity(2) = [{ name: "Ada", score: 3 }]
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var state = Assert.IsType<JsonObject>(@object: json["state"]);
+        var records = Assert.IsType<JsonArray>(@object: state["records"]);
+        var fields = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: records[0])["fields"]);
+
+        Assert.Equal("Text", Assert.IsType<JsonObject>(@object: fields[0])["kind"]?.ToString());
+        var defaultValue = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonObject>(@object: fields[0])["default"]);
+
+        Assert.Equal("Text", defaultValue["kind"]?.ToString());
+        Assert.Equal("guest", defaultValue["value"]?.ToString());
+        Assert.Equal(-1L, Assert.IsType<JsonObject>(@object: Assert.IsType<JsonObject>(@object: fields[1])["advance"])["perSecondNumerator"]?.GetValue<long>());
+        var pools = Assert.IsType<JsonArray>(@object: state["pools"]);
+        var pool = Assert.IsType<JsonObject>(@object: pools[0]);
+
+        Assert.Equal("Player", pool["record"]?.ToString());
+        Assert.Equal(2, pool["capacity"]?.GetValue<int>());
+        Assert.Equal("name", Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: pool["initial"])[0])["values"])[0])["field"]?.ToString());
+        var seedValue = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: pool["initial"])[0])["values"])[0])["value"]);
+
+        Assert.Equal("Text", seedValue["kind"]?.ToString());
+        Assert.Equal("Ada", seedValue["value"]?.ToString());
+    }
+    [Fact]
+    public void PoolEffectsKeepLexicalAliasFieldReferences() {
+        var (json, diag) = Lower(body: """
+            state {
+                record Player { score: Int }
+                pool players of Player capacity(1)
+            }
+            rule "award" {
+                claim players as player {
+                    player.score = 1
+                    release player
+                }
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var effects = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0])["effects"]);
+        var claim = Assert.IsType<JsonObject>(@object: effects[0]);
+
+        Assert.Equal("claim", claim["$type"]?.ToString());
+        var nested = Assert.IsType<JsonArray>(@object: claim["effects"]);
+
+        Assert.Equal("player.score", StateChannelRefJsonConverter.FromNode(node: Assert.IsType<JsonObject>(@object: nested[0])["state"]).Spelling);
+        Assert.Equal("release", Assert.IsType<JsonObject>(@object: nested[1])["$type"]?.ToString());
+    }
+    [Fact]
+    public void RuleHeaderIteratesPoolAndCountReadsItsLiveDomain() {
+        var (json, diagnostics) = Lower(body: """
+            state {
+                record Player { score: Int }
+                pool players of Player capacity(2)
+            }
+            rule "award" for each player in players {
+                local live = count(players)
+                player.score = live
+            }
+            """);
+
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rule = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0]);
+
+        Assert.Equal("players", Assert.IsType<JsonObject>(@object: rule["poolForEach"])["pool"]?.ToString());
+        Assert.Equal("player", Assert.IsType<JsonObject>(@object: rule["poolForEach"])["binding"]?.ToString());
+        var expression = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["locals"])[0])["expression"]);
+        var program = ExpressionProgramJsonConverter.FromNode(node: expression);
+        var operand = Assert.IsType<InstructionPayload.State>(@object: Assert.Single(collection: program.Instructions).Payload);
+
+        Assert.Equal("$reduce:count:players", operand.Name.Spelling);
+    }
+    [Fact]
+    public void NamedPoolForeachLowersNestedEffects() {
+        var (json, diag) = Lower(body: """
+            state {
+                record Player { score: Int }
+                pool players of Player capacity(2)
+            }
+            rule "reset" {
+                for each player in players {
+                    player.score = 0
+                }
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var effects = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0])["effects"]);
+        var each = Assert.IsType<JsonObject>(@object: effects[0]);
+
+        Assert.Equal("forEachPool", each["$type"]?.ToString());
+        Assert.Equal("players", each["pool"]?.ToString());
+    }
+    [Fact]
+    public void NestedPoolIterationGateRetainsItsLexicalFieldOperand() {
+        var (json, diagnostics) = Lower(body: """
+            state {
+                record Piece { mover: Int }
+                pool pieces of Piece capacity(1)
+            }
+            rule "move" {
+                for each piece in pieces {
+                    if piece.mover == 1 {
+                        release piece
+                    }
+                }
+            }
+            """);
+
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rule = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0]);
+        var each = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["effects"])[0]);
+        var branch = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: each["effects"])[0]);
+        var condition = Assert.IsType<JsonObject>(@object: branch["condition"]);
+        var left = Assert.IsType<JsonObject>(@object: condition["left"]);
+        var instruction = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: left["instructions"])));
+
+        Assert.Equal("piece.mover", StateChannelRefJsonConverter.FromNode(node: instruction["name"]).Spelling);
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: json.ToJsonString()));
+
+        var (compiled, _) = WorldFactsCompiler.CompileDocument(definition: definition);
+
+        Assert.Single(collection: compiled);
+    }
+    [Fact]
+    public void NestedClaimAndForeachKeepEachLexicalBinding() {
+        var (json, diag) = Lower(body: """
+            state {
+                record Player { score: Int }
+                pool players of Player capacity(2)
+            }
+            rule "awardAll" {
+                claim players as winner {
+                    for each player in players {
+                        player.score = 0
+                        winner.score = 1
+                    }
+                }
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var claim = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0])["effects"])[0]);
+        var each = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: claim["effects"])[0]);
+        var nested = Assert.IsType<JsonArray>(@object: each["effects"]);
+
+        Assert.Equal("player.score", StateChannelRefJsonConverter.FromNode(node: Assert.IsType<JsonObject>(@object: nested[0])["state"]).Spelling);
+        Assert.Equal("winner.score", StateChannelRefJsonConverter.FromNode(node: Assert.IsType<JsonObject>(@object: nested[1])["state"]).Spelling);
+    }
+    [Fact]
+    public void StaticPoolFieldAccessUsesSlotThenFieldWithoutRewritingTextLiterals() {
+        var (json, diag) = Lower(body: """
+            state {
+                record Fighter { frags: Int = 0 }
+                pool fighters of Fighter capacity(2) = [{ frags: 0 }, { frags: 0 }]
+            }
+            rule "score" when fighters[0].frags == 0 {
+                fighters[1].frags = 1
+                total = fighters[0].frags + 1
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var rule = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["rules"])[0]);
+        var gate = Assert.IsType<JsonObject>(@object: rule["gate"]);
+
+        var left = Assert.IsType<JsonObject>(@object: gate["left"]);
+        var instruction = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: left["instructions"])));
+
+        Assert.Equal("fighters[0].frags", StateChannelRefJsonConverter.FromNode(node: instruction["name"]).Spelling);
+        var effects = Assert.IsType<JsonArray>(@object: rule["effects"]);
+
+        var write = Assert.IsType<JsonObject>(@object: effects[0]);
+
+        Assert.Equal("fighters[1].frags", StateChannelRefJsonConverter.FromNode(node: write["state"]).Spelling);
+        Assert.Null(@object: write["key"]);
+        var expression = ExpressionProgramJsonConverter.FromNode(node: Assert.IsType<JsonObject>(@object: effects[1])["expression"]);
+        var state = Assert.IsType<InstructionPayload.State>(@object: expression.Instructions[0].Payload);
+
+        Assert.Equal("fighters[0].frags", state.Name.Spelling);
+        Assert.Contains(
+            actualString: WorldDecompiler.Decompile(root: json),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "fighters[1].frags = 1"
+        );
+    }
+    [Fact]
+    public void IdentitySelectsNamespacedCapacityOneRecordPools() {
+        var (json, diag) = Lower(body: """
+            identity {
+                id: "hero"
+                name: "Hero"
+                color: "#ffffff"
+                moveSpeedState: motion.move
+                turnSpeedState: motion.turn
+                records [identity.profile]
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        Assert.Equal("identity.profile", Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["identity"])["records"])[0]?.ToString());
+    }
     [Fact]
     public void TableFamilyExpandsToNumberedTables() {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table scores[4] : Int
+                    table scores[4]
                 }
             }
             """);
@@ -44,7 +309,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table cardNames : Int {
+                    table cardNames {
                         c0 = 0
                         c1 = 1
                     }
@@ -93,7 +358,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table meter[3] : Int
+                    table meter[3]
                 }
             }
 
@@ -115,7 +380,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table phase : Int {
+                    table phase {
                         current = 0
                     }
                 }
@@ -158,13 +423,13 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table cards : Int = range(0, 5)
-                    table cardNames : Int {
+                    table cards = range(0, 5)
+                    table cardNames {
                         c0 = 0
                         c1 = 1
                     }
                     pile stock of cardNames = ["c0", "c1"]
-                    table weights : Int = [1, 2, 4, 8]
+                    table weights = [1, 2, 4, 8]
                 }
             }
             """);
@@ -193,7 +458,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table board : Int {
+                    table board {
                         unstable = 1
                     }
                 }
@@ -230,7 +495,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table combat : Int {
+                    table combat {
                         active = 1
                     }
                 }
@@ -271,7 +536,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table combat : Int {
+                    table combat {
                         active = 1
                     }
                 }
@@ -295,7 +560,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table Pile[0, 2..4] : Int
+                    table Pile[0, 2..4]
                 }
             }
             """);
@@ -317,7 +582,7 @@ public class AuthoringSugarTests {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table scores[3] : Int
+                    table scores[3]
                 }
             }
             """);
@@ -344,7 +609,7 @@ public class AuthoringSugarTests {
                     Spades
                 }
                 world {
-                    table trump : Int {
+                    table trump {
                         suit = Suit.Diamonds
                     }
                 }
@@ -377,61 +642,11 @@ public class AuthoringSugarTests {
         Assert.Equal(3m, eff["value"]?.GetValue<decimal>());
     }
     [Fact]
-    public void RecordExpandsToSoATablesAndRewritesFieldAccesses() {
-        var (json, diag) = Lower(body: """
-            state {
-                enum Suit {
-                    Clubs,
-                    Diamonds
-                }
-                record Card {
-                    suit: Suit
-                    rank: Int
-                }
-                world {
-                    table cards[4] : Card
-                }
-            }
-
-            rule "play" when cards[0].suit == Suit.Diamonds {
-                cards[0].rank = 10
-            }
-            """);
-
-        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
-        var rows = WorldRows(json: json);
-        var rowNames = rows.Select(selector: r => r?["name"]?.ToString()).ToHashSet();
-
-        Assert.Contains(expected: "cards_suit", set: rowNames);
-        Assert.Contains(expected: "cards_rank", set: rowNames);
-
-        var cardsSuit = rows.First(predicate: r => (r?["name"]?.ToString() == "cards_suit"));
-        var suitCells = Assert.IsType<JsonArray>(@object: cardsSuit?["cells"]);
-
-        Assert.Equal(4, suitCells.Count);
-
-        var rules = Assert.IsType<JsonArray>(@object: json["rules"]);
-        var rule = Assert.IsType<JsonObject>(@object: rules[0]);
-        var gate = Assert.IsType<JsonObject>(@object: rule["gate"]);
-
-        Assert.Equal("compareState", gate["$type"]?.ToString());
-        Assert.Equal("cards_suit", gate["state"]?.ToString());
-        Assert.Equal("0", gate["key"]?.ToString());
-        Assert.Equal(1m, gate["value"]?.GetValue<decimal>());
-
-        var effects = Assert.IsType<JsonArray>(@object: rule["effects"]);
-        var eff = Assert.IsType<JsonObject>(@object: effects[0]);
-
-        Assert.Equal("cards_rank", eff["state"]?.ToString());
-        Assert.Equal("0", eff["key"]?.ToString());
-        Assert.Equal(10m, eff["value"]?.GetValue<decimal>());
-    }
-    [Fact]
     public void DerivedStateInlinesMacroExpressions() {
         var (json, diag) = Lower(body: """
             state {
                 world {
-                    table board : Int {
+                    table board {
                         cell0 = 5
                     }
                 }
@@ -450,15 +665,13 @@ public class AuthoringSugarTests {
 
         Assert.Equal("board[cell0] > 0", WorldExpressionJson.Text(node: gate["left"]));
     }
-    // A collection operation over a family unrolls into gate text (`and`-joined), which the expression grammar a
-    // comparison operand is read with does not spell. Lowering refuses it rather than writing an operand no rule
-    // can compile.
+    // Family folds retain their runtime subprogram instead of expanding into gate-language text.
     [Fact]
-    public void CollectionOperationsUnrollIntoTextAnOperandCannotCarry() {
-        var (_, diag) = Lower(body: """
+    public void CollectionOperationsRetainTheirFoldSubprogram() {
+        var (json, diag) = Lower(body: """
             state {
                 world {
-                    table scores[3] : Int
+                    table scores[3]
                 }
             }
 
@@ -467,12 +680,41 @@ public class AuthoringSugarTests {
             }
             """);
 
-        Assert.True(condition: diag.HasErrors);
-        Assert.Contains(
-            actualString: diag.FormatReport(""),
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "PUCK002"
-        );
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var program = json["rules"]![0]!["gate"]!["left"]!;
+        Assert.Equal("All", program["instructions"]![0]!["op"]!.GetValue<string>());
+        Assert.Single(collection: program["subprograms"]!.AsArray());
+    }
+    [Fact]
+    public void EnumResolvesInRuleLocalExpressions() {
+        var (json, diag) = Lower(body: """
+            state {
+                enum MoveKind {
+                    None
+                    Quiet
+                    Capture
+                }
+                world {
+                    slot kind = 0
+                }
+            }
+
+            rule "setKind" {
+                local k = MoveKind.Capture
+                kind = k
+            }
+            """);
+
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var rules = Assert.IsType<JsonArray>(@object: json["rules"]);
+        var rule = Assert.IsType<JsonObject>(@object: rules[0]);
+        var locals = Assert.IsType<JsonArray>(@object: rule["locals"]);
+        var local = Assert.IsType<JsonObject>(@object: locals[0]);
+        var expr = Assert.IsType<JsonObject>(@object: local["expression"]);
+        var instructions = Assert.IsType<JsonArray>(@object: expr["instructions"]);
+        var instr = Assert.IsType<JsonObject>(@object: instructions[0]);
+
+        Assert.Equal("Constant", instr["op"]?.ToString());
+        Assert.Equal(2m, instr["value"]?.GetValue<decimal>());
     }
 }
-

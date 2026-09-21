@@ -4,27 +4,16 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateStateDisclosure(WorldDefinition definition, List<string> errors) {
-        var storage = 0L;
-
         foreach (var row in definition.State) {
             if (row is null) {
                 continue;
             }
 
-            storage += (row.Capacity ?? ((row.EffectiveDomain is StateDomain.CellsOf board)
-                ? (WorldTopologyCompilation.Find(
-                    definition: definition,
-                    name: board.Topology
-                )?.CellCount ?? row.CellCeiling)
-                : row.CellCeiling));
             ValidateDisclosureRow(
                 definition: definition,
                 errors: errors,
                 row: row
             );
-        }
-        if (storage > 262_144) {
-            errors.Add(item: "state declared cell storage exceeds the 262144-cell world budget.");
         }
     }
     // One row's own disclosure shape: phaseOf, row/cell visibility and readersFrom, a secret draw site, each cell's
@@ -113,16 +102,14 @@ public static partial class WorldDefinitionValidator {
             definition.State,
             knowledge.Mask
         );
+        const string KnowledgeShape = "knowledge requires an explicit audience and either compatible source/mask boards or compatible token-keyed source/positions rows plus a boolean mask board.";
 
         if (
-            (row.EffectiveDomain is not StateDomain.CellsOf rowBoard) ||
             (row.Visibility is null) ||
-            (source?.EffectiveDomain is not StateDomain.CellsOf sourceBoard) ||
+            (source is null) ||
             (mask?.EffectiveDomain is not StateDomain.CellsOf maskBoard) ||
             (source.Knowledge is not null) ||
             (mask.Knowledge is not null) ||
-            (sourceBoard.Topology != rowBoard.Topology) ||
-            (maskBoard.Topology != rowBoard.Topology) ||
             (source.Kind != row.Kind) ||
             (mask.Kind != CellKind.Bool) ||
             (row.Name.Value == knowledge.Source) ||
@@ -131,7 +118,34 @@ public static partial class WorldDefinitionValidator {
             (row.Max != source.Max) ||
             (row.Overflow != source.Overflow)
         ) {
-            errors.Add(item: $"state row '{row.Name}': knowledge requires an explicit audience and distinct compatible source/mask boards with the same value envelope.");
+            errors.Add(item: $"state row '{row.Name}': {KnowledgeShape}");
+            return;
+        }
+        var valid = false;
+
+        if (knowledge.Positions is null) {
+            valid = (
+                (row.EffectiveDomain is StateDomain.CellsOf rowBoard) &&
+                (source.EffectiveDomain is StateDomain.CellsOf sourceBoard) &&
+                (sourceBoard.Topology == rowBoard.Topology) &&
+                (maskBoard.Topology == rowBoard.Topology)
+            );
+        } else if (knowledge.Positions is { } positionName) {
+            var positions = WorldDefinitionRows.FindStateRow(definition.State, positionName);
+
+            valid = (
+                (row.EffectiveDomain is StateDomain.KeysOf rowKeys) &&
+                (source.EffectiveDomain is StateDomain.KeysOf sourceKeys) &&
+                (positions?.EffectiveDomain is StateDomain.KeysOf positionKeys) &&
+                (positions.Knowledge is null) &&
+                (positions.Kind == CellKind.Int) &&
+                (row.Name.Value != positionName) &&
+                (sourceKeys.Row == rowKeys.Row) &&
+                (positionKeys.Row == rowKeys.Row)
+            );
+        }
+        if (!valid) {
+            errors.Add(item: $"state row '{row.Name}': {KnowledgeShape}");
         }
     }
     // The live audience row is keyed text: each cell's text is one canonical token, and a rule rewrites it.
@@ -161,8 +175,8 @@ public static partial class WorldDefinitionValidator {
 
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (readers.Count > 32) {
-            errors.Add(item: $"state row '{name}': visibility admits at most 32 readers.");
+        if (readers.Count > StateCapacity.MaxVisibilityReaders) {
+            errors.Add(item: $"state row '{name}': visibility admits at most {StateCapacity.MaxVisibilityReaders} readers.");
         }
 
         foreach (var reader in readers) {

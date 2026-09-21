@@ -441,23 +441,23 @@ bodies {
   seatSpawns [
     "stage"
   ]
-  sleepAfterTicks: 0
+  sleepAfterSeconds: 0s
 }
 
 bodyMotionPrograms [
   {
-    kind: "Motion"
+    kind: Motion
     name: "walk"
     operations [
-      "ResolveYawAttitudeAndPlanarFrame"
-      "ResolveHold"
-      "ComputePlanarTargetVelocity"
-      "ShapeVelocity"
-      "SnapYawToPlanarIntent"
-      "RunActionTriggers"
-      "ApplyHold"
-      "IntegratePlanarAndVerticalVelocity"
-      "CommitPose"
+      ResolveYawAttitudeAndPlanarFrame
+      ResolveHold
+      ComputePlanarTargetVelocity
+      ShapeVelocity
+      SnapYawToPlanarIntent
+      RunActionTriggers
+      ApplyHold
+      IntegratePlanarAndVerticalVelocity
+      CommitPose
     ]
     version: "puck.body.program.v1"
   }
@@ -833,52 +833,52 @@ cameras [
 channels [
   {
     composition: false
-    frame: "Heading"
+    frame: Heading
     name: "forward"
-    role: "MoveAdvance"
-    shape: "Bipolar"
+    role: MoveAdvance
+    shape: Bipolar
   }
   {
     composition: false
-    frame: "Heading"
+    frame: Heading
     name: "strafe"
-    role: "MoveStrafe"
-    shape: "Bipolar"
+    role: MoveStrafe
+    shape: Bipolar
   }
   {
     composition: false
     name: "turn"
-    role: "Turn"
-    shape: "Bipolar"
+    role: Turn
+    shape: Bipolar
   }
   {
     composition: false
     name: "faceX"
-    role: "FaceX"
-    shape: "Bipolar"
+    role: FaceX
+    shape: Bipolar
   }
   {
     composition: false
     name: "faceZ"
-    role: "FaceZ"
-    shape: "Bipolar"
+    role: FaceZ
+    shape: Bipolar
   }
   {
     composition: false
     name: "faceY"
-    role: "FaceY"
-    shape: "Bipolar"
+    role: FaceY
+    shape: Bipolar
   }
   {
     composition: true
     name: "jump"
-    shape: "Binary"
+    shape: Binary
   }
   {
     composition: false
     name: "rise"
-    role: "MoveUp"
-    shape: "Bipolar"
+    role: MoveUp
+    shape: Bipolar
   }
 ]
 
@@ -914,20 +914,20 @@ gravity {
   gravitationalConstant: 0
   isActive: true
   softeningLength: 0.5
-  solver: "Pairwise"
+  solver: Pairwise
   uniform [0, -18, 0]
 }
 
 host {
-  backend: "auto"
+  backend: auto
   exitAfterSeconds: 0
   fullscreen: false
   height: 900
   journalDepth: 2000
-  presentMode: "Immediate"
-  presentation: "Windowed"
+  presentMode: Immediate
+  presentation: Windowed
   rayQuery: true
-  surfaceFormat: "r8g8b8a8"
+  surfaceFormat: r8g8b8a8
   targetHertz: 60
   timing: false
   width: 1280
@@ -936,7 +936,7 @@ host {
 kits {
   rows [
     {
-      bodyContact: "Solid"
+      bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: capsule(endpoint: [0, 1, 0], radius: 0.35)
       mass: 0
@@ -945,18 +945,18 @@ kits {
         groundStick: 2
         holds [
           {
-            bond: "Surface"
+            bond: Surface
             cone [0, 60]
             driveAlignment: 0
             envelope {
               sinkSpeed: 40
             }
-            forward: "Heading"
+            forward: Heading
             gravity {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             lift: 0
             name: "ground"
             onDrive: false
@@ -966,14 +966,14 @@ kits {
             upLean: 0
           }
           {
-            bond: "Free"
+            bond: Free
             driveAlignment: 0
-            forward: "Heading"
+            forward: Heading
             gravity {
               fall: 46
               rise: 28
             }
-            hold: "Lift"
+            hold: Lift
             lift: 1
             name: "air"
             onDrive: false
@@ -983,7 +983,7 @@ kits {
             upLean: 0
           }
         ]
-        moveFrame: "World"
+        moveFrame: World
         shaping [
           {
             along {}
@@ -1023,8 +1023,8 @@ looks {
         replayFrames: false
         secondsPerFrame: 0
         lanes [
-          "0"
-          "airPose[$body]"
+          0
+          airPose[$body]
         ]
         poses {
           blink: "state.blink.$body"
@@ -4531,9 +4531,9 @@ render {
       hemisphere(color: "#F1E5DE", base: 0.3, gradient: 0.1)
     ]
   }
-  renderScale: "Native"
+  renderScale: Native
   shadowCrowdRadius: 0
-  shadows: "High"
+  shadows: High
   sky {
     layers [
       gradient(stops: [
@@ -4559,7 +4559,7 @@ render {
     ]
   }
   upscaleSharpness: 0
-  tonemap: "Filmic"
+  tonemap: Filmic
   environment {
     softboxes [
       {
@@ -4585,17 +4585,17 @@ render {
 }
 
 rule "airborne-on" {
-  when $fact:each:Airborne == 1
+  when fact(each, Airborne) == 1
   mode: Edge
-  forEach: "airPose"
+  forEach: airPose
   airPose[$each] = 1
   airWings[$each] = 1
 }
 
 rule "airborne-off" {
-  when $fact:each:Airborne == 0
+  when fact(each, Airborne) == 0
   mode: Edge
-  forEach: "airPose"
+  forEach: airPose
   airPose[$each] = 0
   airWings[$each] = 0
 }
@@ -4603,7 +4603,7 @@ rule "airborne-off" {
 rule "blink-close" {
   when blink[$each] == 0 and $tick >= blinkAt[$each]
   mode: Level
-  forEach: "blink"
+  forEach: blink
   blink[$each] = 1
   schedule blinkAt[$each] in 0.12s
 }
@@ -4611,9 +4611,9 @@ rule "blink-close" {
 rule "blink-open" {
   when blink[$each] == 1 and $tick >= blinkAt[$each]
   mode: Level
-  forEach: "blink"
+  forEach: blink
   blink[$each] = 0
-  generate(row: "blinkRest")
+  generate(row: blinkRest)
   blinkAt[$each] = $tick + blinkRest
 }
 
@@ -4657,10 +4657,10 @@ state {
       kind: "Fixed"
       name: "airWings"
     }
-    table blink: Int {
+    table blink {
       "0" = 0
     }
-    table blinkAt: Int {
+    table blinkAt {
       "0" = 90
     }
     row {

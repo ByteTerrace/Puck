@@ -177,7 +177,7 @@ public class StateDeclarationLspTests {
 
     [Fact]
     public async Task CompletionAfterADotOffersTheDeclaredTablesOwnCellKeys() {
-        var source = "schema: \"puck.world.definition.v1\"\nstate {\n    world {\n        table vitals : Int {\n            health = 100\n            mana = 50\n        }\n    }\n}\nrule \"heal\" {\n    when vitals.|\n    hp += 1\n}\n";
+        var source = "schema: \"puck.world.definition.v1\"\nstate {\n    world {\n        table vitals {\n            health = 100\n            mana = 50\n        }\n    }\n}\nrule \"heal\" {\n    when vitals.|\n    hp += 1\n}\n";
         var response = await CompletionAtAsync(markedSource: source);
         var labels = CompletionLabels(response: response);
 
@@ -196,7 +196,7 @@ public class StateDeclarationLspTests {
     }
     [Fact]
     public async Task CompletionAfterADotWithAPartialKeyStillOffersTheDeclaredCellKeys() {
-        var source = "schema: \"puck.world.definition.v1\"\nstate {\n    world {\n        table vitals : Int {\n            health = 100\n            mana = 50\n        }\n    }\n}\nrule \"heal\" {\n    when vitals.he|\n    hp += 1\n}\n";
+        var source = "schema: \"puck.world.definition.v1\"\nstate {\n    world {\n        table vitals {\n            health = 100\n            mana = 50\n        }\n    }\n}\nrule \"heal\" {\n    when vitals.he|\n    hp += 1\n}\n";
         var response = await CompletionAtAsync(markedSource: source);
         var labels = CompletionLabels(response: response);
 
@@ -209,7 +209,7 @@ public class StateDeclarationLspTests {
     public async Task CompletionAfterADotOnIncompleteUnclosedInputStillRecoversTheDeclaredCellKeys() {
         // The `rule "heal" {` block is never closed anywhere in the buffer — this is what a document looks like
         // mid-keystroke, before the author has typed a closing brace.
-        var source = "schema: \"puck.world.definition.v1\"\nstate {\n    world {\n        table vitals : Int {\n            health = 100\n            mana = 50\n        }\n    }\n}\nrule \"heal\" {\n    when vitals.|";
+        var source = "schema: \"puck.world.definition.v1\"\nstate {\n    world {\n        table vitals {\n            health = 100\n            mana = 50\n        }\n    }\n}\nrule \"heal\" {\n    when vitals.|";
         var response = await CompletionAtAsync(markedSource: source);
         var labels = CompletionLabels(response: response);
 

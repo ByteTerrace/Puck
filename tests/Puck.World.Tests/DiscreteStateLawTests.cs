@@ -449,7 +449,7 @@ public sealed class DiscreteStateLawTests {
         };
 
         var operation = new StateTransform.SetRay(
-            Direction: "E",
+            Direction: CellName.Parse(candidate: "E"),
             From: "0",
             Pattern: "capture",
             Row: "board",

@@ -207,6 +207,6 @@ public sealed class EvaluatorDoorLawTests {
     private sealed class UnboundEffect : RuleEffect {
         public UnboundEffect() : base(describe: "stamp") { }
 
-        public override long Cost(IRuleCostContext context) => 1L;
+        public override RuleWork Cost(IRuleCostContext context) => 1L;
     }
 }

@@ -13,6 +13,7 @@ namespace Puck.Cli.Tests;
 public sealed class CanaryAccountingLawTests {
     private static CliProcessOutputLine Line(string text, long sequence, CliProcessOutputStream stream = CliProcessOutputStream.Stdout) =>
         new(
+            ElapsedMilliseconds: sequence,
             Line: text,
             Sequence: sequence,
             Stream: stream

@@ -340,6 +340,7 @@ public sealed class CommandRegistry {
             modality.ActiveMaps[mapIndex]
         );
     }
+
     /// <summary>Determines whether the line's verb resolves to a <see cref="CommandRouting.Simulation"/>-routed
     /// command. Such a line may drain behind an unapplied deferred mutation (it folds into the same pending
     /// snapshot, FIFO); an unresolved or <see cref="CommandRouting.Immediate"/> line reads applied state, so it must
@@ -413,19 +414,24 @@ public sealed class CommandRegistry {
         // guard does. It is therefore untested BY CONSTRUCTION: a test would have to forge an entry, which is exactly
         // what CommandEntry's internal construction prevents.
         if (entry.Text is { } line) {
-            if (
-                entry.Dispatch &&
-                (((int)entry.CommandId) < m_nameById.Length)
-            ) {
-                ApplySubmittedSimulation(
+            // The submitting session settles with whatever became of its line, a line that never dispatched included:
+            // a session that settles results is otherwise left waiting on a verdict nothing will produce.
+            var settled = ((entry.Dispatch && (((int)entry.CommandId) < m_nameById.Length))
+                ? ApplySubmittedSimulation(
                     line: line,
                     expectedCommandId: entry.CommandId,
                     phase: entry.Phase,
                     value: entry.Value,
                     principal: entry.Principal,
                     slot: slot
-                );
-            }
+                )
+                : CommandResult.Error(output: "[wire.reject: the line was not dispatched]")
+            );
+
+            entry.Session?.Settle(
+                line: line,
+                result: settled
+            );
 
             return;
         }
@@ -473,7 +479,7 @@ public sealed class CommandRegistry {
     // The entry's read-after-write barrier is NOT this method's to release: ApplySnapshot's per-entry boundary owns
     // that, so a throw anywhere in here — the parse, CanonicalizeVerb, a handler's exception rendering — releases it
     // exactly once and cannot strand the session.
-    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, CommandPrincipal principal, int slot) {
+    private CommandResult ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, CommandPrincipal principal, int slot) {
         Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
 
         if (
@@ -505,7 +511,7 @@ public sealed class CommandRegistry {
                 NoteRejection();
             }
 
-            return;
+            return wireResult;
         }
 
         var parseResult = m_root.Parse(
@@ -530,7 +536,8 @@ public sealed class CommandRegistry {
             // without this a Simulation-routed rejection would leave the operator nothing but a wire.errors bump
             // to notice, on a line whose refusal arrives a tick after the prompt accepted it.
             NoteRejection();
-            NotifyRefusal(
+
+            return NotifyRefusal(
                 errors: parseResult.Errors,
                 expectedCommandId: expectedCommandId,
                 line: line,
@@ -538,8 +545,6 @@ public sealed class CommandRegistry {
                 principal: principal,
                 slot: slot
             );
-
-            return;
         }
 
         var context = new CommandContext(
@@ -555,14 +560,18 @@ public sealed class CommandRegistry {
 
         // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
         // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
-        if (Dispatch(
+        var result = Dispatch(
             context: in context,
             definition: definition,
             faulted: out _,
             suppressWireAck: true
-        ).IsError) {
+        );
+
+        if (result.IsError) {
             NoteRejection();
         }
+
+        return result;
     }
     /// <summary>Reports or flips the wire acknowledgement mode for the built-in <c>wire.ack</c> verb.</summary>
     /// <param name="args">The trailing tokens: empty reports the current mode; <c>on</c>/<c>quiet</c> set it.</param>
@@ -975,11 +984,7 @@ public sealed class CommandRegistry {
     // console tape) keys on the activation's Text, so without this the refusal is invisible on every surface but the
     // wire.errors counter nobody polls. The alternative — a synchronous shape check at submit — would re-parse the
     // line at both ends, which is exactly the double parse the deferred route exists to avoid.
-    private void NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, CommandPrincipal principal, int slot) {
-        if (m_observers.Length == 0) {
-            return;
-        }
-
+    private CommandResult NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, CommandPrincipal principal, int slot) {
         // Named for the command the line was INJECTED as, which is what the operator asked for; the line's own text
         // rides Text, so a sink can show both when they disagree.
         var name = ((((int)expectedCommandId) < m_nameById.Length)
@@ -993,16 +998,19 @@ public sealed class CommandRegistry {
             )
             : $"'{line}' no longer names '{name}'"
         );
+        var refusal = CommandResult.Error(output: $"[wire.reject: {reason}]");
         var activation = new CommandActivation(
             Name: name,
             Phase: phase,
-            Result: CommandResult.Error(output: $"[wire.reject: {reason}]"),
-            Text: line,
             Principal: principal,
-            Slot: slot
+            Result: refusal,
+            Slot: slot,
+            Text: line
         );
 
         PublishActivation(activation: in activation);
+
+        return refusal;
     }
     // Hands one activation to every observer, each behind its own boundary. An observer is an I/O SINK (a launcher
     // writing the verdict to stdout, a host publishing a console frame), so a throw from one is a fault in a reporting
@@ -1029,17 +1037,27 @@ public sealed class CommandRegistry {
         CommandValue value
     ) {
         session?.Barrier.Begin();
+        if (session is not null) {
+            session.QueuedLine = line;
+        }
 
         try {
             sink.Inject(
+                captureTick: ((session?.DueNextTick ?? false)
+                    ? InputRouter.EarliestCaptureTick
+                    : 0UL
+                ),
                 commandId: commandId,
                 value: value,
                 phase: CommandPhase.Started,
                 text: line,
-                submissionBarrier: session?.Barrier
+                session: session
             );
         } catch {
             session?.Barrier.Complete();
+            if (session is not null) {
+                session.QueuedLine = null;
+            }
 
             throw;
         }
@@ -1056,7 +1074,15 @@ public sealed class CommandRegistry {
                 ? fromEntry
                 : 0
             ); (entryIndex < entries.Length); entryIndex++) {
-                entries[entryIndex].SubmissionBarrier?.Complete();
+                var abandoned = entries[entryIndex];
+
+                abandoned.Session?.Barrier.Complete();
+                if (abandoned.Text is { } line) {
+                    abandoned.Session?.Settle(
+                        line: line,
+                        result: CommandResult.Error(output: "[wire.reject: the host cancelled the tick before this line applied]")
+                    );
+                }
             }
         }
     }
@@ -1264,10 +1290,10 @@ public sealed class CommandRegistry {
     }
     // The one definition of the wire.ack-quiet suppression rule, applied on every text dispatch path (fast, full
     // parse, snapshot re-dispatch): in quiet mode a successful acknowledgement-only result carries no answer, so drop
-    // it to None. An error (IsError) and an answer-bearing verb's output are never suppressed.
+    // its text alone. Settlement and control metadata survive; errors and answer-bearing output are never suppressed.
     private CommandResult SuppressAckIfQuiet(CommandResult result, CommandDefinition definition) {
         return ((m_acksQuiet && definition.AcknowledgementOnly && !result.IsError)
-            ? CommandResult.None
+            ? result with { Output = string.Empty }
             : result
         );
     }
@@ -1468,7 +1494,13 @@ public sealed class CommandRegistry {
                     );
                 } catch (Exception exception) when (IsContainable(exception: exception)) {
                     NoteRejection();
+                    if (entry.Text is { } failedLine) {
+                        entry.Session?.Settle(line: failedLine, result: CommandResult.Error(output: "[wire.reject: the command failed during dispatch]"));
+                    }
                 } catch (Exception exception) when (!IsContainable(exception: exception)) {
+                    if (entry.Text is { } cancelledLine) {
+                        entry.Session?.Settle(line: cancelledLine, result: CommandResult.Error(output: "[wire.reject: the host cancelled this command; inspect state before any retry]"));
+                    }
                     // A host cancellation is the one throw that leaves the loop, so the entries behind this one are
                     // never applied and never will be — no later tick revisits an abandoned snapshot. Their barriers
                     // are released here, before the unwind, because the alternative is a TextCommandSession that
@@ -1482,7 +1514,7 @@ public sealed class CommandRegistry {
 
                     throw;
                 } finally {
-                    entry.SubmissionBarrier?.Complete();
+                    entry.Session?.Barrier.Complete();
                 }
             }
         }

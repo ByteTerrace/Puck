@@ -15,7 +15,7 @@ public static partial class PuckParser {
     private static readonly HashSet<string> GateReservedWords = new(comparer: StringComparer.Ordinal) { "and", "or", "not", "as" };
 
     /// <summary>Scans one contiguous span of opaque operand text: brackets and parentheses are tracked as one
-    /// combined depth counter, a backquoted span is passed through uninterpreted, and scanning always stops
+    /// combined depth counter, a backquoted span and a string literal are passed through uninterpreted, and scanning always stops
     /// (without consuming) at a top-level ')', ',', ';', '{', '}', a comment opener ('//' or '/*'), a newline, or
     /// end of input. When <paramref
     /// name="stopKeywords"/> names a bare word found at a word boundary, scanning also stops there. When <paramref
@@ -46,6 +46,12 @@ public static partial class PuckParser {
                 if (!cursor.Eof) {
                     cursor.Advance();
                 }
+                continue;
+            }
+
+            // An interpolated string is an atom of the operand, and its holes hold brackets and braces of their own.
+            if ((c is '"' or '$') && (StringLiteralEnd(buffer: buffer, offset: cursor.Offset) is var closed and > 0)) {
+                cursor.Advance(count: (closed - cursor.Offset));
                 continue;
             }
 
@@ -181,43 +187,21 @@ public static partial class PuckParser {
         }
         return false;
     }
-    private static bool IsSugarOperand(string text) {
-        if (text.Contains(value: "].")) {
-            return true;
-        }
-        if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "all(") ||
-            text.StartsWith(comparisonType: StringComparison.Ordinal, value: "any(") ||
-            text.StartsWith(comparisonType: StringComparison.Ordinal, value: "sum(") ||
-            (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "count(") && (text.Contains(value: "->") || text.Contains(value: "=>")))) {
-            return true;
-        }
-        return false;
+    private static OperandExpressionNode ValidatedOperand(string text, SourceSpan span, DiagnosticBag? diagnostics) {
+        var operand = CreateOperand(span: span, text: text);
+        ValidateOperand(diagnostics: diagnostics, operand: operand);
+        return operand;
     }
-    /// <summary>Validates opaque operand text through <c>ExpressionSpelling.TryParse</c>, reporting PUCK002 at
-    /// <paramref name="span"/> on failure. Never re-implements the expression grammar — the parse result itself is
-    /// the only thing consulted (rule 8).</summary>
-    private static bool ValidateOperandText(string text, SourceSpan span, DiagnosticBag? diagnostics) {
-        if (IsSugarOperand(text: text)) {
-            return true;
-        }
 
-        if (ExpressionSpelling.TryParse(
-            error: out var error,
-            program: out _,
-            text: text
-        ) || ExpressionSpelling.TryParseVector(
-            error: out _,
-            text: text,
-            token: out _
-        )) {
-            return true;
+    private static void ValidateOperand(OperandExpressionNode operand, DiagnosticBag? diagnostics) {
+        var respelled = ExpressionSpelling.ToSourceDialect(text: operand.Text);
+        if (!string.Equals(a: respelled, b: operand.Text, comparisonType: StringComparison.Ordinal)) {
+            diagnostics?.ReportError(code: PuckDiagnosticCodes.OperandColonChannel,
+                message: $"'{operand.Text}' spells a reserved channel with colons; write '{respelled}'", span: operand.Span);
+        } else if (operand.Syntax is null) {
+            diagnostics?.ReportError(code: PuckDiagnosticCodes.OperandParse,
+                message: $"'{operand.Text}' {operand.SyntaxError}", span: operand.Span);
         }
-        diagnostics?.ReportError(
-            code: PuckDiagnosticCodes.OperandParse,
-            message: $"'{text}' {error}",
-            span: span
-        );
-        return false;
     }
     /// <summary>Reads a row reference span — a name (extended for reserved <c>$</c>-channels and a folded
     /// <c>$zones[...]</c> selector, §9-A8) followed by zero or more immediately adjacent, balanced <c>[...]</c>
@@ -325,17 +309,32 @@ public static partial class PuckParser {
                 span.Column
             );
         }
+        // A dotted row reference is contextual source sugar. ExpressionSpelling preserves it as a structurally
+        // typed lexical pool field so expression IR prints and parses bijectively; the world emitter still needs
+        // the original two pieces here so its active binding scope can distinguish `piece.rank` from the existing
+        // `row.key` spelling. Static `pool[slot].field` references took the early path above and remain indivisible.
+        if ((state.Name.PoolField is { Binding: { } binding, Pool: null, Slot: null } poolField) && (state.Key is null)) {
+            return new RowRefNode(
+                binding,
+                poolField.Field,
+                span.Offset,
+                span.Length,
+                span.Line,
+                span.Column,
+                FieldAccess: true
+            );
+        }
         return new RowRefNode(
-            state.Name,
-            state.Key,
+            state.Name.Spelling,
+            state.Key?.Spelling,
             span.Offset,
             span.Length,
             span.Line,
             span.Column
         );
     }
-    /// <summary>Reads and eagerly resolves a row reference in the unconditional contexts (<c>countdown</c>,
-    /// <c>remove</c>, <c>schedule</c>) where nothing else could follow the keyword. The whole operand span is
+    /// <summary>Reads and eagerly resolves a row reference in the unconditional contexts (<c>remove</c>,
+    /// <c>schedule</c>) where nothing else could follow the keyword. The whole operand span is
     /// captured, not just a name and its brackets, so text that is an expression rather than a row reference is
     /// named as such (PUCK003) instead of tripping a generic syntax error further along the line.</summary>
     private static bool TryReadRowRefOperand(ParseContext context, DiagnosticBag? diagnostics, IReadOnlySet<string>? stopKeywords, out RowRefNode? rowRef) {
@@ -399,14 +398,6 @@ public static partial class PuckParser {
         cursor.Advance();
         return (name.Length > 0);
     }
-    private static decimal LiteralToDecimal(object? value) => value switch {
-        decimal m => m,
-        long l => l,
-        ulong ul => ul,
-        double d => ((decimal)d),
-        int i => i,
-        _ => 0m,
-    };
     private static string? LongestMatchingPunctuation(string buffer, int offset, string[] candidates) {
         foreach (var candidate in candidates) {
             if (

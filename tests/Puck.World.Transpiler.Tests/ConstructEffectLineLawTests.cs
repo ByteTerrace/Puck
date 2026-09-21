@@ -20,9 +20,9 @@ public class ConstructEffectLineLawTests {
     // The row every probe reads, and the one name no probe declares.
     private const string Missing = "missingRow";
     private const string Rows = """
-                slot hp : Int = 1
-                slot flag : Int = 0
-                table deck : Int {
+                slot hp = 1
+                slot flag = 0
+                table deck {
                     a = 1
                 }
         """;
@@ -31,17 +31,20 @@ public class ConstructEffectLineLawTests {
     // first two effects are always ordinary writes, so a refusal reported at either of them, or at the rule, is a
     // different line.
     private static readonly Dictionary<string, string> Thirds = new(comparer: StringComparer.Ordinal) {
-        ["countdown"] = "countdown missingRow",
+        ["claim"] = "claim missingRow as item {\n        flag = 1\n    }",
+        ["claim pair"] = "claim pair missingRow between left, right as link {\n        flag = 1\n    }",
         ["deal"] = "deal 1 from missingRow to deck",
         ["draw"] = "draw missingRow to deck",
         ["if"] = "if missingRow == 1 {\n        flag = 1\n    }",
+        ["for each"] = "for each item in missingRow {\n        flag = 1\n    }",
         ["onFailure"] = "transaction {\n        flag = 1\n    } onFailure {\n        missingRow = 1\n    }",
         ["push"] = "push missingRow = hp",
+        ["release"] = "release missingRow",
         ["remove"] = "remove missingRow",
         ["schedule"] = "schedule missingRow in 5s",
         ["shuffle"] = "shuffle missingRow with missingRow",
         ["transaction"] = "transaction {\n        missingRow = 1\n    }",
-        ["transform"] = "transform boardCombine(row: \"missingRow\", operation: Copy)",
+        ["transform"] = "transform boardCombine(row: missingRow, operation: Copy)",
     };
 
     private static string Probe(string third) => $"schema: \"puck.world.definition.v1\"\n\nstate {{\n    world {{\n{Rows}\n    }}\n}}\n\nrule \"r\" {{\n    hp = 1\n    flag = 1\n    {third}\n}}\n";
@@ -223,7 +226,6 @@ public class ConstructEffectLineLawTests {
         .Select(selector: static construct => construct.Keyword)
         .Distinct(comparer: StringComparer.Ordinal)
         .Order(comparer: StringComparer.Ordinal));
-
     [MemberData(nameof(Arms))]
     [Theory]
     public void ARefusalAboutOneEffectNamesThatEffectsLine(string keyword) {
@@ -277,7 +279,7 @@ public class ConstructEffectLineLawTests {
     // field, so the arms it can draw a finding about are the ones whose effect node carries one — which is why
     // this axis is two named probes rather than the whole arm table: a top-level effect and one nested inside a
     // `transaction`. Both ranges come from the same walk, so a registration the emitter drops moves them.
-    [InlineData("countdown")]
+    [InlineData("remove")]
     [InlineData("transaction")]
     [Theory]
     public async Task TheLanguageServerRangesAnEffectFindingOnThatEffectsLine(string keyword) {

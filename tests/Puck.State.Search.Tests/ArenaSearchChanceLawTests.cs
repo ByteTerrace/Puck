@@ -39,7 +39,7 @@ public sealed class ArenaSearchChanceLawTests {
             Verdict: "verdict",
             Off: -1L,
             Nodes: 64,
-            JudgeCost: 1L,
+            Work: SearchWork.NodeBounded(judge: 1L),
             Depth: 1,
             Best: "best",
             Shapes: [new SearchShapePlan(
@@ -184,7 +184,7 @@ public sealed class ArenaSearchChanceLawTests {
                 Verdict: "verdict",
                 Off: -1L,
                 Nodes: 256,
-                JudgeCost: 1L,
+                Work: SearchWork.NodeBounded(judge: 1L),
                 Depth: 2,
                 Best: "best",
                 Shapes: [new SearchShapePlan(
@@ -253,7 +253,7 @@ public sealed class ArenaSearchChanceLawTests {
             Verdict: "verdict",
             Off: -1L,
             Nodes: 256,
-            JudgeCost: 1L,
+            Work: SearchWork.NodeBounded(judge: 1L),
             Depth: depth,
             Best: "best",
             Shapes: [new SearchShapePlan(
@@ -432,7 +432,7 @@ public sealed class ArenaSearchChanceLawTests {
                     Verdict: "verdict",
                     Off: -1L,
                     Nodes: 64,
-                    JudgeCost: 1L,
+                    Work: SearchWork.NodeBounded(judge: 1L),
                     Depth: 2,
                     Best: "best",
                     Shapes: [new SearchShapePlan(

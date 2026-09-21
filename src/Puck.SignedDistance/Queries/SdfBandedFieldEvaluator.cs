@@ -66,6 +66,25 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     public SdfFieldEvaluator Exact => m_exact;
     /// <summary>Gets the grid.</summary>
     public SdfDistanceGrid Grid => m_grid;
+    /// <summary>Gets an endpoint-independent structural work bound for one line-of-sight march.</summary>
+    public SdfLineOfSightWorkEnvelope LineOfSightWork {
+        get {
+            var exact = m_exact.LineOfSightWork;
+            var boundBudget = MaximumGridBoundBudget();
+            var samples = ((((long)exact.ExactSampleBudget) + boundBudget) + 1L);
+            // A sample may lazily evaluate a grid corner, then evaluate its own position when the bound is unusable.
+            var evaluations = (samples * 2L);
+
+            return new(
+                ProgramInstructionCount: exact.ProgramInstructionCount,
+                ExactSampleBudget: exact.ExactSampleBudget,
+                BoundSampleBudget: boundBudget,
+                MaximumSamples: samples,
+                MaximumProgramEvaluations: evaluations,
+                MaximumInstructionVisits: (((UInt128)((ulong)evaluations)) * ((uint)exact.ProgramInstructionCount))
+            );
+        }
+    }
 
     // The number of bound samples a march of the given reach can spend: one per bound-step floor, plus one for the
     // sample at the reach itself.
@@ -73,6 +92,24 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
         var steps = (((maxDistance.Value + m_boundStepFloor.Value) - 1L) / m_boundStepFloor.Value);
 
         return ((steps >= int.MaxValue)
+            ? int.MaxValue
+            : (((int)steps) + 1)
+        );
+    }
+    private int MaximumGridBoundBudget() {
+        // Normalize's largest component is strictly above one half in Q16: after DirectionShift, S <= 3M², while
+        // its rounded root denominator is below (15/8)M*2^16 because sqrt(3) < 15/8 and M >= 2^45. Multiplying a
+        // positive raw step s by that component therefore moves its axis by at least ceil(s/2) raw ticks after
+        // nearest-even rounding. Bound LOS samples have radius zero and advance by at least m_boundStepFloor, except
+        // for the one max-distance-truncated terminal advance already covered by the extra sample below.
+        var minimumCoordinateProgress = ((((ulong)m_boundStepFloor.Value) + 1UL) >> 1);
+        // TryLowerBound rounds to the nearest corner, so count*edge conservatively covers each axis interval. March
+        // coordinates are monotone, hence a ray crosses this convex box once and spends at most its L1 span inside.
+        var counts = ((((ulong)m_grid.CornerCountX) + ((ulong)m_grid.CornerCountY)) + ((ulong)m_grid.CornerCountZ));
+        var span = (((UInt128)counts) * ((ulong)m_grid.CellSize.Value));
+        var steps = (((span + minimumCoordinateProgress) - 1U) / minimumCoordinateProgress);
+
+        return ((steps >= (((UInt128)int.MaxValue) - 1U))
             ? int.MaxValue
             : (((int)steps) + 1)
         );

@@ -3,7 +3,7 @@ namespace Puck.State;
 public sealed partial class StateArena {
     /// <summary>Reads one vector cell's components as a borrowed span into the arena's own buffer.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="components">The cell's components on success; otherwise empty.</param>
     /// <returns><see langword="true"/> when the row holds the vector cell.</returns>
     /// <remarks>The span aliases the arena's storage: consume it before the next write, rewind, or relayout.</remarks>
@@ -35,7 +35,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Attempts to write one vector cell's components.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="components">The components to store; their count must be the row's space dimensions.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write was admitted and stored.</returns>
@@ -49,7 +49,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Kind != CellKind.Vector) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is not a Vector row";
@@ -115,6 +115,7 @@ public sealed partial class StateArena {
                 previous: destination
             );
         } else if (!destination.SequenceEqual(other: components)) {
+            RetainDirectWrite(column: ArenaColumn.Vector, index: slot, number: 0L, components: destination);
             m_changeEpoch++;
 
             MarkVersion(

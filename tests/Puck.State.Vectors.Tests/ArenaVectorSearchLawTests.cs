@@ -9,6 +9,25 @@ namespace Puck.State.Vectors.Tests;
 public sealed class ArenaVectorSearchLawTests {
     private static readonly long NearThreshold = ((FixedQ4816.One.Value * 9L) / 10L);
 
+    [Fact]
+    public void VectorConsumersReadSparsePoolFieldsBeyondTheLiveCount() {
+        var direction = VectorArenaFixture.Unit(axis: 0);
+        var record = new StateRecord(Name: VectorArenaFixture.Name(value: "item"), Fields: [new StatePoolField(
+            Name: VectorArenaFixture.Name(value: "direction"), Kind: CellKind.Vector, Space: VectorArenaFixture.Name(value: "space8"), Dimensions: 8, Default: CellValue.Vector(components: direction.Memory))]);
+        var section = VectorArenaFixture.Section() with {
+            Records = [record],
+            Pools = [new StatePool(Name: VectorArenaFixture.Name(value: "items"), Record: record.Name, Capacity: 130, Initial: [new StatePoolSeed(Slot: 129)])],
+        };
+        var arena = new StateArena(catalog: StateCatalog.Compile(section: section), section: section, time: ArenaTime.Origin);
+        var field = arena.Catalog.Pools[0].Fields[0].RowOrdinal;
+        var slot = VectorArenaFixture.Key(arena: arena, value: StateRow.SlotKey.Value);
+
+        Assert.True(condition: ArenaVectorTransforms.TryMean(arena: arena, request: new VectorMeanRequest(IntoRowOrdinal: VectorArenaFixture.Stance, IntoKey: slot, FromRowOrdinal: field), refusal: out var refusal), userMessage: refusal.ToString());
+        Assert.Equal(expected: direction.Components.ToArray(), actual: VectorArenaFixture.Read(arena: arena, key: slot, rowOrdinal: VectorArenaFixture.Stance));
+        Assert.True(condition: ArenaVectorTransforms.TryNearest(arena: arena, request: new VectorNearestRequest(FromRowOrdinal: field, IntoRowOrdinal: VectorArenaFixture.Recalled, K: 1, Query: VectorSource.Literal(components: direction.Memory)), refusal: out refusal), userMessage: refusal.ToString());
+        Assert.Equal(expected: new[] { "129" }, actual: RankedKeys(arena: arena, rowOrdinal: VectorArenaFixture.Recalled));
+    }
+
     private static VectorSource Query(StateCatalog catalog, string key) => VectorSource.Cell(
         key: VectorArenaFixture.Key(
             catalog: catalog,
@@ -26,12 +45,50 @@ public sealed class ArenaVectorSearchLawTests {
                 rowOrdinal: rowOrdinal
             ));
 
-            keys[position] = arena.Catalog.Keys[key: key].Value;
+            keys[position] = arena.Keys[key: key].Value;
         }
 
         return keys;
     }
 
+    // The candidates and the ranking are leased from the arena's scratch. The rows a ranking writes are the
+    // arena's own to grow, so the law holds the transform to the same request repeated, where they no longer do.
+    [Fact]
+    public void ARepeatedNearestAllocatesNothing() {
+        var arena = VectorArenaFixture.Arena(catalog: out var catalog);
+        var request = new VectorNearestRequest(
+            FromRowOrdinal: VectorArenaFixture.Memories,
+            IntoRowOrdinal: VectorArenaFixture.Recalled,
+            K: 2,
+            Query: Query(
+                catalog: catalog,
+                key: "north"
+            )
+        );
+
+        for (var warm = 0; (warm < 4); warm++) {
+            Assert.True(condition: ArenaVectorTransforms.TryNearest(
+                arena: arena,
+                refusal: out _,
+                request: request
+            ));
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var round = 0; (round < 256); round++) {
+            _ = ArenaVectorTransforms.TryNearest(
+                arena: arena,
+                refusal: out _,
+                request: request
+            );
+        }
+
+        Assert.Equal(
+            actual: (GC.GetAllocatedBytesForCurrentThread() - before),
+            expected: 0L
+        );
+    }
     // An Int destination scores by exact dot product, so the ranking is the kernel's order and the stored value is
     // the kernel's score rather than a rank index.
     [Fact]
@@ -311,7 +368,7 @@ public sealed class ArenaVectorSearchLawTests {
         );
         Assert.True(condition: arena.TryRead(
             key: VectorArenaFixture.Key(
-                catalog: catalog,
+                arena: arena,
                 value: "old"
             ),
             rowOrdinal: VectorArenaFixture.Capped,
@@ -344,7 +401,7 @@ public sealed class ArenaVectorSearchLawTests {
             actual: VectorArenaFixture.Read(
                 arena: arena,
                 key: VectorArenaFixture.Key(
-                    catalog: catalog,
+                    arena: arena,
                     value: "second"
                 ),
                 rowOrdinal: VectorArenaFixture.Journal

@@ -133,7 +133,7 @@ public class DotAccessEquivalenceTests {
     public void ADottedLocalExpressionLowersToTheProgramItSpells() {
         var rule = FirstRule(body: """
             rule "r" {
-                local dx : Int = vitals.mana - 10
+                local dx = vitals.mana - 10
                 flag = dx
             }
             """);

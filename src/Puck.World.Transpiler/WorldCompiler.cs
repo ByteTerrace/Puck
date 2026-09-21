@@ -5,6 +5,7 @@ using Puck.Transpiler.Parsing;
 using Puck.Transpiler.Ast;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
+using Puck.World.Transpiler.Assets;
 
 namespace Puck.World.Transpiler;
 
@@ -39,17 +40,21 @@ public sealed record WorldCompilation(
     IReadOnlyDictionary<string, HashSet<string>> DiscoveredEmbeddings,
     IReadOnlyList<WorldTestWorld> TestWorlds
 ) {
+    /// <summary>Gets every named world emitted by a composition, in declaration order. Empty for a single-document source.</summary>
+    public IReadOnlyList<WorldOutput> Worlds { get; init; } = [];
+    /// <summary>Gets the asset verification context. An explicit refresh is saved by the caller after validation.</summary>
+    public AssetCompilationContext? Assets { get; init; }
     /// <summary>Gets whether a document was lowered and nothing refused it.</summary>
-    public bool Success => (!Diagnostics.HasErrors && (Json is not null));
+    public bool Success => (!Diagnostics.HasErrors && ((Json is not null) || (Worlds.Count > 0)));
 
     /// <summary>Returns the lowered document, refusing to hand back partial output after an error.</summary>
     /// <returns>The canonical document.</returns>
     /// <exception cref="InvalidOperationException">The compile reported an error, or lowered nothing.</exception>
     public JsonObject RequireJson() {
-        if (!Success) {
+        if (!Success || (Json is null)) {
             throw new InvalidOperationException(message: string.Join(
                 separator: Environment.NewLine,
-                values: Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}")
+                values: Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}").Append(element: "A single world document is required; select an emitted world from Worlds.")
             ));
         }
 
@@ -80,6 +85,8 @@ public static class WorldCompiler {
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
     /// <param name="vocabulary">The described vocabulary every stage parses and lowers against; the shipped
     /// <see cref="WorldDocumentVocabulary.Instance"/> when omitted.</param>
+    /// <param name="allowMultiple">Whether this consumer accepts every emitted world through <see cref="WorldCompilation.Worlds"/>.</param>
+    /// <param name="updateAssets">Prepares refreshed asset pins without writing them. The caller saves the lock only after validation succeeds.</param>
     /// <returns>The compilation.</returns>
     public static WorldCompilation Compile(
         string source,
@@ -91,7 +98,9 @@ public static class WorldCompiler {
         DiagnosticBag? diagnostics = null,
         SourceMap? sourceMap = null,
         CancellationToken cancellationToken = default,
-        WorldDocumentVocabulary? vocabulary = null
+        WorldDocumentVocabulary? vocabulary = null,
+        bool allowMultiple = false,
+        bool updateAssets = false
     ) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
@@ -100,9 +109,9 @@ public static class WorldCompiler {
         vocabulary ??= WorldDocumentVocabulary.Instance;
 
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            source: source,
             defaultSchema: defaultSchema,
             diagnostics: diagnostics,
+            source: source,
             vocabulary: vocabulary
         );
         var document = parseResult.Value;
@@ -130,21 +139,30 @@ public static class WorldCompiler {
                 diagnostics: diagnostics,
                 rootDoc: document,
                 rootPath: sourcePath!,
-                vocabulary: vocabulary
+                vocabulary: vocabulary,
+                cancellationToken: cancellationToken
             );
 
             if (bundled is not null) {
                 document = bundled;
             }
         } else if (effectiveImports == ImportHandling.Validate) {
-            ModuleResolver.ValidateImportGraph(
+            var withModules = ModuleResolver.ImportModules(
                 diagnostics: diagnostics,
                 rootDoc: document,
                 rootPath: sourcePath!,
-                vocabulary: vocabulary
+                vocabulary: vocabulary,
+                cancellationToken: cancellationToken
             );
+
+            if (withModules is not null) {
+                document = withModules;
+            }
         }
 
+        using var rootOrigin = sourceMap.PushOrigin(sourcePath: sourcePath);
+        var worlds = new List<WorldOutput>();
+        var assets = ((sourcePath is null) ? null : new AssetCompilationContext(rootSourcePath: sourcePath, updateLock: updateAssets));
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
             basePath: (basePath ?? ((sourcePath is null)
                 ? null
@@ -159,17 +177,24 @@ public static class WorldCompiler {
             sourceMap: sourceMap,
             testStem: TestStem(sourcePath: sourcePath),
             testWorlds: out var testWorlds,
-            vocabulary: vocabulary
+            vocabulary: vocabulary,
+            worldOutputs: worlds,
+            assets: assets
         );
+
+        if (!allowMultiple && (worlds.Count > 1)) {
+            diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "This source emits several worlds. Compile them to individual documents before selecting one for this consumer.", span: document.Span);
+        }
+        assets?.Validate(diagnostics: diagnostics);
 
         return new WorldCompilation(
             Diagnostics: diagnostics,
             DiscoveredEmbeddings: discovered,
             Document: document,
-            Json: loweringResult.Value,
-            SourceMap: sourceMap,
+            Json: ((worlds.Count == 0) ? loweringResult.Value : ((worlds.Count == 1) ? worlds[0].Json : null)),
+            SourceMap: ((worlds.Count == 1) ? worlds[0].SourceMap : sourceMap),
             TestWorlds: testWorlds
-        );
+        ) { Assets = assets, Worlds = worlds };
     }
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>
     /// <param name="path">The <c>.puck</c> source file.</param>
@@ -179,6 +204,8 @@ public static class WorldCompiler {
     /// <param name="diagnostics">The bag every stage reports into; a fresh one when omitted.</param>
     /// <param name="sourceMap">The map the lowering registers pointers in; a fresh one when omitted.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
+    /// <param name="allowMultiple">Whether the caller accepts every emitted world through <see cref="WorldCompilation.Worlds"/>.</param>
+    /// <param name="updateAssets">Prepares refreshed asset pins for an explicit save after validation.</param>
     /// <returns>The compilation.</returns>
     /// <exception cref="IOException">The file could not be read.</exception>
     public static WorldCompilation CompileFile(
@@ -187,11 +214,15 @@ public static class WorldCompiler {
         EmbeddingLock? embeddings = null,
         DiagnosticBag? diagnostics = null,
         SourceMap? sourceMap = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool allowMultiple = false,
+        bool updateAssets = false
     ) {
         ArgumentNullException.ThrowIfNull(argument: path);
 
         return Compile(
+            allowMultiple: allowMultiple,
+            updateAssets: updateAssets,
             cancellationToken: cancellationToken,
             diagnostics: diagnostics,
             embeddings: embeddings,

@@ -34,10 +34,12 @@ The discrete substrate shares `state.lattices` with physical fields. Declare a
 discrete cases—a `"box"` case exists too, for a 3-layer discrete board; the document's own
 `"field"` case is `WorldFieldTopology`, registered through `WorldJsonVocabulary`) and bind an
 integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
-a `"field"` lattice creates physical field storage. A world may declare at most 16 topologies, including
-at most one physical field topology. Each discrete topology admits 4096 cells;
-boards together admit 65536 cells, and all declared state storage admits
-262144 cells; a row of any domain may author a capacity up to 4096 cells, and a slot or keys row that authors none gets 128.
+a `"field"` lattice creates physical field storage. A world may declare at most 64 topologies, including
+at most one physical field topology. Each discrete topology admits 4096 cells; a row of any domain may author a
+capacity up to 4096 cells, and a slot or keys row that authors none gets 128. What all of a document's state may
+occupy together is one figure in bytes, `ArenaCapacity.MaxBytes` (64 MiB): the arena's layout measures every column
+at its full width, and a document that lays out past the ceiling is refused at the row that crossed. `world.state`
+prints the measure beside the ceiling.
 
 A `cellsOf` row may declare itself derived rather than authored:
 `inverse: { "tokens": "pieceCell", "codes": "pieceCode" }` (`Puck.State.StateInverse`) names a keyed
@@ -49,6 +51,11 @@ wins and the earlier one's code is absent from the board. The board is never wri
 instead, and `Puck.State.StateArena` recomputes the board's cells on every keyed write to either row and on
 every load, so the journaled document already carries them. A candidate inside a journal scope keeps the same
 answer: a write to `tokens` rewrites only the moved token's own two board cells.
+
+The inverse declaration also proves a storage contract at validation and arena construction: every value admitted
+by `codes` (after its `min`/`max` envelope and optional enum are intersected) must be admitted by the board's own
+envelope and enum, and the board's `cellsOf.empty` value must be admitted by both. An incompatible declaration is
+refused before state is loaded; keep the two rows' numeric and symbolic domains aligned when changing a board.
 
 Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
 `SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
@@ -108,6 +115,7 @@ Rule operands accept these bounded channels:
 | Channel | Result |
 |---|---|
 | `$board:neighbour:<row>:<direction>` | Neighbour ordinal, or -1 at the edge |
+| `$board:jumpDistance:<row>:<target>` or `$board:jumpDistance:<row>:cell:<targetRow>:<targetKey>` | Fewest non-capturing hops over occupied neighbours onto empty cells, changing direction as needed; the moving source is vacated. The live target is an integer cell ordinal, and an absent or out-of-range target returns -1. Returns 0 for the source, -1 when unreachable. Visits each cell once, works on boards wider than 64 cells. |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` or `$board:pathCost:<row>:cell:<targetRow>:<targetKey>:<maxCost>:<maxVisits>` | Minimum terrain entry cost to the literal `<target>` cell, or to whichever cell `<targetRow>`.`<targetKey>` holds at evaluation time; -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
@@ -360,10 +368,9 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 `empty` past what the ring holds); `$match:<pattern>:<row>` reads the ring
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
-the ring is held. `sortZone` puts a zone in canonical order by `by`, up to
-`MaxSortKeys` (`StateCapacity`, derived from `MaxRows` -- a sort key
-names a declared row, so a sort can never carry more keys than a section can
-hold) attribute keys (`row`, `descending`) in precedence order; `sortKeyed`
+the ring is held. `sortZone` puts a zone in canonical order by `by`, one or
+more distinct attribute keys (`row`, `descending`) in precedence order, each
+priced on the work sheet; `sortKeyed`
 orders a keyed row by its own values under one `descending` flag. Both sort
 stably,
 which is what turns a multiset question into a regular one: Reversi's
@@ -407,8 +414,8 @@ separate primitive: it picks up a rigid body, never a placement or board. The
 bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
-its code into the occupancy row at that resolved cell—see the garden's own
-`games/chess.world.json` tabletop rules for the worked pattern (retain the accepted
+its code into the occupancy row at that resolved cell—see the standalone
+`worlds/parlor/chess.puck` tabletop rules for the worked pattern (retain the accepted
 board while clearing and deriving fresh occupancy, detect which single piece
 moved between two occupied board cells—a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
@@ -416,7 +423,7 @@ qualifies as the mover, so its own disappearance is never ruled legal or
 illegal by its own color—then a verdict any authored predicate—occupancy, turn order,
 a `$match:…:cell`/`$board:offset` movement-geometry check—may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
-new position into `lastLegal`). The shipped chess module authors the default
+new position into `lastLegal`). The Parlor chess world authors the default
 `record` enforcement: an illegal move is recorded and never undone by the
 engine—see `enforcement` above for the `return` alternative. Every top-level
 `setState`/`addState`/etc. effect preflights and applies on its own; only an
@@ -1389,22 +1396,21 @@ backend—never an unnamed ordinal, which would silently re-point itself the
 day an enum member is inserted). Each reads the row's slot into the ordinary
 literal field (`bodies.capacity`/`host.backend`) and narrates the read on
 stderr (`[world.draw: settled bodies.capacity instance=… -> …]`), but the ROW
-stays the persisted evidence—its cursor and value survive in `world.state`,
-and every fresh load re-reads it. `host.backendRow` is XOR-by-presence against
+stays the persisted evidence—its cursor and value survive in `world.state`.
+Backend settlement clears `host.backendRow`, so a saved document carries the settled
+backend literal. `host.backendRow` is XOR-by-presence against
 `host.backend` (`WorldHostDefaults` is a class, so a null `Backend` is
 honestly distinguishable from an authored one, and declaring both refuses by
 name); `bodies.capacityRow` beside a literal `capacity` is legitimate instead
-—`WorldPopulationDefaults` is a struct, so the row is simply the source of
+—`WorldBodiesDefaults` is a struct, so the row is simply the source of
 truth and overwrites the literal on every fresh load, nothing shadowed
 silently.
 
-**Draw domains are narrowed STATICALLY**, against the site's own admissible range
-(a state row's `min`/`max`, the census coherence sum for
-`bodies.capacity`, every reachable token for `host.backend`). Without that, a
-draw the validator admits could produce a value the SAME validator refuses on the
-resolved document—so whether the world boots would depend on what it rolled, a
-refusal moving with the world seed and the instance identity. Refusing the
-authoring mismatch makes the door the type rather than the outcome.
+Numeric draw domains are checked against the state row's admissible range,
+including its `min`/`max`, before sampling. Boot row consumers also validate their
+selected census or backend token. Proving every possible source outcome against
+those consuming fields remains open in the [plan register](../../docs/plans/open-items.md):
+a source can currently pass its row checks but produce a value the boot field refuses.
 
 **`host.journalDepth`** is the undo horizon, in journal entries: `0` (the
 default, every world authored before the field existed) is unbounded, today's
@@ -1696,12 +1702,46 @@ entry count and columns. A lookup prices as 2 plus the log of the entry count.
 ## The `rules` document—the per-body action primitive, one level up
 
 Validation can return a [WorldRuleCompilation](WorldRuleCompilation.cs) containing
-its rules, interactions, and pinned tables. Mutation and reload installation
+its rules, interactions, and pinned tables. Server construction, mutation, and reload installation
 reuse this result for the exact unchanged definition. Derived-board recomposition
 that produces another definition forces a fresh compile. Rules, interactions,
 and table compilation share one context; a catalog's shape alone never licenses
 program reuse. Scalar and keyed behavior traits share field validation while
 retaining their distinct placement and exclusivity checks.
+
+`WorldDefinitionAdmission` carries the local validation proof separately from
+`WorldRuleCompilation.Compile`, which compiles programs without proving document
+admission. The receipt belongs to one preparation operation: its exact definition,
+collection contents and selected machine catalog must remain unchanged.
+The server and machine host refuse a receipt for a different
+definition or catalog, even when catalog metadata fingerprints match. Embedded
+checkpoint loads use `DeserializeForAdmission` to carry this proof into construction
+and restoration; a distinct journal base still needs its own validation.
+
+File and composed-byte loaders expose `TryLoadForAdmission` and
+`TryLoadFileForAdmission` to retain the final document's programs through boot and
+local instance construction. Bytes, files, and asynchronous loads resolve boot draws
+and state-backed document values before full admission. A preflight uses the existing
+generator and row validators for inputs that drawing can consume or replace; invalid
+source domains and authored cells cannot be hidden by their sampled replacements.
+Only the final document is fully validated and compiled. A state-only draw preserves
+absent host and population sections. Ordinary file-source validation does not draw.
+`TryCompleteAdmission` rechecks binding/input/context, icon, probe and render
+vocabularies and neighbour claims after host services compose, using the existing
+section validators without compiling rules or work analysis again. A hook delegate
+can stay the same while its registry changes, so delegate identity is not evidence
+that these checks remain valid. Boot document overrides clear their old receipt.
+
+The receipt retains validation's work sheet when available, and otherwise computes
+its `WorkBudget` and contributor list on demand. It also owns lazy `Hazards` and
+`CostReport` results. Server diagnostics, search planning, and the browser cost export
+reuse the compiled programs; a replacement definition gets a fresh receipt.
+Callers making several analysis requests pass the same compilation to
+`WorldRuleHazards.Analyze`, `WorldRuleWorkBudget.Measure`, and
+`WorldRuleWorkBudget.Contributors`. The definition overloads perform fresh work.
+The report identifies both the model and its evidence digest. Reference costs
+remain unresolved while calibration is incomplete; heuristic work units never
+certify a cycle deadline. See [abstract-machine costing](../../docs/plans/abstract-machine-costing.md).
 
 `WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
 `Puck.State`'s `Rule` (`Name, Gate, Effects, Mode, ForEach, Bindings`) plus the
@@ -1894,12 +1934,19 @@ Perception scratch and range-level grids are reused; `world.decisions` exposes
 image size, grid builds, inspections, score evaluations, sight tests, and limited
 queries. `world.budget` charges candidate gates and expanded scores, even when
 ordinary cadence would usually spread them across ticks. It also charges one
-shared pose-image visit per population slot and two point visits per grid
-rebuild (copying and grouping). The cost sheet separately reports the maximum
-poses copied, distinct range-scale grids rebuilt, and total grid points sorted.
-Those ceilings assume simultaneous reconsideration; sharing a range scale does
-not charge a new grid per option or observer. Structural work units are not a
-CPU-time or sort-comparison bound: whole-frame performance still needs measurement.
+shared pose-image visit per population slot and, per grid rebuild, two point
+visits (keying and grouping) plus the sort of the keyed points. A neighbours
+option is charged the 27 cell lookups around its observer, the query's walk and
+retained-neighbour heap over the candidate budget, a perception test and the
+option's gate per candidate, a score per retained candidate, and the sort of the
+retained choices. A line-of-sight test is a flat weight: the sphere trace behind
+it spends a sample budget over the world's compiled solids, and neither that
+program's length nor its step scale is a fact the document carries. The cost
+sheet separately reports the maximum poses copied, distinct range-scale grids
+rebuilt, and total grid points sorted. Those ceilings assume simultaneous
+reconsideration; sharing a range scale does not charge a new grid per option or
+observer. Work units are heuristic weights, not CPU time: whole-frame
+performance still needs measurement.
 
 `world.decisions` reports choices, last evaluated raw scores, timers, and draw
 counts. `world.budget` includes all option gates/scores, the current-option and
@@ -2014,7 +2061,7 @@ is retired rather than re-keyed onto the pair-key indirection above.
 
 ### World-rule state effects
 
-The state effects are `setState`, `addState`, `countdownState`,
+The state effects are `setState`, `addState`,
 `removeStateCell`, `scheduleState`, `transaction`, and `if`. Rules may also generate a
 text row, edit HUD panels or placements, save the session, pose or drive an
 active body, set or clear one of its target registers, emit a gameplay cue, and
@@ -2117,8 +2164,7 @@ vocabulary—composition, not a new mechanism:
   non-negative delay into an `int` row. Its seconds-to-ticks conversion uses the
   world's simulation rate and rounds up, so the deadline never opens early. Gate
   the ability on `$tick >= cooldownDue`; a companion effect can remove the keyed
-  deadline after handling it. A relative countdown remains useful when pausing
-  or explicitly spending engine-step time is the desired rule.
+  deadline after handling it.
 - **Round boundary**: compare a `round` row against a DECLARED `roundLength` row
   (both same kind)—the cross-row spelling, exercising the kind match.
 
@@ -2152,7 +2198,7 @@ token vocabulary, the opcode enum, the arithmetic, and the state transforms in
 folds successful constant subexpressions and prices the remaining program the
 same way for both spellings, and the document writes back whichever
 spelling it read. Expressions are
-postfix token lists with a 64-token ceiling; they provide constants, state or
+postfix token lists with a 256-token ceiling; they provide constants, state or
 reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `modulo`
 (remainder toward zero; in `fixed` the raw remainder, so `2.5 modulo 1` is
 `0.5`), `min`, `max`, `clamp`, the comparisons `equal`/`notEqual`/`less`/
@@ -2262,38 +2308,54 @@ fixed-point instruction path as authored body actions. `paintField` clips a
 sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
-Rule execution admits at most 64 top-level effects per rule/interaction and
-2,000,000 statically derived heuristic work units per tick. There is no separate
-ordinary-rule count ceiling. The cost includes gate/expression operands, keyed scans, `forEach`, the
-quadratic worst case of distance interactions, mutation rebuild weights, nested
-transaction preflight, field-paint candidate visits, and flock-affinity expressions
-for every body's worst-case simultaneous initial sample. Validation refuses a
-document above the aggregate ceiling, naming the three costliest lines with
-their multipliers; `world.budget` prints the current rule,
+Rule execution admits at most 256 top-level effects per rule/interaction and
+4,000,000 statically derived heuristic work units per tick. There is no separate
+ordinary-rule count ceiling. A line has three parts: setup, paid once per sweep;
+check, paid once per evaluation whether or not the gate holds; and firing, paid
+once per evaluation whose effects run. The cost includes gate/expression
+operands, keyed scans, the `forEach` key snapshot, mutation rebuild weights,
+nested transaction preflight, the insertion sort a reordering transform runs,
+field-paint candidate visits, and flock-affinity expressions for every body's
+worst-case simultaneous initial sample. A bound is a number, an operation nothing
+prices, or an overflow; the last two survive every sum and product, fit no
+ceiling, and are refused by what they are rather than admitted as a number.
+Validation refuses a document above the aggregate ceiling, naming the three
+costliest lines with their multipliers; `world.budget` prints the current rule,
 interaction, evaluation-slot, and work-unit totals, and `world.budget.rules
-[top]` lists every rule's and interaction's line—multiplier, unit cost,
-total, and the cell its firing effects price exclusively under—costliest first,
-so the total is traceable to the rows that make it up. All candidate checks sum
-even when firing effects are mutually exclusive. A `forEach` line's multiplier
-is its row's capacity: a row left at the default room prices at 128 cells, a
-registry-sized row authors the capacity it needs. Interaction `range` is an
-exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
-A distance interaction's `neighbours` (1..64) evaluates at most that many right
-carriers per left carrier—the nearest first, ties by the lower body index—
-and its line prices pairs at that budget instead of the population squared.
+[top]` lists every rule's and interaction's line—multiplier, setup, check,
+firing, total, and the cell its firing effects price exclusively under—costliest
+first, so the total is traceable to the rows that make it up. All candidate
+checks sum even when firing effects are mutually exclusive. A `forEach` line's
+multiplier is its row's capacity: a row left at the default room prices at 128
+cells, a registry-sized row authors the capacity it needs. Interaction `range`
+is an exact JSON decimal lowered directly to fixed point, with no binary32 round
+trip. A distance interaction's setup gathers both carrier sets (a scan of each
+tag row and a sort of its carriers) and tests every left against every right;
+a carrier set is no larger than its tag row or the population. Its `neighbours`
+(1..64) evaluates at most that many right carriers per left carrier—the nearest
+first, ties by the lower body index—so the limit bounds the evaluations and adds
+the selection it makes, and never removes a distance test.
+`world.budget.rules --why <interaction>` prints those terms.
 
 The [portable costing brief](../../docs/plans/abstract-machine-costing.md)
 defines the proposed replacement. Its cycle schedule remains uncalibrated.
 `WorldCostReport` exposes heuristic totals separately and reports unresolved
 cycle bounds, including search work; it cannot yet certify an abstract
-deadline. The ceilings above remain the current validator policy.
+deadline. Its resource dimensions independently report the arena layout,
+declaration visibility, and retained compiled-key bytes admitted under the
+64 MiB arena ceiling, plus row, topology, body, cell-slot, vector, lane, and
+draw-mask counts. The journal figure is its configured allowance, not allocated
+memory. Scratch retention, a crossing effect's possible journal overrun,
+runtime collections, compiled programs, fields, and host services remain
+explicitly outside a total-memory bound. The ceilings above remain the current
+validator policy.
 
 Live effect failures are bounded diagnostics, not a Level-rule log flood.
 `world.rule.failures` reports one fixed counter per refusal category plus its
 latest tick, rule, effect, and concrete reason; stderr narrates only the first
 occurrence of each category. To see WHY one rule did what it did,
 `world.rule.trace <rule> [evaluations]` arms a capture of its next evaluations
-(at most 32); after `world.wait`, `world.rule.trace` prints one line per
+(at most 256); after `world.wait`, `world.rule.trace` prints one line per
 evaluation—the tick, the `forEach` key, every local's value, every gate
 conjunct with the two values it compared and its verdict, whether the gate
 held (and whether an edge rule was already held), and each effect's spelling,
@@ -2310,7 +2372,7 @@ gates pin one cell to disjoint ranges never fires together and is not listed.
 The high-frequency `UpsertStateCell` path validates only the addressed mutable
 cell and installs only value-derived state. Declaration-shape mutations retain
 whole-document validation and rebuild the compiled rule/input/field surfaces;
-a value-only rule, countdown, field scalar, or console write does not pay those
+a value-only rule, field scalar, or console write does not pay those
 unrelated rebuild costs.
 
 See `WorldRule`'s own remarks in `WorldRules.cs` for the edge-with-a-moving-
@@ -2509,8 +2571,8 @@ gets every authored pass and a crowded one stays bounded. See the
 
 ### Body sleep
 
-`bodies.sleepAfterTicks` (engine ticks, 0 or positive; 0, the default, never
-sleeps) is the idle floor a non-seat, non-rigid body clears before its motion
+`bodies.sleepAfterSeconds` (seconds that land on a whole engine tick, a multiple
+of 1/800 s; 0, the default, never sleeps) is the idle floor a non-seat, non-rigid body clears before its motion
 program and contact solve stop running. See the
 [server reference](../Puck.World.Server/README.md) for the mechanism and its
 wake conditions.
@@ -2727,7 +2789,7 @@ minimal two-token primitive a castle's rook needs, not a general rule for every
 pair's own reach). `relocate` with
 `displace: false` leaves the standing token in place, so a judge rule that
 reads two tokens sharing a cell decides the candidate itself. `promote`
-(`codes`, an integer row keyed by the tokens; `to`, up to eight codes) relocates
+(`codes`, an integer row keyed by the tokens; `to`, up to sixteen codes) relocates
 the walked token onto any other cell, evicting what stood there, with its code
 in `codes` changed to each offered value in turn—one candidate per (cell,
 code); the judge decides where a code may change.
@@ -2818,22 +2880,34 @@ of the leaf once and keeps the accepted ones as children (a pool of
 job's own SplitMix64 stream seeded by its stamp—never an RNG in simulation
 state—until nothing is accepted or the depth cap, then the score read there
 from the side that just moved and folded back along the path with alternating
-sign; it lands the most-visited root move in `best` with the mean score. One
-judge is one node of the quota here too, and the whole tree, path, frames, and
-seed ride the checkpoint and hash.
+sign; it lands the most-visited root move in `best` with the mean score. A tree
+step is a unit of the job's allowance like any other, and the whole tree, path,
+frames, and seed ride the checkpoint and hash.
 
-Work derives: one judge run costs the sum of the frame-evaluable rules'
-work-sheet lines, and the per-tick node quota is what `RuleCapacity.
-MaxWorkUnitsPerTick` leaves after the sheet, shared by the jobs and divided by
-that cost (at most `WorldSearchCapacity.MaxNodesPerTick`); a document whose
-rules leave no room for one judge run is refused. `nodes` may lower the quota
-for a job with something specific in mind, never raise it—a deeper search
-spends the same quota over more ticks rather than a larger one. Job progress
-is simulation state—it hashes and rides the checkpoint—and `world.search`
-lists each job's phase, walk position, accepted count, judged count, quota,
-judge cost, rule count, and (a job authoring a score) the depth it is
+Search spends work, not nodes. One judge run costs the sum of the
+frame-evaluable rules' work-sheet lines. What `RuleCapacity.
+MaxWorkUnitsPerTick` leaves after the sheet, less one fold of every row (the
+stamp that tells a job its inputs moved), is divided equally among the jobs;
+a share's remainder goes unspent, no job borrows another's, and nothing carries
+to the next tick. That share is the job's allowance. Every unit of the walk has
+a price: a cursor move, a candidate resolved and refused, a candidate applied,
+judged, scored, keyed and folded, a chance outcome, a tree step. The walk
+reserves its costliest unit before it runs any and yields when that no longer
+fits, so a tick never spends past the allowance. A tick that resumes a job pays
+to replay its open scopes, and one whose inputs moved pays for the restart,
+both out of the same allowance. A job whose allowance cannot cover a restart, a
+full replay and one unit would stall, so it is refused by that sum. A chance
+ply is a ply like any other: it folds one outcome a unit, at the root or inside
+the walk, and a checkpoint carries the outcomes it has folded. `nodes`
+(1..`WorldSearchCapacity.MaxNodesPerTick`) caps the candidates one tick judges,
+for a job that should take longer than its allowance makes it. Job progress is
+simulation state—it hashes and rides the checkpoint—and `world.search` lists
+each job's phase, walk position, accepted count, judged count, node cap, judge
+cost, allowance, the most any one tick has spent, the total spent since the
+last restart, rule count, and (a job authoring a score) the depth it is
 iterative-deepening through and the negamax answer the deepest completed pass
-found.
+found. The best move a job lands names the cell its candidate lands on at every
+depth.
 
 ## The egress documents—what leaves an authority
 
@@ -2887,9 +2961,9 @@ hints are coalesced by the server sampler before delivery.
 
 ## Verifying a change here
 
-There is no engine gate over this project. Verify by building
-(`dotnet build Puck.slnx -c Release`—the architecture profile and XML-doc
-diagnostics run there) and by RUNNING `Puck.World` and round-tripping the
+Run `dotnet test tests/Puck.World.Schema.Tests -c Release` for document laws.
+The solution build also runs architecture and XML-documentation diagnostics.
+For changes to live document behavior, run `Puck.World` and round-trip the
 affected document over stdin (`world.status`, `world.save`, `world.load`;
 see [`Puck.World`'s README](../Puck.World/README.md) for the console). The
 strict-parse contract (an unmapped nested member refuses by name; a root
@@ -2897,7 +2971,7 @@ reserved-prefix key survives) is proven in-process by
 `tests/Puck.World.Tests/StrictParseLawTests.cs`. No committed battery covers
 the HUD document—validate HUD
 document changes by running the app; see
-[the puck-world skill's hud reference](../../.claude/skills/puck-world/references/hud.md)
+[the puck-world skill's hud reference](../../.agents/skills/puck-world/references/hud.md)
 for the recipes.
 
 ## Documentation

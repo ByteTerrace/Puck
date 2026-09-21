@@ -169,6 +169,9 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
 /// seam carries its own tolerance.</para>
 /// <para>A world whose rate is 0 has no tick mapping for a positive value (see <see cref="CompiledTickDuration"/>),
 /// which reads as never dropped.</para></param>
+/// <param name="Hysteresis">An authored non-negative minimum ownership deadband in world units. The runtime still
+/// derives its contact/vertical safety threshold and uses the larger value; authoring this can widen a seam but
+/// never weaken its safety floor. Reciprocal rows must agree.</param>
 public sealed record WorldAdjacency(
     SafeName Name,
     string Destination,
@@ -177,7 +180,8 @@ public sealed record WorldAdjacency(
     WorldAdjacencyUnavailable Unavailable = WorldAdjacencyUnavailable.Closed,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null,
-    float LivenessGraceSeconds = 0f
+    float LivenessGraceSeconds = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Hysteresis = 0f
 );
 /// <summary>One body's deterministic sweep through an invisible ownership boundary.</summary>
 /// <param name="Crossed">Whether the segment left the boundary's owned (non-positive) half-space through the

@@ -8,6 +8,7 @@ namespace Puck.Transpiler.Ast;
 /// <c>$zones[...]</c>-folded name and a second bracket group read back as the key (§1.5-F).</summary>
 /// <param name="Name">The state row or reserved-channel name.</param>
 /// <param name="Key">The optional cell key.</param>
+/// <param name="FieldAccess">Whether <paramref name="Key"/> is a lexical pool field authored with dot syntax.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -18,7 +19,8 @@ public sealed record RowRefNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    bool FieldAccess = false
 ) : SyntaxNode(
     Offset,
     Length,
@@ -26,8 +28,7 @@ public sealed record RowRefNode(
     Column
 );
 /// <summary>Base class for a <c>setState</c>/<c>addState</c>/<c>push</c> right-hand side. Only the syntactic shape
-/// is decided here (a string literal, a number carrying the <c>s</c> unit, or opaque operand text already validated
-/// through <c>ExpressionSpelling.TryParse</c>); classifying <see cref="RhsOperandNode"/> into
+/// is decided here (a string literal, a number carrying the <c>s</c> unit, or a parsed operand tree); classifying <see cref="RhsOperandNode"/> into
 /// <c>Value</c>/<c>FromState</c>+<c>FromKey</c>/<c>Expression</c> per the spec's own table is lowering-stage work.</summary>
 public abstract record RhsNode(int Offset = 0, int Length = 0, int Line = 1, int Column = 1)
     : SyntaxNode(
@@ -72,16 +73,16 @@ public sealed record RhsSecondsNode(
     Line,
     Column
 );
-/// <summary>Opaque operand text, already validated through <c>ExpressionSpelling.TryParse</c>, for the lowering
+/// <summary>A parsed operand for the lowering
 /// stage to classify (a single <c>Constant</c> token → <c>Value</c>, a single <c>State</c> token → <c>FromState</c>/
-/// <c>FromKey</c>, anything else → a verbatim <c>Expression</c> capture).</summary>
-/// <param name="Text">The raw operand span.</param>
+/// <c>FromKey</c>, anything else → an <c>Expression</c> program).</summary>
+/// <param name="Expression">The parsed operand.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 public sealed record RhsOperandNode(
-    string Text,
+    OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -159,19 +160,6 @@ public sealed record CompoundAssignStatementNode(
 public sealed record PushStatementNode(
     string RowName,
     RhsNode Rhs,
-    int Offset = 0,
-    int Length = 0,
-    int Line = 1,
-    int Column = 1
-) : EffectStatementNode(
-    Offset,
-    Length,
-    Line,
-    Column
-);
-/// <summary><c>countdown row</c> / <c>countdown row[key]</c> — a <c>countdownState</c> effect.</summary>
-public sealed record CountdownStatementNode(
-    RowRefNode Target,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -319,6 +307,46 @@ public sealed record BreakStatementNode(
     Line,
     Column
 );
+/// <summary>Claims an available pool slot and binds its record fields under an alias for the nested effects.</summary>
+public sealed record ClaimStatementNode(
+    string Pool,
+    string Alias,
+    IReadOnlyList<StatementNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+/// <summary>Claims an available pair-pool slot for two already-bound record instances.</summary>
+public sealed record ClaimPairStatementNode(
+    string Pool,
+    string Left,
+    string Right,
+    string Alias,
+    IReadOnlyList<StatementNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+/// <summary>Releases the slot currently bound to a pool alias.</summary>
+public sealed record ReleaseStatementNode(
+    string Alias,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+/// <summary>Iterates a named pool and binds each slot under an alias for the nested effects.</summary>
+public sealed record PoolForEachStatementNode(
+    string Pool,
+    string Alias,
+    IReadOnlyList<StatementNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
 /// <summary><c>draw from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count 1.</summary>
 public sealed record DrawStatementNode(
     string From,
@@ -362,4 +390,3 @@ public sealed record ShuffleStatementNode(
     Line,
     Column
 );
-

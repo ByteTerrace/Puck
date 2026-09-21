@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler;
+using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -31,6 +33,49 @@ internal static class AuthoredGameFixtures {
             path1: Root,
             path2: relativePath
         );
+        if (string.Equals(
+            a: Path.GetExtension(path: path),
+            b: ".puck",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            var compilation = WorldCompiler.CompileFile(path: path);
+
+            Assert.False(condition: compilation.Diagnostics.HasErrors);
+
+            var rootBytes = System.Text.Encoding.UTF8.GetBytes(s: compilation.RequireJson().ToJsonString());
+            var puckCatalog = (catalog ?? TestHookInstaller.CreateMachineCatalog());
+
+            Assert.True(
+                condition: PuckDocumentComposer.TryComposeWorldDocument(
+                    catalog: puckCatalog,
+                    rootBytes: rootBytes,
+                    rootResolvedPath: path,
+                    chainBytes: out _,
+                    composed: out var composed,
+                    reason: out var composeReason
+                ),
+                userMessage: composeReason
+            );
+
+            var puckNeighbours = new WorldFileNeighbourResolver(
+                baseDirectory: () => (Path.GetDirectoryName(path: path) ?? Root)
+            );
+
+            Assert.True(
+                condition: WorldDefinitionLoader.TryLoad(
+                    catalog: puckCatalog,
+                    definition: out var puckDefinition,
+                    instanceIdentity: WorldDefinitionLoader.BootInstanceName,
+                    neighbours: puckNeighbours,
+                    reason: out var puckReason,
+                    sourceName: path,
+                    utf8: System.Text.Encoding.UTF8.GetBytes(s: (composed ?? compilation.RequireJson()).ToJsonString())
+                ),
+                userMessage: puckReason
+            );
+
+            return puckDefinition!;
+        }
         // The island proves its seams against the shard documents beside it, read the way the host reads them.
         // A supplied catalog also relocates imported machine assets through the real content-provider metadata.
         var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => (Path.GetDirectoryName(path: path) ?? Root));

@@ -1571,13 +1571,18 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     /// <summary>The at-site position a mutation's cue can derive, or <see langword="null"/>: upserts carry their
     /// row's authored pose in the mutation payload; removals and section-wide edits have no single site (their cues
     /// fall back to the listener placement — honest, documented).</summary>
+    /// <remarks>The payload is the row as its submitter wrote it. The document resolves a row's state-backed values
+    /// in a private copy on the way to applying it. A missing or state-backed position has no site in this payload,
+    /// applied or refused. References in unrelated fields do not hide a literal position.</remarks>
     /// <param name="mutation">The mutation the edit echo answered, or <see langword="null"/>.</param>
     public static Vector3? MutationSite(WorldMutation? mutation) => mutation switch {
-        WorldMutation.UpsertScreen upsert => upsert.Screen.Origin,
-        WorldMutation.UpsertPlacement upsert => upsert.Placement.Position,
-        WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed fixedSpeaker } => fixedSpeaker.Position,
-        WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed bed } => bed.Center,
-        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => WorldCameraRigCompiler.AuthoredPosition(program: upsert.Camera.Rig),
+        WorldMutation.UpsertScreen { Screen.Origin: { Reference: null } origin } => origin.Value,
+        WorldMutation.UpsertPlacement { Placement.Position: { Reference: null } position } => position.Value,
+        WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed { Position: { Reference: null } position } } => position.Value,
+        WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed { Center: { Reference: null } center } } => center.Value,
+        WorldMutation.UpsertCamera { Camera: { Anchor: null, Rig: { } rig } } when ((rig.OrbitOp is { } orbit)
+            ? (orbit.PivotOffset?.Reference is null)
+            : (rig.OffsetOp is null or { Value: { Reference: null } })) => WorldCameraRigCompiler.AuthoredPosition(program: rig),
         _ => null,
     };
     /// <summary>Resolves this frame's listener and emitter poses and publishes one snapshot from the slab rotation.

@@ -562,7 +562,6 @@ public class LinterSugarTests {
     public static TheoryData<string> SelfContainedShippedWorlds => new() {
         "games/billiards.world.json",
         "games/tictactoe.world.json",
-        "games/chinese-checkers.world.json",
         "games/poker.world.json",
         "pipeline.world.json",
     };

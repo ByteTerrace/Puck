@@ -99,29 +99,25 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly WorldMutationBudgetMeter m_mutationBudget = new();
     // The multi-subscriber output hub — supports a local sink plus N future connections. See WorldOutputHub's own remarks.
     private readonly WorldOutputHub m_output = new();
-
-
     // The arena host every state effect and resolved transform fires through, rebuilt with the arena.
     private WorldArenaHost m_arenaHost = null!;
 
     // The tick facade: the intent and ordered queues, the step clock, the contribution fold and its read-back, the
     // engagement/transfer/field/music/response/board/deal per-tick work, and the snapshot it emits.
     private readonly WorldTick m_tick;
-
     // The persistence facade: journal undo, the authority checkpoint, the state hash, and the replay gate. It owns
     // no state — it walks the others.
     private readonly WorldPersistence m_persistence;
-
     // The document facade: the live definition, the journal and its base, the buffered live-edit ops, the compose
     // and apply pipeline, the solid field, and the delivery decision.
     private readonly WorldDocument m_document;
-
     // The rule facade: the evaluator, the compiled rules/groups/tables, the edge latches, the decision and pattern
     // runtimes, and the world facts and effect arms the evaluator reaches through.
     private readonly WorldRuleHost m_ruleHost;
 
     // The `search` jobs over the arena, rebuilt with the rules on every install.
-    private readonly ArenaSearch m_search;
+    private ArenaSearch m_search;
+
     private readonly Func<IReadOnlyList<ArenaSearchWrite>, bool> m_searchApply;
 
     // Translates a landed job's writes into the ordinary mutation vocabulary: a single write installs directly, more
@@ -148,7 +144,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         return (write switch {
             ArenaSearchWrite.Cell cell => new WorldMutation.UpsertStateCell(
-            Key: catalog.Keys[cell.Key].Value,
+            Key: m_arena.Keys[cell.Key].Value,
             Kind: WorldDocumentWriteKind.Set,
             Principal: WorldPrincipal.World,
             Row: catalog.Descriptors[cell.RowOrdinal].Name,
@@ -158,15 +154,12 @@ public sealed partial class WorldServer : IWorldServerHost {
             Principal: WorldPrincipal.World,
             Transform: new StateTransform.BoardCombine(
                 Operation: BoardCombineOp.Clear,
-                Row: catalog.Descriptors[clear.RowOrdinal].Name
+                Row: StateChannelRef.OfName(name: catalog.Descriptors[clear.RowOrdinal].Name)
             )
         ),
             _ => throw new InvalidOperationException(message: $"unrecognized search write '{write.GetType().Name}'"),
         });
     }
-
-
-
 
     // The engagement fold — the seat/peer→screen route decision, its per-tick pad fold, and the
     // screen-removal admin cleanup. Assigned in the constructor (not a field initializer: it needs the constructor's
@@ -446,9 +439,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <param name="narrationSink">A sink attached to this server's narration before construction narrates anything
     /// of its own (the document's authored grants, seeded here) — a composition root that only attaches after
     /// construction returns would miss every line construction itself writes.</param>
+    /// <param name="admission">An unchanged definition's validation result from this construction operation,
+    /// or null to validate here. It must name this exact definition and the machine host's catalog.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty.</exception>
-    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null) {
+    /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty, admission or machine
+    /// preparation refuses, or the supplied admission names a different definition or machine catalog.</exception>
+    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null,
+        WorldDefinitionAdmission? admission = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
@@ -456,7 +453,11 @@ public sealed partial class WorldServer : IWorldServerHost {
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        if (!WorldDefinitionValidator.TryValidateLocally(
+        if ((admission is not null) && !admission.AppliesTo(definition: definition, machines: machines.ValidationCatalog)) {
+            throw new ArgumentException(message: "The admission result belongs to a different definition or machine catalog.", paramName: nameof(admission));
+        }
+        if ((admission is null) && !WorldDefinitionValidator.TryAdmitLocally(
+            admission: out admission,
             definition: definition,
             machines: machines.ValidationCatalog,
             reason: out var machineAdmissionReason
@@ -466,6 +467,7 @@ public sealed partial class WorldServer : IWorldServerHost {
                 paramName: nameof(definition)
             );
         }
+        var compilation = admission.Compilation;
 
         if (narrationSink is not null) {
             _ = m_output.AttachNarrationSink(sink: narrationSink);
@@ -480,6 +482,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         m_machines = machines;
         if (!machines.TryPrepare(
+            admission: admission,
             candidate: definition,
             current: null,
             plan: out var machinePlan,
@@ -508,19 +511,9 @@ public sealed partial class WorldServer : IWorldServerHost {
         );
         m_persistence = new WorldPersistence(host: this);
         m_ruleHost = new WorldRuleHost(host: this);
-        m_ruleHost.RecompileTables(definition: definition);
+        m_ruleHost.InstallTables(compilation: compilation!);
         BuildArena(definition: definition);
-        m_search = new ArenaSearch(
-            arena: m_arena,
-            narrate: (channel, text) => {
-                if (m_output.HasNarrationSink) {
-                    m_output.Narrate(
-                        channel: channel,
-                        text: text
-                    );
-                }
-            }
-        );
+        m_search = CreateSearch(arena: m_arena);
         m_searchApply = writes => TryApplyMutation(
             mutation: ComposeSearchMutation(writes: writes),
             tick: m_searchTick,
@@ -626,9 +619,11 @@ public sealed partial class WorldServer : IWorldServerHost {
         // headless included, since nothing presentation-side ever called it either.
         m_machines.ReconcileLinks(links: definition.MachineCableGroups());
 
-        // Same reasoning as the cable links above: a rules row authored in the BOOT document needs its own compile
-        // call here, since Install never runs at construction.
-        definition = RecompileRules(definition: definition);
+        // The initial arena already settled clocks and inverse boards. Export those results from that same arena,
+        // then install it directly: constructing and loading another copy would repeat the entire state seed.
+        // Admission's programs remain reusable only when settlement keeps the exact definition unchanged.
+        definition = SettleInstalledRows(definition: definition, seeded: m_arena);
+        definition = RecompileRules(definition: definition, compilation: compilation, arena: m_arena);
         // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         m_tick.PaintLatticeDraws(definition: definition);

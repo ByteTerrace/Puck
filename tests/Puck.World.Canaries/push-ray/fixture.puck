@@ -1,0 +1,94 @@
+schema: "puck.world.definition.v1"
+basis: "../../../src/Puck.World/Assets/worlds/standard.basis.json"
+documentId: "push-ray-canary"
+
+state {
+  world {
+    slot request = 0
+    slot moverCell = -1
+    slot firstPushCell = -1
+    slot secondPushCell = -1
+    slot passableCell = -1
+    grid board dimensions(width: 4, depth: 1)
+  }
+
+  record Piece {
+    id: Int = 0
+    cell: Int bounds(0..3) = 0
+    kind: Int = 1
+    mover: Int = 0
+  }
+
+  pool pieces of Piece capacity(4) = [
+    { id: 0, cell: 0, kind: 1, mover: 1 },
+    { id: 1, cell: 1, kind: 1 },
+    { id: 2, cell: 1, kind: 1 },
+    { id: 3, cell: 2, kind: 3 }
+  ]
+}
+
+pattern pushable: Int {
+  symbols {
+    push = 1
+    vacant = 0
+    passable = 3
+  }
+  match: push+ (vacant | passable+)
+}
+
+pattern push: Int {
+  symbols {
+    push = 1
+  }
+  match: push
+}
+
+pattern stop: Int {
+  symbols {
+    stop = 2
+  }
+  match: stop
+}
+
+rule "push-east" {
+  when request == 1
+  for each mover in pieces {
+    if mover.mover == 1 {
+      transform pushRay(pool: pieces, cell: cell, value: kind, from: mover.cell, topology: board, direction: E, pattern: pushable, pushPattern: push, stopPattern: stop, empty: 0)
+    }
+  }
+  for each piece in pieces {
+    if piece.id == 0 {
+      moverCell = piece.cell
+    }
+    if piece.id == 1 {
+      firstPushCell = piece.cell
+    }
+    if piece.id == 2 {
+      secondPushCell = piece.cell
+    }
+    if piece.id == 3 {
+      passableCell = piece.cell
+    }
+  }
+  request = 0
+}
+
+rule "observe-without-push" {
+  when request == 2
+  for each piece in pieces {
+    if piece.id == 0 {
+      moverCell = piece.cell
+    }
+    if piece.id == 1 {
+      firstPushCell = piece.cell
+    }
+    if piece.id == 2 {
+      secondPushCell = piece.cell
+    }
+    if piece.id == 3 {
+      passableCell = piece.cell
+    }
+  }
+  request = 0
+}

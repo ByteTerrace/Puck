@@ -45,7 +45,7 @@ public sealed class WorldSearchJudgeCostLawTests {
         return WorldSearchCompilation.JudgeCost(
             context: WorldFactsCompiler.Context(definition: definition),
             judge: WorldSearchCompilation.JudgeRules(rules: WorldFactsCompiler.CompileAll(definition: definition))
-        );
+        ).Units;
     }
 
     [Fact]

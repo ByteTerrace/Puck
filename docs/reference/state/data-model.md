@@ -71,6 +71,39 @@ A board row with `Inverse` derives occupancy from those token positions.
 Write the token position and let the inverse be recomputed; independently
 maintaining both would give the same position two possible answers.
 
+## Group fields into bounded instances
+
+A record declares typed fields, defaults, and bounds. A pool provides a bounded
+set of live instances of that record. `claim` chooses the lowest free slot;
+`release` removes the instance and advances that slot's generation. Fields and
+allocator metadata participate in the same journal, so a refused initializer
+rolls back the whole claim.
+
+Storage reserves a fixed position per identity slot and marks live instances with
+presence bits. Claim and release do not move other instances. Generic C# row
+iteration must skip holes; see [pool storage and iteration](../state.md#store-bounded-records-and-relationships).
+
+`poolName[slot].field` addresses the slot's current occupant. A lexical binding
+from a claim or iteration holds a specific generation instead; release and
+reclaim cannot make that binding refer to the replacement. Iteration snapshots
+handles in ascending slot order and skips stale entries. Dead-slot generations
+remain in snapshots and hashes because they determine whether held handles are
+valid; equal live values alone do not mean equal allocator state.
+
+Numeric fields can declare `advance(perSecond: ...)`. Each live instance has
+its own clock, born at claim time. Pool snapshots carry the stored base and
+clock together, preserving accumulation across publication and reload. C#
+callers use the time-aware pool APIs for effective values and rebasing writes.
+
+World interactions bind a pool through `properties.carriers`, naming an enum
+field and mapping each member to a local seat, a named inhabited placement, or
+an explicit detached state. Every enum member needs exactly one mapping. The
+field and mapping compile once; live reads use ordinals, and placement bindings
+follow the population's current body assignment. Several instances may share
+one body; each remains a separate interaction participant and spends its own
+evaluation budget. Release removes a carrier; reclaim resolves the new instance's own
+default or initialized binding. Physical body indices never enter pool state.
+
 ## Choose behavior deliberately
 
 | Need | Trait or mechanism | Consequence for the host |
@@ -152,9 +185,14 @@ accumulate and draw, for one.
 Visibility also differs from gameplay permission. An observation policy says
 what a reader learns; it does not authorize that reader to mutate the state.
 Row and cell restrictions intersect. Hidden cells can disappear, contribute
-only a count, or appear as anonymous placeholders. A knowledge row records
-what was last observed through a mask, including its observation tick; a hidden
-location need not reveal its current authoritative value.
+only a count, or appear as anonymous placeholders. A knowledge row is keyed by
+the stable token identity shared with its source-property and position rows.
+`observe` tests each token's current position against a board mask and remembers
+the source property with its observation tick. Moving a revealed token therefore
+keeps what was learned about it; hiding its new cell clears `Visible` without
+discarding the remembered value. Omitting the positions row selects the direct
+board projection for location knowledge: source, mask, and knowledge then share
+one topology and observations remain keyed by cell.
 
 A phase guard answers a narrower question: “Does this submission still refer
 to generation 7?” Once an accepted guarded submission advances the generation,
@@ -168,6 +206,12 @@ catalog-bound handles. A store supplies the values currently being read.
 `StateReader` combines a stored value with its authored behavior at a tick.
 Replacing a catalog invalidates its handles; preserving the declaration shape
 can let a host retain the catalog during value-only updates.
+
+State sections are immutable snapshots. Pool expansion is shared by section
+identity, so layout, rules, and admission reuse one expansion. A replacement
+section gets its own expanded values even when its declaration shape allows the
+catalog to survive. Shape comparison reads declarations rather than constructing
+every pool slot again; loading the replacement still validates its population.
 
 [Candidates](frames.md) explain how the same rows and compiled rules can read a
 different store while exploring a possible move.
@@ -183,7 +227,7 @@ a storage shape, or an implementation, not because either is redundant:
 | State ring / topology ring | A bounded history buffer and a spatial or cyclic adjacency structure are different domains despite the shared name. |
 | Live zones / dynamic keys | Both select an address component, but a live-zone gap closes the whole evaluation before the gate; a dynamic key's evaluation timing is its own. |
 | Bindings / state rows | A per-evaluation value and persistent, mutable simulation state have different lifetimes and observability; they are not interchangeable. |
-| `sortZone` / `sortKeyed` | They share their finishing pass but keep separate authoring frontends: one orders a pile, the other a keyed row's own values. Both preserve stable ties, per-key direction, and token-domain validation. |
+| Own-value / attribute sorting | One authored `sort(row: scores, by: [{ row: scores }])` orders a row's own values. Naming attribute rows in `by` instead orders a pile over their shared token domain. Compilation selects the storage-specific kernel; both preserve stable ties and per-key direction. |
 
 World wrappers such as `WorldStateRow` and `WorldRule` forward a base row's or
 rule's constructor fields; that duplication is maintenance surface, not a
@@ -335,7 +379,9 @@ dimensionality for semantic state vectors:
 - `Revision`: model revision string (e.g. `"1"`).
 - `Dimensions`: dimensionality in `[8, 1024]`.
 
-Every `Vector` table or slot must reference a declared space (`space: "lore"`).
+Every `Vector` table or slot must reference a declared space (`space: "lore"`);
+in `.puck` source, the row's own `space(...)` modifier is what infers the `Vector`
+kind — a row's kind is never authored (see [world-vocabulary.md](../world-vocabulary.md)).
 Vector components are stored in `StateVector` as unit-normalized signed 8-bit integers
 (`sbyte[]`) on radius 127:
 
@@ -345,11 +391,11 @@ state {
         space lore { model: "puck-fixture" revision: "1" dimensions: 256 }
     }
     world {
-        table events : Vector {
+        table events space(lore) {
             ambush = "Bandits ambushed the caravan on the north road"
         }
-        table memories : Vector capacity(128) evicts { }
-        slot situation : Vector = "Travellers approach the gate at dusk"
+        table memories capacity(128) evicts space(lore) { }
+        slot situation space(lore) = "Travellers approach the gate at dusk"
     }
 }
 ```
@@ -376,7 +422,7 @@ and `space` apply to it, but the validator and the transpiler refuse every
 other row trait on it by name — `min`, `max`, `overflow`, `advance`,
 `dynamics`, `cycle`, `draw`, `valuesFrom`, `inverse`, `phase`, `phaseOf`,
 `gatesDrive`, and `field` — every domain other than a slot or a keyed table,
-`addState`/`countdownState`/`scheduleState`/`pushState`, and a HUD binding. A
+`addState`/`scheduleState`/`pushState`, and a HUD binding. A
 row's cell ceiling times its space's dimensions must not exceed 65,536, and a
 document's vector rows together must not exceed 4 MiB.
 
@@ -431,9 +477,35 @@ axis), the `CellKind` its values are stored in, its `StateParticipantRole`
 (`Counter` or `Timer` on a slot lane, `None` on a document row), and whether a
 lowering generated it or a host facet owns it. Beside the descriptors the
 catalog holds the lane extents (`StateLaneDescriptor`), the `CellKeyTable` that
-interns every cell key to a `CellKey`, the declared `StateEnum`s a row may name,
+interns authored keys and compiled key symbols to a `CellKey`, the declared `StateEnum`s a row may name,
 and each declared `StateFamily` resolved to the contiguous `RowFamily` ordinal
 range of its member rows.
+
+Each `StateArena.Keys` table starts with the authored cell and topology names
+sealed when its catalog was constructed, and owns its runtime additions.
+Compiler-only symbols do not consume the arena's key or byte budget or enter
+its hash until a runtime operation admits the name. Constructing an arena
+before or after binding a compiler literal therefore gives the same state.
+A speculative mint consumes room only in that arena; rewinding its
+scope releases the name and rejects any retained handle from that mint. A
+later mint can reuse the ordinal without reviving the old handle. Compiled
+keys continue to resolve by name even when compilation introduces a symbol
+after the arena was constructed. Runtime callers resolve and render keys
+through `StateArena.Keys`, not the catalog's symbol table.
+
+Member hashes fold names in cell order. The full arena hash also covers its
+retained key-name count and a wrapping sum of per-name digests, because a committed name still
+uses key budget after its last cell is removed. Relayouts and checkpoints retain this ledger;
+exported rows alone do not retain orphan names. Both distinct-key count and
+retained key bytes are bounded, and `StateArena.Bytes` includes the key charge.
+Each retained name charges 96 bytes plus two bytes per UTF-16 code unit;
+spare table capacity is bounded separately by `StateCapacity.MaxCellKeys`.
+The digest sum changes only for admitted or released names, so hashing the
+ledger is constant time and requires no sorting or temporary allocation.
+Removing a committed cell still retains its name: distinct names admitted
+over the arena's lifetime remain bounded by that ledger. Reads resolve keys
+without admitting names.
+
 `StateReader` is the one (row, key) → raw-value computation (advance, cycle,
 eased reads, reductions, arg-extrema); `StateArena` is the one cell-write
 store, and owns FIFO eviction. `StateArena.TryRead` answers one keyed read as a

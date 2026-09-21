@@ -77,6 +77,31 @@ internal static class ShippedWorlds {
 
         throw new DirectoryNotFoundException(message: "Could not locate src/Puck.World/Assets/worlds directory from test runner.");
     }
+    /// <summary>Returns every <c>*.puck</c> source of the asset packages under the repository's <c>worlds</c>
+    /// directory, recursively, as forward-slashed absolute paths in ordinal order.</summary>
+    /// <returns>The package sources' absolute paths.</returns>
+    public static IEnumerable<string> PackageSourcePaths() {
+        var packages = Path.GetFullPath(path: Path.Combine(
+            FindDirectory(),
+            "..",
+            "..",
+            "..",
+            "..",
+            "worlds"
+        ));
+
+        return (Directory.Exists(path: packages)
+            ? Directory.EnumerateFiles(
+                path: packages,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.puck"
+            ).Select(selector: static path => path.Replace(
+                newChar: '/',
+                oldChar: '\\'
+            )).Order(comparer: StringComparer.Ordinal)
+            : []
+        );
+    }
     /// <summary>Returns every <c>*.puck</c> world source under the worlds directory, recursively, as forward-slashed
     /// paths relative to it, in ordinal order.</summary>
     /// <returns>The committed source corpus.</returns>

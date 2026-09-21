@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 /// <summary>Construction options for <see cref="SdfWorldEngine"/>.</summary>
 /// <param name="Program">The scene program; the GPU buffer is sized to it and it is uploaded once at construction
 /// (the "program uploaded once" seam the dynamic-transform channel rides). A host whose scene later changes calls
-/// <see cref="SdfWorldEngine.UploadProgram"/> — the new program must fit the constructed buffer.</param>
+/// <see cref="SdfWorldEngine.UploadProgram"/> — program and instance buffers grow when necessary.</param>
 /// <param name="ViewportCapacity">The number of viewport slots to provision (source textures + packed viewport rows).
 /// Frames may carry fewer views than the capacity, never more; the kernels' source array caps it at 5.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
@@ -29,13 +29,11 @@ namespace Puck.SdfVm;
 /// <see langword="false"/> (the default, the waited harness/measure path), timing runs eagerly the moment a supported
 /// factory + recorder are supplied — the pools are created at construction and every frame is timed, never consulting
 /// the shared arming control.</param>
-/// <param name="ProgramWordCapacity">An optional floor on the program buffer's packed-word capacity (the engine
-/// always provisions at least <paramref name="Program"/>'s length). A host that hot-swaps programs via
-/// <see cref="SdfWorldEngine.UploadProgram"/> declares its envelope here instead of relying on every future program
-/// staying within the first one's size.</param>
-/// <param name="InstanceCapacity">An optional floor on the instance count the per-tile mask buffer is sized for (the
-/// engine always provisions at least <paramref name="Program"/>'s <see cref="SdfProgram.InstanceMaskWordCount"/>).
-/// The hot-swap counterpart of <paramref name="ProgramWordCapacity"/> for instanced programs.</param>
+/// <param name="ProgramWordCapacity">An optional initial reserve in packed words (the engine always provisions at
+/// least <paramref name="Program"/>'s length). <see cref="SdfWorldEngine.UploadProgram"/> grows it as needed;
+/// reserving expected content here avoids reallocations during authoring.</param>
+/// <param name="InstanceCapacity">An optional initial instance reserve for the per-tile masks and instance grids.
+/// The engine provisions at least the initial program's instance count and grows with later uploads.</param>
 /// <param name="BrickPoolVoxelCapacity">The carve-bake brick pool's voxel (f32 word) capacity, fixed at construction.
 /// Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (16.7M voxels = 64 MB —
 /// <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full <see cref="SdfBrickPoolLayout.BrickDim"/><sup>3</sup>

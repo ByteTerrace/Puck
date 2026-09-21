@@ -263,6 +263,43 @@ public sealed class SdfPackedContractLawTests {
             ),
         }]));
     }
+    /// <summary>Every float operand rejects both infinities and NaN, including otherwise unused lanes. Finite
+    /// extremes, subnormals, and signed zero remain admissible on an operation that ignores their magnitude.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void EveryFloatLaneKeepsItsAdmissionAndDiagnostic(int lane) {
+        foreach (var op in new[] { SdfOp.ResetPoint, SdfOp.ShapeBlend }) {
+            foreach (var value in new[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity }) {
+                var instruction = Shape() with { Op = op };
+                var data = ((lane < 4) ? instruction.Data0 : instruction.Data1);
+
+                data[(lane % 4)] = value;
+                instruction = ((lane < 4) ? instruction with { Data0 = data } : instruction with { Data1 = data });
+                var refusal = Assert.Throws<ArgumentException>(testCode: () => Build([instruction]));
+
+                Assert.Equal("instructions", refusal.ParamName);
+                Assert.Contains($"Data{(lane / 4)}.{"xyzw"[(lane % 4)]}", refusal.Message, StringComparison.Ordinal);
+            }
+        }
+
+        foreach (var value in new[] { float.MinValue, float.MaxValue, float.Epsilon, -float.Epsilon, 0f, -0f }) {
+            var data = Vector4.Zero;
+
+            data[(lane % 4)] = value;
+            _ = Build([Shape() with {
+                Op = SdfOp.ResetPoint,
+                Data0 = ((lane < 4) ? data : Vector4.Zero),
+                Data1 = ((lane < 4) ? Vector4.Zero : data),
+            }]);
+        }
+    }
     /// <summary>The shader divides the hit's projection onto each screen axis by that axis's half-extent, so a zero
     /// half-extent produces an infinite or NaN UV on a surface the sentinel band guarantees is reachable.</summary>
     [Fact]

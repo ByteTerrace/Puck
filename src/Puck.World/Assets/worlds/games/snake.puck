@@ -4,7 +4,7 @@
 // A single snake crawls one cell per beat on an 8x8 wrapping field. The player may turn
 // left, right, up or down but may never reverse straight back into the neck; eating the
 // food grows the snake by one segment and places a new food; running into the snake's own
-// body ends the run, and a countdown restarts it.
+// body ends the run, and a respawn deadline restarts it.
 //
 // This is a module: a host supplies the seat, the channels the four turn presses arrive on,
 // and the population. tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json is the
@@ -20,29 +20,29 @@
 // same request pair (snakeTurnRequest, snakeTurnSerial); the four rules below judge it.
 
 rule "snake-press-east" {
-  when $channel:1:strafe >= 0.5
-  mode: "Edge"
+  when channel(1, strafe) >= 0.5
+  mode: Edge
   snakeTurnRequest = 0
   snakeTurnSerial += 1
 }
 
 rule "snake-press-west" {
-  when $channel:1:strafe <= -0.5
-  mode: "Edge"
+  when channel(1, strafe) <= -0.5
+  mode: Edge
   snakeTurnRequest = 2
   snakeTurnSerial += 1
 }
 
 rule "snake-press-north" {
-  when $channel:1:forward >= 0.5
-  mode: "Edge"
+  when channel(1, forward) >= 0.5
+  mode: Edge
   snakeTurnRequest = 3
   snakeTurnSerial += 1
 }
 
 rule "snake-press-south" {
-  when $channel:1:forward <= -0.5
-  mode: "Edge"
+  when channel(1, forward) <= -0.5
+  mode: Edge
   snakeTurnRequest = 1
   snakeTurnSerial += 1
 }
@@ -53,11 +53,11 @@ rule "snake-press-south" {
 
 rule "snake-turn-east" {
   when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 0
-  mode: "Level"
+  mode: Level
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 2 {
     snakeHeading = 0
-    transform push(row: "snakeHeadingLog", value: 0)
+    transform push(row: snakeHeadingLog, value: 0)
   } else {
     snakeIllegalTurns += 1
   }
@@ -65,11 +65,11 @@ rule "snake-turn-east" {
 
 rule "snake-turn-south" {
   when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 1
-  mode: "Level"
+  mode: Level
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 3 {
     snakeHeading = 1
-    transform push(row: "snakeHeadingLog", value: 1)
+    transform push(row: snakeHeadingLog, value: 1)
   } else {
     snakeIllegalTurns += 1
   }
@@ -77,11 +77,11 @@ rule "snake-turn-south" {
 
 rule "snake-turn-west" {
   when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 2
-  mode: "Level"
+  mode: Level
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 0 {
     snakeHeading = 2
-    transform push(row: "snakeHeadingLog", value: 2)
+    transform push(row: snakeHeadingLog, value: 2)
   } else {
     snakeIllegalTurns += 1
   }
@@ -89,11 +89,11 @@ rule "snake-turn-west" {
 
 rule "snake-turn-north" {
   when snakeTurnSerial != snakeTurnApplied and snakeTurnRequest == 3
-  mode: "Level"
+  mode: Level
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 1 {
     snakeHeading = 3
-    transform push(row: "snakeHeadingLog", value: 3)
+    transform push(row: snakeHeadingLog, value: 3)
   } else {
     snakeIllegalTurns += 1
   }
@@ -108,26 +108,26 @@ rule "snake-turn-north" {
 
 rule "snake-step" {
   when snakeAlive == 1 and ((snakePace >= 8 and snakeTempo[fast] == 0) or (snakePace < 8 and snakeTempo[slow] == 0))
-  local col: Int = snakeHead % 8
-  local rw: Int = snakeHead / 8
-  mode: "Edge"
-  snakeNextCell = (snakeHeading == 0) ? ($local:rw * 8 + ($local:col + 1) % 8) : ((snakeHeading == 1) ? ((($local:rw + 1) % 8) * 8 + $local:col) : ((snakeHeading == 2) ? ($local:rw * 8 + ($local:col + 7) % 8) : ((($local:rw + 7) % 8) * 8 + $local:col)))
+  local col = snakeHead % 8
+  local rw = snakeHead / 8
+  mode: Edge
+  snakeNextCell = (snakeHeading == 0) ? (rw * 8 + (col + 1) % 8) : ((snakeHeading == 1) ? (((rw + 1) % 8) * 8 + col) : ((snakeHeading == 2) ? (rw * 8 + (col + 7) % 8) : (((rw + 7) % 8) * 8 + col)))
   snakeStepSerial += 1
 }
 
 rule "snake-die" {
   when snakeStepSerial != snakeStepApplied and snakeBoard[snakeNextCell[$value]] == 1
-  mode: "Level"
+  mode: Level
   snakeStepApplied = snakeStepSerial
   snakeAlive = 0
   snakeDeaths += 1
-  snakeRespawn = 50400
+  schedule snakeRespawn in 1s
   snakePace = 0
 }
 
 rule "snake-eat" {
   when snakeStepSerial != snakeStepApplied and snakeBoard[snakeNextCell[$value]] == 2
-  mode: "Level"
+  mode: Level
   snakeStepApplied = snakeStepSerial
   snakeBoard[snakeNextCell[$value]] = 1
   push snakeTrail = snakeNextCell
@@ -136,9 +136,9 @@ rule "snake-eat" {
     snakeLength += 1
   }
   snakeScore += 10
-  setState(fromState: "snakeLength", key: "$cell:snakeNextCell:$value", state: "snakeMeals")
+  setState(fromState: snakeLength, key: snakeNextCell[$value], state: snakeMeals)
   snakeFoodPlaced = 0
-  generate(row: "snakeFoodDraw")
+  generate(row: snakeFoodDraw)
   snakeFoodCell = snakeFoodDraw
 }
 
@@ -147,55 +147,49 @@ rule "snake-eat" {
 // this step's own push: the departing tail is age snakeLength - 1.
 rule "snake-move" {
   when snakeStepSerial != snakeStepApplied and snakeBoard[snakeNextCell[$value]] == 0
-  local tail2: Int = $history:snakeTrail:2
-  local tail3: Int = $history:snakeTrail:3
-  local tail4: Int = $history:snakeTrail:4
-  local tail5: Int = $history:snakeTrail:5
-  mode: "Level"
+  local tail2 = history(snakeTrail, 2)
+  local tail3 = history(snakeTrail, 3)
+  local tail4 = history(snakeTrail, 4)
+  local tail5 = history(snakeTrail, 5)
+  mode: Level
   snakeStepApplied = snakeStepSerial
   snakeBoard[snakeNextCell[$value]] = 1
   push snakeTrail = snakeNextCell
   snakeHead = snakeNextCell
   if snakeLength == 3 {
-    setState(key: "$local:tail2", state: "snakeBoard", value: 0)
+    setState(key: local(tail2), state: snakeBoard, value: 0)
   } else if snakeLength == 4 {
-    setState(key: "$local:tail3", state: "snakeBoard", value: 0)
+    setState(key: local(tail3), state: snakeBoard, value: 0)
   } else if snakeLength == 5 {
-    setState(key: "$local:tail4", state: "snakeBoard", value: 0)
+    setState(key: local(tail4), state: snakeBoard, value: 0)
   } else {
-    setState(key: "$local:tail5", state: "snakeBoard", value: 0)
+    setState(key: local(tail5), state: snakeBoard, value: 0)
   }
 }
 
-// --- Death, the countdown, and the next run -------------------------------------------
-
-rule "snake-countdown" {
-  when snakeAlive == 0 and snakeRespawn > 0
-  mode: "Level"
-  countdown snakeRespawn
-}
+// --- Death, the respawn deadline, and the next run -------------------------------------
 
 rule "snake-spawn" {
-  when snakeAlive == 0 and snakeRespawn == 0
-  mode: "Edge"
-  transform boardCombine(operation: "Clear", row: "snakeBoard")
+  when snakeAlive == 0 and $tick >= snakeRespawn
+  mode: Edge
+  transform boardCombine(operation: Clear, row: snakeBoard)
   push snakeTrail = 25
   push snakeTrail = 26
   push snakeTrail = 27
-  setState(key: "25", state: "snakeBoard", value: 1)
-  setState(key: "26", state: "snakeBoard", value: 1)
-  setState(key: "27", state: "snakeBoard", value: 1)
+  setState(key: 25, state: snakeBoard, value: 1)
+  setState(key: 26, state: snakeBoard, value: 1)
+  setState(key: 27, state: snakeBoard, value: 1)
   snakeHead = 27
   snakeHeading = 0
   snakeLength = 3
   snakeScore = 0
   snakePace = 0
   snakeAlive = 1
-  transform push(row: "snakeHeadingLog", value: 0)
+  transform push(row: snakeHeadingLog, value: 0)
   snakeTurnApplied = snakeTurnSerial
   snakeTurnRequest = 0
   snakeFoodPlaced = 0
-  generate(row: "snakeFoodDraw")
+  generate(row: snakeFoodDraw)
   snakeFoodCell = snakeFoodDraw
 }
 
@@ -204,21 +198,21 @@ rule "snake-spawn" {
 
 rule "snake-food-reroll" {
   when snakeFoodPlaced == 0 and snakeBoard[snakeFoodCell[$value]] != 0
-  mode: "Level"
-  generate(row: "snakeFoodDraw")
+  mode: Level
+  generate(row: snakeFoodDraw)
   snakeFoodCell = snakeFoodDraw
 }
 
 rule "snake-food-place" {
   when snakeFoodPlaced == 0 and snakeBoard[snakeFoodCell[$value]] == 0
-  mode: "Level"
+  mode: Level
   snakeBoard[snakeFoodCell[$value]] = 2
   snakeFoodPlaced = 1
 }
 
 state {
   world {
-    grid snakeBoard: Int dimensions(width: 8, depth: 8) wrap(Both) cellSize(1) origin(0, 0, 0)
+    grid snakeBoard dimensions(width: 8, depth: 8) wrap(Both) cellSize(1) origin(0, 0, 0)
 
     row {
       domain: ring(capacity: 16, empty: -1)
@@ -232,7 +226,7 @@ state {
       name: "snakeHeadingLog"
     }
 
-    table snakeMeals: Int capacity(2) evicts
+    table snakeMeals capacity(2) evicts
 
     row {
       cells [
@@ -287,37 +281,37 @@ state {
       value: 21
     }
 
-    slot snakeAlive: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot snakeAlive = 0 bounds(0..1)
 
-    slot snakeHead: Int = 27 bounds(minimum: 0, maximum: 63)
+    slot snakeHead = 27 bounds(0..63)
 
-    slot snakeHeading: Int = 0 bounds(minimum: 0, maximum: 3)
+    slot snakeHeading = 0 bounds(0..3)
 
-    slot snakeNextCell: Int = 27 bounds(minimum: 0, maximum: 63)
+    slot snakeNextCell = 27 bounds(0..63)
 
-    slot snakeLength: Int = 0 bounds(minimum: 0, maximum: 6)
+    slot snakeLength = 0 bounds(0..6)
 
-    slot snakeScore: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeScore = 0 bounds(0..9999)
 
-    slot snakeDeaths: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeDeaths = 0 bounds(0..9999)
 
-    slot snakeRespawn: Int = 0 bounds(minimum: 0, maximum: 504000)
+    slot snakeRespawn = 0
 
-    slot snakeFoodCell: Int = 21 bounds(minimum: 0, maximum: 63)
+    slot snakeFoodCell = 21 bounds(0..63)
 
-    slot snakeFoodPlaced: Int = 1 bounds(minimum: 0, maximum: 1)
+    slot snakeFoodPlaced = 1 bounds(0..1)
 
-    slot snakeTurnRequest: Int = 0 bounds(minimum: 0, maximum: 3)
+    slot snakeTurnRequest = 0 bounds(0..3)
 
-    slot snakeTurnSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeTurnSerial = 0 bounds(0..9999)
 
-    slot snakeTurnApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeTurnApplied = 0 bounds(0..9999)
 
-    slot snakeIllegalTurns: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeIllegalTurns = 0 bounds(0..9999)
 
-    slot snakeStepSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeStepSerial = 0 bounds(0..9999)
 
-    slot snakeStepApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot snakeStepApplied = 0 bounds(0..9999)
   }
 }
 

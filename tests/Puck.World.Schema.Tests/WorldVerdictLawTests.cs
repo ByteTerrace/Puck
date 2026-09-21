@@ -35,6 +35,15 @@ public sealed class WorldVerdictLawTests {
             Status: CellName.Parse(candidate: status)
         ),
     };
+    private static WorldStateRow Witness() => new(
+        Name: CellName.Parse(candidate: "sawFixed"),
+        Kind: CellKind.Fixed,
+        Cells: [new StateCell(
+                Key: CellName.Parse(candidate: "speed"),
+                Value: CellValue.Fixed(rawBits: 0L)
+            )],
+        Witness: Verdict().Name
+    );
     private static string Validate(WorldDefinition definition) =>
         (WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
@@ -299,7 +308,7 @@ public sealed class WorldVerdictLawTests {
     }
     [Fact]
     public void EveryDoorButARuleEffectRefusesAVerdictWriteWithOneText() {
-        var refusal = WorldVerdict.RefuseWrite(row: CellName.Parse(candidate: "phaseAdvances"));
+        var refusal = WorldVerdict.RefuseWrite(row: Verdict() with { Name = CellName.Parse(candidate: "phaseAdvances") });
 
         Assert.Contains(
             actualString: refusal,
@@ -310,6 +319,106 @@ public sealed class WorldVerdictLawTests {
             actualString: refusal,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: WorldVerdict.FiredTickKey.Value
+        );
+
+        var witnessed = WorldVerdict.RefuseWrite(row: Witness());
+
+        Assert.Contains(
+            actualString: witnessed,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"'{Witness().Name}' is a witness of the verdict '{Verdict().Name}'"
+        );
+    }
+    [Fact]
+    public void AWitnessNamesAVerdictAndMovesOnlyWhenARuleFires() {
+        Assert.Equal(
+            actual: Validate(definition: BuildDefinition(
+                Verdict(),
+                Witness()
+            )),
+            expected: string.Empty
+        );
+        Assert.Contains(
+            actualString: Validate(definition: BuildDefinition(Witness())),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $".witness '{Verdict().Name}' names no verdict row"
+        );
+        Assert.Contains(
+            actualString: Validate(definition: BuildDefinition(
+                Verdict(),
+                Witness() with {
+                    Cells = [new StateCell(
+                            Key: CellName.Parse(candidate: "hp"),
+                            Value: CellValue.Int(value: 0L)
+                        )],
+                    Kind = CellKind.Int,
+                }
+            )),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "so a witness is kind Fixed or Bool"
+        );
+        Assert.Contains(
+            actualString: Validate(definition: BuildDefinition(
+                Verdict(),
+                Witness() with {
+                    Verdict = Verdict().Verdict,
+                }
+            )),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "a row is a verdict or a witness of one, never both"
+        );
+        Assert.Contains(
+            actualString: Validate(definition: BuildDefinition(
+                Verdict(),
+                Witness() with {
+                    Advance = new StateAdvance(
+                        PerSecondDenominator: 1L,
+                        PerSecondNumerator: 1L
+                    ),
+                }
+            )),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "a value-over-time trait moves a verdict's cells with no rule behind it"
+        );
+    }
+    [Fact]
+    public void AWitnessRoundTripsThroughTheDocument() {
+        var written = Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: BuildDefinition(
+            Verdict(),
+            Witness()
+        )));
+
+        Assert.Contains(
+            actualString: written,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"\"witness\": \"{Verdict().Name}\""
+        );
+    }
+    [Fact]
+    public void AValueAGateSawIsSpelledByItsKind() {
+        Assert.Equal(
+            actual: WorldVerdict.DescribeSeen(
+                key: "hp",
+                kind: CellKind.Int,
+                raw: 3L
+            ),
+            expected: "hp=3"
+        );
+        Assert.Equal(
+            actual: WorldVerdict.DescribeSeen(
+                key: "speed",
+                kind: CellKind.Fixed,
+                raw: 147456L
+            ),
+            expected: "speed=2.25"
+        );
+        Assert.Equal(
+            actual: WorldVerdict.DescribeSeen(
+                key: "open",
+                kind: CellKind.Bool,
+                raw: 0L
+            ),
+            expected: "open=false"
         );
     }
     [Fact]

@@ -21,7 +21,7 @@ public sealed class WorldSymmetryChannelLawTests {
         var definition = Definition(new ActionEffect.SetState(
             State: destination,
             FromState: channel,
-            FromKey: key
+            FromKey: StateChannelRef.OfNullable(spelling: key)
         ));
         var compiled = WorldFactsCompiler.CompileAll(definition: definition);
 
@@ -86,7 +86,7 @@ public sealed class WorldSymmetryChannelLawTests {
         var exception = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(
             State: destination,
             FromState: channel,
-            FromKey: key
+            FromKey: StateChannelRef.OfNullable(spelling: key)
         ))));
 
         Assert.Equal(

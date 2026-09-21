@@ -53,7 +53,7 @@ public static class IrreversibleFixture {
                 RowOrdinal: m_rowOrdinal
             ));
         }
-        public override long Cost(IRuleCostContext context) => 1L;
+        public override RuleWork Cost(IRuleCostContext context) => 1L;
     }
 }
 /// <summary>A section carrying two vector spaces, so a space mismatch and every vector shape refusal has a source.</summary>

@@ -126,7 +126,7 @@ public sealed class PuckMigrationLawTests {
         state {
           world {
             // above a row the constant sizes
-            slot hp : Int = speed
+            slot hp = speed
           }
         }
 

@@ -289,7 +289,10 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
             return false;
         }
 
+        // A schedule names the tick a step is submitted at, so the step lands in the tick after it however far the
+        // simulation is running behind the wall clock.
         session = m_source().CreateSeatSession(
+            dueNextTick: true,
             router: m_router(),
             slot: parsed.Index
         );

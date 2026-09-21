@@ -1566,10 +1566,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
 
     /// <inheritdoc/>
-    public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason) {
+    public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason,
+        WorldDefinitionAdmission? admission = null) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
 
-        if (!WorldDefinitionValidator.TryValidateLocally(
+        if ((admission is not null) && !admission.AppliesTo(definition: candidate, machines: Catalog)) {
+            plan = null;
+            reason = "the admission result belongs to a different definition or machine catalog";
+            return false;
+        }
+        if ((admission is null) && !WorldDefinitionValidator.TryValidateLocally(
             definition: candidate,
             machines: Catalog,
             reason: out var validationReason

@@ -86,25 +86,25 @@ public sealed class GraphTopologyLawTests {
             new GraphEdge(
                 From: "hub",
                 To: "n",
-                Direction: "N"
+                Direction: CellName.Parse(candidate: "N")
             ),
             new GraphEdge(
                 From: "hub",
                 To: "e",
-                Direction: "E"
+                Direction: CellName.Parse(candidate: "E")
             ),
             new GraphEdge(
                 From: "hub",
                 To: "s",
-                Direction: "S"
+                Direction: CellName.Parse(candidate: "S")
             ),
             new GraphEdge(
                 From: "hub",
                 To: "w",
-                Direction: "W"
+                Direction: CellName.Parse(candidate: "W")
             ),
             new GraphEdge(
-                Direction: "ladder",
+                Direction: CellName.Parse(candidate: "ladder"),
                 From: "w",
                 OneWay: true,
                 To: "n"
@@ -288,7 +288,7 @@ public sealed class GraphTopologyLawTests {
             Star(new GraphEdge(
                 From: "hub",
                 To: "e",
-                Direction: "N"
+                Direction: CellName.Parse(candidate: "N")
             )),
             out var slot
         ));
@@ -301,7 +301,7 @@ public sealed class GraphTopologyLawTests {
             Star(new GraphEdge(
                 From: "hub",
                 To: "w",
-                Direction: "ladder"
+                Direction: CellName.Parse(candidate: "ladder")
             )),
             out var reverse
         ));
@@ -314,7 +314,7 @@ public sealed class GraphTopologyLawTests {
             Star(new GraphEdge(
                 From: "e",
                 To: "e",
-                Direction: "ladder"
+                Direction: CellName.Parse(candidate: "ladder")
             )),
             out var loop
         ));
@@ -327,7 +327,7 @@ public sealed class GraphTopologyLawTests {
             Star(new GraphEdge(
                 From: "e",
                 To: "ghost",
-                Direction: "N"
+                Direction: CellName.Parse(candidate: "N")
             )),
             out var ghost
         ));
@@ -337,7 +337,8 @@ public sealed class GraphTopologyLawTests {
             expectedSubstring: "undeclared cell"
         );
 
-        var asymmetric = Star() with { Directions = [new GraphDirection(
+        var asymmetric = Star() with {
+            Directions = [new GraphDirection(
                 Name: "N",
                 Opposite: "S"
             ), new GraphDirection(
@@ -352,7 +353,8 @@ public sealed class GraphTopologyLawTests {
             ), new GraphDirection(
                 Name: "ladder",
                 Opposite: "ladder"
-            )] };
+            )],
+        };
 
         Assert.False(condition: TopologyCompilation.TryValidate(
             reason: out var opposite,
@@ -364,7 +366,8 @@ public sealed class GraphTopologyLawTests {
             expectedSubstring: "whose own opposite"
         );
 
-        var duplicate = Star() with { Cells = [new GraphCell(
+        var duplicate = Star() with {
+            Cells = [new GraphCell(
                 Id: "a",
                 Centre: new DocumentVector3(
                     x: 0f,
@@ -378,7 +381,8 @@ public sealed class GraphTopologyLawTests {
                     y: 0f,
                     z: 0f
                 )
-            )] };
+            )],
+        };
 
         Assert.False(condition: TopologyCompilation.TryValidate(
             reason: out var repeated,

@@ -43,13 +43,13 @@ public sealed class WorldRuleBindingLawTests {
                 ],
                 Locals: (bound
             ? [new RuleLocal(
-                            CellName.Parse(candidate: "dealt"),
-                            CellKind.Int,
-                            Expr(
+                            Expression: Expr(
                                 State(row: "damage"),
                                 State(row: "hp"),
                                 Instruction.Of(operation: ExpressionOp.Minimum)
-                            )
+                            ),
+                            Kind: CellKind.Int,
+                            Name: CellName.Parse(candidate: "dealt")
                         )]
             : null)
             )],
@@ -90,14 +90,14 @@ public sealed class WorldRuleBindingLawTests {
                     )],
                 Locals: [
                 new RuleLocal(
-                        CellName.Parse(candidate: "x"),
-                        CellKind.Int,
-                        Expr(State(row: "$local:y"))
+                        Expression: Expr(State(row: "$local:y")),
+                        Kind: CellKind.Int,
+                        Name: CellName.Parse(candidate: "x")
                     ),
                 new RuleLocal(
-                        CellName.Parse(candidate: "y"),
-                        CellKind.Int,
-                        Expr(State(row: "a"))
+                        Expression: Expr(State(row: "a")),
+                        Kind: CellKind.Int,
+                        Name: CellName.Parse(candidate: "y")
                     ),
             ]
             )],
@@ -119,18 +119,18 @@ public sealed class WorldRuleBindingLawTests {
                     )],
                 Locals: [
                 new RuleLocal(
-                        CellName.Parse(candidate: "y"),
-                        CellKind.Int,
-                        Expr(State(row: "a"))
+                        Expression: Expr(State(row: "a")),
+                        Kind: CellKind.Int,
+                        Name: CellName.Parse(candidate: "y")
                     ),
                 new RuleLocal(
-                        CellName.Parse(candidate: "x"),
-                        CellKind.Int,
-                        Expr(
+                        Expression: Expr(
                             State(row: "$local:y"),
                             Instruction.Constant(value: 2m),
                             Instruction.Of(operation: ExpressionOp.Multiply)
-                        )
+                        ),
+                        Kind: CellKind.Int,
+                        Name: CellName.Parse(candidate: "x")
                     ),
             ]
             )],
@@ -159,13 +159,13 @@ public sealed class WorldRuleBindingLawTests {
                         Value: 1m
                     )],
                 Locals: [new RuleLocal(
-                        CellName.Parse(candidate: "q"),
-                        CellKind.Int,
-                        Expr(
+                        Expression: Expr(
                             Instruction.Constant(value: 1m),
                             State(row: "zero"),
                             Instruction.Of(operation: ExpressionOp.Divide)
-                        )
+                        ),
+                        Kind: CellKind.Int,
+                        Name: CellName.Parse(candidate: "q")
                     )]
             )],
         };

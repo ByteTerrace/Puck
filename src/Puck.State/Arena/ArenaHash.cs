@@ -4,7 +4,7 @@ using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
-    /// <summary>Folds every stored column of every lane into one hash, in layout order.</summary>
+    /// <summary>Folds every stored column of every lane plus the retained key ledger into one hash.</summary>
     /// <returns>The hash value.</returns>
     /// <remarks>
     /// The fold reads the logical value of each position rather than the array behind it, so an arena that has
@@ -12,6 +12,8 @@ public sealed partial class StateArena {
     /// the catalog and the authored rows alone, so two hosts running the same document and the same writes fold the
     /// same bytes in the same order.
     /// <para>A host-owned row is excluded: it has no columns here, and its facet hashes what it serves.</para>
+    /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger
+    /// folds its count and order-independent digest sum because orphan names affect future mint admission.</para>
     /// </remarks>
     public ulong ComputeHash() {
         var hash = Fnv1aHash.Create();
@@ -25,6 +27,10 @@ public sealed partial class StateArena {
             );
         }
 
+        // Retained names affect future mint admission, including names no row currently uses. The digest sum
+        // preserves that resource state without making allocation ordinals part of content identity.
+        m_keys.AddLedgerTo(hash: ref hash);
+        AddUndoTo(hash: ref hash);
         return hash.Value;
     }
     /// <summary>Folds one column of every lane into its own hash.</summary>
@@ -48,7 +54,7 @@ public sealed partial class StateArena {
     /// A row is more than its values. Its member keys say which key stands at which position, its cursors say where
     /// a ring's oldest slot and a draw site's next sample are, its presence bits tell a lattice cell holding the
     /// empty value from one holding none, and its runtime-state columns carry what a live read answers from. Two
-    /// rows fold the same exactly when every read of them, stored or live at one tick, answers the same, so a
+    /// rows with the same stored fields fold the same independently of key allocation order, so a
     /// caller keying a cache by a set of rows folds each through here rather than reading values back by position.
     /// <para>A host-owned row stores nothing here and folds as its ordinal alone; its facet hashes what it
     /// serves. The lane roster belongs to a lane rather than a row and is not folded.</para>
@@ -63,7 +69,7 @@ public sealed partial class StateArena {
             );
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         // The ordinal and each column's own ordinal frame the row's runs, so neither two rows nor two adjacent
         // columns of one row can present the same values by dividing them differently.
@@ -156,7 +162,7 @@ public sealed partial class StateArena {
                 length: range.RowCount,
                 start: range.FirstRow
             )) {
-                var layout = m_layout[rowOrdinal];
+                ref readonly var layout = ref m_layout[rowOrdinal];
 
                 if (
                     layout.HostOwned ||
@@ -191,6 +197,13 @@ public sealed partial class StateArena {
     }
     private void FoldCell(ref Fnv1aHash hash, ArenaColumn column, in ArenaRowLayout layout, int slot) {
         switch (column) {
+            case ArenaColumn.MemberKey:
+                m_keys.AddNameTo(
+                    hash: ref hash,
+                    ordinal: m_memberKeys[slot]
+                );
+
+                break;
             case ArenaColumn.Text:
                 FoldText(
                     hash: ref hash,
@@ -214,24 +227,10 @@ public sealed partial class StateArena {
 
                 break;
             case ArenaColumn.Visibility:
-                if (m_visibilities?[slot] is { } visibility) {
-                    hash.Add(value: 1UL);
-                    hash.Add(value: ((ulong)((byte)visibility.Hidden)));
-                    FoldText(
-                        hash: ref hash,
-                        text: visibility.ReadersFrom
-                    );
-                    hash.Add(value: ((ulong)(visibility.Readers?.Count ?? 0)));
-
-                    foreach (var reader in (visibility.Readers ?? [])) {
-                        FoldText(
-                            hash: ref hash,
-                            text: reader
-                        );
-                    }
-                } else {
-                    hash.Add(value: 0UL);
-                }
+                StateVisibilityHash.Append(
+                    hash: ref hash,
+                    visibility: m_visibilities?[slot]
+                );
 
                 break;
             case ArenaColumn.Observation:

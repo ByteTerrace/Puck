@@ -1,0 +1,44 @@
+{
+  "id": "edit-state-backed-row",
+  "title": "A live row edit whose position names a state cell applies, and the world keeps running past its edit echo",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 3,
+  "timeoutSeconds": 60,
+  "binding": "The document resolves a submitted row's state-backed values in a private copy, so the mutation an edit echo carries still holds the reference as its submitter wrote it: every echo tap reads a payload with no resolved value. The positive leg sets the fixture placement's position to state.spot (a Text cell holding [2, 0, 0]), and asserts the edit applies and world.status still answers after the echo fired. The discriminating leg writes a reference that names no row and then a null position. Both are refused by name, so no edit applies and the world still answers.",
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/edit-state-backed-row/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the state-backed edit applies", "stream": "stderr", "match": "contains", "text": "[world.mutation: UpsertPlacement 'card' applied]", "present": true },
+      { "type": "line", "name": "the world answers after the edit echo", "stream": "stdout", "match": "contains", "text": "[world.status: source", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/edit-state-backed-row/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "refused" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 2, "outcome": "refused" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "a reference naming no row is refused by name", "stream": "stderr", "match": "contains", "text": "reference 'elsewhere' must be state.<row>[.<key>]", "present": true },
+      { "type": "line", "name": "a missing position is refused by name", "stream": "stderr", "match": "contains", "text": ".position is required.", "present": true },
+      { "type": "line", "name": "nothing applies", "stream": "stderr", "match": "contains", "text": "[world.mutation: UpsertPlacement 'card' applied]", "present": false },
+      { "type": "line", "name": "the world answers after the refusal echo", "stream": "stdout", "match": "contains", "text": "[world.status: source", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

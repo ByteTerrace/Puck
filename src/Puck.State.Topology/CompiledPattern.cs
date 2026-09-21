@@ -26,6 +26,9 @@ public sealed class CompiledPattern {
     public PatternRow Source { get; }
     /// <summary>Gets the number of states in the compiled machine.</summary>
     public int StateCount => m_accepting.Length;
+    /// <summary>Gets the bytes the machine's transition and accepting tables occupy, which is what
+    /// <see cref="PatternCapacity.MaxTableBytes"/> totals across a document.</summary>
+    public long TableBytes => ((((long)m_transitions.Length) * sizeof(int)) + m_accepting.Length);
 
     private static bool TryLower(CellKind kind, decimal literal, out long raw) {
         try {
@@ -93,6 +96,41 @@ public sealed class CompiledPattern {
         }
 
         return longest;
+    }
+    /// <summary>Finds one non-empty occurrence in a word, in start order. Overlapping occurrences are retained and
+    /// each start contributes its longest accepted prefix.</summary>
+    /// <param name="values">The word, raw in the pattern's kind.</param>
+    /// <param name="occurrence">The zero-based occurrence to find.</param>
+    /// <param name="start">The occurrence's zero-based start, or -1 when absent.</param>
+    /// <param name="length">The occurrence's length, or 0 when absent.</param>
+    /// <returns><see langword="true"/> when the occurrence exists.</returns>
+    public bool TryFindOccurrence(ReadOnlySpan<long> values, int occurrence, out int start, out int length) {
+        if (occurrence < 0) {
+            start = -1;
+            length = 0;
+
+            return false;
+        }
+
+        for (var candidate = 0; (candidate < values.Length); candidate++) {
+            var accepted = LongestAcceptedPrefix(values: values[candidate..]);
+
+            // Empty-language acceptance does not identify a piece of the word. Counting only non-empty matches
+            // also guarantees progress for star/optional patterns without a special zero-width convention.
+            if (accepted <= 0L) {
+                continue;
+            }
+            if (occurrence-- == 0) {
+                start = candidate;
+                length = checked((int)accepted);
+
+                return true;
+            }
+        }
+
+        start = -1;
+        length = 0;
+        return false;
     }
     /// <summary>Runs a word of raw cell values through the machine.</summary>
     /// <param name="values">The word, raw in the pattern's kind.</param>
@@ -370,13 +408,15 @@ public sealed class CompiledPattern {
             ) { return Empty; }
             if (left == Epsilon) { return right; }
             if (right == Epsilon) { return left; }
-            if (m_terms[left].Kind == Kind.Concat) { return Concat(
+            if (m_terms[left].Kind == Kind.Concat) {
+                return Concat(
                 left: m_terms[left].Left,
                 right: Concat(
                     left: m_terms[left].Right,
                     right: right
                 )
-            ); }
+            );
+            }
             return Intern(term: new(
                 Items: [],
                 Kind: Kind.Concat,
@@ -809,9 +849,15 @@ public sealed class CompiledPatterns {
 
         rows ??= [];
 
+        // Past the row ceiling nothing is compiled: a machine is work to build, and the count is what bounds it.
         if (rows.Count > PatternCapacity.MaxRows) {
             errors.Add(item: $"patterns declares {rows.Count} rows; the maximum is {PatternCapacity.MaxRows}.");
+            patterns = Empty;
+
+            return false;
         }
+
+        var tableBytes = 0L;
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
@@ -827,6 +873,14 @@ public sealed class CompiledPatterns {
             )) {
                 errors.Add(item: $"patterns[{index}] {reason}.");
                 continue;
+            }
+
+            tableBytes += compiled!.TableBytes;
+
+            if (tableBytes > PatternCapacity.MaxTableBytes) {
+                errors.Add(item: $"patterns[{index}] '{row.Name}' brings the document's pattern tables to {tableBytes} bytes, past the {PatternCapacity.MaxTableBytes}-byte ceiling; lower a row's maxStates, merge symbols that are always matched together, or drop a pattern.");
+
+                break;
             }
             if (!table.TryAdd(
                 key: row.Name.Value,

@@ -8,20 +8,19 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary><see cref="PuckPrinter"/> against the concise state-row declarations: formatting is idempotent and
 /// never changes what a document compiles to.</summary>
 public class StateDeclarationFormatterTests {
-
     private const string DeclarationSource = """
         schema: "puck.world.definition.v1"
 
         state {
             world {
-                table vitals : Int capacity(3) bounds(minimum: 0, maximum: 100, overflow: Saturate) {
+                table vitals capacity(3) bounds(0..100, overflow: Saturate) {
                     health = 100
                     mana = 50 advance(perSecond: 5)
                 }
 
-                slot gold : Int = 10 bounds(minimum: 0)
+                slot gold = 10 bounds(0..)
 
-                table cardNames : Int capacity(2) {
+                table cardNames capacity(2) {
                     king = 0
                     queen = 1
                 }
@@ -31,7 +30,7 @@ public class StateDeclarationFormatterTests {
                     queen
                 }
 
-                grid board : Int dimensions(width: 2, depth: 2) wrap(Both) empty(-1) {
+                grid board dimensions(width: 2, depth: 2) wrap(Both) empty(-1) {
                     "0" = 1
                     "3" = 2
                 }
@@ -74,6 +73,7 @@ public class StateDeclarationFormatterTests {
     public void FormattingPreservesWhatTheDeclarationsCompileTo() {
         var (beforeJson, beforeDiagnostics) = Lower(source: DeclarationSource);
         var formatted = PuckFormat.Format(DeclarationSource);
+
         var (afterJson, afterDiagnostics) = Lower(source: formatted);
 
         Assert.False(condition: beforeDiagnostics.HasErrors);
@@ -130,11 +130,11 @@ public class StateDeclarationFormatterTests {
             expected: pass1
         );
     }
-
     [Fact]
     public void FormattingPreservesWhatSqlDeclarationsCompileTo() {
         var (beforeJson, beforeDiagnostics) = Lower(source: SqlDeclarationSource);
         var formatted = PuckFormat.Format(SqlDeclarationSource);
+
         var (afterJson, afterDiagnostics) = Lower(source: formatted);
 
         Assert.False(condition: beforeDiagnostics.HasErrors, userMessage: beforeDiagnostics.FormatReport(""));
@@ -149,4 +149,3 @@ public class StateDeclarationFormatterTests {
         Assert.Null(@object: mismatch);
     }
 }
-

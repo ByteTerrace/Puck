@@ -36,8 +36,13 @@ public sealed class PatternMemo {
     private ArenaLayout? m_layout;
     private StateArena? m_arena;
 
-    /// <summary>The most memoized walks one memo holds before it drops them all.</summary>
-    public const int MaxEntries = 256;
+    /// <summary>The bytes one memoized walk occupies: a dictionary entry's hash and link, the pattern reference
+    /// and word source that key it, and the two proofs, length, state and accepted prefix it holds.</summary>
+    public const int EntryBytes = 64;
+    /// <summary>The most memory one memo holds before it drops every walk. A board read from every cell in every
+    /// direction keys one walk per read, so the figure is a share of memory rather than a count of walks: at
+    /// <see cref="EntryBytes"/> each it keeps 16,384 of them.</summary>
+    public const int MaxBytes = (1 << 20);
 
     /// <summary>Gets how many walks resumed from a memoized state.</summary>
     public int Resumed { get; private set; }
@@ -124,7 +129,7 @@ public sealed class PatternMemo {
         }
 
         if (memoizes) {
-            if (m_entries.Count >= MaxEntries) {
+            if (m_entries.Count >= (MaxBytes / EntryBytes)) {
                 m_entries.Clear();
             }
 

@@ -5,19 +5,32 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>A non-seat body's <c>bodies.sleepAfterTicks</c> idle floor: falls asleep once its program has produced
+/// <summary>A non-seat body's <c>bodies.sleepAfterSeconds</c> idle floor: falls asleep once its program has produced
 /// no motion and received no intent for the authored ticks, and wakes on an adopted intent, a contact-field version
 /// bump, or a designation targeting it.</summary>
 public sealed class BodySleepLawTests {
     // Below one fixture Step's own engine-tick width, so a single idle step crosses the floor and the body is
     // asleep after it. A woken body therefore re-crosses the floor within the very step that woke it: an
     // observation of the wake reads the sleep latch's own tick (AsleepSinceTick), never a still-awake body.
-    private const int SleepAfterTicks = 1000;
+    private const decimal SleepAfterSeconds = 0.0125m;
+
+    private static WorldAuthorityCheckpoint RoundTrip(WorldAuthorityCheckpoint checkpoint) {
+        Assert.True(
+            condition: WorldAuthorityCheckpointCodec.TryDecode(
+                bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint),
+                checkpoint: out var decoded,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        return decoded!;
+    }
 
     // Zero gravity on the fixture kit's one Free hold — Fixtures.BuildDocument's kit carries no collider and no
     // ground plane, so a body under any nonzero fall rate would never stop integrating downward and could never
     // qualify as "produced no motion" no matter how long it idles.
-    private static WorldDefinition Document() {
+    private static WorldDefinition Document(decimal sleepAfterSeconds = SleepAfterSeconds) {
         var definition = Fixtures.BuildDocument();
         var kit = definition.Kits[0];
         var motion = (kit.Motion with {
@@ -34,11 +47,42 @@ public sealed class BodySleepLawTests {
             PopulationRaw = definition.Population with {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
                 NetworkPlayers = 1,
-                SleepAfterTicks = SleepAfterTicks,
+                SleepAfterSeconds = sleepAfterSeconds,
             },
         };
     }
 
+    [InlineData("0.0125", true)]
+    [InlineData("0.001", false)]
+    [InlineData("-1", false)]
+    [Theory]
+    public void TheIdleFloorIsAdmittedOnlyOnAWholeEngineTick(string seconds, bool admitted) {
+        var definition = Document();
+
+        definition = definition with {
+            PopulationRaw = definition.Population with {
+                SleepAfterSeconds = decimal.Parse(
+                    provider: System.Globalization.CultureInfo.InvariantCulture,
+                    s: seconds
+                ),
+            },
+        };
+
+        Assert.Equal(
+            actual: WorldDefinitionValidator.TryValidateLocally(
+                definition: definition,
+                reason: out var reason
+            ),
+            expected: admitted
+        );
+
+        if (!admitted) {
+            Assert.Contains(
+                actualString: reason,
+                expectedSubstring: "bodies.sleepAfterSeconds"
+            );
+        }
+    }
     [Fact]
     public void RestingBodySleepsAfterAuthoredTicksAndWakesOnIntent() {
         using var fixture = Fixtures.FreshServer(Document());
@@ -166,5 +210,120 @@ public sealed class BodySleepLawTests {
         );
 
         Assert.False(condition: body.Asleep);
+    }
+    [Fact]
+    public void CheckpointRestorePreservesTheSleepLatchAndItsPartialIdleFloor() {
+        using var fixture = Fixtures.FreshServer(Document(sleepAfterSeconds: 0.05m));
+        var population = fixture.Server.Population;
+
+        Assert.Equal(
+            expected: 1,
+            actual: population.SetSimulatedCount(count: 1)
+        );
+
+        var index = WorldBodiesLimits.LocalSeatCount;
+
+        fixture.Step();
+
+        var before = population.Capture().Entries.Single().Residue;
+
+        Assert.Equal(expected: 0UL, actual: before.AsleepSinceTick);
+        Assert.True(condition: before.SleepIdleTicks > 0UL);
+        Assert.True(condition: before.ContactFieldObservationCurrent);
+        Assert.Equal(expected: 0UL, actual: before.LastContactFieldVersion);
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpoint,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        var firstBytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
+        var decoded = RoundTrip(checkpoint: checkpoint!);
+
+        fixture.Server.RestoreCheckpoint(checkpoint: decoded);
+
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var recaptured,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out reason
+            ),
+            userMessage: reason
+        );
+        Assert.Equal(
+            expected: firstBytes,
+            actual: WorldAuthorityCheckpointCodec.Encode(checkpoint: recaptured!)
+        );
+
+        var restoredPartial = fixture.Server.Population.Capture().Entries.Single().Residue;
+
+        Assert.Equal(expected: before.SleepIdleTicks, actual: restoredPartial.SleepIdleTicks);
+        Assert.Equal(expected: before.LastContactFieldVersion, actual: restoredPartial.LastContactFieldVersion);
+
+        fixture.Step();
+
+        var slept = fixture.Server.Body(index: index)!;
+
+        Assert.True(condition: slept.Asleep);
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out checkpoint,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out reason
+            ),
+            userMessage: reason
+        );
+
+        fixture.Server.RestoreCheckpoint(checkpoint: RoundTrip(checkpoint: checkpoint!));
+
+        var restoredAsleep = fixture.Server.Body(index: index)!;
+
+        Assert.True(condition: restoredAsleep.Asleep);
+        Assert.Equal(expected: slept.AsleepSinceTick, actual: restoredAsleep.AsleepSinceTick);
+        Assert.Equal(expected: 1, actual: fixture.Server.Population.SleepingCount);
+    }
+    [Fact]
+    public void CheckpointRestorePreservesAPendingContactFieldWake() {
+        using var fixture = Fixtures.FreshServer(Document());
+        var population = fixture.Server.Population;
+
+        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+        fixture.Step();
+
+        var index = WorldBodiesLimits.LocalSeatCount;
+        var body = fixture.Server.Body(index: index)!;
+        var sleptAt = body.AsleepSinceTick;
+
+        Assert.True(condition: body.Asleep);
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpoint,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        // A field install can occur after this body's latest advance and before a settled capture. Its numeric
+        // version is process-local, but the pending edge is continuation state and must survive reconstruction.
+        var populationCheckpoint = checkpoint!.Population;
+        var capturedEntry = populationCheckpoint.Entries.Single();
+        var pendingEntry = capturedEntry with {
+            Residue = capturedEntry.Residue with { ContactFieldObservationCurrent = false },
+        };
+        checkpoint = checkpoint with {
+            Population = populationCheckpoint with { Entries = [pendingEntry] },
+        };
+
+        fixture.Server.RestoreCheckpoint(checkpoint: RoundTrip(checkpoint: checkpoint));
+        fixture.Step();
+
+        Assert.True(
+            condition: fixture.Server.Body(index: index)!.AsleepSinceTick > sleptAt,
+            userMessage: "the pending contact-field edge was rebased away during restore"
+        );
     }
 }

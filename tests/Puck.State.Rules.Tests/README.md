@@ -24,6 +24,9 @@ arena, the row shapes a reorder may address, the four vector transforms fired
 through the same entry point, and a per-firing allocation ceiling for every
 scalar case — measured one transform at a time, so one that starts rebuilding a
 record cannot hide behind the others.
+`TransformRowShapeLawTests` also pins the unified authored sort: own-value and
+attribute keys select their kernel at compilation, preserve direction, and
+refuse empty, duplicate, or mixed own-value/attribute keys.
 
 ## Running
 

@@ -1,7 +1,4 @@
-using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
 using Puck.World.Machines;
-using Puck.World.Transpiler;
 using Puck.World.Transpiler.Validation;
 using System.CommandLine;
 
@@ -20,68 +17,14 @@ internal static class LintCommand {
             return 2;
         }
 
-        var vocabulary = CliVocabularyResolver.Instance.Resolve(source: sourceText);
-        var diagnostics = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            sourceText,
-            diagnostics: diagnostics,
-            vocabulary: vocabulary
+        var diagnostics = WorldSourceDiagnostics.Diagnose(
+            catalogFingerprint: catalogFingerprint,
+            foreign: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose,
+            machines: machines,
+            source: sourceText,
+            sourcePath: filePath,
+            vocabularies: CliVocabularyResolver.Instance
         );
-        var documentNode = parseResult.Value;
-
-        if (
-            (documentNode is not null) &&
-            !Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose(
-            diagnostics: diagnostics,
-            document: documentNode,
-            sourcePath: filePath
-        )
-        ) {
-            PuckLinter.Lint(
-                diagnostics: diagnostics,
-                document: documentNode
-            );
-
-            // Lowering is what the semantic check and the reference lint both read. The import graph is composed by
-            // `PuckLinter.LintReferences` itself, so this pass does not walk it a second time.
-            var loweringDiags = new DiagnosticBag();
-            var sourceMap = new SourceMap();
-            var loweringResult = WorldCompiler.Compile(
-                diagnostics: loweringDiags,
-                imports: ImportHandling.Ignore,
-                source: sourceText,
-                sourceMap: sourceMap,
-                sourcePath: filePath
-            );
-
-            diagnostics.AddRange(diagnostics: loweringDiags);
-
-            if (
-                (loweringResult.Json is not null) &&
-                !diagnostics.HasErrors
-            ) {
-                // Only a root composes to a full engine schema; validating a module as one reports as missing
-                // every field whichever root imports it supplies.
-                if (WorldSemanticValidator.IsRootDocument(loweredJson: loweringResult.Json)) {
-                    WorldSemanticValidator.ValidateComposedWorld(
-                        loweringResult.Json,
-                        sourceMap,
-                        diagnostics,
-                        sourcePath: filePath,
-                        machines: machines,
-                        catalogFingerprint: catalogFingerprint
-                    );
-                }
-                PuckLinter.LintReferences(
-                    loweringResult.Json,
-                    sourceMap,
-                    diagnostics,
-                    sourcePath: filePath,
-                    catalogFingerprint: catalogFingerprint,
-                    machines: machines
-                );
-            }
-        }
 
         if (diagnostics.Count > 0) {
             Console.WriteLine(value: diagnostics.FormatReport(

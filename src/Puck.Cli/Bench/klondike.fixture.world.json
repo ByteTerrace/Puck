@@ -1983,10 +1983,41 @@
           "$type": "transformState",
           "transform": {
             "$type": "transfer",
-            "from": "$zones[solitaireKlondike[gatherStep]]",
+            "from": {
+              "channel": "zones",
+              "arguments": [
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "gatherStep"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
             "to": "solitaireKlondikePile0",
             "selector": "Slice",
-            "key": "$zone:$zones[solitaireKlondike[gatherStep]]:first",
+            "key": {
+              "channel": "zone",
+              "arguments": [
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "gatherStep"
+                      }
+                    ]
+                  }
+                },
+                "first"
+              ]
+            },
             "insertFirst": false,
             "draw": null,
             "count": 1
@@ -2012,7 +2043,23 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:$zones[solitaireKlondike[gatherStep]]",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "gatherStep"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -2071,7 +2118,13 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:solitaireKlondikePile0",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                "solitaireKlondikePile0"
+              ]
+            },
             "comparison": "Equal",
             "value": 52
           }
@@ -2087,7 +2140,13 @@
           "state": "solitaireKlondikeFace",
           "value": 0,
           "target": "Self",
-          "key": "$cell:solitaireKlondike:attributeStep"
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "solitaireKlondike",
+              "attributeStep"
+            ]
+          }
         }
       ],
       "gate": {
@@ -2171,7 +2230,183 @@
           "transform": {
             "$type": "transfer",
             "from": "solitaireKlondikePile0",
-            "to": "$zones[(solitaireKlondike[dealStep] < 7) ? (2 + solitaireKlondike[dealStep]) : ((solitaireKlondike[dealStep] < 13) ? (solitaireKlondike[dealStep] - 4) : ((solitaireKlondike[dealStep] < 18) ? (solitaireKlondike[dealStep] - 9) : ((solitaireKlondike[dealStep] < 22) ? (solitaireKlondike[dealStep] - 13) : ((solitaireKlondike[dealStep] < 25) ? (solitaireKlondike[dealStep] - 16) : ((solitaireKlondike[dealStep] < 27) ? (solitaireKlondike[dealStep] - 18) : 8)))))]",
+            "to": {
+              "channel": "zones",
+              "arguments": [
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 7
+                      },
+                      {
+                        "op": "Less"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 2
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Add"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 13
+                      },
+                      {
+                        "op": "Less"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 4
+                      },
+                      {
+                        "op": "Subtract"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 18
+                      },
+                      {
+                        "op": "Less"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 9
+                      },
+                      {
+                        "op": "Subtract"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 22
+                      },
+                      {
+                        "op": "Less"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 13
+                      },
+                      {
+                        "op": "Subtract"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 25
+                      },
+                      {
+                        "op": "Less"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 16
+                      },
+                      {
+                        "op": "Subtract"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 27
+                      },
+                      {
+                        "op": "Less"
+                      },
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "dealStep"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 18
+                      },
+                      {
+                        "op": "Subtract"
+                      },
+                      {
+                        "op": "Constant",
+                        "value": 8
+                      },
+                      {
+                        "op": "Select"
+                      },
+                      {
+                        "op": "Select"
+                      },
+                      {
+                        "op": "Select"
+                      },
+                      {
+                        "op": "Select"
+                      },
+                      {
+                        "op": "Select"
+                      },
+                      {
+                        "op": "Select"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
             "selector": "First",
             "key": null,
             "insertFirst": false,
@@ -2431,8 +2666,30 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$match:solitaireKlondikeRun:$zones[solitaireKlondike[from]]",
-                "key": "$cell:solitaireKlondike:card"
+                "name": {
+                  "channel": "match",
+                  "arguments": [
+                    "solitaireKlondikeRun",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "from"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               }
             ]
           }
@@ -2447,8 +2704,31 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix",
-                "key": "$cell:solitaireKlondike:card"
+                "name": {
+                  "channel": "match",
+                  "arguments": [
+                    "solitaireKlondikeLength",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "from"
+                          }
+                        ]
+                      }
+                    },
+                    "prefix"
+                  ]
+                },
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               }
             ]
           }
@@ -2503,10 +2783,31 @@
           },
           {
             "$type": "compareState",
-            "state": "$zones[solitaireKlondike[from]]",
+            "state": {
+              "channel": "zones",
+              "arguments": [
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "from"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
             "comparison": "Equal",
             "value": 1,
-            "key": "$cell:solitaireKlondike:card"
+            "key": {
+              "channel": "cell",
+              "arguments": [
+                "solitaireKlondike",
+                "card"
+              ]
+            }
           }
         ]
       },
@@ -2536,8 +2837,30 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$match:solitaireKlondikeSingle:$zones[solitaireKlondike[from]]",
-                "key": "$cell:solitaireKlondike:card"
+                "name": {
+                  "channel": "match",
+                  "arguments": [
+                    "solitaireKlondikeSingle",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "from"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               }
             ]
           }
@@ -2552,8 +2875,31 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix",
-                "key": "$cell:solitaireKlondike:card"
+                "name": {
+                  "channel": "match",
+                  "arguments": [
+                    "solitaireKlondikeLength",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "from"
+                          }
+                        ]
+                      }
+                    },
+                    "prefix"
+                  ]
+                },
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               }
             ]
           }
@@ -2608,10 +2954,31 @@
           },
           {
             "$type": "compareState",
-            "state": "$zones[solitaireKlondike[from]]",
+            "state": {
+              "channel": "zones",
+              "arguments": [
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": "solitaireKlondike",
+                        "key": "from"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
             "comparison": "Equal",
             "value": 1,
-            "key": "$cell:solitaireKlondike:card"
+            "key": {
+              "channel": "cell",
+              "arguments": [
+                "solitaireKlondike",
+                "card"
+              ]
+            }
           }
         ]
       },
@@ -2646,7 +3013,23 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$reduce:count:$zones[solitaireKlondike[to]]"
+                "name": {
+                  "channel": "reduce",
+                  "arguments": [
+                    "count",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "to"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
               },
               {
                 "op": "Constant",
@@ -2658,7 +3041,13 @@
               {
                 "op": "Operand",
                 "name": "solitaireKlondikeRank",
-                "key": "$cell:solitaireKlondike:card"
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               },
               {
                 "op": "Constant",
@@ -2669,7 +3058,23 @@
               },
               {
                 "op": "Operand",
-                "name": "$match:solitaireKlondikeLanding:$zones[solitaireKlondike[to]]"
+                "name": {
+                  "channel": "match",
+                  "arguments": [
+                    "solitaireKlondikeLanding",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "to"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
               },
               {
                 "op": "Select"
@@ -2773,7 +3178,13 @@
               {
                 "op": "Operand",
                 "name": "solitaireKlondikeSuit",
-                "key": "$cell:solitaireKlondike:card"
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               },
               {
                 "op": "Operand",
@@ -2796,11 +3207,33 @@
               {
                 "op": "Operand",
                 "name": "solitaireKlondikeRank",
-                "key": "$cell:solitaireKlondike:card"
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                }
               },
               {
                 "op": "Operand",
-                "name": "$reduce:count:$zones[solitaireKlondike[to]]"
+                "name": {
+                  "channel": "reduce",
+                  "arguments": [
+                    "count",
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "to"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
               },
               {
                 "op": "Constant",
@@ -2903,10 +3336,46 @@
               "$type": "transformState",
               "transform": {
                 "$type": "transfer",
-                "from": "$zones[solitaireKlondike[from]]",
-                "to": "$zones[solitaireKlondike[to]]",
+                "from": {
+                  "channel": "zones",
+                  "arguments": [
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "from"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "to": {
+                  "channel": "zones",
+                  "arguments": [
+                    {
+                      "zone": {
+                        "instructions": [
+                          {
+                            "op": "Operand",
+                            "name": "solitaireKlondike",
+                            "key": "to"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
                 "selector": "Slice",
-                "key": "$cell:solitaireKlondike:card",
+                "key": {
+                  "channel": "cell",
+                  "arguments": [
+                    "solitaireKlondike",
+                    "card"
+                  ]
+                },
                 "insertFirst": false,
                 "draw": null,
                 "count": 1
@@ -3187,7 +3656,13 @@
                   },
                   {
                     "op": "Operand",
-                    "name": "$reduce:count:solitaireKlondikePile0"
+                    "name": {
+                      "channel": "reduce",
+                      "arguments": [
+                        "count",
+                        "solitaireKlondikePile0"
+                      ]
+                    }
                   },
                   {
                     "op": "Minimum"
@@ -3254,7 +3729,13 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:solitaireKlondikePile0",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                "solitaireKlondikePile0"
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -3273,7 +3754,13 @@
               "state": "solitaireKlondikeFace",
               "value": 1,
               "target": "Self",
-              "key": "$zone:solitaireKlondikePile0:first"
+              "key": {
+                "channel": "zone",
+                "arguments": [
+                  "solitaireKlondikePile0",
+                  "first"
+                ]
+              }
             },
             {
               "$type": "transformState",
@@ -3508,13 +3995,25 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:solitaireKlondikePile0",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                "solitaireKlondikePile0"
+              ]
+            },
             "comparison": "Equal",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:solitaireKlondikePile1",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                "solitaireKlondikePile1"
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -3558,7 +4057,13 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:solitaireKlondikePile1",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                "solitaireKlondikePile1"
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -3574,7 +4079,9 @@
           "state": "solitaireKlondikeFace",
           "value": 0,
           "target": "Self",
-          "key": "$each"
+          "key": {
+            "channel": "each"
+          }
         }
       ],
       "gate": {
@@ -3599,7 +4106,9 @@
             "state": "solitaireKlondikeFace",
             "comparison": "Equal",
             "value": 1,
-            "key": "$each"
+            "key": {
+              "channel": "each"
+            }
           }
         ]
       },
@@ -3687,7 +4196,13 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:solitaireKlondikePile1",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                "solitaireKlondikePile1"
+              ]
+            },
             "comparison": "Equal",
             "value": 0
           }
@@ -3897,7 +4412,24 @@
           "state": "solitaireKlondikeFace",
           "value": 1,
           "target": "Self",
-          "key": "$zone:$zones[$each]:last"
+          "key": {
+            "channel": "zone",
+            "arguments": [
+              {
+                "zone": {
+                  "instructions": [
+                    {
+                      "op": "Operand",
+                      "name": {
+                        "channel": "each"
+                      }
+                    }
+                  ]
+                }
+              },
+              "last"
+            ]
+          }
         },
         {
           "$type": "setState",
@@ -3933,7 +4465,24 @@
           },
           {
             "$type": "compareState",
-            "state": "$reduce:count:$zones[$each]",
+            "state": {
+              "channel": "reduce",
+              "arguments": [
+                "count",
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": {
+                          "channel": "each"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           },
@@ -3942,12 +4491,31 @@
             "state": "solitaireKlondikeFace",
             "comparison": "Equal",
             "value": 0,
-            "key": "$zone:$zones[$each]:last"
+            "key": {
+              "channel": "zone",
+              "arguments": [
+                {
+                  "zone": {
+                    "instructions": [
+                      {
+                        "op": "Operand",
+                        "name": {
+                          "channel": "each"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "last"
+              ]
+            }
           }
         ]
       },
       "mode": "Level",
-      "forEach": "$zones",
+      "forEach": {
+        "channel": "zones"
+      },
       "zones": [
         "solitaireKlondikePile2",
         "solitaireKlondikePile3",
@@ -4137,25 +4705,49 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$reduce:count:solitaireKlondikePile10"
+                "name": {
+                  "channel": "reduce",
+                  "arguments": [
+                    "count",
+                    "solitaireKlondikePile10"
+                  ]
+                }
               },
               {
                 "op": "Operand",
-                "name": "$reduce:count:solitaireKlondikePile11"
+                "name": {
+                  "channel": "reduce",
+                  "arguments": [
+                    "count",
+                    "solitaireKlondikePile11"
+                  ]
+                }
               },
               {
                 "op": "Add"
               },
               {
                 "op": "Operand",
-                "name": "$reduce:count:solitaireKlondikePile12"
+                "name": {
+                  "channel": "reduce",
+                  "arguments": [
+                    "count",
+                    "solitaireKlondikePile12"
+                  ]
+                }
               },
               {
                 "op": "Add"
               },
               {
                 "op": "Operand",
-                "name": "$reduce:count:solitaireKlondikePile13"
+                "name": {
+                  "channel": "reduce",
+                  "arguments": [
+                    "count",
+                    "solitaireKlondikePile13"
+                  ]
+                }
               },
               {
                 "op": "Add"
@@ -4301,7 +4893,9 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeFace",
-            "key": "$token"
+            "key": {
+              "channel": "token"
+            }
           },
           {
             "op": "Constant",
@@ -4310,12 +4904,16 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeRank",
-            "key": "$token"
+            "key": {
+              "channel": "token"
+            }
           },
           {
             "op": "Operand",
             "name": "solitaireKlondikeRank",
-            "key": "$previous"
+            "key": {
+              "channel": "previous"
+            }
           },
           {
             "op": "Constant",
@@ -4330,7 +4928,9 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeSuit",
-            "key": "$token"
+            "key": {
+              "channel": "token"
+            }
           },
           {
             "op": "Constant",
@@ -4342,7 +4942,9 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeSuit",
-            "key": "$previous"
+            "key": {
+              "channel": "previous"
+            }
           },
           {
             "op": "Constant",
@@ -4397,12 +4999,20 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeRank",
-            "key": "$token"
+            "key": {
+              "channel": "token"
+            }
           },
           {
             "op": "Operand",
             "name": "solitaireKlondikeRank",
-            "key": "$cell:solitaireKlondike:card"
+            "key": {
+              "channel": "cell",
+              "arguments": [
+                "solitaireKlondike",
+                "card"
+              ]
+            }
           },
           {
             "op": "Constant",
@@ -4417,7 +5027,9 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeSuit",
-            "key": "$token"
+            "key": {
+              "channel": "token"
+            }
           },
           {
             "op": "Constant",
@@ -4429,7 +5041,13 @@
           {
             "op": "Operand",
             "name": "solitaireKlondikeSuit",
-            "key": "$cell:solitaireKlondike:card"
+            "key": {
+              "channel": "cell",
+              "arguments": [
+                "solitaireKlondike",
+                "card"
+              ]
+            }
           },
           {
             "op": "Constant",

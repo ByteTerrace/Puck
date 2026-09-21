@@ -814,7 +814,8 @@
                         "Polygon",
                         "Ellipse",
                         "ChamferedRectangle",
-                        "Convex"
+                        "Convex",
+                        "Path"
                       ],
                       "description": "The profile family.",
                       "x-enumDescriptions": {
@@ -823,7 +824,8 @@
                         "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
                         "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
                         "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
-                        "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection."
+                        "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
+                        "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
                       }
                     },
                     "cornerRadius": {
@@ -843,6 +845,162 @@
                       ],
                       "default": null,
                       "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind."
+                    },
+                    "path": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "contours": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "start": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "minItems": 2,
+                                "maxItems": 2
+                              },
+                              "segments": {
+                                "type": "array",
+                                "items": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "end": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 2,
+                                      "maxItems": 2
+                                    },
+                                    "control": {
+                                      "default": null
+                                    },
+                                    "control2": {
+                                      "default": null
+                                    },
+                                    "arcCenter": {
+                                      "default": null
+                                    },
+                                    "clockwise": {
+                                      "type": "boolean",
+                                      "default": false
+                                    }
+                                  },
+                                  "required": [
+                                    "end"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame."
+                                }
+                              },
+                              "closed": {
+                                "type": "boolean",
+                                "default": false
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "segments"
+                            ],
+                            "additionalProperties": false,
+                            "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed."
+                          }
+                        },
+                        "tolerance": {
+                          "type": "number",
+                          "default": 0.001
+                        },
+                        "stroke": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "radiusStart": {
+                              "type": "number"
+                            },
+                            "radiusEnd": {
+                              "type": "number"
+                            },
+                            "smooth": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "from": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "to": {
+                              "type": "number",
+                              "default": 1
+                            }
+                          },
+                          "required": [
+                            "radiusStart",
+                            "radiusEnd"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
+                        },
+                        "shear": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "linear": {
+                              "type": "number"
+                            },
+                            "quadratic": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "cubic": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "offset": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "from": {
+                              "type": "number",
+                              "default": -1
+                            },
+                            "to": {
+                              "type": "number",
+                              "default": 1
+                            },
+                            "target": {
+                              "type": "integer",
+                              "default": 0
+                            }
+                          },
+                          "required": [
+                            "linear"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "contours"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "description": "Required only for Path; its points are normalized profile coordinates."
                     }
                   },
                   "required": [

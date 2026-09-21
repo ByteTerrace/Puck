@@ -11,14 +11,14 @@ export read hexBoard, hexLinesBoard, hexMove, hexStoneCell, hexTurn, hexVerdict
 kits {
   rows [
     {
-      bodyContact: "Solid"
+      bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: box(halfExtents: [0.06, 0.024, 0.06], rotation: [0, 0, 0, 1])
       motion {
         facingSnap: true
         holds [
           {
-            bond: "Free"
+            bond: Free
             envelope {
               sinkSpeed: 40
             }
@@ -26,7 +26,7 @@ kits {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             name: "air"
           }
         ]
@@ -1572,18 +1572,18 @@ state {
           value: 0
         }
       ]
-      domain: cellsOf(topology: "hexLinesBoard")
+      domain: cellsOf(topology: hexLinesBoard)
       kind: "Int"
       max: 1
       min: -1
       name: "hexBoard"
     }
 
-    slot hexTurn: Int = 1 bounds(minimum: 0, maximum: 1)
+    slot hexTurn = 1 bounds(0..1)
 
-    slot hexVerdict: Int = 1 bounds(minimum: 0, maximum: 1)
+    slot hexVerdict = 1 bounds(0..1)
 
-    table hexMove: Int capacity(5) bounds(minimum: -1, maximum: 60) {
+    table hexMove capacity(5) bounds(-1..60) {
       captured = 0
       from = -1
       kind = 0
@@ -1591,7 +1591,7 @@ state {
       to = -1
     }
 
-    table hexStoneCell: Int capacity(30) bounds(minimum: -1, maximum: 60) {
+    table hexStoneCell capacity(30) bounds(-1..60) {
       "hexStoneLight-0" = -1
       "hexStoneLight-1" = -1
       "hexStoneLight-2" = -1
@@ -1624,7 +1624,7 @@ state {
       "hexStoneDark-14" = -1
     }
 
-    table hexStoneCode: Int capacity(30) bounds(minimum: -1, maximum: 1) {
+    table hexStoneCode capacity(30) bounds(-1..1) {
       "hexStoneLight-0" = 1
       "hexStoneLight-1" = 1
       "hexStoneLight-2" = 1
@@ -1657,18 +1657,18 @@ state {
       "hexStoneDark-14" = -1
     }
 
-    table hexTileColors: Text {
+    table hexTileColors {
       a = "#D9B98A"
       b = "#B98A5C"
       c = "#8C5E3C"
     }
 
-    table hexStoneColors: Text {
+    table hexStoneColors {
       light = "#F2EFE6"
       dark = "#2B2B30"
     }
 
-    table hexTableColors: Text {
+    table hexTableColors {
       wood = "#6F4E37"
       tray = "#4A3728"
     }

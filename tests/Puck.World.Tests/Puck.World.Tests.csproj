@@ -44,6 +44,9 @@
         <ProjectReference Include="..\..\src\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Server\Puck.World.Server.csproj" />
+        <!-- Canonical .puck gameplay laws compile and compose their authored basis graph through the same
+             PuckDocumentComposer path as the executable host. -->
+        <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <!-- Retirement must close the real silo routing session, including work awaiting a row's clock. -->
         <ProjectReference Include="..\..\src\Puck.World.Silo\Puck.World.Silo.csproj" />
         <ProjectReference Include="..\..\src\Puck.Launcher\Puck.Launcher.csproj" />

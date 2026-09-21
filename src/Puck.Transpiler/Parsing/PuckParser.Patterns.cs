@@ -81,7 +81,7 @@ public static partial class PuckParser {
         PatternNode? match = null;
 
         string? attribute = null;
-        string? value = null;
+        OperandExpressionNode? value = null;
         int? maximumStates = null;
 
         SkipWhiteSpace(context: context);
@@ -134,12 +134,15 @@ public static partial class PuckParser {
                     }
                 case "value": {
                         SkipWhiteSpace(context: context);
-                        if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out value)) {
+                        var valueStart = cursor.Offset;
+                        if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var valueText)) {
                             throw CreateException(
                                 context: context,
                                 message: $"Expected a quoted expression after 'value:' in pattern '{name}'"
                             );
                         }
+                        var (valueLine, valueColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: valueStart);
+                        value = CreateOperand(valueText, new SourceSpan(valueStart, (cursor.Offset - valueStart), valueLine, valueColumn));
 
                         break;
                     }

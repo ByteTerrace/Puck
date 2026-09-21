@@ -12,26 +12,31 @@ public static class SearchCapacity {
     public const long MateScore = (long.MaxValue >> 2);
     /// <summary>The most outcomes one <see cref="SearchChancePlan"/> may bake — the cross product of its row's own
     /// generator's domain across every one of the row's cells (two six-sided dice bakes 36).</summary>
-    public const int MaxChanceOutcomes = 64;
-    /// <summary>The most plies one job searches ahead.</summary>
-    public const int MaxDepth = 32;
+    public const int MaxChanceOutcomes = 256;
+    /// <summary>The most plies one job searches ahead. A ply is one level record and two open scopes; the walk
+    /// holds them in arrays, so depth costs no machine stack.</summary>
+    public const int MaxDepth = 64;
     /// <summary>The most tree iterations one job runs before it lands.</summary>
     public const int MaxIterations = 65_536;
-    /// <summary>The most jobs one document declares.</summary>
-    public const int MaxJobs = 8;
-    /// <summary>The most hops one <c>jump</c> shape's chain may take in a single candidate.</summary>
-    public const int MaxJumpHops = 12;
-    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
+    /// <summary>The most jobs one document declares. A job with a score holds its own transposition table and a
+    /// tree job its own node pool, so this multiplies <see cref="TranspositionEntries"/> and
+    /// <see cref="TreeNodes"/>.</summary>
+    public const int MaxJobs = 16;
+    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves. A jump chain may
+    /// enumerate no more candidates per token than this, which is what bounds how long a chain may be.</summary>
     public const int MaxNodesPerTick = 4_096;
-    /// <summary>The most codes one <c>promote</c> shape offers.</summary>
-    public const int MaxPromotions = 8;
-    /// <summary>The most candidate shapes one job declares.</summary>
-    public const int MaxShapesPerJob = 8;
+    /// <summary>The most codes one <c>promote</c> shape offers; each multiplies the shape's candidates, which the
+    /// node ceiling counts.</summary>
+    public const int MaxPromotions = 16;
+    /// <summary>The most candidate shapes one job declares; each adds its candidates to the walk, which the node
+    /// ceiling counts.</summary>
+    public const int MaxShapesPerJob = 16;
     /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
-    /// position's frame hash.</summary>
-    public const int TranspositionEntries = 1_024;
-    /// <summary>The tree nodes one job with an outcome may grow.</summary>
-    public const int TreeNodes = 2_048;
+    /// position's frame hash. An entry is three eight-byte words, so a table is 192 KiB, and a restart clears
+    /// it.</summary>
+    public const int TranspositionEntries = 8_192;
+    /// <summary>The tree nodes one job with an outcome may grow: 48 bytes a node, 384 KiB a job.</summary>
+    public const int TreeNodes = 8_192;
 }
 /// <summary>How a job with a score compares plies.</summary>
 [JsonConverter(typeof(StrictEnumConverter<SearchMethod>))]
@@ -137,8 +142,8 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// <param name="Turn">The slot row whose change marks an accepted relocation.</param>
 /// <param name="Verdict">The slot row the rules judge a relocation into.</param>
 /// <param name="Off">The token value meaning off the board.</param>
-/// <param name="Nodes">The relocations judged per tick.</param>
-/// <param name="JudgeCost">The work units one judge run costs.</param>
+/// <param name="Nodes">The most relocations judged per tick, whatever the allowance leaves.</param>
+/// <param name="Work">What a tick may spend on the job and what each unit of its walk costs.</param>
 /// <param name="Depth">How many plies the job searches ahead.</param>
 /// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
 /// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
@@ -159,6 +164,8 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// seat's gain is another's loss (max-n); mutually exclusive with <see cref="SearchPlan.Scored"/>, and, since the
 /// outcome the tree method backpropagates alternates sign along the path, not authored with
 /// <see cref="SearchMethod.Tree"/>.</param>
+/// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
+/// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 public sealed record SearchPlan(
     string Name,
     string Tokens,
@@ -169,7 +176,7 @@ public sealed record SearchPlan(
     string Verdict,
     long Off,
     int Nodes,
-    long JudgeCost,
+    SearchWork Work,
     int Depth,
     string? Best,
     SearchShapePlan[] Shapes,
@@ -181,7 +188,9 @@ public sealed record SearchPlan(
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 0,
     SearchChancePlan? Chance = null,
-    string? Scores = null
+    string? Scores = null,
+    string? Enabled = null,
+    string? Revision = null
 ) {
     /// <summary>Gets a value indicating whether the job compares plies by a score its judge reads.</summary>
     public bool Scored { get; init; }

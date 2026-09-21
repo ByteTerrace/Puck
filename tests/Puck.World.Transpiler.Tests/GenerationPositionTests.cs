@@ -88,7 +88,7 @@ public class GenerationPositionTests {
 
             rule "settle" {
                 when row == wellFloor
-                mode: "Level"
+                mode: Level
                 done = 1
             }
             """)["rules"]);

@@ -1,0 +1,498 @@
+// Physical Chinese checkers: validate each settled observation against the last legal board.
+// This source is canonical; compile it to regenerate the world document.
+
+schema: "puck.world.definition.v1"
+basis: "parlor.basis.puck"
+documentId: "chinese-checkers"
+
+views {
+  layout "action" {
+    slots [{ camera: "table", height: 1, width: 1, x: 0, y: 0 }]
+  }
+}
+
+bodies {
+  capacity: 64
+}
+
+cameras [{
+    name: "table"
+    renderWidth: 1280
+    renderHeight: 960
+    rig {
+      name: "table"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 4.2, -3.2]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.8)
+      ]
+    }
+  }
+]
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: sphere(radius: 0.05)
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "piece"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.5
+        linearDamping: 0.05
+        mass: 0.12
+        restitution: 0.1
+        rollingFriction: 0.15
+      }
+    }
+  ]
+}
+
+// Camps clockwise around the star. Use [0, 3] for two players,
+// [0, 1, 3, 4] for four, or [0, 1, 2, 3, 4, 5] for six.
+let playerCamps = [0, 2, 4]
+let playerCount = length(playerCamps)
+let colors = ["#D74738", "#E7AD27", "#39835C", "#3A79B8", "#8A56AC", "#D98236"]
+let tips = [[8, -4], [4, -8], [-4, -4], [-8, 4], [-4, 8], [4, 4]]
+let directions = [
+  { name: "E", opposite: "W", q: 1, r: 0 }
+  { name: "SE", opposite: "NW", q: 0, r: 1 }
+  { name: "SW", opposite: "NE", q: -1, r: 1 }
+  { name: "W", opposite: "E", q: -1, r: 0 }
+  { name: "NW", opposite: "SE", q: 0, r: -1 }
+  { name: "NE", opposite: "SW", q: 1, r: -1 }
+]
+// A radius-four hexagon and six ten-hole triangles, generated once at compile time.
+let axial = reduce(range(-8, 17), [], (cells, q) => concat(cells, map(range(-8, 17), r => { q: q, r: r, s: -q - r })))
+let star = filter(axial, p => (absolute(p["q"]) <= 4) + (absolute(p["r"]) <= 4) + (absolute(p["s"]) <= 4) >= 2)
+let holes = map(star, (p, i) => {
+  id: i, q: p["q"], r: p["r"], x: 0.18 * (p["q"] + p["r"] / 2), z: 0.155884572681 * p["r"],
+  camp: select(p["q"] > 4, 0, select(p["r"] < -4, 1, select(p["s"] > 4, 2, select(p["q"] < -4, 3, select(p["r"] > 4, 4, select(p["s"] < -4, 5, -1))))))
+}
+)
+let pieces = reduce(playerCamps, [], (all, camp) => concat(all, filter(holes, p => p["camp"] == camp)))
+let pieceCount = length(pieces)
+let initialTokens = map(pieces, (p, i) => { cell: p["id"], code: floor(i / 10) + 1 })
+let edges = reduce(holes, [], (all, p) => concat(all,
+  reduce(filter(directions, (d, i) => i < 3), [], (links, d) => concat(links,
+    map(filter(holes, n => (n["q"] == p["q"] + d["q"]) * (n["r"] == p["r"] + d["r"])), n => { from: $"{p[\"id\"]}", to: $"{n[\"id\"]}", direction: d["name"] })
+  )
+  )
+)
+)
+
+looks {
+  rows: map(playerCamps, camp => {
+    name: $"marble{camp}", scale: 1, source: creation(prototypeId: $"marble{camp}")
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  }
+  )
+}
+
+placements {
+  placement "tabletop" {
+    prototype: "tabletop"
+    position [0, -0.5, 0]
+    solid
+    board {
+      topology: "ccStar"
+      occupancy: "board"
+      turn: "turn"
+      verdict: "verdict"
+      move: "move"
+    }
+  }
+  for (p, i) in pieces {
+    placement $"piece{i}" {
+      prototype: $"marble{p[\"camp\"]}"
+      parent: "tabletop"
+      position [p["x"], 1.6, p["z"]]
+      inhabit {
+        count: 1
+        kit: "piece"
+        look: $"marble{p[\"camp\"]}"
+        source: "Idle"
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.001)
+        }
+      }
+    }
+  }
+}
+
+prototypes {
+  prototype "tabletop" {
+    document {
+      schema: "puck.creation.v1"
+      name: "Chinese checkers table"
+      palette: concat([{ color: "#956A40", roughness: 0.7 }], map(colors, color => { color: color, roughness: 0.65 }))
+      shape Cylinder "top" {
+        material: 0
+        position [0, 1.24, 0]
+        scale [1.65, 0.06, 1.65]
+      }
+      shape Cylinder "leg" {
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.12, 0.6, 0.12]
+      }
+      for p in holes {
+        shape Sphere $"hole{p[\"id\"]}" {
+          blend: "Subtraction"
+          material: maximum(0, p["camp"] + 1)
+          position [-p["x"], 1.355, -p["z"]]
+          scale [0.065, 0.065, 0.065]
+        }
+      }
+    }
+  }
+  for camp in playerCamps {
+    prototype $"marble{camp}" {
+      document {
+        schema: "puck.creation.v1"
+        name: $"marble{camp}"
+        palette [{ color: colors[camp], roughness: 0.2, specular: 0.65 }]
+        shape Sphere "marble" {
+          material: 0
+          position [0, 0, 0]
+          scale [0.05, 0.05, 0.05]
+        }
+      }
+    }
+  }
+}
+
+rule "cc-settle-advance" {
+  when physics(quiescent) == 1 and settleHold < 60
+  mode: Level
+  settleHold += 1
+}
+rule "cc-settle-reset" {
+  when physics(quiescent) != 1
+  mode: Level
+  settleHold = 0
+}
+
+rules "" when settleHold == 60 {
+  mode: "Edge"
+  rule "cc-observe" {
+    // A marble has no upright direction. Graph resolution includes height.
+    when physics(quiescent) == 1
+    forEach: pieceCell
+    pieceCell[$each] = board(cellOf, board, placement, $each)
+  }
+  rule "cc-candidate-reset" {
+    movedCount = 0
+    move[from] = -1
+    move[to] = -1
+    move[seat] = -1
+    move[token] = -1
+    boardCollisions = count(pieceCell, atLeast: 0, atMost: 120) - count(board, atLeast: 1, atMost: 6)
+    missingCount = pieceCount - count(pieceCell, atLeast: 0, atMost: 120)
+  }
+  rule "cc-candidate" {
+    when pieceCell[$each] != lastCell[$each]
+    forEach: pieceCell
+    movedCount += 1
+    move[from] = lastCell[$each]
+    move[to] = pieceCell[$each]
+    move[seat] = pieceCode[$each] - 1
+    move[token] = pieceOrdinal[$each]
+  }
+  rule "cc-judge" {
+    shapeLegal = 0
+    verdict = 0
+    if movedCount == 1 and missingCount == 0 and boardCollisions == 0 and winner == -1 and move[seat] == turn and move[from] >= 0 and move[to] >= 0 {
+      if lastLegal[move[to]] == 0 {
+        // One adjacent step OR a whole chain; never a step followed by jumps.
+        shapeLegal = board(jumpDistance, lastLegal, cell, move, to)[move[from]] > 0
+        shapeLegal = shapeLegal | (board(neighbour, lastLegal, E)[move[from]] == move[to]) | (board(neighbour, lastLegal, SE)[move[from]] == move[to]) | (board(neighbour, lastLegal, SW)[move[from]] == move[to]) | (board(neighbour, lastLegal, W)[move[from]] == move[to]) | (board(neighbour, lastLegal, NW)[move[from]] == move[to]) | (board(neighbour, lastLegal, NE)[move[from]] == move[to])
+        verdict = shapeLegal
+      }
+    }
+    // Returning every displaced marble restores the legal position without consuming a turn.
+    if movedCount == 0 and missingCount == 0 and boardCollisions == 0 and winner == -1 {
+      verdict = 1
+    }
+  }
+  rule "cc-count-home-reset" {
+    forEach: home
+    home[$each] = 0
+    scores[$each] = 0
+  }
+  rule "cc-count-home" {
+    forEach: pieceCell
+    local seat = pieceCode[$each] - 1
+    local cell = pieceCell[$each]
+    home[(seat)] += goalCamp[(seat)] == camp[(cell)]
+  }
+  // Scores are deliberately evaluated only over admitted positions; an illegal
+  // physical arrangement must never manufacture a winner or update the snapshot.
+  rule "cc-commit" {
+    when verdict == 1 and movedCount == 1
+    moveCount += 1
+    turn = (turn + 1) % playerCount
+    transform boardCombine(left: board, operation: Copy, row: lastLegal)
+  }
+  rule "cc-commit-tokens" {
+    when verdict == 1
+    forEach: pieceCell
+    lastCell[$each] = pieceCell[$each]
+  }
+  rule "cc-win" {
+    when verdict == 1 and home[$each] == 10 and winner == -1
+    forEach: home
+    winner = seatOrdinal[$each]
+  }
+  rule "cc-illegal" {
+    when verdict == 0 and movedCount > 0 and winner == -1
+    illegalCount += 1
+  }
+}
+
+// Max-n evaluates each player's progress independently. One ply is bounded by
+// pieceCount * 121 destinations; hop reachability is a linear graph walk,
+// not enumeration of exponentially many direction sequences.
+for seat in range(0, playerCount) {
+  rule $"cc-score-{seat}" {
+    when search(ply) > 0
+    mode: Level
+    forEach: pieceCell
+
+    if (pieceCode[$each] == seat + 1 : Int) {
+      addState(state: scores, key: $"{seat}", expression: 1000 * (camp[pieceCell[$each]] == goalCamp[$"{seat}"]) - $"distance{seat}"[pieceCell[$each]])
+    }
+  }
+}
+
+// aiSide is a seat ordinal; -1 disables the opponent. Answers carry a revision
+// of the complete token position, turn and winner. Only the physical apply path
+// moves a body; it then waits for the normal settled validator to accept it.
+rule "cc-ai-revision" {
+  local tokenState = (pieceCell[$each] + 1) | ((lastCell[$each] + 1) << 7) | (pieceCode[$each] << 14)
+  when settleHold == 60 and physics(quiescent) == 1
+  mode: Level
+  forEach: pieceCell
+  if tokenState != aiBefore[$each] or turn != ai[turn] or winner != ai[winner] {
+    aiBefore[$each] = tokenState
+    ai[turn] = turn
+    ai[winner] = winner
+    aiRevision += 1
+  }
+}
+rule "cc-ai-enable" {
+  mode: Level
+  aiEnabled = (aiSide == turn) & (settleHold == 60) & (physics(quiescent) == 1) & (verdict == 1) & (winner == -1) & (missingCount == 0) & (boardCollisions == 0)
+}
+for i in range(0, pieceCount) {
+  rule $"cc-ai-place-{i}" {
+    when aiEnabled == 1 and aiBest[revision] == aiRevision and aiBest[token] == i and aiBest[to] >= 0 and aiBest[to] < 121 and physics(quiescent) == 1
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: ccStar, expression: aiBest[to], offset: [0, 0.15, 0])
+    aiBest[token] = -1
+    aiEnabled = 0
+    settleHold = 0
+  }
+}
+
+search {
+  jobs [{
+      name: "ccAI", tokens: pieceCell, board: board, turn: turn, verdict: verdict
+      enabled: aiEnabled, revision: aiRevision, best: aiBest, scores: scores, depth: 1
+      shapes [relocate(displace: false)]
+    }
+  ]
+}
+
+state {
+  lattices [
+    graph(name: "ccStar", origin: [0, 1.36, 0], cellSize: 0.18,
+      cells: map(holes, p => { id: $"{p[\"id\"]}", centre [p["x"], 0, p["z"]] }),
+      directions: map(directions, d => { name: d["name"], opposite: d["opposite"] }), edges: edges
+    )
+  ]
+  world {
+    row {
+      name: "board"
+      capacity: 121
+      kind: "Int"
+      domain: cellsOf(topology: ccStar)
+      inverse {
+        tokens: "pieceCell"
+        codes: "pieceCode"
+      }
+    }
+    row {
+      name: "lastLegal"
+      capacity: 121
+      kind: "Int"
+      domain: cellsOf(topology: ccStar)
+      cells: map(holes, p => { key: $"{p[\"id\"]}", value: reduce(initialTokens, 0, (code, token) => code + select(token["cell"] == p["id"], token["code"], 0)) })
+    }
+    row {
+      name: "camp"
+      capacity: 121
+      kind: "Int"
+      cells: map(holes, p => { key: $"{p[\"id\"]}", value: p["camp"] })
+    }
+    row {
+      name: "goalCamp"
+      capacity: playerCount
+      kind: "Int"
+      cells: map(playerCamps, (camp, i) => { key: $"{i}", value: (camp + 3) % 6 })
+    }
+    row {
+      name: "pieceCell"
+      capacity: pieceCount
+      kind: "Int"
+      cells: map(pieces, (p, i) => { key: $"piece{i}", value: -1 })
+    }
+    row {
+      name: "lastCell"
+      capacity: pieceCount
+      kind: "Int"
+      cells: map(pieces, (p, i) => { key: $"piece{i}", value: p["id"] })
+    }
+    row {
+      name: "pieceCode"
+      capacity: pieceCount
+      kind: "Int"
+      cells: map(pieces, (p, i) => { key: $"piece{i}", value: floor(i / 10) + 1 })
+    }
+    row {
+      name: "pieceOrdinal"
+      capacity: pieceCount
+      kind: "Int"
+      cells: map(pieces, (p, i) => { key: $"piece{i}", value: i })
+    }
+    row {
+      name: "aiBefore"
+      capacity: pieceCount
+      kind: "Int"
+      cells: map(pieces, (p, i) => { key: $"piece{i}", value: -1 })
+    }
+    row {
+      name: "seatOrdinal"
+      capacity: playerCount
+      kind: "Int"
+      cells: map(playerCamps, (camp, i) => { key: $"{i}", value: i })
+    }
+    row {
+      name: "home"
+      capacity: playerCount
+      kind: "Int"
+      cells: map(playerCamps, (camp, i) => { key: $"{i}", value: 0 })
+    }
+    row {
+      name: "scores"
+      capacity: playerCount
+      kind: "Int"
+      cells: map(playerCamps, (camp, i) => { key: $"{i}", value: 0 })
+    }
+    for (camp, seat) in playerCamps {
+
+      row {
+        name: $"distance{seat}"
+        capacity: 121
+        kind: "Int"
+        cells: map(holes, p => { key: $"{p[\"id\"]}", value: (absolute(p["q"] - tips[(camp + 3) % 6][0]) + absolute(p["r"] - tips[(camp + 3) % 6][1]) + absolute(p["q"] + p["r"] - tips[(camp + 3) % 6][0] - tips[(camp + 3) % 6][1])) / 2 })
+      }
+    }
+    slot turn = 0 bounds(0..playerCount - 1)
+    slot verdict = 0
+    slot settleHold = 0 bounds(0..60)
+    slot winner = -1
+    slot moveCount = 0
+    slot illegalCount = 0
+    slot movedCount = 0
+    slot missingCount = pieceCount
+    slot boardCollisions = 0
+    slot shapeLegal = 0
+    slot aiSide = -1 bounds(-1..playerCount - 1)
+    slot aiEnabled = 0
+    slot aiRevision = 0
+    table move capacity(4) {
+      from = -1
+      to = -1
+      seat = -1
+      token = -1
+    }
+    table ai capacity(2) {
+      turn = -1
+      winner = -1
+    }
+    table aiBest capacity(4) {
+      token = -1
+      to = -1
+      score = 0
+      revision = -1
+    }
+  }
+}
+
+test "all marbles settle into the star" {
+  when {
+    ticks 500
+  }
+  expect {
+    missingCount == 0
+    boardCollisions == 0
+    movedCount == 0
+    verdict == 1
+    turn == 0
+    winner == -1
+  }
+}
+
+test "AI makes one physical move and waits for the next seat" {
+  given {
+    aiSide = 0
+  }
+  when {
+    ticks 1800
+  }
+  expect {
+    turn == 1
+    moveCount == 1
+    verdict == 1
+    aiEnabled == 0
+    aiBest[token] == -1
+    missingCount == 0
+    boardCollisions == 0
+  }
+}

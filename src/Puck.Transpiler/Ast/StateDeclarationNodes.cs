@@ -24,7 +24,7 @@ public sealed record FamilyMemberNode(
     Column
 );
 /// <summary>A modifier call attached to a <c>table</c>/<c>slot</c> declaration or one of a table's cell entries —
-/// e.g. <c>bounds(minimum: 0, maximum: 100)</c>, <c>advance(perSecond: 5)</c>, <c>capacity(8)</c>, or
+/// e.g. <c>bounds(0..100)</c>, <c>advance(perSecond: 5)</c>, <c>capacity(8)</c>, or
 /// <c>behavior(none)</c>. This IS a call — it reuses the ordinary call-expression grammar
 /// (<see cref="ArgumentNode"/>) verbatim — but it stands after a declaration header or a cell entry rather than in
 /// expression position, so it carries its own node rather than an <see cref="ExpressionNode"/>. The core parses the
@@ -74,12 +74,11 @@ public sealed record StateCellEntryNode(
     Line,
     Column
 );
-/// <summary>A <c>table</c> declaration: <c>table name : Kind [modifier]* { cellEntry* }</c> — the keyed-row
+/// <summary>A <c>table</c> declaration: <c>table name [modifier]* { cellEntry* }</c> — the keyed-row
 /// sugar. Legal only where the owning vocabulary admits a state-row declaration (<c>state.world</c> alone, for the
 /// world vocabulary).</summary>
 /// <param name="Name">The declared row's name.</param>
-/// <param name="Kind">The declared cell kind, exactly as written (an unrecognized kind is the owning vocabulary's
-/// own refusal, not a parse error — the core does not know the admitted kind set).</param>
+/// <param name="Kind">The inferred cell kind, or an empty string before the owning vocabulary lowers the declaration.</param>
 /// <param name="Modifiers">The row-level modifier calls, in written order.</param>
 /// <param name="Cells">The declared cell entries, in written order.</param>
 /// <param name="FamilySize">The optional compile-time family count expression (e.g. [8]), or null for a single row.</param>
@@ -269,6 +268,8 @@ public sealed record EnumDeclarationNode(
 public sealed record RecordFieldNode(
     string Name,
     string TypeName,
+    IReadOnlyList<StateModifierNode> Modifiers,
+    ExpressionNode? Default = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -279,6 +280,45 @@ public sealed record RecordFieldNode(
     Line,
     Column
 );
+/// <summary>A statically populated or runtime-claimable pool of record instances. The owning vocabulary lowers the
+/// declaration to its pool wire shape; the core only preserves the record name, capacity and initializer syntax.</summary>
+/// <param name="Name">The pool name.</param>
+/// <param name="RecordName">The record type each instance carries.</param>
+/// <param name="Capacity">The compile-time capacity expression, or <see langword="null"/> when the declaration has no bracket.</param>
+/// <param name="Initializer">The optional compile-time array of instance objects.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record StatePoolDeclarationNode(
+    string Name,
+    string RecordName,
+    ExpressionNode? Capacity,
+    ExpressionNode? Initializer,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary>A bounded pool of relationships between instances from two ordinary pools.</summary>
+public sealed record StatePairPoolDeclarationNode(
+    string Name,
+    string RecordName,
+    string LeftPool,
+    string RightPool,
+    ExpressionNode MaxLive,
+    bool Directed = true,
+    bool AllowSelf = false,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(Offset, Length, Line, Column);
 /// <summary><c>record Name { field1: Type1 ... }</c>. Lowers to columnar state row sets (Structure of Arrays).</summary>
 public sealed record RecordDeclarationNode(
     string Name,
@@ -296,16 +336,14 @@ public sealed record RecordDeclarationNode(
 /// <summary><c>derive name = expression</c>. Compile-time macro inlining or cached derived state.</summary>
 public sealed record DerivedStateNode(
     string Name,
-    ExpressionNode Expression,
+    OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1,
-    string? RawExpression = null
+    int Column = 1
 ) : StatementNode(
     Offset,
     Length,
     Line,
     Column
 );
-

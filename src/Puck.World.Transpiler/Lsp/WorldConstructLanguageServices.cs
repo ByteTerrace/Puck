@@ -42,7 +42,7 @@ public static class WorldConstructLanguageServices {
     /// <returns>The enclosing construct's keyword, or <see langword="null"/> at the document's own root or inside
     /// a construct the table does not describe.</returns>
     /// <remarks>The cursor's own line decides first, since a declaration writes its header members on the keyword's
-    /// line (<c>grid board : Int dimensions(…)</c>); otherwise the innermost block still open at the cursor does.
+    /// line (<c>grid board dimensions(…)</c>); otherwise the innermost block still open at the cursor does.
     /// String literals and comments are skipped, so a brace inside either does not open a block.</remarks>
     public static string? ConstructAt(WorldConstructTable table, string text, int offset) {
         ArgumentNullException.ThrowIfNull(table);

@@ -76,7 +76,7 @@ public static partial class ArenaTransforms {
     // The site records the last sample it emitted, the way an ordinary draw site's slot cell does.
     private static bool TryRecordSample(in ArenaTransformContext context, int rowOrdinal, long sample, TransformRefusal code, out EffectRefusal refusal) {
         if (!context.Arena.TryWrite(
-            key: context.Arena.Catalog.Keys.Intern(name: StateRow.SlotKey),
+            key: context.Arena.Keys.Intern(name: StateRow.SlotKey),
             operand: sample,
             reason: out var reason,
             rowOrdinal: rowOrdinal,

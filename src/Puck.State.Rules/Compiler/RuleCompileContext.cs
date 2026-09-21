@@ -16,6 +16,8 @@ public readonly record struct TableSource(string Name, TableDocument? Document, 
 public class RuleCompileContext : IRuleCostContext {
     private readonly Dictionary<string, CompiledPattern> m_patternsByName = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, object> m_scope = new(comparer: StringComparer.Ordinal);
+    private readonly List<RuleInstanceBinding> m_instanceBindings = [];
+    private readonly HashSet<int> m_releasedInstanceSlots = [];
 
     private readonly string?[] m_tableErrors;
     private readonly CompiledTable?[] m_tables;
@@ -33,10 +35,15 @@ public class RuleCompileContext : IRuleCostContext {
         ArgumentNullException.ThrowIfNull(argument: vocabulary);
 
         Catalog = catalog;
+        Section = section;
         Generators = generators;
         Lattices = (section?.Lattices ?? []);
         Patterns = (patterns ?? []);
-        Rows = (section?.Rows ?? []);
+        // The catalog gives record fields and pool bookkeeping stable row ordinals by expanding them into the
+        // section's row universe. Keep the compiler's metadata view over that same universe: resolving a generated
+        // field by ordinal and then pricing it against only the authored rows would silently fall back to the
+        // section-wide ceiling.
+        Rows = StateCatalog.ExpandRows(section: section);
         SimulationRateHz = simulationRateHz;
         Spaces = (section?.Spaces ?? []);
         Tables = (tables ?? []);
@@ -49,6 +56,8 @@ public class RuleCompileContext : IRuleCostContext {
     public BoundKey[]? BindingScope { get; set; }
     /// <summary>Gets the section's compiled catalog.</summary>
     public StateCatalog Catalog { get; }
+    /// <summary>Gets the authored section used for layout and retained-journal admission.</summary>
+    public IStateSection? Section { get; }
     /// <summary>Gets or sets the enclosing rule's declared <see cref="Rule.ForEach"/> row name, for the duration of
     /// one compile.</summary>
     public string? ForEachRow { get; set; }
@@ -87,6 +96,56 @@ public class RuleCompileContext : IRuleCostContext {
     /// <c>$zones[&lt;index&gt;]</c> spelling in the rule indexes, for the duration of one compile.</summary>
     public ZoneTable? Zones { get; set; }
 
+    /// <summary>Resolves a lexical pool-instance binding visible at the current compilation point.</summary>
+    public bool TryInstanceBinding(string name, out RuleInstanceBinding binding) {
+        for (var index = (m_instanceBindings.Count - 1); (index >= 0); index--) {
+            if (string.Equals(a: m_instanceBindings[index].Name, b: name, comparisonType: StringComparison.Ordinal) && !m_releasedInstanceSlots.Contains(item: m_instanceBindings[index].Slot)) {
+                binding = m_instanceBindings[index];
+                return true;
+            }
+        }
+        binding = default;
+        return false;
+    }
+    /// <summary>Resolves a declared ordinary pool slot for direct logical field access. The arena binds that slot to
+    /// its currently live lifetime at evaluation time.</summary>
+    public bool TryStaticPoolHandle(string poolName, int slot, out StatePoolDescriptor? pool, out StateInstanceHandle handle) {
+        if (Catalog.TryGetPool(name: CellName.Parse(candidate: poolName), pool: out pool) && (pool is not null) && !pool.IsPair && (((uint)slot) < ((uint)pool.Capacity))) {
+            handle = Catalog.CreateInstanceHandle(poolOrdinal: pool.Ordinal, slot: slot, generation: 0L);
+            return true;
+        }
+        pool = null;
+        handle = default;
+        return false;
+    }
+    /// <summary>Opens one lexical instance binding and returns its distinct evaluator register.</summary>
+    public RuleInstanceBinding PushInstanceBinding(CellName name, StatePoolDescriptor pool) {
+        ArgumentNullException.ThrowIfNull(argument: pool);
+        if (m_instanceBindings.Count >= StateCapacity.MaxInstanceBindings) {
+            throw new InvalidOperationException(message: $"a rule may bind at most {StateCapacity.MaxInstanceBindings} pool instances");
+        }
+        foreach (var existing in m_instanceBindings) {
+            if (string.Equals(a: existing.Name, b: name.Value, comparisonType: StringComparison.Ordinal)) {
+                throw new InvalidOperationException(message: $"instance binding '{name}' is already live in this scope");
+            }
+        }
+        var binding = new RuleInstanceBinding(Name: name.Value, Pool: pool, Slot: m_instanceBindings.Count);
+
+        m_instanceBindings.Add(item: binding);
+        _ = m_releasedInstanceSlots.Remove(item: binding.Slot);
+        return binding;
+    }
+    /// <summary>Marks a lexical binding unavailable after its release effect.</summary>
+    public void ReleaseInstanceBinding(RuleInstanceBinding binding) => m_releasedInstanceSlots.Add(item: binding.Slot);
+    /// <summary>Closes the most recently opened lexical instance binding.</summary>
+    public void PopInstanceBinding(RuleInstanceBinding binding) {
+        if ((m_instanceBindings.Count == 0) || !EqualityComparer<RuleInstanceBinding>.Default.Equals(x: m_instanceBindings[^1], y: binding)) {
+            throw new InvalidOperationException(message: "pool instance scopes must close in lexical order");
+        }
+        m_instanceBindings.RemoveAt(index: (m_instanceBindings.Count - 1));
+        _ = m_releasedInstanceSlots.Remove(item: binding.Slot);
+    }
+
     // Scope identity keeps pattern-local token bindings separate from the enclosing rule's bindings.
     internal Dictionary<(string Text, BoundKey[]? Scope), CompiledCellRef> KeyExpressions { get; } = [];
 
@@ -94,6 +153,8 @@ public class RuleCompileContext : IRuleCostContext {
     public void ClearScope() {
         BindingScope = null;
         ForEachRow = null;
+        m_instanceBindings.Clear();
+        m_releasedInstanceSlots.Clear();
         RuleLocals = null;
         Zones = null;
 
@@ -110,14 +171,12 @@ public class RuleCompileContext : IRuleCostContext {
 
         return row.Draw;
     }
-    /// <summary>Finds a declared row by name.</summary>
+    /// <summary>Finds an authored row by name. Generated storage rows are never addressable by an authored name.</summary>
+    /// <remarks>Pool field compilation and costing use <see cref="FindRowAt"/> after resolving a pool handle.</remarks>
     /// <param name="name">The row name.</param>
     /// <returns>The row, or <see langword="null"/>.</returns>
-    public StateRow? FindRow(string name) => StateRows.FindStateRow(
-        name: name,
-        rows: Rows
-    );
-    /// <summary>Finds a declared row by its catalog ordinal.</summary>
+    public StateRow? FindRow(string name) => StateRows.FindStateRow(name: name, rows: Rows);
+    /// <summary>Finds a declared or generated storage row by its catalog ordinal.</summary>
     /// <param name="rowOrdinal">The catalog ordinal.</param>
     /// <returns>The row, or <see langword="null"/>.</returns>
     public StateRow? FindRowAt(int rowOrdinal) {
@@ -127,8 +186,8 @@ public class RuleCompileContext : IRuleCostContext {
 
         var descriptor = Catalog.Descriptors[rowOrdinal];
 
-        return ((descriptor.Lane == StateLane.Document)
-            ? FindRow(name: descriptor.Name)
+        return (((descriptor.Lane == StateLane.Document) && (((uint)descriptor.LaneOrdinal) < ((uint)Rows.Count)))
+            ? Rows[descriptor.LaneOrdinal]
             : null
         );
     }
@@ -294,3 +353,8 @@ public class RuleCompileContext : IRuleCostContext {
         return false;
     }
 }
+/// <summary>One typed lexical instance binding and its evaluator register slot.</summary>
+/// <param name="Name">The authored binding name.</param>
+/// <param name="Pool">The pool the binding belongs to.</param>
+/// <param name="Slot">The distinct evaluator register slot.</param>
+public readonly record struct RuleInstanceBinding(string Name, StatePoolDescriptor Pool, int Slot);

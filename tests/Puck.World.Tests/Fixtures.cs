@@ -1040,8 +1040,8 @@ internal static class Fixtures {
     );
 
     private static WorldViewDefaults StandardViews { get; } = new(
-        SeatRig: StandardSeatRig,
-        SeatControl: new WorldSeatViewControl(
+        SeatRigRaw: StandardSeatRig,
+        SeatControlRaw: new WorldSeatViewControl(
             MaxPitch: 1.2f,
             MinPitch: -0.35f,
             YawReference: WorldSeatYawReference.World

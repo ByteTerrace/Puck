@@ -90,8 +90,18 @@
       "effects": [
         {
           "$type": "setState",
-          "fromState": "$board:cellOf:hexBoard:placement:$each",
-          "key": "$each",
+          "fromState": {
+            "channel": "board",
+            "arguments": [
+              "cellOf",
+              "hexBoard",
+              "placement",
+              "$each"
+            ]
+          },
+          "key": {
+            "channel": "each"
+          },
           "state": "hexStoneCell"
         }
       ],

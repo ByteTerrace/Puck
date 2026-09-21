@@ -269,12 +269,12 @@ public static partial class WorldDefinitionValidator {
                 break;
             case ActionEffect.SetState set:
                 RefuseKey(
-                    key: set.Key,
+                    key: set.Key?.Spelling,
                     verb: "setState"
                 );
                 RefuseFromOperand(
-                    fromState: set.FromState,
-                    fromKey: set.FromKey,
+                    fromState: set.FromState?.Spelling,
+                    fromKey: set.FromKey?.Spelling,
                     verb: "setState"
                 );
                 RefuseValueSeconds(
@@ -291,18 +291,18 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 ValidateCounterState(
-                    name: set.State,
+                    name: set.State.Spelling,
                     value: set.Value
                 );
                 break;
             case ActionEffect.AddState add:
                 RefuseKey(
-                    key: add.Key,
+                    key: add.Key?.Spelling,
                     verb: "addState"
                 );
                 RefuseFromOperand(
-                    fromState: add.FromState,
-                    fromKey: add.FromKey,
+                    fromState: add.FromState?.Spelling,
+                    fromKey: add.FromKey?.Spelling,
                     verb: "addState"
                 );
                 RefuseValueSeconds(
@@ -314,11 +314,11 @@ public static partial class WorldDefinitionValidator {
                     verb: "addState"
                 );
                 ValidateCounterState(
-                    name: add.State,
+                    name: add.State.Spelling,
                     value: add.Value
                 );
                 break;
-            case ActionEffect.TransformState or ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or ActionEffect.If or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.ApplyRigidImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
+            case ActionEffect.TransformState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or ActionEffect.If or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.ApplyRigidImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
                 errors.Add(item: $"{path} is a world-rule effect, which has no body-action meaning — admissible only inside a world rule's own effects.");
                 break;
             case WorldEffect.StartTimer timer:
@@ -354,7 +354,7 @@ public static partial class WorldDefinitionValidator {
                 // against the SAME row map a world rule's own generate effect resolves against. Refusing here means a
                 // kit naming a dead generator refuses at LOAD, not at first fire.
                 ValidateGenerateEffect(
-                    row: generate.Row,
+                    row: generate.Row.Spelling,
                     stateRows: stateRows,
                     path: path,
                     errors: errors
@@ -396,9 +396,9 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        // 'valueSeconds' authors an engine-tick countdown against a WORLD state row a companion countdownState effect
-        // consumes once per tick — a per-body action-state slot has no such row, so it is refused here on the same
-        // terms RefuseFromOperand already refuses a per-body live copy source.
+        // 'valueSeconds' writes a WORLD state row's raw engine-tick representation of a duration — a per-body
+        // action-state slot has no such row, so it is refused here on the same terms RefuseFromOperand already
+        // refuses a per-body live copy source.
         void RefuseValueSeconds(decimal? valueSeconds, string verb) {
             if (valueSeconds is not null) {
                 errors.Add(item: $"{path}.valueSeconds is refused at body scope — '{verb}' writes a per-body action-state slot via 'value', or starts a proper timer via 'startTimer'; 'valueSeconds' is legitimate only in a world rule.");
@@ -597,7 +597,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.comparandState/comparandKey is refused at body scope — a comparand row reference addresses a world state row or a reserved channel, legitimate only in a world rule.");
                 }
                 if (!stateSlots.TryGetValue(
-                    key: compare.State,
+                    key: compare.State.Spelling,
                     value: out var compareSlot
                 )) {
                     errors.Add(item: $"{path}.state '{compare.State}' names no declared action state.");

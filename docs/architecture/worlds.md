@@ -208,9 +208,11 @@ Ownership changes at the far side of a derived deadband, never at the authored p
 starts that far inside its new writer and the reciprocal pair closes. The deadband is derived from
 whichever envelope the boundary's own geometry closes against—a wall against two body reaches plus
 contact skin, a floor or ceiling against one authority step of the fastest vertical travel a kit's
-holds admit, gravity over a step or a hold's terminal speed, plus contact skin. Neither is authored:
-a safety margin a world could set is a safety margin a world could set wrong. The floor deadband is
-a hysteresis width. It grows as the authority rate falls, and at the default rate it is comparable
+holds admit, gravity over a step or a hold's terminal speed, plus contact skin. Those derived minima
+cannot be reduced by a document. An adjacency may declare a non-negative `hysteresis` to widen its
+deadband; both reciprocal rows must agree, and direct and corner projections widen their overlap
+to cover it. The effective threshold is the larger of the authored value and the derived minimum.
+The floor deadband grows as the authority rate falls, and at the default rate it is comparable
 to a body's height, so a destination needs that much clear space past the plane. A body settling or
 hovering under its holds never crosses back in one step, so it changes writer at most once; a body
 descending on purpose clears the deadband in a few steps, with the neighbour's field serving its
@@ -436,8 +438,9 @@ admission and read by every remote egress: `frames` (pixels only, no document), 
 (`puck.world.projection.v1` — the visitor's rendered and embodied-from state, with no member to
 carry the logic or authority sections), or `replica` (the whole world document, the sanctioned
 download). An absent tier resolves to `presentation`, so a world authored before the field existed
-hands out no replica. A traveler crossing a seam discloses an identity projection — appearance and
-the two motion rates — never its owned document. A counterpart proves a border with a signed
+hands out no replica. A traveler crossing a seam discloses an identity projection: appearance,
+the two motion rates, and the capacity-one record pools explicitly selected by `identity.records`.
+The rest of its owned document remains private. A counterpart proves a border with a signed
 attestation over the crossing rather than by handing over its world; assembling a derived corner from
 several such proofs ranks a resolved document over a verified attestation over a plain one,
 first-of-kind winning, so only the first two ever complete a corner. Snapshot delivery separately
@@ -654,4 +657,3 @@ reopen it.
 
 Attestation's rejected shapes live with the project:
 [src/Puck.Attestation/README.md, "Ruled out"](../../src/Puck.Attestation/README.md#ruled-out).
-

@@ -476,8 +476,8 @@ public sealed class StateCatalogModelLawTests {
         );
     }
     [Fact]
-    public void AGeneratedRowCarriesItsMarkOntoTheDescriptor() {
-        var catalog = StateCatalog.Compile(section: new StateSection(Rows: [
+    public void AnAuthoredRowCannotClaimTheRuntimeGeneratedMark() {
+        var section = new StateSection(Rows: [
             new StateRow(
                 Name: Name(candidate: "authored"),
                 Kind: CellKind.Int
@@ -486,9 +486,10 @@ public sealed class StateCatalogModelLawTests {
                 Name: Name(candidate: "lowered"),
                 Kind: CellKind.Int
             ) { Generated = true },
-        ]));
+        ]);
 
-        Assert.False(condition: catalog.Descriptors[0].Generated);
-        Assert.True(condition: catalog.Descriptors[1].Generated);
+        var error = Assert.Throws<InvalidOperationException>(testCode: () => StateCatalog.Compile(section: section));
+
+        Assert.Contains(expectedSubstring: "cannot carry", actualString: error.Message);
     }
 }

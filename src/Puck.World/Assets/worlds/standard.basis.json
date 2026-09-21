@@ -1,6 +1,6 @@
 {
   "bodies": {
-    "sleepAfterTicks": 50400
+    "sleepAfterSeconds": 1
   },
   "placements": {
     "rows": [

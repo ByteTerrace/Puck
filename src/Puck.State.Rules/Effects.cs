@@ -1,5 +1,20 @@
 namespace Puck.State.Rules;
 
+/// <summary>Restores the newest retained turn of a named undo group.</summary>
+public sealed class RewindTurnEffect(string group) : RuleEffect(describe: $"rewindTurn {group}") {
+    /// <summary>Gets the stable target group name.</summary>
+    public string Group { get; } = group;
+
+    // Bound by group compilation before the compiled document is published. Standalone effect compilation keeps
+    // the full arena journal ceiling as its conservative price.
+    internal long WorkUnits { get; set; } = ArenaCapacity.MaxJournalBytes;
+
+    /// <inheritdoc/>
+    public override EffectNeeds Needs => EffectNeeds.ReadsTick;
+
+    /// <inheritdoc/>
+    public override RuleWork Cost(IRuleCostContext context) => WorkUnits;
+}
 /// <summary>A state cell write — <c>setState</c>/<c>addState</c>, a literal, a live copy, an expression, or (for a
 /// kind=Text row) a text literal.</summary>
 public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEffect {
@@ -68,54 +83,7 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => RuleWorkBudget.SaturatingAdd(
-        left: 512L,
-        right: Source.Cost(context: context)
-    );
-}
-/// <summary>Consumes a non-negative integer countdown by the simulation step's engine-tick width.</summary>
-public sealed class CountdownEffect : RuleEffect, IStateWriteEffect {
-    /// <summary>Initializes the effect.</summary>
-    /// <param name="rowOrdinal">The destination row's catalog ordinal.</param>
-    /// <param name="key">The destination cell key, or the invalid default.</param>
-    /// <param name="keyFrom">The live key indirection, or <see langword="null"/>.</param>
-    /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public CountdownEffect(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, string describe) : base(describe: describe) {
-        Key = key;
-        KeyFrom = keyFrom;
-        RowOrdinal = rowOrdinal;
-    }
-
-    /// <inheritdoc/>
-    public CellKey Key { get; }
-    /// <inheritdoc/>
-    public CompiledCellRef? KeyFrom { get; }
-    /// <summary>Gets what firing needs: the engine-tick width of the step is read from the tick pair.</summary>
-    public override EffectNeeds Needs => EffectNeeds.ReadsTick;
-    /// <inheritdoc/>
-    public int RowOrdinal { get; }
-    /// <summary>Always <see cref="StateWriteKind.Add"/> — a countdown subtracts from the current value.</summary>
-    public StateWriteKind Write => StateWriteKind.Add;
-
-    /// <inheritdoc/>
-    public override void CollectReads(List<CellAccess> into) => CompiledCellRef.CollectReference(
-        into: into,
-        reference: KeyFrom
-    );
-    /// <inheritdoc/>
-    public override void CollectWrites(List<CellAccess> into) {
-        ArgumentNullException.ThrowIfNull(argument: into);
-
-        into.Add(item: new CellAccess(
-            IsSet: false,
-            Key: ((KeyFrom is null)
-            ? Key
-            : default),
-            RowOrdinal: RowOrdinal
-        ));
-    }
-    /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 512L;
+    public override RuleWork Cost(IRuleCostContext context) => (512L + Source.Cost(context: context));
 }
 /// <summary>Fires a generator row into its draw site.</summary>
 public sealed class GenerateEffect : RuleEffect, IStateAddressedEffect {
@@ -146,7 +114,7 @@ public sealed class GenerateEffect : RuleEffect, IStateAddressedEffect {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 4_096L;
+    public override RuleWork Cost(IRuleCostContext context) => 4_096L;
 }
 /// <summary>Removes an addressed state cell.</summary>
 public sealed class RemoveStateCellEffect : RuleEffect, IStateAddressedEffect {
@@ -186,7 +154,7 @@ public sealed class RemoveStateCellEffect : RuleEffect, IStateAddressedEffect {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 512L;
+    public override RuleWork Cost(IRuleCostContext context) => 512L;
 }
 /// <summary>Writes an absolute simulation due tick into an integer state cell.</summary>
 public sealed class ScheduleStateEffect : RuleEffect, IStateWriteEffect {
@@ -234,7 +202,7 @@ public sealed class ScheduleStateEffect : RuleEffect, IStateWriteEffect {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 512L;
+    public override RuleWork Cost(IRuleCostContext context) => 512L;
 }
 /// <summary>A savepoint inside the firing's scope: when a step refuses, the savepoint rewinds so earlier siblings
 /// survive, <see cref="OnFailure"/> runs in the firing's own scope, and later siblings continue.</summary>
@@ -280,7 +248,7 @@ public sealed class TransactionEffect : RuleEffect {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) {
+    public override RuleWork Cost(IRuleCostContext context) {
         var main = RuleWorkBudget.EffectsCost(
             context: context,
             effects: Effects
@@ -290,22 +258,12 @@ public sealed class TransactionEffect : RuleEffect {
             effects: OnFailure
         );
 
-        return RuleWorkBudget.SaturatingAdd(
-            left: 1L,
-            right: Math.Max(
-                val1: RuleWorkBudget.SaturatingMultiply(
-                    left: 2L,
-                    right: main
-                ),
-                val2: RuleWorkBudget.SaturatingAdd(
-                    left: main,
-                    right: RuleWorkBudget.SaturatingMultiply(
-                        left: 2L,
-                        right: failure
-                    )
-                )
-            )
-        );
+        // A success preflights the main effects and commits them. A refusal preflights them as far as the member
+        // that refuses, then preflights and commits the failure branch.
+        return (1L + RuleWork.Max(
+            left: (2L * main),
+            right: (main + (2L * failure))
+        ));
     }
 }
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>
@@ -337,10 +295,7 @@ public sealed class PushStateEffect : RuleEffect, IValueSourcedEffect {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => RuleWorkBudget.SaturatingAdd(
-        left: 1_024L,
-        right: Source.Cost(context: context)
-    );
+    public override RuleWork Cost(IRuleCostContext context) => (1_024L + Source.Cost(context: context));
 }
 /// <summary>Branches on a compiled gate: fires <see cref="Then"/> or <see cref="Else"/>, never both. Both branches
 /// contribute to the read and write sets, since either may run.</summary>
@@ -395,25 +350,19 @@ public sealed class IfEffect : RuleEffect {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => RuleWorkBudget.SaturatingAdd(
-        left: RuleWorkBudget.SaturatingAdd(
-            left: 1L,
-            right: RuleWorkBudget.GateCost(
-                context: context,
-                tokens: Condition
-            )
+    public override RuleWork Cost(IRuleCostContext context) => ((1L + RuleWorkBudget.GateCost(
+        context: context,
+        tokens: Condition
+    )) + RuleWork.Max(
+        left: RuleWorkBudget.EffectsCost(
+            context: context,
+            effects: Then
         ),
-        right: Math.Max(
-            val1: RuleWorkBudget.EffectsCost(
-                context: context,
-                effects: Then
-            ),
-            val2: RuleWorkBudget.EffectsCost(
-                context: context,
-                effects: Else
-            )
+        right: RuleWorkBudget.EffectsCost(
+            context: context,
+            effects: Else
         )
-    );
+    ));
 }
 /// <summary>An atomic discrete state transform. The authored declaration carries the transform's own parameters;
 /// every row it addresses is resolved here to a catalog ordinal.</summary>
@@ -432,7 +381,7 @@ public sealed class TransformStateEffect : RuleEffect {
     /// <param name="fromRow">The live row a transfer's source resolves through.</param>
     /// <param name="toRow">The live row a transfer's destination resolves through.</param>
     /// <param name="value">The compiled value source a push's value resolves through.</param>
-    public TransformStateEffect(StateTransform transform, ArenaTransform arena, string describe, int[] reads, int[] writes, long cost, CompiledCellRef? keyRef = null, LiveRow? fromRow = null, LiveRow? toRow = null, CompiledValueSource? value = null) : base(describe: describe) {
+    public TransformStateEffect(StateTransform transform, ArenaTransform arena, string describe, int[] reads, int[] writes, RuleWork cost, CompiledCellRef? keyRef = null, LiveRow? fromRow = null, LiveRow? toRow = null, CompiledValueSource? value = null) : base(describe: describe) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: reads);
         ArgumentNullException.ThrowIfNull(argument: transform);
@@ -457,7 +406,7 @@ public sealed class TransformStateEffect : RuleEffect {
     /// <see langword="null"/>.</summary>
     public CompiledCellRef? KeyRef { get; }
     /// <summary>Gets the conservative work units one firing costs.</summary>
-    public long Price { get; }
+    public RuleWork Price { get; }
     /// <summary>Gets the live row a transfer's destination resolves through, or <see langword="null"/>.</summary>
     public LiveRow? ToRow { get; }
     /// <summary>Gets the authored transform.</summary>
@@ -504,5 +453,5 @@ public sealed class TransformStateEffect : RuleEffect {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => Price;
+    public override RuleWork Cost(IRuleCostContext context) => Price;
 }

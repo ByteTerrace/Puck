@@ -8,6 +8,19 @@ namespace Puck.World.Tests;
 /// <summary>Pins the pattern-language operand over its three word sources, complement and intersection, the sort that
 /// canonicalizes a hand, the state budget's refusal, and the strict wire shape.</summary>
 public sealed class WorldPatternLawTests {
+    [Theory]
+    [InlineData("sortZone")]
+    [InlineData("sortKeyed")]
+    public void RetiredSortDiscriminatorsAreRefused(string discriminator) {
+        var json = System.Text.Encoding.UTF8.GetBytes(s: $$$"""
+            {"rules":[{"name":"order","effects":[{"$type":"transformState","transform":{
+              "$type":"{{{discriminator}}}","row":"scores"
+            }}]}]}
+            """);
+        var error = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: json));
+        Assert.Contains(discriminator, error.Message, StringComparison.Ordinal);
+    }
+
     private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(
             condition: WorldArenaTransforms.TryApply(
@@ -158,7 +171,7 @@ public sealed class WorldPatternLawTests {
         [new ActionEffect.SetState(
                 State: target,
                 FromState: operand,
-                FromKey: key
+                FromKey: StateChannelRef.OfNullable(spelling: key)
             )]
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
@@ -391,7 +404,7 @@ public sealed class WorldPatternLawTests {
         var unsorted = Hand();
         var sorted = Apply(
             definition: unsorted,
-            transform: new StateTransform.SortZone(
+            transform: new StateTransform.Sort(
                 "hand",
                 By: [new("rank")]
             )
@@ -406,7 +419,7 @@ public sealed class WorldPatternLawTests {
         );
         var descending = Apply(
             definition: unsorted,
-            transform: new StateTransform.SortZone(
+            transform: new StateTransform.Sort(
                 "hand",
                 By: [new(
                         "rank",
@@ -425,7 +438,7 @@ public sealed class WorldPatternLawTests {
         // Suit first, rank descending inside a suit, stable across cards with equal keys.
         var suited = Apply(
             definition: unsorted,
-            transform: new StateTransform.SortZone(
+            transform: new StateTransform.Sort(
                 "hand",
                 By: [new("suit"), new(
                         "rank",
@@ -444,7 +457,7 @@ public sealed class WorldPatternLawTests {
         // Control: no attribute keys at all is not "sort by nothing" — it refuses.
         Assert.False(condition: WorldArenaTransforms.TryApply(
             unsorted,
-            new StateTransform.SortZone(
+            new StateTransform.Sort(
                 "hand",
                 By: []
             ),
@@ -485,7 +498,7 @@ public sealed class WorldPatternLawTests {
 
         Assert.False(condition: WorldArenaTransforms.TryApply(
             foreign,
-            new StateTransform.SortZone(
+            new StateTransform.Sort(
                 "hand",
                 By: [new("score")]
             ),
@@ -503,7 +516,7 @@ public sealed class WorldPatternLawTests {
             definition: foreign with {
                 Rules = [new WorldRule(
                     Name(value: "bad"),
-                    [new ActionEffect.TransformState(Transform: new StateTransform.SortZone(
+                    [new ActionEffect.TransformState(Transform: new StateTransform.Sort(
                             "hand",
                             By: [new("score")]
                         ))]
@@ -631,7 +644,7 @@ public sealed class WorldPatternLawTests {
 
         var sorted = Apply(
             definition: definition,
-            transform: new StateTransform.SortKeyed("dice")
+            transform: new StateTransform.Sort(Row: "dice", By: [new SortKey(Row: "dice")])
         );
 
         Assert.Equal(
@@ -655,7 +668,7 @@ public sealed class WorldPatternLawTests {
         // Control: a plain slot row carries no keyed cells to order.
         Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
-            new StateTransform.SortKeyed("hit"),
+            new StateTransform.Sort(Row: "hit", By: [new SortKey(Row: "hit")]),
             WorldPrincipal.World,
             0,
             "test",
@@ -774,7 +787,7 @@ public sealed class WorldPatternLawTests {
 
         var sorted = Apply(
             definition: definition,
-            transform: new StateTransform.SortZone(
+            transform: new StateTransform.Sort(
                 "hand",
                 By: [new("rank")]
             )
@@ -867,6 +880,86 @@ public sealed class WorldPatternLawTests {
         Assert.Contains(
             actualString: bothReason,
             expectedSubstring: "both attribute and value"
+        );
+    }
+    // Staggered ranges give every value its own set of memberships, so the alphabet is as wide as a letter mask
+    // holds, and a long exact repeat gives the machine a state for every copy: a wide, tall table.
+    private static PatternRow Wide(int index) => new(
+        Name(value: $"wide{index}"),
+        CellKind.Int,
+        MaxStates: PatternCapacity.MaxStates,
+        Symbols: [.. Enumerable.Range(
+                count: PatternCapacity.MaxSymbols,
+                start: 0
+            ).Select(selector: static symbol => new PatternSymbol(
+                Name(value: $"p{symbol}"),
+                symbol,
+                (symbol + PatternCapacity.MaxSymbols)
+            ))],
+        Pattern: new PatternNode.Repeat(
+            Item: new PatternNode.Symbol(Name: "p0"),
+            Max: PatternCapacity.MaxRepeat,
+            Min: PatternCapacity.MaxRepeat
+        )
+    );
+
+    [Fact]
+    public void ADocumentsPatternTablesAreBoundedTogetherInBytesAndRefusedAtTheRowThatCrossed() {
+        var errors = new List<string>();
+
+        Assert.True(
+            condition: CompiledPatterns.TryCompileAll(
+                errors: errors,
+                patterns: out var one,
+                rows: [Wide(index: 0)]
+            ),
+            userMessage: string.Join(
+                separator: "; ",
+                values: errors
+            )
+        );
+
+        var each = one.All.Single().TableBytes;
+        var fit = ((int)(PatternCapacity.MaxTableBytes / each));
+
+        // The rows that fit are fewer than the row ceiling, so the bytes are the limit that binds.
+        Assert.InRange(
+            actual: fit,
+            high: (PatternCapacity.MaxRows - 1),
+            low: 1
+        );
+        Assert.True(
+            condition: CompiledPatterns.TryCompileAll(
+                errors: errors,
+                patterns: out _,
+                rows: [.. Enumerable.Range(
+                    count: fit,
+                    start: 0
+                ).Select(selector: Wide)]
+            ),
+            userMessage: string.Join(
+                separator: "; ",
+                values: errors
+            )
+        );
+        Assert.False(condition: CompiledPatterns.TryCompileAll(
+            errors: errors,
+            patterns: out _,
+            rows: [.. Enumerable.Range(
+                count: (fit + 1),
+                start: 0
+            ).Select(selector: Wide)]
+        ));
+
+        var refusal = Assert.Single(collection: errors);
+
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"patterns[{fit}] 'wide{fit}'"
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"{PatternCapacity.MaxTableBytes}-byte ceiling"
         );
     }
     [Fact]
@@ -1029,7 +1122,7 @@ public sealed class WorldPatternLawTests {
             PatternsRaw = [.. Hand().Patterns, every],
             Rules = [.. Hand().Rules!, new WorldRule(
                 Name(value: "order"),
-                [new ActionEffect.TransformState(Transform: new StateTransform.SortZone(
+                [new ActionEffect.TransformState(Transform: new StateTransform.Sort(
                         "hand",
                         By: [new("suit"), new(
                                 "rank",
@@ -1050,7 +1143,7 @@ public sealed class WorldPatternLawTests {
             parsed.Patterns[1].MaxStates
         );
         Assert.IsType<PatternNode.Sequence>(@object: parsed.Patterns[1].Pattern);
-        var sort = Assert.IsType<StateTransform.SortZone>(@object: Assert.IsType<ActionEffect.TransformState>(@object: parsed.Rules![1].Effects[0]).Transform);
+        var sort = Assert.IsType<StateTransform.Sort>(@object: Assert.IsType<ActionEffect.TransformState>(@object: parsed.Rules![1].Effects[0]).Transform);
 
         Assert.Equal(
             2,

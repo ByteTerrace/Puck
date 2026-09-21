@@ -27,7 +27,17 @@ workload, and a versioned, checksum-checked DXC archive on Windows. It restores
 the solution in locked mode and compiles Release with warnings as errors. It
 packages those assemblies with `puck nuget pack --no-build`, publishes the
 Functions and WebAssembly payloads without rebuilding managed assemblies, and
-publishes `Puck.World` as a framework-dependent artifact. WebAssembly native
+publishes `Puck.World` as a framework-dependent ReadyToRun artifact. World's
+restore prepares its desktop runtime graphs and precompiler. The publish step
+sets `AppendRuntimeIdentifierToOutputPath=false` to read the portable assemblies
+the solution already built, then precompiles them without rebuilding C# sources.
+World's publish target regenerates the runtime-specific dependency manifest in
+the publish directory; the portable build's manifest must remain unchanged.
+The target hooks the pinned SDK's dependency selection, so an SDK update must
+verify a real launch of this no-build artifact, including its runtime libraries.
+CI boots chess headlessly from the published artifact and requires a clean
+console verdict before uploading it. This checks host packaging, not GPU rendering.
+WebAssembly native
 compilation and trimming remain part of its one publish operation.
 The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.

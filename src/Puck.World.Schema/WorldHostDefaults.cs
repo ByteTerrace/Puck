@@ -38,9 +38,9 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 }
 /// <summary>
 /// World-varying editor/authoring policy values, authored as data rather than compile-time constants. The whole
-/// section is optional: an unauthored <c>placements.policy</c> resolves through <see cref="DeriveFrom"/> — no live
-/// placement authoring, a scale envelope spanning exactly the placement rows' authored scales — so a world of only
-/// static placement rows authors no policy block at all, while a world wanting live authoring declares the block
+/// section is optional: an unauthored <c>placements.policy</c> resolves through <see cref="DeriveFrom"/> — no editor
+/// candidate ring, a scale envelope spanning exactly the placement rows' authored scales — so a world of only
+/// static placement rows authors no policy block at all, while a world wanting editor candidates declares the block
 /// deliberately and whole (every member is required of an authored block; a partial one refuses at parse naming
 /// the missing member). Two
 /// consumption classes share this one row (whole-row mutable like every other section — never split into two
@@ -48,10 +48,9 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// <list type="bullet">
 /// <item><description><b>Boot-consumed</b> (<see cref="AuthoringHeadroomScreens"/>,
 /// <see cref="AuthoringHeadroomPlacements"/>): read exactly once, at
-/// <c>Client.WorldSceneEmitter</c> construction, into the frozen render-envelope capacity floor (the probe's
-/// worst-case word/instance reservation). The one honest exception: a live edit to these capacity-floor fields is
-/// journaled but the running session's floor cannot retroactively grow — it applies at the next boot (the validator
-/// still gates the new value against engine caps immediately, so a bad authored value never reaches a boot).</description></item>
+/// <c>Client.WorldSceneEmitter</c> construction, into the initial render-capacity reserve. Live edits to these
+/// reservation fields apply at the next boot; actual program and instance buffers grow with live content regardless
+/// of the initial headroom. The validator still gates the new values against engine caps immediately.</description></item>
 /// <item><description><b>Live-consumed</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
 /// <see cref="CandidateRadius"/>, <see cref="CandidateCap"/>,
 /// <see cref="PreviewDeadlineFrames"/>): read fresh from the delivered definition at each use site (a candidate
@@ -103,13 +102,14 @@ public sealed record WorldPlacementPolicyDefaults(
         PreviewDeadlineFrames: 0
     );
 
-    /// <summary>Derives what an unauthored <c>placements.policy</c> means: no live placement authoring — zero
+    /// <summary>Derives what an unauthored <c>placements.policy</c> means: zero initial
     /// headroom (placements and screens), no derived faces, no candidate ring, no preview deadline — and a scale
     /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
     /// authored (a row's scale is admitted because it is authored, never against a guessed envelope) and the
     /// envelope's ceiling keeps <c>Client.WorldStampPool</c>'s probe bound radius covering the largest authored
     /// row. A non-finite or non-positive scale contributes nothing (the validator refuses it by name before the
-    /// envelope is consulted); no contributing row resolves to <see cref="Absent"/>.</summary>
+    /// envelope is consulted); no contributing row resolves to <see cref="Absent"/>. Zero headroom does not prevent
+    /// console mutations: the renderer grows program and instance buffers when admitted content requires it.</summary>
     /// <param name="placements">The world's placement rows.</param>
     public static WorldPlacementPolicyDefaults DeriveFrom(IReadOnlyList<WorldPlacement> placements) {
         ArgumentNullException.ThrowIfNull(argument: placements);
@@ -238,10 +238,9 @@ public enum WorldHostPresentation : byte {
 /// byte-identically; the <c>--headless</c> CLI flag reflects <see cref="WorldHostPresentation.None"/> for a single run
 /// without editing the document.</param>
 /// <param name="BackendRow">A scalar kind=Text state row whose slot names the backend token, read at boot after
-/// literal <paramref name="Backend"/>. A boot-only site (<see cref="WorldDrawSites.HostBackend"/>): the resolver draws
-/// it once at composition, writes the settled preference into <paramref name="Backend"/>, clears this facet, and
-/// narrates the settlement on stderr — the only surface that can say the backend was drawn at all, since a settled
-/// field is indistinguishable from an authored one thereafter.
+/// state first-fills. Declaring this beside a literal <paramref name="Backend"/> is refused. This boot-only site
+/// (<see cref="WorldDrawSites.HostBackend"/>) writes the settled preference into <paramref name="Backend"/>, clears
+/// this facet, and narrates the settlement on stderr. The source row retains its value and draw bookkeeping.
 /// <para>Its natural spelling is a weighted text source over the backend tokens (<c>auto</c>/<c>directx</c>/
 /// <c>vulkan</c> — a one-context Markov table with <c>bound</c> 1, the degenerate flat weighted draw), parsed through
 /// <see cref="WorldHostTokens.ParseBackend"/> at settle. A token naming no backend refuses by name. Drawing the name

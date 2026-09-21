@@ -112,7 +112,7 @@ public class DiagnosticsFixTests {
         var (json, diagnostics) = Compile(body: """
             rule "mode-equals" {
                 mode = Edge
-                forEach = "pieceCode"
+                forEach = pieceCode
                 hp[0] = 1
             }
             """);
@@ -186,7 +186,7 @@ public class DiagnosticsFixTests {
         );
         Assert.Equal(
             0.5,
-            Assert.IsType<JsonObject>(@object: json["look"])["alpha"]!.GetValue<double>()
+            Assert.IsType<JsonObject>(@object: json["look"])["alpha"].AsNumber()!.Value
         );
     }
     // ---- reachability -----------------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ public class DiagnosticsFixTests {
     public void RowReferenceThatIsAnExpressionReportsPuck003() {
         var diagnostics = Parse(body: """
             rule "r" {
-                countdown someRow[a] + 1
+                remove someRow[a] + 1
                 hp[0] = 1
             }
             """);

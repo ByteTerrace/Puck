@@ -79,7 +79,7 @@ public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect {
 }
 /// <summary>Writes one world document row, or saves the world.</summary>
 public sealed class WorldDocumentEffect : WorldFactEffect {
-    private readonly long m_cost;
+    private readonly RuleWork m_cost;
 
     /// <summary>Initializes the effect.</summary>
     /// <param name="write">What the effect installs.</param>
@@ -88,7 +88,7 @@ public sealed class WorldDocumentEffect : WorldFactEffect {
     /// <param name="placement">The placement the write installs, or <see langword="null"/>.</param>
     /// <param name="cost">The conservative work units one firing costs.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldDocumentEffect(WorldDocumentWrite write, string id, WorldHudPanel? panel, WorldPlacement? placement, long cost, string describe) : base(describe: describe) {
+    public WorldDocumentEffect(WorldDocumentWrite write, string id, WorldHudPanel? panel, WorldPlacement? placement, RuleWork cost, string describe) : base(describe: describe) {
         HudPanel = panel;
         Id = id;
         Placement = placement;
@@ -102,13 +102,19 @@ public sealed class WorldDocumentEffect : WorldFactEffect {
     public string Id { get; }
     /// <summary>Gets the placement the write installs, or <see langword="null"/>.</summary>
     public WorldPlacement? Placement { get; }
+    /// <summary>Gets what firing needs: a document row is committed with the firing, as one unit with the firing's
+    /// other rows; a save is delivered after it.</summary>
+    public override EffectNeeds Needs => ((Write == WorldDocumentWrite.Save)
+        ? EffectNeeds.Irreversible
+        : (EffectNeeds.Irreversible | EffectNeeds.Transactional)
+    );
     /// <inheritdoc/>
     public override bool SubmitsMutation => (Write != WorldDocumentWrite.Save);
     /// <summary>Gets what the effect installs.</summary>
     public WorldDocumentWrite Write { get; }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => m_cost;
+    public override RuleWork Cost(IRuleCostContext context) => m_cost;
 }
 /// <summary>Emits a gameplay cue.</summary>
 public sealed class WorldCueEffect : WorldFactEffect {
@@ -142,7 +148,7 @@ public sealed class WorldCueEffect : WorldFactEffect {
         reference: KeyFrom
     );
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
 }
 /// <summary>Teleports a body to a spawn point or a literal pose.</summary>
 public sealed class WorldPoseEffect : WorldFactEffect {
@@ -176,7 +182,7 @@ public sealed class WorldPoseEffect : WorldFactEffect {
         reference: KeyFrom
     );
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
 }
 /// <summary>Applies a body motion operation to a world-addressed body.</summary>
 public sealed class WorldBodyMotionEffect : WorldFactEffect {
@@ -212,7 +218,7 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
 }
 /// <summary>Applies a rigid-body impulse to a live-resolved struck body, along a second live-resolved heading body's
 /// own forward facing, scaled by a live state cell.</summary>
@@ -242,7 +248,7 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => Magnitude.CollectReads(into: into);
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (1L + Magnitude.Cost(context: context));
+    public override RuleWork Cost(IRuleCostContext context) => (1L + Magnitude.Cost(context: context));
 }
 /// <summary>Paints a lattice field cell or the cube around it.</summary>
 public sealed class WorldPaintFieldEffect : WorldFactEffect {
@@ -257,7 +263,7 @@ public sealed class WorldPaintFieldEffect : WorldFactEffect {
     public override bool SubmitsMutation => false;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) {
+    public override RuleWork Cost(IRuleCostContext context) {
         var diameter = ((2L * Paint.Radius) + 1L);
 
         return (1L + ((diameter * diameter) * diameter));
@@ -317,8 +323,5 @@ public sealed class WorldIdentityFactEffect : WorldFactEffect {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => Puck.State.Rules.RuleWorkBudget.SaturatingAdd(
-        left: 512L,
-        right: Source.Cost(context: context)
-    );
+    public override RuleWork Cost(IRuleCostContext context) => (512L + Source.Cost(context: context));
 }

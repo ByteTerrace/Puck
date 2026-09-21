@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
+using Puck.World;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -7,9 +10,9 @@ namespace Puck.Cli.Tests;
 /// naming the gate and the values the gate saw, prints the refusals a run recorded, and exits 0 only when every
 /// verdict passes. The two worlds are a discriminating pair: one is green, and one carries a verdict that is meant
 /// to fail, so a runner that reported success unconditionally fails this class.</summary>
-/// <remarks>These facts boot a real process twice per world, so each takes tens of seconds. They pass
-/// <c>--world-artifact</c> at the repository's own Release output rather than letting the verb build
-/// <c>Puck.World</c> again: the test project already depends on that build.</remarks>
+/// <remarks>These facts boot the real host unpaced. They pass <c>--world-artifact</c> at the repository's own
+/// Release output rather than letting the verb build <c>Puck.World</c> again: the test project already depends on
+/// that build.</remarks>
 public sealed class TestCommandLawTests {
     private static string Artifact() => Path.Combine(
         path1: Root(),
@@ -72,8 +75,26 @@ public sealed class TestCommandLawTests {
         path4: name
     );
 
+    // Package entry points must keep their authored real-host scenarios in the normal test gate after graduation
+    // out of the engine's built-in assets. The manifest owns the list, so adding a game also adds its test run.
+    [Fact]
+    public void EveryParlorEntryPointPassesItsAuthoredTests() {
+        var package = Path.Combine(path1: Root(), path2: "worlds/parlor");
+        var manifest = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: Path.Combine(path1: package, path2: "manifest.json")))!;
+        var worlds = manifest[propertyName: "worlds"]!.AsArray();
+
+        Assert.NotEmpty(collection: worlds);
+
+        foreach (var world in worlds) {
+            var source = world![propertyName: "source"]!.GetValue<string>();
+            var (exitCode, output) = RunTest(Path.Combine(path1: package, path2: source), "--jobs", "2");
+
+            Assert.True(condition: exitCode == 0, userMessage: $"{source}{Environment.NewLine}{output}");
+        }
+    }
+
     // Two sources of one sweep sharing a file name generate the same world name. Writing the second would replace
-    // the first source's world and run the second one's twice, so the sweep refuses by name before anything boots.
+    // the first source's world and run only the second one, so the sweep refuses by name before anything boots.
     [Fact]
     public void TwoSourcesGeneratingOneWorldNameAreRefusedByName() {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-stems-").FullName;
@@ -112,6 +133,72 @@ public sealed class TestCommandLawTests {
             );
         }
     }
+    // A green world and a red world with the same basename must retain their own evidence on every leg.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ParallelWorldsSharingAFileNameKeepSeparatePersistenceAndVerdicts(bool reproduce) {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-isolation-").FullName;
+
+        try {
+            var input = Path.Combine(path1: directory, path2: "input");
+            var kept = Path.Combine(path1: directory, path2: "kept");
+            var fixtures = new[] { "refused-command.world.json", "phase-advance.world.json" };
+            var verdicts = new[] { "wrongGuardRefused", "trickPhaseAdvanced" };
+            ulong[] ticks = [14UL, 12UL];
+
+            for (var index = 0; (index < fixtures.Length); index++) {
+                var folder = Directory.CreateDirectory(path: Path.Combine(
+                    path1: input,
+                    path2: index.ToString(provider: CultureInfo.InvariantCulture)
+                ));
+                var document = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: World(name: fixtures[index])))!.AsObject();
+
+                document[propertyName: "basis"] = World(name: "phase-fixture.world.json").Replace(oldChar: '\\', newChar: '/');
+                File.WriteAllText(
+                    path: Path.Combine(path1: folder.FullName, path2: "foo.world.json"),
+                    contents: document.ToJsonString()
+                );
+            }
+
+            var (exitCode, output) = RunTest([
+                input, "--jobs", "2", "--keep", kept,
+                .. (reproduce ? (string[])["--reproduce"] : []),
+            ]);
+
+            Assert.True(condition: exitCode == 1, userMessage: output);
+            Assert.Contains(expectedSubstring: "wrongGuardRefused: pass", actualString: output, comparisonType: StringComparison.Ordinal);
+            Assert.Contains(expectedSubstring: "trickPhaseAdvanced: never evaluated", actualString: output, comparisonType: StringComparison.Ordinal);
+            Assert.Equal(expected: 2, actual: Directory.GetDirectories(path: Path.Combine(path1: kept, path2: "worlds")).Length);
+
+            for (var index = 0; (index < fixtures.Length); index++) {
+                var worldDirectory = Path.Combine(
+                    path1: kept,
+                    path2: "worlds",
+                    path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture)
+                );
+
+                for (var run = 1; (run <= (reproduce ? 2 : 1)); run++) {
+                    var leg = Path.Combine(path1: worldDirectory, path2: $"run{run.ToString(provider: CultureInfo.InvariantCulture)}");
+                    var manifest = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: Path.Combine(
+                        path1: leg, path2: "out", path3: WorldScheduleSection.ManifestFileName
+                    )))!;
+                    var export = File.ReadAllText(path: Path.Combine(
+                        path1: leg, path2: "out", path3: WorldScheduleSection.ExportFileName
+                    ));
+
+                    Assert.Equal(expected: ticks[index], actual: manifest[propertyName: "exportTick"]!.GetValue<ulong>());
+                    Assert.Contains(expectedSubstring: verdicts[index], actualString: export, comparisonType: StringComparison.Ordinal);
+                    Assert.DoesNotContain(expectedSubstring: verdicts[1 - index], actualString: export, comparisonType: StringComparison.Ordinal);
+                    Assert.True(condition: Directory.Exists(path: Path.Combine(path1: leg, path2: "state")));
+                    Assert.True(condition: File.Exists(path: Path.Combine(path1: leg, path2: "stdout.log")));
+                    Assert.True(condition: File.Exists(path: Path.Combine(path1: leg, path2: "stderr.log")));
+                }
+            }
+        } finally {
+            Directory.Delete(path: directory, recursive: true);
+        }
+    }
     [Fact]
     public void ADirectoryWithNoWorldDocumentIsAUsageError() {
         var (exitCode, output) = RunTest(Path.Combine(
@@ -131,8 +218,8 @@ public sealed class TestCommandLawTests {
             expectedSubstring: "is neither a world document, a .puck source, nor a directory"
         );
     }
-    // A generated verdict row is an Int row: it records what the gate read of an Int row, and a gate over a row of
-    // another kind still boots, fires and passes.
+    // A generated verdict row is an Int row: it records what the gate read of an Int row, and what the gate read of
+    // a Fixed or a Bool row is recorded by a witness of that kind and listed the way a source spells the value.
     [Fact]
     public void ATestGivesAndExpectsOnARowOfEveryKind() {
         var (exitCode, output) = RunTest(Source(name: "every-kind-is-given.puck"));
@@ -140,7 +227,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "a-fixed-row-is-given-and-expected-on-1: pass gate=\"speed > 2.0\" saw=[]"
+            expectedSubstring: "a-fixed-row-is-given-and-expected-on-1: pass gate=\"speed > 2.0\" saw=[speed=2.25]"
         );
         Assert.Contains(
             actualString: output,
@@ -150,7 +237,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "a-bool-row-is-given-and-expected-on-1: pass gate=\"open == 0\""
+            expectedSubstring: "a-bool-row-is-given-and-expected-on-1: pass gate=\"open == 0\" saw=[open=false]"
         );
         Assert.Equal(
             actual: exitCode,
@@ -188,25 +275,6 @@ public sealed class TestCommandLawTests {
         Assert.Equal(
             actual: exitCode,
             expected: 1
-        );
-    }
-    // A shipped world states its own behaviour in `test` blocks, and this sweep is what runs them: every test of
-    // every shipped source, each generated world booted twice through the real executable.
-    [Fact]
-    public void EveryTestAShippedWorldAuthorsPasses() {
-        var (exitCode, output) = RunTest(Path.Combine(
-            path1: Root(),
-            path2: "src/Puck.World/Assets/worlds"
-        ));
-
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "chinese-checkers--the-win-condition-fires-when-the-last-piece-lands <-"
-        );
-        Assert.True(
-            condition: (exitCode == 0),
-            userMessage: output
         );
     }
     [Fact]
@@ -255,7 +323,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "wrongGuardRefused: pass gate=\"a guarded transform naming generation 7 when heartsPassPhase stands at 0 is refused, so the generation never advances\" saw=[generation=0]"
+            expectedSubstring: "wrongGuardRefused: pass gate=\"a guarded transform naming generation 7 when passPhase stands at 0 is refused, so the generation never advances\" saw=[generation=0]"
         );
         Assert.Contains(
             actualString: output,
@@ -284,12 +352,12 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "passPhaseAdvanced: pass gate=\"heartsPassPhase's generation advanced past 0 once the scheduled guarded transform landed\" saw=[generation=1]"
+            expectedSubstring: "passPhaseAdvanced: pass gate=\"passPhase's generation advanced past 0 once the scheduled guarded transform landed\" saw=[generation=1]"
         );
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "trickPhaseAdvanced: never evaluated gate=\"heartsTrickPhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it\" saw=[generation=0]"
+            expectedSubstring: "trickPhaseAdvanced: never evaluated gate=\"idlePhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it\" saw=[generation=0]"
         );
         Assert.Contains(
             actualString: output,

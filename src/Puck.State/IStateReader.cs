@@ -18,6 +18,10 @@ public interface IStateReader {
     /// own local's kind. The evaluator writes the slots it computes before the gate reads them, so the span is the
     /// host's own scratch and is at least <see cref="RuleCapacity.MaxLocalsPerRule"/> wide.</summary>
     Span<long> Locals { get; }
+    /// <summary>Gets the lexical pool-instance registers for the evaluation in flight. A compiled qualified field
+    /// names one register slot; the evaluator sets and restores that slot around a claim or pool sweep. Readers
+    /// that cannot evaluate pool rules expose the empty default span, so ordinary rules carry no extra state.</summary>
+    Span<StateInstanceHandle> InstanceBindings => [];
     /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Each"/>, set by the evaluator for the
     /// duration of one iteration and the default invalid key outside a <see cref="Rule.ForEach"/> evaluation.</summary>
     CellKey BoundEachKey { get; set; }
@@ -39,6 +43,8 @@ public interface IStateReader {
     /// <summary>Gets the simulation tick the evaluation in flight answers as of — what a <see cref="StateCycle"/> or
     /// <see cref="StateDynamics"/> read is computed at.</summary>
     ulong Tick { get; }
+    /// <summary>Gets the hypothetical search ply; zero on a live host.</summary>
+    int SearchPly => 0;
     /// <summary>Gets the clocks and dynamics rows a live cell read is evaluated against. The default carries the
     /// tick pair alone, which is what a section declaring no dynamics row needs; a host whose document declares
     /// dynamics rows answers with them and with the simulation rate.</summary>
@@ -56,10 +62,11 @@ public interface IStateReader {
     /// <param name="ordinal">The local's slot in the rule.</param>
     /// <returns>The local's raw value.</returns>
     long LocalValue(int ordinal) => Locals[ordinal];
-    /// <summary>Returns scratch for one board read, at least <paramref name="cells"/> wide.</summary>
-    /// <param name="cells">The topology's cell count.</param>
-    /// <returns>The scratch.</returns>
-    Span<long> BoardScratch(int cells);
+
+    /// <summary>Gets the working storage a read borrows: a board read's cell values, an expression's value
+    /// stack.</summary>
+    ArenaScratch Scratch => Arena.Scratch;
+
     /// <summary>Returns the participant index a binding names for the evaluation in flight, or -1 when it is not in
     /// play.</summary>
     /// <param name="key">The binding.</param>

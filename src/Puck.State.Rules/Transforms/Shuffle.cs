@@ -37,8 +37,9 @@ public static partial class ArenaTransforms {
             return false;
         }
 
-        Span<int> order = stackalloc int[count];
+        using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
+        var order = orderLease.Span;
         for (var position = 0; (position < count); position++) {
             order[position] = position;
         }

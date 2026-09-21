@@ -64,7 +64,9 @@
       "mode": "Edge",
       "gate": {
         "$type": "compareState",
-        "state": "$tick",
+        "state": {
+          "channel": "tick"
+        },
         "comparison": "GreaterOrEqual",
         "value": 1
       },

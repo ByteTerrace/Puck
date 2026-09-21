@@ -30,7 +30,9 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        var keys = new long[count];
+        using var keysLease = context.Arena.Scratch.Rent<long>(length: count);
+
+        var keys = keysLease.Span;
 
         for (var position = 0; (position < count); position++) {
             if (arena.TryReadRawAt(
@@ -42,7 +44,9 @@ public static partial class ArenaTransforms {
             }
         }
 
-        Span<int> order = stackalloc int[count];
+        using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
+
+        var order = orderLease.Span;
         Span<bool> descending = [sort.Descending];
 
         SortOrder(

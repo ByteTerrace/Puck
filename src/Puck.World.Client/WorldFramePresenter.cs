@@ -405,7 +405,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // instance capacity the OTHER side already holds, since
     // the packed tables a program carries (the instance grid, segment directory, world-segment list, rigid plan) are
     // computed over the WHOLE composed program and are not additive across emitters — a later commit on the
-    // unchecked side then adds its content on top and SdfWorldEngine.UploadProgram throws on the frozen buffer.
+    // unchecked side could exceed an engine structural limit at the next rebuild, even with growable buffers.
     //
     // Emission order and slot base mirror SdfCompositionFrameSource.BuildProgram exactly: the world side first (its
     // own material scope, matching ComposeCandidate's internal wrap), then the document side at the slot base the
@@ -429,7 +429,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         // The SAME reservation the construction probe froze the envelope with, taken over the CANDIDATE's own
         // adjacency rows — measuring only the static half would let a mutation spend the room a border's bodies hold,
-        // and the next rebuild would then overflow the frozen buffers.
+        // and the next rebuild could exceed the composed program's structural limits.
         WorldAdjacencySceneEmitter.EmitReservation(
             bandCount: WorldAdjacencyBands.ProjectionCapacity(definition: worldDefinition),
             builder: builder,
@@ -1714,12 +1714,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         // Publish the probed envelope + a JOINT candidate measurer so a scene/screen/placement mutation is
         // capacity-checked at apply time against the SAME worst-case build (avatars and the animated pool are always at
-        // worst case; scene/screens/static placements measure AS AUTHORED, so authoring consumes the reserved room
-        // before the loud rejection) — and, composition-safely, against whatever puck.sdf.v1 document is CURRENTLY
+        // worst case; scene/screens/static placements measure AS AUTHORED). The renderer grows beyond its initial
+        // reserve, while this check enforces engine limits against whatever puck.sdf.v1 document is CURRENTLY
         // loaded (see MeasureComposed: measuring the world emitter alone would let a mutation spend capacity
         // the loaded document already holds, since the packed tables the two share are computed over the COMPOSED
         // program and are not additive).
         _ = envelope.Configure(
+            allowGrowth: true,
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
             measure: candidate => MeasureComposed(
@@ -1731,13 +1732,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // THE RECIPROCAL HALF (the asymmetric-join fix): a puck.sdf.v1 document load (world.sdf.load) commits OUTSIDE
         // WorldRenderEnvelope's queued-mutation path entirely — it is a client-local Immediate door (see
         // WorldSdfCommandModule), never a WorldMutation the server drains — so it needs its OWN composed-admission
-        // check against the SAME frozen floors, reusing the SAME MeasureComposed method with the roles swapped: the
+        // check against the SAME engine limits, reusing the SAME MeasureComposed method with the roles swapped: the
         // CANDIDATE is the incoming document, the CURRENT side is the live world definition (m_client.Definition, read
         // fresh at call time so a document loaded after a scene mutation is checked against what that mutation left
         // behind, never a stale snapshot). Without this, a scene mutation could spend capacity a document isn't
         // currently using, and a subsequently loaded — individually valid — document would commit unchecked and
         // overflow the composed program at the next rebuild.
         m_sdfDocuments.Configure(
+            allowGrowth: true,
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
             measureComposed: candidateProgram => MeasureComposed(

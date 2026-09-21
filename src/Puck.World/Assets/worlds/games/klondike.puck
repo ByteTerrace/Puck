@@ -10,7 +10,7 @@ export read solitaireKlondike, solitaireKlondikeCards, solitaireKlondikeFace, so
 
 state {
   world {
-    table solitaireKlondikeCards: Int capacity(52) {
+    table solitaireKlondikeCards capacity(52) {
       "0" = 0
       "1" = 1
       "2" = 2
@@ -68,7 +68,7 @@ state {
     row {
       name: "solitaireKlondikeRank"
       kind: "Int"
-      domain: keysOf(row: "solitaireKlondikeCards")
+      domain: keysOf(row: solitaireKlondikeCards)
       capacity: 52
       cells: map(range(0, 52), i => { key: $"{i}", value: i % 13 + 1 })
     }
@@ -76,7 +76,7 @@ state {
     row {
       name: "solitaireKlondikeSuit"
       kind: "Int"
-      domain: keysOf(row: "solitaireKlondikeCards")
+      domain: keysOf(row: solitaireKlondikeCards)
       capacity: 52
       cells: map(range(0, 52), i => { key: $"{i}", value: floor(i / 13) })
     }
@@ -84,7 +84,7 @@ state {
     row {
       name: "solitaireKlondikeFace"
       kind: "Int"
-      domain: keysOf(row: "solitaireKlondikeCards")
+      domain: keysOf(row: solitaireKlondikeCards)
       capacity: 52
       cells: map(range(0, 52), i => { key: $"{i}", value: 0 })
     }
@@ -167,7 +167,7 @@ state {
 
     pile solitaireKlondikePile13 of solitaireKlondikeCards capacity(13)
 
-    table solitaireKlondike: Int capacity(27) {
+    table solitaireKlondike capacity(27) {
       request = 0
       applied = 0
       action = 0
@@ -213,8 +213,8 @@ state {
 patterns [
   {
     name: "solitaireKlondikeLength"
-    kind: "Int"
-    value: "1"
+    kind: Int
+    value: 1
     symbols [
       {
         name: "any"
@@ -226,8 +226,8 @@ patterns [
   }
   {
     name: "solitaireKlondikeSingle"
-    kind: "Int"
-    value: "1"
+    kind: Int
+    value: 1
     symbols [
       {
         name: "any"
@@ -239,8 +239,8 @@ patterns [
   }
   {
     name: "solitaireKlondikeRun"
-    kind: "Int"
-    value: "solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))"
+    kind: Int
+    value: solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))
     symbols [
       {
         name: "face"
@@ -261,8 +261,8 @@ patterns [
   }
   {
     name: "solitaireKlondikeLanding"
-    kind: "Int"
-    value: "(solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)"
+    kind: Int
+    value: (solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)
     symbols [
       {
         name: "yes"
@@ -288,26 +288,26 @@ rule "solitaireKlondike-new-deal" {
 }
 
 rule "solitaireKlondike-gather" {
-  when solitaire[table] == 1 and solitaireKlondike[stage] == 1 and $reduce:count:$zones[solitaireKlondike[gatherStep]] > 0
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 1 and count($zones[solitaireKlondike[gatherStep]]) > 0
   zones [
-    "solitaireKlondikePile1"
-    "solitaireKlondikePile2"
-    "solitaireKlondikePile3"
-    "solitaireKlondikePile4"
-    "solitaireKlondikePile5"
-    "solitaireKlondikePile6"
-    "solitaireKlondikePile7"
-    "solitaireKlondikePile8"
-    "solitaireKlondikePile10"
-    "solitaireKlondikePile11"
-    "solitaireKlondikePile12"
-    "solitaireKlondikePile13"
+    solitaireKlondikePile1
+    solitaireKlondikePile2
+    solitaireKlondikePile3
+    solitaireKlondikePile4
+    solitaireKlondikePile5
+    solitaireKlondikePile6
+    solitaireKlondikePile7
+    solitaireKlondikePile8
+    solitaireKlondikePile10
+    solitaireKlondikePile11
+    solitaireKlondikePile12
+    solitaireKlondikePile13
   ]
-  transform transfer(from: "$zones[solitaireKlondike[gatherStep]]", to: "solitaireKlondikePile0", selector: "Slice", key: "$zone:$zones[solitaireKlondike[gatherStep]]:first")
+  transform transfer(from: $zones[solitaireKlondike[gatherStep]], to: solitaireKlondikePile0, selector: Slice, key: zone($zones[solitaireKlondike[gatherStep]], first))
 }
 
 rule "solitaireKlondike-attributes-start" {
-  when solitaire[table] == 1 and solitaireKlondike[stage] == 1 and solitaireKlondike[gatherStep] == 11 and $reduce:count:solitaireKlondikePile0 == 52
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 1 and solitaireKlondike[gatherStep] == 11 and count(solitaireKlondikePile0) == 52
   solitaireKlondike[stage] = 5
 }
 
@@ -327,20 +327,20 @@ rule "solitaireKlondike-shuffle" {
 rule "solitaireKlondike-deal" {
   when solitaire[table] == 1 and solitaireKlondike[stage] == 3 and solitaireKlondike[dealStep] <= 27
   zones [
-    "solitaireKlondikePile0"
-    "solitaireKlondikePile1"
-    "solitaireKlondikePile2"
-    "solitaireKlondikePile3"
-    "solitaireKlondikePile4"
-    "solitaireKlondikePile5"
-    "solitaireKlondikePile6"
-    "solitaireKlondikePile7"
-    "solitaireKlondikePile8"
+    solitaireKlondikePile0
+    solitaireKlondikePile1
+    solitaireKlondikePile2
+    solitaireKlondikePile3
+    solitaireKlondikePile4
+    solitaireKlondikePile5
+    solitaireKlondikePile6
+    solitaireKlondikePile7
+    solitaireKlondikePile8
     ""
-    "solitaireKlondikePile10"
-    "solitaireKlondikePile11"
-    "solitaireKlondikePile12"
-    "solitaireKlondikePile13"
+    solitaireKlondikePile10
+    solitaireKlondikePile11
+    solitaireKlondikePile12
+    solitaireKlondikePile13
   ]
   draw solitaireKlondikePile0 to $zones[(solitaireKlondike[dealStep] < 7) ? (2 + solitaireKlondike[dealStep]) : ((solitaireKlondike[dealStep] < 13) ? (solitaireKlondike[dealStep] - 4) : ((solitaireKlondike[dealStep] < 18) ? (solitaireKlondike[dealStep] - 9) : ((solitaireKlondike[dealStep] < 22) ? (solitaireKlondike[dealStep] - 13) : ((solitaireKlondike[dealStep] < 25) ? (solitaireKlondike[dealStep] - 16) : ((solitaireKlondike[dealStep] < 27) ? (solitaireKlondike[dealStep] - 18) : 8)))))]
 }
@@ -371,23 +371,23 @@ rule "solitaireKlondike-source" {
   zones [
     ""
     ""
-    "solitaireKlondikePile2"
-    "solitaireKlondikePile3"
-    "solitaireKlondikePile4"
-    "solitaireKlondikePile5"
-    "solitaireKlondikePile6"
-    "solitaireKlondikePile7"
-    "solitaireKlondikePile8"
+    solitaireKlondikePile2
+    solitaireKlondikePile3
+    solitaireKlondikePile4
+    solitaireKlondikePile5
+    solitaireKlondikePile6
+    solitaireKlondikePile7
+    solitaireKlondikePile8
   ]
-  solitaireKlondike[sourceOk] = $match:solitaireKlondikeRun:$zones[solitaireKlondike[from]][solitaireKlondike[card]]
-  solitaireKlondike[runLength] = $match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]
+  solitaireKlondike[sourceOk] = match(solitaireKlondikeRun, $zones[solitaireKlondike[from]])[solitaireKlondike[card]]
+  solitaireKlondike[runLength] = match(solitaireKlondikeLength, $zones[solitaireKlondike[from]], prefix)[solitaireKlondike[card]]
 }
 
 rule "solitaireKlondike-source-1" {
   when solitaire[table] == 1 and solitaireKlondike[request] != solitaireKlondike[applied] and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 0 and solitaireKlondike[status] == 1 and solitaireKlondike[action] == 2 and $zones[solitaireKlondike[from]][solitaireKlondike[card]] == 1
   zones [
     ""
-    "solitaireKlondikePile1"
+    solitaireKlondikePile1
     ""
     ""
     ""
@@ -396,13 +396,13 @@ rule "solitaireKlondike-source-1" {
     ""
     ""
     ""
-    "solitaireKlondikePile10"
-    "solitaireKlondikePile11"
-    "solitaireKlondikePile12"
-    "solitaireKlondikePile13"
+    solitaireKlondikePile10
+    solitaireKlondikePile11
+    solitaireKlondikePile12
+    solitaireKlondikePile13
   ]
-  solitaireKlondike[sourceOk] = $match:solitaireKlondikeSingle:$zones[solitaireKlondike[from]][solitaireKlondike[card]]
-  solitaireKlondike[runLength] = $match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]
+  solitaireKlondike[sourceOk] = match(solitaireKlondikeSingle, $zones[solitaireKlondike[from]])[solitaireKlondike[card]]
+  solitaireKlondike[runLength] = match(solitaireKlondikeLength, $zones[solitaireKlondike[from]], prefix)[solitaireKlondike[card]]
 }
 
 rule "solitaireKlondike-target" {
@@ -410,15 +410,15 @@ rule "solitaireKlondike-target" {
   zones [
     ""
     ""
-    "solitaireKlondikePile2"
-    "solitaireKlondikePile3"
-    "solitaireKlondikePile4"
-    "solitaireKlondikePile5"
-    "solitaireKlondikePile6"
-    "solitaireKlondikePile7"
-    "solitaireKlondikePile8"
+    solitaireKlondikePile2
+    solitaireKlondikePile3
+    solitaireKlondikePile4
+    solitaireKlondikePile5
+    solitaireKlondikePile6
+    solitaireKlondikePile7
+    solitaireKlondikePile8
   ]
-  solitaireKlondike[targetOk] = $reduce:count:$zones[solitaireKlondike[to]] == 0 ? (solitaireKlondikeRank[solitaireKlondike[card]] == 13) : $match:solitaireKlondikeLanding:$zones[solitaireKlondike[to]]
+  solitaireKlondike[targetOk] = count($zones[solitaireKlondike[to]]) == 0 ? (solitaireKlondikeRank[solitaireKlondike[card]] == 13) : match(solitaireKlondikeLanding, $zones[solitaireKlondike[to]])
 }
 
 rule "solitaireKlondike-target-10" {
@@ -434,34 +434,34 @@ rule "solitaireKlondike-target-10" {
     ""
     ""
     ""
-    "solitaireKlondikePile10"
-    "solitaireKlondikePile11"
-    "solitaireKlondikePile12"
-    "solitaireKlondikePile13"
+    solitaireKlondikePile10
+    solitaireKlondikePile11
+    solitaireKlondikePile12
+    solitaireKlondikePile13
   ]
-  solitaireKlondike[targetOk] = (solitaireKlondike[runLength] == 1) * (solitaireKlondikeSuit[solitaireKlondike[card]] == solitaireKlondike[to] - 10) * (solitaireKlondikeRank[solitaireKlondike[card]] == $reduce:count:$zones[solitaireKlondike[to]] + 1)
+  solitaireKlondike[targetOk] = (solitaireKlondike[runLength] == 1) * (solitaireKlondikeSuit[solitaireKlondike[card]] == solitaireKlondike[to] - 10) * (solitaireKlondikeRank[solitaireKlondike[card]] == count($zones[solitaireKlondike[to]]) + 1)
 }
 
 rule "solitaireKlondike-move" {
   when solitaire[table] == 1 and solitaireKlondike[request] != solitaireKlondike[applied] and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 0 and solitaireKlondike[status] == 1 and solitaireKlondike[action] == 2 and solitaireKlondike[sourceOk] == 1 and solitaireKlondike[targetOk] == 1 and (solitaireKlondike[from] != solitaireKlondike[to] : Int)
   zones [
-    "solitaireKlondikePile0"
-    "solitaireKlondikePile1"
-    "solitaireKlondikePile2"
-    "solitaireKlondikePile3"
-    "solitaireKlondikePile4"
-    "solitaireKlondikePile5"
-    "solitaireKlondikePile6"
-    "solitaireKlondikePile7"
-    "solitaireKlondikePile8"
+    solitaireKlondikePile0
+    solitaireKlondikePile1
+    solitaireKlondikePile2
+    solitaireKlondikePile3
+    solitaireKlondikePile4
+    solitaireKlondikePile5
+    solitaireKlondikePile6
+    solitaireKlondikePile7
+    solitaireKlondikePile8
     ""
-    "solitaireKlondikePile10"
-    "solitaireKlondikePile11"
-    "solitaireKlondikePile12"
-    "solitaireKlondikePile13"
+    solitaireKlondikePile10
+    solitaireKlondikePile11
+    solitaireKlondikePile12
+    solitaireKlondikePile13
   ]
   transaction {
-    transform transfer(from: "$zones[solitaireKlondike[from]]", to: "$zones[solitaireKlondike[to]]", selector: "Slice", key: "$cell:solitaireKlondike:card")
+    transform transfer(from: $zones[solitaireKlondike[from]], to: $zones[solitaireKlondike[to]], selector: Slice, key: solitaireKlondike[card])
     solitaireKlondike[moves] = solitaireKlondike[moves] + 1
     solitaireKlondike[busy] = 1
     solitaireKlondike[score] = maximum(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))
@@ -471,10 +471,10 @@ rule "solitaireKlondike-move" {
 }
 
 rule "solitaireKlondike-draw-start" {
-  when solitaire[table] == 1 and solitaireKlondike[request] != solitaireKlondike[applied] and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 0 and solitaireKlondike[status] == 1 and solitaireKlondike[action] == 3 and $reduce:count:solitaireKlondikePile0 > 0
+  when solitaire[table] == 1 and solitaireKlondike[request] != solitaireKlondike[applied] and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 0 and solitaireKlondike[status] == 1 and solitaireKlondike[action] == 3 and count(solitaireKlondikePile0) > 0
   transaction {
     solitaireKlondike[stage] = 4
-    solitaireKlondike[drawLeft] = minimum(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)
+    solitaireKlondike[drawLeft] = minimum(solitaireKlondike[activeOption], count(solitaireKlondikePile0))
     solitaireKlondike[busy] = 1
   }
 }
@@ -482,7 +482,7 @@ rule "solitaireKlondike-draw-start" {
 rule "solitaireKlondike-draw-card" {
   when solitaire[table] == 1 and solitaireKlondike[stage] == 4
   transaction {
-    solitaireKlondikeFace[$zone:solitaireKlondikePile0:first] = 1
+    solitaireKlondikeFace[zone(solitaireKlondikePile0, first)] = 1
     draw solitaireKlondikePile0 to solitaireKlondikePile1
     solitaireKlondike[drawLeft] = solitaireKlondike[drawLeft] - 1
   }
@@ -499,24 +499,24 @@ rule "solitaireKlondike-draw-finish" {
 }
 
 rule "solitaireKlondike-recycle-start" {
-  when solitaire[table] == 1 and solitaireKlondike[request] != solitaireKlondike[applied] and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 0 and solitaireKlondike[status] == 1 and solitaireKlondike[action] == 3 and $reduce:count:solitaireKlondikePile0 == 0 and $reduce:count:solitaireKlondikePile1 > 0
+  when solitaire[table] == 1 and solitaireKlondike[request] != solitaireKlondike[applied] and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 0 and solitaireKlondike[status] == 1 and solitaireKlondike[action] == 3 and count(solitaireKlondikePile0) == 0 and count(solitaireKlondikePile1) > 0
   solitaireKlondike[stage] = 2
   solitaireKlondike[passes] = solitaireKlondike[passes] + 1
 }
 
 rule "solitaireKlondike-recycle-card" {
-  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and $reduce:count:solitaireKlondikePile1 > 0
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and count(solitaireKlondikePile1) > 0
   draw solitaireKlondikePile1 to solitaireKlondikePile0
 }
 
 rule "solitaireKlondike-recycle-face-down" {
   when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and solitaireKlondikeFace[$each] == 1
-  forEach: "solitaireKlondikePile0"
+  forEach: solitaireKlondikePile0
   solitaireKlondikeFace[$each] = 0
 }
 
 rule "solitaireKlondike-recycle-finish" {
-  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and $reduce:count:solitaireKlondikePile1 == 0
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and count(solitaireKlondikePile1) == 0
   transaction {
     solitaireKlondike[stage] = 0
     solitaireKlondike[moves] = solitaireKlondike[moves] + 1
@@ -544,19 +544,19 @@ rule "solitaireKlondike-maintenance-start" {
 }
 
 rule "solitaireKlondike-reveal" {
-  when solitaire[table] == 1 and solitaireKlondike[status] == 1 and solitaireKlondike[stage] == 0 and $reduce:count:$zones[$each] > 0 and ((solitaireKlondikeFace[$zone:$zones[$each]:last] ?? 1) == 0 : Int)
-  forEach: "$zones"
+  when solitaire[table] == 1 and solitaireKlondike[status] == 1 and solitaireKlondike[stage] == 0 and count($zones[$each]) > 0 and ((solitaireKlondikeFace[zone($zones[$each], last)] ?? 1) == 0 : Int)
+  forEach: $zones
   zones [
-    "solitaireKlondikePile2"
-    "solitaireKlondikePile3"
-    "solitaireKlondikePile4"
-    "solitaireKlondikePile5"
-    "solitaireKlondikePile6"
-    "solitaireKlondikePile7"
-    "solitaireKlondikePile8"
-    "solitaireKlondikePile1"
+    solitaireKlondikePile2
+    solitaireKlondikePile3
+    solitaireKlondikePile4
+    solitaireKlondikePile5
+    solitaireKlondikePile6
+    solitaireKlondikePile7
+    solitaireKlondikePile8
+    solitaireKlondikePile1
   ]
-  solitaireKlondikeFace[$zone:$zones[$each]:last] = 1
+  solitaireKlondikeFace[zone($zones[$each], last)] = 1
   solitaireKlondike[busy] = 1
 }
 
@@ -572,5 +572,5 @@ rule "solitaireKlondike-attribute-advance" {
 
 rule "solitaireKlondike-win" {
   when solitaire[table] == 1 and solitaireKlondike[status] == 1 and solitaireKlondike[busy] == 0
-  solitaireKlondike[status] = ($reduce:count:solitaireKlondikePile10 + $reduce:count:solitaireKlondikePile11 + $reduce:count:solitaireKlondikePile12 + $reduce:count:solitaireKlondikePile13) == 52 ? 2 : 1
+  solitaireKlondike[status] = (count(solitaireKlondikePile10) + count(solitaireKlondikePile11) + count(solitaireKlondikePile12) + count(solitaireKlondikePile13)) == 52 ? 2 : 1
 }

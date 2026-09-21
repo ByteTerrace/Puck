@@ -80,7 +80,10 @@ public static partial class WorldFactsCompiler {
             subject: "interaction"
         );
 
-        if (!registry.Contains(item: row.Left)) {
+        var leftPool = FindInteractionPool(context: context, name: row.Left);
+        var rightPool = ((row.CoOccurrence == WorldInteractionCoOccurrence.Distance) ? FindInteractionPool(context: context, name: row.Right) : null);
+
+        if ((leftPool is null) && !registry.Contains(item: row.Left)) {
             throw new RuleException(
                 detail: $"'left' names '{row.Left}', which is not a registered property (see the 'properties' section)",
                 refusal: WorldRuleRefusal.PropertyUnknown,
@@ -89,7 +92,8 @@ public static partial class WorldFactsCompiler {
             );
         }
 
-        _ = RuleCompiler.ResolveNumericRow(
+        if (leftPool is null) {
+            _ = RuleCompiler.ResolveNumericRow(
             channel: "left",
             context: context,
             malformed: WorldRuleRefusal.PropertyUnknown,
@@ -97,11 +101,12 @@ public static partial class WorldFactsCompiler {
             requireKeyed: true,
             ruleName: name
         );
+        }
         context.ClearScope();
 
         switch (row.CoOccurrence) {
             case WorldInteractionCoOccurrence.Distance:
-                if (!registry.Contains(item: row.Right)) {
+                if ((rightPool is null) && !registry.Contains(item: row.Right)) {
                     throw new RuleException(
                         detail: $"'right' names '{row.Right}', which is not a registered property (see the 'properties' section)",
                         refusal: WorldRuleRefusal.PropertyUnknown,
@@ -110,7 +115,8 @@ public static partial class WorldFactsCompiler {
                     );
                 }
 
-                _ = RuleCompiler.ResolveNumericRow(
+                if (rightPool is null) {
+                    _ = RuleCompiler.ResolveNumericRow(
                     channel: "right",
                     context: context,
                     malformed: WorldRuleRefusal.PropertyUnknown,
@@ -118,6 +124,7 @@ public static partial class WorldFactsCompiler {
                     requireKeyed: true,
                     ruleName: name
                 );
+                }
 
                 if (row.Range < decimal.Zero) {
                     throw new RuleException(
@@ -173,6 +180,8 @@ public static partial class WorldFactsCompiler {
         }
 
         try {
+            var leftBinding = ((leftPool is null) ? -1 : context.PushInstanceBinding(name: CellName.Parse(candidate: "left"), pool: leftPool).Slot);
+            var rightBinding = ((rightPool is null) ? -1 : context.PushInstanceBinding(name: CellName.Parse(candidate: "right"), pool: rightPool).Slot);
             var effects = RuleCompiler.CompileEffects(
                 context: context,
                 effects: row.Effects,
@@ -187,7 +196,13 @@ public static partial class WorldFactsCompiler {
                     Left: row.Left,
                     Neighbours: (row.Neighbours ?? 0),
                     Range: NumericLiteral.ToFixed(value: row.Range),
-                    Right: row.Right
+                    Right: row.Right,
+                    LeftPool: leftPool,
+                    RightPool: rightPool,
+                    LeftBinding: leftBinding,
+                    RightBinding: rightBinding,
+                    LeftCarrier: ((leftPool is null) ? null : WorldPoolBodyBindings.Compile(definition: context.Definition, pool: leftPool)),
+                    RightCarrier: ((rightPool is null) ? null : WorldPoolBodyBindings.Compile(definition: context.Definition, pool: rightPool))
                 ),
                 original: new CompiledRule(
                     Locals: RuleCompiler.AllLocals(
@@ -206,6 +221,8 @@ public static partial class WorldFactsCompiler {
             context.ClearScope();
         }
     }
+    private static StatePoolDescriptor? FindInteractionPool(WorldFactsCompileContext context, string name) =>
+        ((CellName.TryParse(candidate: name, name: out var parsed, reason: out _) && context.Catalog.TryGetPool(name: parsed, pool: out var pool)) ? pool : null);
 
     /// <summary>Compiles a flock-affinity expression over <c>$left</c>/<c>$right</c>, refusing an operand whose
     /// value is not state-backed.</summary>

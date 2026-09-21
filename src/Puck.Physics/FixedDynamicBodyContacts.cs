@@ -206,6 +206,29 @@ public static class FixedDynamicBodyContacts {
             );
         }
 
+        if ((left.Kind == FixedBodyColliderKind.Sphere) || (right.Kind == FixedBodyColliderKind.Sphere)) {
+            var sphereIsLeft = (left.Kind == FixedBodyColliderKind.Sphere);
+            var sphere = (sphereIsLeft ? left : right);
+            var box = (sphereIsLeft ? right : left);
+            var spherePosition = (sphereIsLeft ? leftPosition : rightPosition);
+            var sphereOrientation = (sphereIsLeft ? leftOrientation : rightOrientation);
+            var boxPosition = (sphereIsLeft ? rightPosition : leftPosition);
+            var boxOrientation = (sphereIsLeft ? rightOrientation : leftOrientation);
+            if (FixedSphereBoxContact.TryPush(
+                sphereCenter: (spherePosition + sphereOrientation.Rotate(vector: sphere.Center)),
+                radius: sphere.Radius,
+                boxCenter: (boxPosition + boxOrientation.Rotate(vector: box.Center)),
+                boxRotation: (boxOrientation * box.Rotation).Normalize(),
+                halfExtents: box.HalfExtents,
+                push: out var push
+            )) {
+                correction = (push.Normal * (sphereIsLeft ? push.Penetration : -push.Penetration));
+                return true;
+            }
+            correction = default;
+            return false;
+        }
+
         var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
             orientation: leftOrientation,
             position: leftPosition,
@@ -412,7 +435,7 @@ public static class FixedDynamicBodyContacts {
         out FixedVector3 correction
     ) {
         correction = FixedVector3.Zero;
-        var deepestSquared = FixedQ4816.Zero;
+        var deepestSquared = UInt128.Zero;
 
         foreach (ref readonly var left in leftVolumes) {
             foreach (ref readonly var right in rightVolumes) {
@@ -429,7 +452,8 @@ public static class FixedDynamicBodyContacts {
                     continue;
                 }
 
-                var squared = candidate.LengthSquared;
+                // Keep Q32 through comparison: rounding to Q16 discards shallow, real overlaps.
+                var squared = ((Square(value: candidate.X.Value) + Square(value: candidate.Y.Value)) + Square(value: candidate.Z.Value));
 
                 if (squared > deepestSquared) {
                     deepestSquared = squared;
@@ -438,6 +462,8 @@ public static class FixedDynamicBodyContacts {
             }
         }
 
-        return (deepestSquared > FixedQ4816.Zero);
+        return (deepestSquared > UInt128.Zero);
     }
+
+    private static UInt128 Square(long value) => ((UInt128)(((Int128)value) * value));
 }

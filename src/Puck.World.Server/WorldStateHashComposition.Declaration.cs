@@ -10,6 +10,7 @@ public static partial class WorldStateHashComposition {
     /// <remarks>A re-declared row set changes what every future read of the row answers while leaving its stored
     /// values alone, so the declaration is folded beside the store rather than assumed constant.</remarks>
     public static void AppendDeclaration(ref Fnv1aHash hash, WorldStateSection? state) {
+        AppendPoolDeclarations(hash: ref hash, state: state);
         var rows = (state?.World ?? []);
 
         hash.Add(value: ((uint)rows.Count));
@@ -77,6 +78,17 @@ public static partial class WorldStateHashComposition {
                 AppendString(
                     hash: ref hash,
                     value: verdict.Status.Value
+                );
+            }
+
+            if (row.Witness is { } witnessed) {
+                AppendString(
+                    hash: ref hash,
+                    value: "witness"
+                );
+                AppendString(
+                    hash: ref hash,
+                    value: witnessed.Value
                 );
             }
 
@@ -404,21 +416,6 @@ public static partial class WorldStateHashComposition {
         }
     }
     private static void AppendVisibility(ref Fnv1aHash hash, StateVisibility? visibility) {
-        hash.Add(value: ((byte)((visibility is null)
-            ? 0
-            : 1)));
-
-        if (visibility is null) {
-            return;
-        }
-
-        hash.Add(value: (visibility.Readers?.Count ?? -1));
-
-        for (var index = 0; (index < (visibility.Readers?.Count ?? 0)); index++) {
-            AppendString(
-                hash: ref hash,
-                value: visibility.Readers![index]
-            );
-        }
+        StateVisibilityHash.Append(hash: ref hash, visibility: visibility);
     }
 }

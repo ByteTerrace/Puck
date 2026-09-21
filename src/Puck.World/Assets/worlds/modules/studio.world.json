@@ -391,13 +391,24 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "$region:studioTurntable",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "studioTurntable"
+              ]
+            },
             "comparison": "GreaterOrEqual",
             "value": 1
           },
           {
             "$type": "compareState",
-            "state": "$channel:1:jump",
+            "state": {
+              "channel": "channel",
+              "arguments": [
+                1,
+                "jump"
+              ]
+            },
             "comparison": "GreaterOrEqual",
             "value": 1
           }

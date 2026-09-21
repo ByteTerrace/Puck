@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Reflection;
 using Xunit;
 
@@ -237,12 +238,12 @@ public sealed class ExpressionIrLawTests {
             context: reader.Context,
             kind: CellKind.Int,
             tokens: reader.Compile(text: "count(scores, s -> s > 0)")
-        );
+        ).Units;
         var deeper = Rules.RuleWorkBudget.ExpressionCost(
             context: reader.Context,
             kind: CellKind.Int,
             tokens: reader.Compile(text: "count(scores, s -> s * s * s > 0)")
-        );
+        ).Units;
 
         Assert.True(
             condition: (deeper > one),
@@ -271,7 +272,7 @@ public sealed class ExpressionIrLawTests {
                 context: reader.Context,
                 kind: CellKind.Int,
                 tokens: reader.Compile(text: "count(scores, s -> s * s > 0)")
-            );
+            ).Units;
         }
     }
     // A predicate fold's body computes in its member's kind, so a Fixed family folds like an Int one.
@@ -478,7 +479,8 @@ public sealed class ExpressionIrLawTests {
             ),
         };
 
-        for (var level = 1; (level < RuleCapacity.MaxSubprograms); level++) {
+        // Sixteen levels prove the sharing: the value doubles at each, and evaluating it is still quick.
+        for (var level = 1; (level < 16); level++) {
             subprograms.Add(item: new Subprogram(
                 Arity: 1,
                 Instructions: [
@@ -515,6 +517,95 @@ public sealed class ExpressionIrLawTests {
             actual: reader.Evaluate(program: program),
             expected: (2L << top)
         );
+    }
+    // The value stack is leased at the program's own length, so a program at the token ceiling evaluates with its
+    // stack as deep as a program can make it, and one token more is refused by name.
+    [Fact]
+    public void AProgramAtTheTokenCeilingEvaluatesAtItsDeepestStackAndOneMoreIsRefused() {
+        var reader = new Section(Slot(
+            name: "hp",
+            value: 1L
+        ));
+        var pushes = (RuleCapacity.MaxExpressionTokens / 2);
+
+        ExpressionProgram Sum(int operands) => new(Instructions: [
+            .. Enumerable.Repeat(
+                count: operands,
+                element: Instruction.Operand(name: "hp")
+            ),
+            .. Enumerable.Repeat(
+                count: (operands - 1),
+                element: Instruction.Of(operation: ExpressionOp.Add)
+            ),
+        ]);
+
+        Assert.Equal(
+            actual: reader.Evaluate(program: Sum(operands: pushes)),
+            expected: ((long)pushes)
+        );
+        Assert.Contains(
+            actualString: Assert.ThrowsAny<Exception>(testCode: () => reader.Compile(program: Sum(operands: (pushes + 1)))).Message,
+            expectedSubstring: $"1..{RuleCapacity.MaxExpressionTokens} postfix instructions"
+        );
+    }
+    // A chain that calls the level below twice at each level is a few tokens a level to write and doubles with its
+    // depth to run. At the table's full depth nothing may walk it: compiling it, folding its constants, counting
+    // its steps and pricing it all take time in its authored size, and its price is an overflow, which no ceiling
+    // admits.
+    [Fact]
+    public void ADoublingCallChainAtTheCeilingIsCompiledAndPricedInItsAuthoredSize() {
+        var reader = new Section(Slot(
+            name: "hp",
+            value: 1L
+        ));
+        var subprograms = new List<Subprogram> {
+            new(
+                Arity: 1,
+                Instructions: [Instruction.Argument(index: 0)],
+                Name: "leaf"
+            ),
+        };
+
+        for (var level = 1; (level < RuleCapacity.MaxSubprograms); level++) {
+            subprograms.Add(item: new Subprogram(
+                Arity: 1,
+                Instructions: [
+                    Instruction.Argument(index: 0),
+                    Instruction.Call(subprogram: (level - 1)),
+                    Instruction.Argument(index: 0),
+                    Instruction.Call(subprogram: (level - 1)),
+                    Instruction.Of(operation: ExpressionOp.Add),
+                ],
+                Name: $"level{level}"
+            ));
+        }
+
+        var top = (subprograms.Count - 1);
+
+        foreach (var argument in new[] { Instruction.Operand(name: "hp"), Instruction.Constant(value: 1L) }) {
+            var compiled = reader.Compile(program: new ExpressionProgram(Instructions: [
+                argument,
+                Instruction.Call(subprogram: top),
+            ]) { Subprograms = subprograms });
+            var call = Assert.Single(
+                collection: compiled,
+                predicate: static token => (token.Call is not null)
+            ).Call!;
+
+            Assert.Equal(
+                actual: call.Steps,
+                expected: long.MaxValue
+            );
+            Assert.Equal(
+                actual: Rules.RuleWorkBudget.Steps(tokens: compiled),
+                expected: long.MaxValue
+            );
+            Assert.True(condition: Rules.RuleWorkBudget.ExpressionCost(
+                context: reader.Context,
+                kind: CellKind.Int,
+                tokens: compiled
+            ).IsOverflow);
+        }
     }
     // The subprogram table is bounded so a call chain, which the acyclic call graph makes at most as deep as the
     // table is long, nests a bounded number of frames at evaluation.
@@ -671,21 +762,21 @@ public sealed class ExpressionIrLawTests {
             );
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var run = 0; (run < 256); run++) {
-            _ = Rules.RuleExpressions.TryEvaluate(
-                fault: out _,
-                kind: CellKind.Int,
-                program: program,
-                reader: reader,
-                value: out _
-            );
-        }
+        var before = AllocationWindow.Least(window: () => {
+            for (var run = 0; (run < 256); run++) {
+                _ = Rules.RuleExpressions.TryEvaluate(
+                    fault: out _,
+                    kind: CellKind.Int,
+                    program: program,
+                    reader: reader,
+                    value: out _
+                );
+            }
+        });
 
         Assert.Equal(
-            actual: GC.GetAllocatedBytesForCurrentThread(),
-            expected: before
+            actual: before,
+            expected: 0L
         );
     }
 
@@ -726,7 +817,6 @@ public sealed class ExpressionIrLawTests {
         public IReadOnlyList<StateRow> Rows { get; }
         public ulong Tick => 0UL;
 
-        public Span<long> BoardScratch(int cells) => new long[cells];
         public int BoundIndex(BoundKey key) => -1;
         public Rules.CompiledExpressionToken[] Compile(string text, CellKind kind = CellKind.Int) =>
             Compile(

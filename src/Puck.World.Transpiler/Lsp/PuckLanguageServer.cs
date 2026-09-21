@@ -1,12 +1,12 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Machines;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Validation;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -14,9 +14,11 @@ namespace Puck.World.Transpiler.Lsp;
 
 /// <summary>High-performance, Native AOT-compatible Language Server Protocol (LSP) implementation for the Puck authoring language.</summary>
 public sealed class PuckLanguageServer {
+    private readonly string m_catalogFingerprint;
     private readonly Func<DocumentNode, JsonArray?>? m_completeDocument;
     private readonly Func<DocumentNode, string?, DiagnosticBag, bool>? m_diagnoseDocument;
     private readonly Stream m_input;
+    private readonly IMachineValidationCatalog? m_machines;
     private readonly Stream m_output;
 
     private readonly Dictionary<string, string> m_documents = new(comparer: StringComparer.OrdinalIgnoreCase);
@@ -124,7 +126,7 @@ public sealed class PuckLanguageServer {
                     AddNode(
                         array: children,
                         node: CreateSymbol(
-                            $"slot {slot.Name} : {slot.Kind}",
+                            $"slot {slot.Name}",
                             8,
                             (slot.Line - 1),
                             (slot.Column - 1),
@@ -154,7 +156,7 @@ public sealed class PuckLanguageServer {
                     AddNode(
                         array: children,
                         node: CreateSymbol(
-                            $"grid {grid.Name} : {grid.Kind}",
+                            $"grid {grid.Name}",
                             8,
                             (grid.Line - 1),
                             (grid.Column - 1),
@@ -196,7 +198,7 @@ public sealed class PuckLanguageServer {
     }
     private static JsonObject CreateStateTableSymbol(StateTableDeclarationNode table) {
         var symbol = CreateSymbol(
-            $"table {table.Name} : {table.Kind}",
+            (string.IsNullOrEmpty(value: table.Kind) ? $"table {table.Name}" : $"table {table.Name} : {table.Kind}"),
             8,
             (table.Line - 1),
             (table.Column - 1),
@@ -248,17 +250,26 @@ public sealed class PuckLanguageServer {
     }
     // The words this vocabulary's own construct table does not describe: the document headers, the compile-time
     // layer the core owns, the unit suffixes, and the two cell kinds no described member enumerates on its own.
-    private static string? GetDocumentationForWord(string word, string? enclosing) => (WorldConstructLanguageServices.Hover(
-        enclosing: enclosing,
-        table: WorldConstructs.Table,
-        word: word
+    private static string? GetDocumentationForWord(string word, string? enclosing, bool memberPosition) => (((
+        memberPosition || WorldConstructs.Table.TryGet(
+        construct: out _,
+        keyword: word
+    ))
+        ? WorldConstructLanguageServices.Hover(
+            enclosing: enclosing,
+            table: WorldConstructs.Table,
+            word: word
+        )
+        : null
     ) ?? (word switch {
         "schema" => "**`schema` Directive**\n\nDeclares the document schema family tag (e.g. `puck.world.definition.v1`, `puck.creation.v1`). Enables semantic validation and schema conformance checks.",
         "basis" => "**`basis` Directive**\n\nSpecifies the base world document path inherited by this world definition. Properties in this document override or compose over the basis.",
         "documentId" => "**`documentId` Directive**\n\nUnique string identifier for this world definition document.",
         "let" => "**`let` Declaration**\n\nDeclares a compile-time evaluated constant or alias (e.g. `let tickRate = 0.25s`, `let tableColor = #1b4d3e`).",
         "template" => "**`template` Definition**\n\nDeclares a reusable parametric template block expanded at compile time with default and named arguments.",
-        "import" => "**`import` Declaration**\n\nImports symbols or components from another `.puck` or `.world.json` document.",
+        "module" => "**`module` Definition**\n\nDeclares a typed compile-time module. Parameters may require points, angles, assets, modules, pools, rows, or gates.",
+        "use" => "**`use` Instantiation**\n\nExpands a module at compile time; an `as` alias prefixes its declarations and internal references.",
+        "import" => "**`import` Declaration**\n\nLoads compile-time declarations from a `.puck` source, or composes a runtime `.world.json` document.",
         "export" => "**`export` Declaration**\n\nDeclares exported world facets (`action`, `binding`, `read`) exposed across the network and to client sessions.",
         "orbit" => "**`orbit(pitch:, yaw:, distance:)`**\n\nConfigures spherical orbit camera positioning relative to the focus target.",
         "fieldOfView" => "**`fieldOfView(degrees:)`**\n\nSets the camera vertical field-of-view in degrees.",
@@ -273,23 +284,69 @@ public sealed class PuckLanguageServer {
         "m" => "**`m` Unit**\n\nSpatial metric unit in meters.",
         _ => null
     }));
+    // A catalogue member describes authored syntax, not every identifier sharing its spelling. In particular, a
+    // template argument named `size` is not `ground.size`. Property members open a source line or an inline block
+    // body and modifiers are followed by `(`; header and body members have no independently hoverable label.
+    private static bool IsConstructMemberPosition(string text, int offset, string word, string? enclosing) {
+        var table = WorldConstructs.Table;
+        var candidates = (((enclosing is not null) && table.TryGet(
+            construct: out var owner,
+            keyword: enclosing
+        ))
+            ? owner!.Members.Where(predicate: member => string.Equals(
+                a: member.Name,
+                b: word,
+                comparisonType: StringComparison.Ordinal
+            ))
+            : table.Owners(name: word).SelectMany(selector: construct => construct.Members.Where(predicate: member => string.Equals(
+                a: member.Name,
+                b: word,
+                comparisonType: StringComparison.Ordinal
+            )))
+        );
+        var members = candidates.ToArray();
+
+        if (members.Length == 0) {
+            return false;
+        }
+        var start = Math.Clamp(value: offset, min: 0, max: text.Length);
+
+        while ((start > 0) && (char.IsLetterOrDigit(c: text[(start - 1)]) || (text[(start - 1)] == '_'))) {
+            start--;
+        }
+        var end = Math.Min(val1: text.Length, val2: (start + word.Length));
+
+        while ((end < text.Length) && char.IsWhiteSpace(c: text[end]) && (text[end] is not '\r' and not '\n')) {
+            end++;
+        }
+        var lineStart = (text.LastIndexOf(value: '\n', startIndex: Math.Max(val1: 0, val2: (start - 1))) + 1);
+        var first = lineStart;
+
+        while ((first < start) && char.IsWhiteSpace(c: text[first])) {
+            first++;
+        }
+        var previous = (start - 1);
+
+        while ((previous >= lineStart) && char.IsWhiteSpace(c: text[previous])) {
+            previous--;
+        }
+        var opensStatement = ((first == start) || ((previous >= lineStart) && (text[previous] == '{')));
+
+        return members.Any(predicate: member => member.Position switch {
+            WorldMemberPosition.Modifier or WorldMemberPosition.Cell => ((end < text.Length) && (text[end] == '(')),
+            WorldMemberPosition.Property => (opensStatement && (end < text.Length) && (text[end] is ':' or '[')),
+            _ => false,
+        });
+    }
     // Best-effort: lowers the open document and looks `word` up as a declared `state` row's name, reporting its
     // kind. Swallows parse/lowering failures — a document mid-edit need not lower cleanly for hover to still work
     // on the parts that do.
     private string? GetStateRowHoverCard(string text, string word, string? sourcePath = null) {
         try {
-            var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-                source: text,
-                vocabulary: m_vocabularyResolver.Resolve(source: text)
-            );
-
-            if (parseResult.Value is not { } document) {
-                return null;
-            }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(
-                document: document,
-                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
-            ).Value?["state"] is not JsonObject stateSection) {
+            if (LowerStateSection(
+                sourcePath: sourcePath,
+                text: text
+            ) is not { } stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -485,17 +542,40 @@ public sealed class PuckLanguageServer {
         }
 
         try {
-            var prefix = text[..Math.Clamp(
-                max: text.Length,
-                min: 0,
-                value: cursorOffset
-            )];
-            var recovered = (prefix + ComputeClosingSuffix(source: prefix));
+            var recovered = RecoverToCursor(
+                cursorOffset: cursorOffset,
+                text: text
+            );
 
             return PuckParser.ParseDocumentWithDiagnostics(source: recovered, vocabulary: m_vocabularyResolver.Resolve(source: recovered)).Value;
         } catch {
             return null;
         }
+    }
+    // The text before the cursor with every delimiter it left open closed, which parses when the whole buffer,
+    // mid-edit, does not.
+    private static string RecoverToCursor(string text, int cursorOffset) {
+        var prefix = text[..Math.Clamp(
+            max: text.Length,
+            min: 0,
+            value: cursorOffset
+        )];
+
+        return (prefix + ComputeClosingSuffix(source: prefix));
+    }
+    // The `state` section `text` lowers to, or null when the text is not a world source or lowers to none. Whatever
+    // the compile reports is dropped: a document mid-edit still answers for the rows that do lower.
+    private JsonObject? LowerStateSection(string text, string? sourcePath) {
+        if (m_vocabularyResolver.Resolve(source: text) is not WorldDocumentVocabulary vocabulary) {
+            return null;
+        }
+
+        return (WorldCompiler.Compile(
+            imports: ImportHandling.Ignore,
+            source: text,
+            sourcePath: sourcePath,
+            vocabulary: vocabulary
+        ).Json?["state"] as JsonObject);
     }
     // The closing `}`/`]`/`)` sequence, innermost first, that balances every delimiter `source` opened and never
     // closed — skipping string/backquote contents and comments, exactly like the formatter's own nesting scan.
@@ -587,16 +667,16 @@ public sealed class PuckLanguageServer {
     // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
     private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset, string? sourcePath = null) {
         try {
-            if (TryParseDocumentBestEffort(
-                cursorOffset: cursorOffset,
+            if ((LowerStateSection(
+                sourcePath: sourcePath,
                 text: text
-            ) is not { } document) {
-                return null;
-            }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(
-                document: document,
-                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
-            ).Value?["state"] is not JsonObject stateSection) {
+            ) ?? LowerStateSection(
+                sourcePath: sourcePath,
+                text: RecoverToCursor(
+                    cursorOffset: cursorOffset,
+                    text: text
+                )
+            )) is not { } stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -787,6 +867,20 @@ public sealed class PuckLanguageServer {
             items: items,
             kind: 14,
             label: "template"
+        );
+        AddCompletion(
+            detail: "Keyword: Typed module",
+            insertText: "module ${1:name}(${2:params}) {\n    $0\n}",
+            items: items,
+            kind: 14,
+            label: "module"
+        );
+        AddCompletion(
+            detail: "Keyword: Instantiate module",
+            insertText: "use ${1:module} as ${2:alias}(${3:arguments})",
+            items: items,
+            kind: 14,
+            label: "use"
         );
         AddCompletion(
             detail: "Keyword: Module import",
@@ -991,13 +1085,6 @@ public sealed class PuckLanguageServer {
             items: items,
             kind: 3,
             label: "pushState"
-        );
-        AddCompletion(
-            detail: "Effect: countdownState",
-            insertText: "countdownState(state: \"${1:row}\")",
-            items: items,
-            kind: 3,
-            label: "countdownState"
         );
         AddCompletion(
             detail: "Effect: removeStateCell",
@@ -1332,6 +1419,12 @@ public sealed class PuckLanguageServer {
             return;
         }
 
+        var memberPosition = IsConstructMemberPosition(
+            enclosing: enclosing,
+            offset: offset,
+            text: text,
+            word: word
+        );
         var docCard = (PuckSqlLsp.GetSqlHoverCard(
             offset: offset,
             resolver: m_vocabularyResolver,
@@ -1342,7 +1435,7 @@ public sealed class PuckLanguageServer {
             resolver: m_vocabularyResolver,
             source: text,
             word: word
-        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(enclosing: enclosing, word: word) ?? GetStateRowHoverCard(
+        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(enclosing: enclosing, memberPosition: memberPosition, word: word) ?? GetStateRowHoverCard(
             sourcePath: hoverSourcePath,
             text: text,
             word: word
@@ -1526,62 +1619,19 @@ public sealed class PuckLanguageServer {
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     private async Task PublishDiagnosticsAsync(string uri, string text) {
-        var diagnosticsBag = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            text,
-            diagnostics: diagnosticsBag,
-            vocabulary: m_vocabularyResolver.Resolve(source: text)
-        );
-
-        if (
-            (parseResult.Value is not null) &&
-            !(m_diagnoseDocument?.Invoke(
-            parseResult.Value,
-            (TryGetLocalPath(
-                path: out var localPath,
-                uri: uri
-            )
-            ? localPath
-            : null),
-            diagnosticsBag
-        ) ?? false)
-        ) {
-            PuckLinter.Lint(
-                parseResult.Value,
-                diagnosticsBag
-            );
-
-            // Reference resolution needs a real directory to resolve a declared basis/import against, which only a
-            // `file://` URI carries — an unsaved buffer publishes syntax-level lint alone.
-            if (TryGetLocalPath(
+        var diagnosticsBag = WorldSourceDiagnostics.Diagnose(
+            catalogFingerprint: m_catalogFingerprint,
+            foreign: m_diagnoseDocument,
+            machines: m_machines,
+            source: text,
+            sourcePath: (TryGetLocalPath(
                 path: out var sourcePath,
                 uri: uri
-            )) {
-                var loweringDiags = new DiagnosticBag();
-                var sourceMap = new SourceMap();
-                var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-                    document: parseResult.Value,
-                    basePath: Path.GetDirectoryName(path: sourcePath),
-                    sourceMap: sourceMap,
-                    diagnostics: loweringDiags,
-                    embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
-                );
-
-                diagnosticsBag.AddRange(diagnostics: loweringDiags);
-
-                if (
-                    (loweringResult.Value is not null) &&
-                    !diagnosticsBag.HasErrors
-                ) {
-                    PuckLinter.LintReferences(
-                        loweringResult.Value,
-                        sourceMap,
-                        diagnosticsBag,
-                        sourcePath: sourcePath
-                    );
-                }
-            }
-        }
+            )
+                ? sourcePath
+                : null),
+            vocabularies: m_vocabularyResolver
+        );
 
         var lspDiags = new JsonArray();
 
@@ -1792,9 +1842,15 @@ public sealed class PuckLanguageServer {
     /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
     /// <param name="completeDocument">An optional schema completion provider; null retains World completions.</param>
     /// <param name="vocabularyResolver">An optional vocabulary resolver; null uses default World resolver.</param>
+    /// <param name="machines">The deployment's machine vocabulary, which the engine's validation of a world reads.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
     public PuckLanguageServer(Stream input, Stream output, Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
         Func<DocumentNode, JsonArray?>? completeDocument = null,
-        DocumentVocabularyResolver? vocabularyResolver = null) {
+        DocumentVocabularyResolver? vocabularyResolver = null,
+        IMachineValidationCatalog? machines = null,
+        string catalogFingerprint = "") {
+        m_catalogFingerprint = catalogFingerprint;
+        m_machines = machines;
         m_input = input;
         m_output = output;
         m_diagnoseDocument = diagnoseDocument;

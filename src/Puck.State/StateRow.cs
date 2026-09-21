@@ -236,6 +236,92 @@ public record StateRow(
     CellName? Enum = null,
     bool HostOwned = false
 ) {
+    /// <summary>Checks that every value a code row can admit is also a value a derived board can store.</summary>
+    /// <param name="board">The derived board.</param>
+    /// <param name="boardSymbols">The board's enum, or <see langword="null"/>.</param>
+    /// <param name="codes">The inverse codes row.</param>
+    /// <param name="codeSymbols">The codes row's enum, or <see langword="null"/>.</param>
+    /// <param name="reason">Why the inverse domain is not safe, or empty.</param>
+    /// <returns><see langword="true"/> when the code domain is a subset of the board domain and the board empty
+    /// value is admitted.</returns>
+    public static bool TryProveDerivedDomain(StateRow board, StateEnum? boardSymbols, StateRow codes, StateEnum? codeSymbols, out string reason) {
+        ArgumentNullException.ThrowIfNull(board);
+        ArgumentNullException.ThrowIfNull(codes);
+
+        if (
+            ((board.Kind != CellKind.Int) && (board.Kind != CellKind.Bool)) ||
+            (codes.Kind != CellKind.Int)
+        ) {
+            reason = $"derived board '{board.Name.Value}' must be an integer or bool row and inverse codes '{codes.Name.Value}' must be an integer row";
+
+            return false;
+        }
+        if (board.EffectiveDomain is not StateDomain.CellsOf boardDomain) {
+            reason = $"derived board '{board.Name.Value}' does not declare a cellsOf domain";
+
+            return false;
+        }
+        if (!TryAdmitDerivedValue(
+            row: board,
+            symbols: boardSymbols,
+            value: boardDomain.Empty,
+            out reason
+        )) {
+            reason = $"derived board '{board.Name.Value}' empty value {boardDomain.Empty} {reason}";
+
+            return false;
+        }
+
+        var boardLower = ((board.Kind == CellKind.Bool) ? 0L : (board.Min ?? long.MinValue));
+        var boardUpper = ((board.Kind == CellKind.Bool) ? 1L : (board.Max ?? long.MaxValue));
+        var codeLower = (codes.Min ?? long.MinValue);
+        var codeUpper = (codes.Max ?? long.MaxValue);
+
+        if (boardSymbols is { } boardEnum) {
+            boardLower = Math.Max(val1: boardLower, val2: 0L);
+            boardUpper = Math.Min(val1: boardUpper, val2: (boardEnum.Count - 1L));
+        }
+        if (codeSymbols is { } codeEnum) {
+            codeLower = Math.Max(val1: codeLower, val2: 0L);
+            codeUpper = Math.Min(val1: codeUpper, val2: (codeEnum.Count - 1L));
+        }
+
+        if ((boardLower > boardUpper) || (codeLower > codeUpper)) {
+            reason = $"derived board '{board.Name.Value}' or inverse codes '{codes.Name.Value}' has an empty admitted value domain";
+
+            return false;
+        }
+
+        if (
+            (codeLower < boardLower) ||
+            (codeUpper > boardUpper)
+        ) {
+            reason = $"derived board '{board.Name.Value}' admits {DescribeRange(lower: boardLower, upper: boardUpper)}, but inverse codes '{codes.Name.Value}' can admit {DescribeRange(lower: codeLower, upper: codeUpper)}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
+    private static bool TryAdmitDerivedValue(StateRow row, StateEnum? symbols, long value, out string reason) {
+        if (
+            (row.ClampToEnvelope(value: value) != value) ||
+            ((symbols is not null) && !symbols.Admits(value: value))
+        ) {
+            reason = $"is outside its declared value domain";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    private static string DescribeRange(long lower, long upper) => $"{lower}..{upper}";
+
     /// <summary>Gets a value indicating whether the runtime or a lowering synthesized this row rather than an
     /// author declaring it. A console listing, a HUD binding, the decompiler, and the schema treat a generated row
     /// as implementation detail; the hash and the checkpoint still cover it.</summary>
@@ -536,6 +622,10 @@ public static class StateReservedCells {
 /// all), or to a keyed row (no single value to show) draws empty at render time rather than failing validation.
 /// </remarks>
 public static class StateCapacity {
+    /// <summary>The most simultaneously live lexical pool-instance bindings in one rule evaluation. Each host
+    /// holds a compact handle for every slot, so nested claims and pool sweeps remain bounded without reusing a
+    /// global binding such as <c>$each</c>.</summary>
+    public const int MaxInstanceBindings = 32;
     /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
     /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
     public const int DefaultCellRoom = 128;
@@ -548,44 +638,54 @@ public static class StateCapacity {
     /// construction, never by author diligence). An authored <see cref="StateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
     public const int MaxCellsPerRow = TopologyCompilation.MaxCells;
-    /// <summary>The catalog-wide ceiling on distinct interned <see cref="CellKey"/> names. Interning collapses one
+    /// <summary>The per-table ceiling on distinct interned <see cref="CellKey"/> names. Each arena owns its runtime
+    /// additions and releases speculative names on rewind. Interning collapses one
     /// name used by many rows to one entry, so this admits sixteen fully disjoint
     /// <see cref="MaxCellsPerRow"/>-wide key sets before a mint refuses by name.</summary>
     public const int MaxCellKeys = (16 * MaxCellsPerRow);
-    /// <summary>A <see cref="StateEnum"/>'s member-count ceiling — the widest symbolic domain a row's integer
-    /// cells may name.</summary>
-    public const int MaxEnumMembers = 256;
-    /// <summary>The section's enum-count ceiling.</summary>
-    public const int MaxEnums = 64;
-    /// <summary>The section's family-count ceiling; a family's own size is bounded by <see cref="MaxRows"/>, since
-    /// its members are rows.</summary>
-    public const int MaxFamilies = 64;
+    /// <summary>A <see cref="StateEnum"/>'s member-count ceiling, the widest symbolic domain a row's integer
+    /// cells may name. A member is one name the catalog holds; nothing per tick is sized by it.</summary>
+    public const int MaxEnumMembers = 1024;
+    /// <summary>The section's enum-count ceiling: one name table of at most <see cref="MaxEnumMembers"/> names
+    /// each, held once by the catalog.</summary>
+    public const int MaxEnums = 256;
+    /// <summary>The section's family-count ceiling: one member-ordinal table per family in the catalog. A family's
+    /// own size is bounded by <see cref="MaxRows"/>, since its members are rows.</summary>
+    public const int MaxFamilies = 256;
     /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
     public const int MaxProvenanceLength = 256;
-    /// <summary>The section's row-count ceiling — a pure capacity bound on document size and per-tick iteration
-    /// cost, never a fixed-size stack buffer or a per-world tunable.</summary>
-    public const int MaxRows = 256;
-    /// <summary>The most attribute keys one zone sort orders by — each key names a declared state row, so a sort
-    /// can never carry more keys than <see cref="MaxRows"/> the section holds.</summary>
-    public const int MaxSortKeys = MaxRows;
-    /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
-    public const int MaxTextValueLength = 256;
+    /// <summary>The most explicit readers one row or cell visibility may retain.</summary>
+    public const int MaxVisibilityReaders = 32;
+    /// <summary>The most UTF-16 code units one explicit visibility reader token may retain.</summary>
+    public const int MaxVisibilityReaderLength = 256;
+    /// <summary>The section's row-count ceiling. A row is one layout record, one key-to-slot map, and one version,
+    /// generation and change stamp in every arena over the catalog; its cells are counted by the arena's byte
+    /// ceiling (<see cref="ArenaCapacity.MaxBytes"/>), and what a rule does across rows is priced on the work
+    /// sheet.</summary>
+    public const int MaxRows = 1024;
+    /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units: two bytes a unit,
+    /// so one text cell holds at most two kibibytes.</summary>
+    public const int MaxTextValueLength = 1024;
     /// <summary>The minimum allowed dimensions for a vector embedding space.</summary>
     public const int MinVectorDimensions = 8;
     /// <summary>The maximum allowed dimensions for a vector embedding space.</summary>
     public const int MaxVectorDimensions = 1024;
-    /// <summary>The maximum number of vector embedding spaces a world may declare.</summary>
-    public const int MaxVectorSpaces = 16;
+    /// <summary>The maximum number of vector embedding spaces a world may declare. A space is a name and a
+    /// dimension count; the components its rows hold are bounded by <see cref="MaxVectorSectionBytes"/>.</summary>
+    public const int MaxVectorSpaces = 64;
     /// <summary>The maximum byte capacity of a single vector row (capacity * dimensions).</summary>
     public const int MaxVectorRowBytes = 65536;
     /// <summary>The maximum total byte capacity of all vector rows across a state section (4 MiB).</summary>
     public const int MaxVectorSectionBytes = 4194304;
-    /// <summary>The maximum number of results returned by a nearest vector transform.</summary>
-    public const int MaxNearestResults = 64;
-    /// <summary>The maximum number of terms in a mix vector transform.</summary>
-    public const int MaxMixTerms = 8;
+    /// <summary>The maximum number of results returned by a nearest vector transform. The transform leases one
+    /// candidate per cell of the row it scans, so this bounds the writes one firing makes rather than its
+    /// scratch.</summary>
+    public const int MaxNearestResults = 256;
+    /// <summary>The maximum number of terms in a mix vector transform. The sum is one leased word per dimension
+    /// however many terms feed it; each term is one pass over the dimensions, priced on the work sheet.</summary>
+    public const int MaxMixTerms = 32;
     /// <summary>The maximum absolute weight magnitude of a term in a mix vector transform.</summary>
     public const int MaxMixWeight = 1000;
 }

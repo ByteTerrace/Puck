@@ -17,6 +17,24 @@ namespace Puck.World.Browser.Exports;
 /// attribute so it links unmodified into <c>tests/Puck.World.Browser.Tests</c>.</summary>
 [SupportedOSPlatform(platformName: "browser")]
 public static partial class BrowserExports {
+    /// <summary>Analyzes a structurally compilable draft without installing a session or allocating its arena.</summary>
+    /// <param name="json">The candidate document's UTF-8 JSON text.</param>
+    /// <returns><c>{ok, validated, report, validationErrors, deferred}</c> when programs compile, or structured analysis errors.</returns>
+    [JSExport]
+    public static string AnalyzeCosts(string json) => Write(
+        value: BrowserCostAnalyzer.Analyze(utf8Json: Utf8(text: json)),
+        info: BrowserExportsJsonContext.Default.BrowserCostAnalysisResult
+    );
+    /// <summary>Reads the installed compilation's shared authored cost analysis, including unresolved costs.</summary>
+    /// <param name="handle">The session handle.</param>
+    /// <returns><c>{ok, report, error}</c>. Every reference-cycle count is an exact decimal string.</returns>
+    [JSExport]
+    public static string Costs(string handle) => Write(
+        value: (BrowserSessionRegistry.TryGet(handle: ParseHandle(handle: handle), session: out var session)
+            ? new BrowserCostsResult(true, BrowserCostReport.From(report: session!.CostReport), null)
+            : new BrowserCostsResult(false, null, NoSuchHandle(handle: handle))),
+        info: BrowserExportsJsonContext.Default.BrowserCostsResult
+    );
     /// <summary>Returns the engine identity: <c>{"schemaVersion","engine","commit"}</c>.</summary>
     [JSExport]
     public static string Version() => Write(

@@ -33,11 +33,13 @@ jobs:
         run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
       - name: Package the compiled assemblies without rebuilding
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll nuget pack artifacts/packages --no-build
-      - name: Publish the compiled Functions and browser payloads
+      - name: Publish the compiled application payloads
         run: |
           dotnet publish src/Puck.Azure.Functions -c Release --no-build --no-restore -o artifacts/runtime/functions
           dotnet publish src/Puck.World.Browser -c Release --no-build --no-restore
-          dotnet publish src/Puck.World -c Release --no-build --no-restore -o artifacts/world
+          dotnet publish src/Puck.World -c Release --no-build --no-restore -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
+      - name: Verify the published World host
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll bench startup worlds/parlor/chess.puck --headless --samples 1 --world-artifact artifacts/world/Puck.World.dll --output artifacts/world-startup
       - name: Capture compiled outputs and their source identity
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll artifacts capture
       - name: Upload compiled Windows assemblies

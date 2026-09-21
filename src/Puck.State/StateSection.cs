@@ -18,6 +18,8 @@ public interface IStateSlot {
 /// lattice-shaped rows lie over, and the per-participant slot lanes a host declares. A document project's own
 /// section record implements this so the catalog, the reader, and the rule compiler consume it without knowing the
 /// document.</summary>
+/// <remarks>Implementations expose immutable snapshots. Replacing declarations or values requires a new section
+/// instance; compilation and expanded-row caches are keyed by section identity.</remarks>
 public interface IStateSection {
     /// <summary>Gets the declared vector embedding spaces, or <see langword="null"/> for none.</summary>
     IReadOnlyList<StateSpace>? Spaces => null;
@@ -33,6 +35,12 @@ public interface IStateSection {
     IReadOnlyList<StateEnum>? Enums => null;
     /// <summary>Gets the declared row families, or <see langword="null"/> for none.</summary>
     IReadOnlyList<StateFamily>? Families => null;
+    /// <summary>Gets the declared record types, or <see langword="null"/> for none.</summary>
+    IReadOnlyList<StateRecord>? Records => null;
+    /// <summary>Gets the declared bounded instance pools, or <see langword="null"/> for none.</summary>
+    IReadOnlyList<StatePool>? Pools => null;
+    /// <summary>Gets the declared bounded pair pools, or <see langword="null"/> for none.</summary>
+    IReadOnlyList<StatePairPool>? PairPools => null;
 }
 /// <summary>A per-participant slot declaration as the standalone state document spells it.</summary>
 /// <param name="Name">The stable slot name.</param>
@@ -52,6 +60,9 @@ public sealed record StateSlot(string Name, StateParticipantRole Role) : IStateS
 /// <param name="IdentitySlots">The per-identity durable slots.</param>
 /// <param name="Enums">The declared symbolic value domains a row may name.</param>
 /// <param name="Families">The declared row families.</param>
+/// <param name="Records">The typed record declarations pools instantiate.</param>
+/// <param name="Pools">The bounded deterministic instance pools.</param>
+/// <param name="PairPools">The bounded deterministic pair pools.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateSection(
     IReadOnlyList<StateSpace>? Spaces = null,
@@ -60,7 +71,10 @@ public sealed record StateSection(
     IReadOnlyList<StateSlot>? ParticipantSlots = null,
     IReadOnlyList<StateSlot>? IdentitySlots = null,
     IReadOnlyList<StateEnum>? Enums = null,
-    IReadOnlyList<StateFamily>? Families = null
+    IReadOnlyList<StateFamily>? Families = null,
+    IReadOnlyList<StateRecord>? Records = null,
+    IReadOnlyList<StatePool>? Pools = null,
+    IReadOnlyList<StatePairPool>? PairPools = null
 ) : IStateSection {
     /// <inheritdoc cref="Spaces"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -83,6 +97,15 @@ public sealed record StateSection(
     /// <inheritdoc cref="Families"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<StateFamily>? Families { get => field; init => field = Freeze(items: value); } = Freeze(items: Families);
+    /// <inheritdoc cref="Records"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateRecord>? Records { get => field; init => field = Freeze(items: value); } = Freeze(items: Records);
+    /// <inheritdoc cref="Pools"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StatePool>? Pools { get => field; init => field = Freeze(items: value); } = Freeze(items: Pools);
+    /// <inheritdoc cref="PairPools"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = Freeze(items: value); } = Freeze(items: PairPools);
 
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => ParticipantSlots;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => IdentitySlots;

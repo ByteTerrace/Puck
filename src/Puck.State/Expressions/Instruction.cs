@@ -67,9 +67,14 @@ public sealed record Instruction(ExpressionOp Operation, InstructionPayload? Pay
     public static Instruction Operand(string name, string? key = null) => new(
         Operation: ExpressionOp.Operand,
         Payload: new InstructionPayload.State(
-            Key: key,
-            Name: name
+            Key: StateChannelRef.OfNullable(spelling: key),
+            Name: StateChannelRef.Parse(spelling: name)
         )
+    );
+    /// <summary>Creates an instruction reading an already typed state reference.</summary>
+    public static Instruction Operand(StateChannelRef name, StateChannelRef? key = null) => new(
+        Operation: ExpressionOp.Operand,
+        Payload: new InstructionPayload.State(Key: key, Name: name)
     );
     /// <summary>Creates an instruction calling a vector function over two vector operands.</summary>
     /// <param name="operation">Dot, Similarity, or Identical.</param>
@@ -112,7 +117,7 @@ public abstract record InstructionPayload {
     /// <summary>A live state cell or reserved rule channel.</summary>
     /// <param name="Name">The state row or reserved-channel name.</param>
     /// <param name="Key">The keyed-row cell, or <see langword="null"/>.</param>
-    public sealed record State(string Name, string? Key = null) : InstructionPayload;
+    public sealed record State(StateChannelRef Name, StateChannelRef? Key = null) : InstructionPayload;
     /// <summary>The two operands of a vector function.</summary>
     /// <param name="Left">The left vector operand.</param>
     /// <param name="Right">The right vector operand.</param>
@@ -126,7 +131,7 @@ public abstract record VectorOperand {
     /// <summary>A vector state cell operand.</summary>
     /// <param name="Name">The state row name.</param>
     /// <param name="Key">The key or key indirection, or <see langword="null"/>.</param>
-    public sealed record Cell(string Name, string? Key = null) : VectorOperand;
+    public sealed record Cell(StateChannelRef Name, StateChannelRef? Key = null) : VectorOperand;
     /// <summary>An unlowered authored text embedding literal operand.</summary>
     /// <param name="Text">The text to embed.</param>
     /// <param name="Space">The space name, or <see langword="null"/> for the document's default.</param>

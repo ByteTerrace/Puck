@@ -353,6 +353,7 @@ public static class WorldPlacementStamper {
     /// copies × <see cref="CreationStampEmitter.PerCopyInstanceCount"/> — a panelled shape charges two chains for its
     /// one instance — plus MaxShapesPerStamp for each authoring-headroom copy; see <see cref="StaticStampReservation"/>).</param>
     public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int reservedShapeInstances = 0) {
+        builder.ReservePathTables(checked(((reservedCount * WorldPlacementPolicy.MaxShapesPerStamp) + reservedShapeInstances)));
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
             // (the per-id cache only relaxes this; probing as if every stamp were unique is the conservative bound).

@@ -3,10 +3,10 @@
   "tick": 635,
   "engineTick": 1066800,
   "hashes": {
-    "authoritative": "a6d4c92b27370fcf",
-    "capture": "83382c23ef783107",
+    "authoritative": "3eb1103b67057d91",
+    "capture": "f8ad7138fdfd675d",
     "pose": "a15bb6ab9ecf9e89",
-    "world": "33aca70761cd44fa"
+    "world": "71e76096d9bc1315"
   },
   "state": {
     "world": [
@@ -156,7 +156,7 @@
           },
           {
             "key": "18",
-            "value": 2
+            "value": 0
           },
           {
             "key": "19",
@@ -256,7 +256,7 @@
           },
           {
             "key": "43",
-            "value": 1
+            "value": 0
           },
           {
             "key": "44",
@@ -284,7 +284,7 @@
           },
           {
             "key": "50",
-            "value": 0
+            "value": 1
           },
           {
             "key": "51",
@@ -292,7 +292,7 @@
           },
           {
             "key": "52",
-            "value": 1
+            "value": 2
           },
           {
             "key": "53",
@@ -316,7 +316,7 @@
           },
           {
             "key": "58",
-            "value": 0
+            "value": 1
           },
           {
             "key": "59",
@@ -324,7 +324,7 @@
           },
           {
             "key": "60",
-            "value": 1
+            "value": 0
           },
           {
             "key": "61",
@@ -370,19 +370,19 @@
           },
           {
             "key": "5",
-            "value": 28
-          },
-          {
-            "key": "6",
-            "value": 36
-          },
-          {
-            "key": "7",
             "value": 35
           },
           {
+            "key": "6",
+            "value": 34
+          },
+          {
+            "key": "7",
+            "value": 42
+          },
+          {
             "key": "8",
-            "value": 43
+            "value": 50
           },
           {
             "key": "9",
@@ -390,15 +390,15 @@
           },
           {
             "key": "10",
-            "value": 52
+            "value": 59
           },
           {
             "key": "11",
-            "value": 60
+            "value": 58
           },
           {
             "key": "12",
-            "value": 59
+            "value": 38
           },
           {
             "key": "13",
@@ -413,7 +413,7 @@
             "value": 62
           }
         ],
-        "historyCursor": 29,
+        "historyCursor": 28,
         "domain": {
           "$type": "ring",
           "capacity": 16,
@@ -455,12 +455,12 @@
         "evicts": true,
         "cells": [
           {
-            "key": "35",
-            "value": 4
+            "key": "54",
+            "value": 5
           },
           {
-            "key": "52",
-            "value": 5
+            "key": "35",
+            "value": 4
           }
         ]
       },
@@ -510,7 +510,7 @@
         "kind": "Int",
         "min": 0,
         "max": 63,
-        "value": 18,
+        "value": 52,
         "draw": {
           "generator": {
             "source": "UniformRange",
@@ -522,7 +522,7 @@
           "timing": "Event",
           "skip": 0
         },
-        "drawCursor": 7
+        "drawCursor": 6
       },
       {
         "name": "snakeAlive",
@@ -536,7 +536,7 @@
         "kind": "Int",
         "min": 0,
         "max": 63,
-        "value": 59
+        "value": 58
       },
       {
         "name": "snakeHeading",
@@ -550,21 +550,21 @@
         "kind": "Int",
         "min": 0,
         "max": 63,
-        "value": 51
+        "value": 50
       },
       {
         "name": "snakeLength",
         "kind": "Int",
         "min": 0,
         "max": 6,
-        "value": 5
+        "value": 4
       },
       {
         "name": "snakeScore",
         "kind": "Int",
         "min": 0,
         "max": 9999,
-        "value": 20
+        "value": 10
       },
       {
         "name": "snakeDeaths",
@@ -576,16 +576,14 @@
       {
         "name": "snakeRespawn",
         "kind": "Int",
-        "min": 0,
-        "max": 504000,
-        "value": 40320
+        "value": 660
       },
       {
         "name": "snakeFoodCell",
         "kind": "Int",
         "min": 0,
         "max": 63,
-        "value": 18
+        "value": 52
       },
       {
         "name": "snakeFoodPlaced",
@@ -627,14 +625,14 @@
         "kind": "Int",
         "min": 0,
         "max": 9999,
-        "value": 25
+        "value": 24
       },
       {
         "name": "snakeStepApplied",
         "kind": "Int",
         "min": 0,
         "max": 9999,
-        "value": 25
+        "value": 24
       }
     ],
     "lattices": [
@@ -830,7 +828,7 @@
         },
         {
           "key": "18",
-          "value": 2,
+          "value": 0,
           "text": null
         },
         {
@@ -955,7 +953,7 @@
         },
         {
           "key": "43",
-          "value": 1,
+          "value": 0,
           "text": null
         },
         {
@@ -990,7 +988,7 @@
         },
         {
           "key": "50",
-          "value": 0,
+          "value": 1,
           "text": null
         },
         {
@@ -1000,7 +998,7 @@
         },
         {
           "key": "52",
-          "value": 1,
+          "value": 2,
           "text": null
         },
         {
@@ -1030,7 +1028,7 @@
         },
         {
           "key": "58",
-          "value": 0,
+          "value": 1,
           "text": null
         },
         {
@@ -1040,7 +1038,7 @@
         },
         {
           "key": "60",
-          "value": 1,
+          "value": 0,
           "text": null
         },
         {
@@ -1090,22 +1088,22 @@
         },
         {
           "key": "5",
-          "value": 28,
-          "text": null
-        },
-        {
-          "key": "6",
-          "value": 36,
-          "text": null
-        },
-        {
-          "key": "7",
           "value": 35,
           "text": null
         },
         {
+          "key": "6",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 42,
+          "text": null
+        },
+        {
           "key": "8",
-          "value": 43,
+          "value": 50,
           "text": null
         },
         {
@@ -1115,17 +1113,17 @@
         },
         {
           "key": "10",
-          "value": 52,
+          "value": 59,
           "text": null
         },
         {
           "key": "11",
-          "value": 60,
+          "value": 58,
           "text": null
         },
         {
           "key": "12",
-          "value": 59,
+          "value": 38,
           "text": null
         },
         {
@@ -1174,13 +1172,13 @@
       "row": "snakeMeals",
       "cells": [
         {
-          "key": "35",
-          "value": 4,
+          "key": "54",
+          "value": 5,
           "text": null
         },
         {
-          "key": "52",
-          "value": 5,
+          "key": "35",
+          "value": 4,
           "text": null
         }
       ]
@@ -1215,7 +1213,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 18,
+          "value": 52,
           "text": null
         }
       ]
@@ -1235,7 +1233,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 59,
+          "value": 58,
           "text": null
         }
       ]
@@ -1255,7 +1253,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 51,
+          "value": 50,
           "text": null
         }
       ]
@@ -1265,7 +1263,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 5,
+          "value": 4,
           "text": null
         }
       ]
@@ -1275,7 +1273,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 20,
+          "value": 10,
           "text": null
         }
       ]
@@ -1295,7 +1293,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 40320,
+          "value": 660,
           "text": null
         }
       ]
@@ -1305,7 +1303,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 18,
+          "value": 52,
           "text": null
         }
       ]
@@ -1365,7 +1363,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 25,
+          "value": 24,
           "text": null
         }
       ]
@@ -1375,7 +1373,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 25,
+          "value": 24,
           "text": null
         }
       ]

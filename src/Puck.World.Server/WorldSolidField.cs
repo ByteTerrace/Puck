@@ -149,6 +149,8 @@ public sealed class WorldSolidField : IContactField {
     /// <summary>Gets the compiled program's instruction count — the <c>world.collision.status</c> read-back (a rough size of
     /// the solid field the solver walks).</summary>
     public int InstructionCount { get; }
+    /// <summary>Gets the compiled field's structural line-of-sight work bound, without assigning cycle prices.</summary>
+    public SdfLineOfSightWorkEnvelope LineOfSightWork => (m_banded?.LineOfSightWork ?? m_evaluator.LineOfSightWork);
     /// <summary>Gets the placement primitive-shape emissions in the compiled field.</summary>
     public long PlacementShapeCount { get; }
     /// <summary>Gets the deterministic gameplay-query view over the same compiled solid program.</summary>

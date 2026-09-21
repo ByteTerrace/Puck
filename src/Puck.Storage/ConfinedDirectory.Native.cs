@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -47,12 +48,62 @@ internal sealed partial class ConfinedDirectory {
             if (
                 ((info.Attributes & 0x400) != 0) ||
                 (((info.Attributes & 0x10) != 0) != directory) ||
-                (!directory && (info.Links != 1))
+                (!directory && (info.Links != 1)) ||
+                !WindowsHandleNamesPath(handle: handle, path: path)
             ) {
-                throw new IOException(message: "Storage refuses reparse points, hard links, and unexpected entry types.");
+                throw new IOException(message: "Storage refuses redirected paths, reparse points, hard links, and unexpected entry types.");
             }
             return handle;
         } catch { handle.Dispose(); throw; }
+    }
+    // CreateFile resolves a path while another process may rename one of its unpinned descendants. The handle is
+    // authoritative after that lookup, so require the kernel's normalized name for the opened object to remain the
+    // exact path this capability walk selected. A raced junction that resolved to its target therefore fails closed
+    // even when its reparse metadata was swapped out before the subsequent handle inspection. Creation occurs only
+    // below the retained, verified parent handle, whose sharing mode denies rename and deletion; the new leaf is also
+    // checked here before its handle can escape.
+    private static bool WindowsHandleNamesPath(SafeFileHandle handle, string path) {
+        const int TypicalPathCapacity = 512, MaximumPathCapacity = 32768;
+        var actual = ArrayPool<char>.Shared.Rent(minimumLength: TypicalPathCapacity);
+
+        try {
+            var length = GetFinalPathNameByHandle(
+                file: handle,
+                path: actual,
+                capacity: actual.Length,
+                flags: 0u
+            );
+
+            if (length == 0u) { throw Error(message: "Cannot resolve confined storage handle"); }
+            if (length >= actual.Length) {
+                if (length >= MaximumPathCapacity) { throw new IOException(message: "Confined storage path is too long."); }
+                var expanded = ArrayPool<char>.Shared.Rent(minimumLength: checked((((int)length) + 1)));
+
+                ArrayPool<char>.Shared.Return(array: actual);
+                actual = expanded;
+                length = GetFinalPathNameByHandle(
+                    file: handle,
+                    path: actual,
+                    capacity: actual.Length,
+                    flags: 0u
+                );
+                if ((length == 0u) || (length >= actual.Length)) { throw Error(message: "Cannot resolve confined storage handle"); }
+            }
+            var expected = WindowsPath(path: Path.GetFullPath(path: path)).AsSpan();
+            var resolved = actual.AsSpan(
+                length: checked((int)length),
+                start: 0
+            );
+
+            while (!expected.IsEmpty && (expected[^1] == Path.DirectorySeparatorChar)) { expected = expected[..^1]; }
+            while (!resolved.IsEmpty && (resolved[^1] == Path.DirectorySeparatorChar)) { resolved = resolved[..^1]; }
+            return resolved.Equals(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                other: expected
+            );
+        } finally {
+            ArrayPool<char>.Shared.Return(array: actual);
+        }
     }
     // The directory walk has already resolved and confined a local absolute path. Use extended
     // syntax only at the native boundary so blob and temporary names are not limited by MAX_PATH.
@@ -154,6 +205,8 @@ internal sealed partial class ConfinedDirectory {
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetFileInformationByHandle(SafeFileHandle handle, out WindowsFileInformation info);
+    [LibraryImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial uint GetFinalPathNameByHandle(SafeFileHandle file, [Out] char[] path, int capacity, uint flags);
     [LibraryImport("kernel32.dll", EntryPoint = "MoveFileExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool MoveFileEx(string source, string target, uint flags);

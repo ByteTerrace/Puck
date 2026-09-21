@@ -10,10 +10,17 @@ public static partial class WorldDefinitionValidator {
         var verdicts = 0;
 
         for (var index = 0; (index < rows.Count); index++) {
-            if (
-                (rows[index] is not { } row) ||
-                (row.Verdict is null)
-            ) {
+            if (rows[index] is not { } row) {
+                continue;
+            }
+
+            ValidateWitnessRow(
+                definition: definition,
+                errors: errors,
+                row: row
+            );
+
+            if (row.Verdict is null) {
                 continue;
             }
 
@@ -85,6 +92,51 @@ public static partial class WorldDefinitionValidator {
             path: path,
             row: row,
             status: verdict.Status
+        );
+    }
+    /// <summary>Validates one witness row: the verdict it names exists, and nothing but a rule's firing moves its
+    /// cells. Both the whole-document walk and a state mutation's touched-row walk run it.</summary>
+    /// <param name="definition">The document the row belongs to.</param>
+    /// <param name="row">The row; returns at once when it is no witness.</param>
+    /// <param name="errors">The refusals collected so far.</param>
+    private static void ValidateWitnessRow(WorldDefinition definition, WorldStateRow row, List<string> errors) {
+        if (row.Witness is not { } witnessed) {
+            return;
+        }
+
+        var path = $"state.world '{row.Name}'.witness";
+
+        if (row.Verdict is not null) {
+            errors.Add(item: $"{path} is declared beside 'verdict' — a row is a verdict or a witness of one, never both.");
+        }
+
+        if (WorldDefinitionRows.FindStateRow(
+            name: witnessed.Value,
+            rows: definition.State
+        )?.Verdict is null) {
+            errors.Add(item: $"{path} '{witnessed}' names no verdict row.");
+        }
+
+        if (row.Kind is not (CellKind.Bool or CellKind.Fixed)) {
+            errors.Add(item: $"{path} is declared on a {row.Kind} row — a gate reads numbers, an Int one is a cell of the verdict row itself, so a witness is kind Fixed or Bool.");
+        }
+
+        if (row.IsSlot) {
+            errors.Add(item: $"{path} is declared on a slot row — the values a gate saw are keyed cells, one per cell it read.");
+        }
+
+        if (row.Field is not null) {
+            errors.Add(item: $"{path} is declared beside 'field' — a physical-field row's cells are the field's, not a rule's to write.");
+        }
+
+        if (row.HostOwned) {
+            errors.Add(item: $"{path} is declared on a host-owned row, which has no storage a rule effect can write.");
+        }
+
+        ValidateVerdictTraits(
+            errors: errors,
+            path: path,
+            row: row
         );
     }
     // Every trait that moves a cell with no rule behind it. A verdict reached by one of them says nothing about the

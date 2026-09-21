@@ -25,7 +25,7 @@ namespace Puck.Overlays;
 /// </remarks>
 public sealed class OverlayGlyphSdfPack {
     private const int PackHashBytes = 32;
-    private const int PackHeaderBytes = (((sizeof(uint) * 5) + sizeof(float)) + (PackHashBytes * 3));
+    private const int PackHeaderBytes = (((sizeof(uint) * 6) + sizeof(float)) + (PackHashBytes * 3));
     // The pack is ~1.4 MiB of already-flattened cells (larger once a world appends icon glyphs), but building it
     // from the atlas decodes the WHOLE combined MTSDF PNG (4435x4440 RGBA ~79 MiB, >=150 MiB transient with the
     // decoder's scanlines) at every startup. The binary artifact below persists the finished pack beside the atlas,
@@ -36,7 +36,7 @@ public sealed class OverlayGlyphSdfPack {
 
     // 'P','O','G','P' + format version. Bump the version on any layout change — the key check then misses cleanly.
     private const uint PackMagic = 0x50474F50u;
-    private const uint PackVersion = 2u;
+    private const uint PackVersion = 3u;
 
     /// <summary>The number of glyphs in the ASCII block (printable ASCII 0x20-0x7E).</summary>
     public const int AsciiGlyphCount = (0x7F - 0x20);
@@ -132,9 +132,12 @@ public sealed class OverlayGlyphSdfPack {
         if (
             (cellWidth <= 0) ||
             (cellHeight <= 0) ||
+            !float.IsFinite(f: distanceRange) || (distanceRange <= 0) ||
             (glyphCount < AsciiGlyphCount) ||
-            (wordCount != ((glyphCount * cellWidth) * cellHeight)) ||
-            (bytes.Length != (PackHeaderBytes + (wordCount * sizeof(uint))))
+            (wordCount <= 0) ||
+            ((((long)cellWidth) * cellHeight) > (wordCount / glyphCount)) ||
+            (wordCount != ((((long)glyphCount) * cellWidth) * cellHeight)) ||
+            (bytes.Length != (PackHeaderBytes + (((long)wordCount) * sizeof(uint))))
         ) {
             return null;
         }
@@ -215,7 +218,7 @@ public sealed class OverlayGlyphSdfPack {
         }
 
         try {
-            var temporary = (path + $".{Environment.ProcessId}.tmp");
+            var temporary = (path + $".{Guid.NewGuid():N}.tmp");
 
             File.WriteAllBytes(
                 bytes: bytes,
@@ -242,7 +245,8 @@ public sealed class OverlayGlyphSdfPack {
     /// order, one cell per entry of <paramref name="extraCodePoints"/> (index = <see cref="AsciiGlyphCount"/> + i —
     /// the caller's own ordering, never re-derived). Returns <see langword="null"/> when <paramref name="monoFont"/>
     /// is <see langword="null"/>, carries no usable ASCII glyph bounds, or a requested cell is not an equal-sized,
-    /// integer-aligned rectangle contained in the image. Variable-cell generated atlases require the layout-based
+    /// pixel-aligned rectangle contained in the image. Integer edges and half-integer texel-center bounds are
+    /// supported; center bounds include both endpoint texels. Variable-cell generated atlases require the layout-based
     /// text path, not this fixed-grid pack. A requested extra codepoint the font does
     /// not declare leaves a blank cell — the same gap the ASCII block's own boundless glyphs (e.g. space) take.</summary>
     /// <param name="monoFont">The source atlas — a uniform-grid mono atlas (typically
@@ -273,19 +277,26 @@ public sealed class OverlayGlyphSdfPack {
             return null;
         }
 
-        var atlasCellWidth = Math.Max(
-            val1: 1,
-            val2: ((int)MathF.Round(x: (probeBounds.Right - probeBounds.Left)))
-        );
-        var atlasCellHeight = Math.Max(
-            val1: 1,
-            val2: ((int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)))
-        );
+        // The shipped msdf-atlas-gen grid describes the first and last texel centers (.5), not outer pixel
+        // edges. Include both endpoints rather than rounding away a row/column (or rejecting the whole atlas).
+        // GlyphGeometry::getQuadAtlasBounds: https://github.com/Chlumsky/msdf-atlas-gen/blob/master/msdf-atlas-gen/GlyphGeometry.cpp
+        static bool PixelRectangle(FontAtlasBounds bounds) =>
+            (float.IsFinite(f: bounds.Left) && float.IsFinite(f: bounds.Top) && float.IsFinite(f: bounds.Right) && float.IsFinite(f: bounds.Bottom) &&
+            (bounds.Right > bounds.Left) && (bounds.Bottom > bounds.Top) &&
+            ((bounds.Left * 2) == MathF.Truncate(x: (bounds.Left * 2))) &&
+            ((bounds.Top * 2) == MathF.Truncate(x: (bounds.Top * 2))) &&
+            ((bounds.Right - bounds.Left) == MathF.Truncate(x: (bounds.Right - bounds.Left))) &&
+            ((bounds.Bottom - bounds.Top) == MathF.Truncate(x: (bounds.Bottom - bounds.Top))));
+
+        if (!PixelRectangle(bounds: probeBounds) || (probeBounds.Left < 0) || (probeBounds.Top < 0) ||
+            (probeBounds.Right > image.Width) || (probeBounds.Bottom > image.Height)) { return null; }
+        var atlasCellWidth = ((int)(MathF.Ceiling(x: probeBounds.Right) - MathF.Floor(x: probeBounds.Left)));
+        var atlasCellHeight = ((int)(MathF.Ceiling(x: probeBounds.Bottom) - MathF.Floor(x: probeBounds.Top)));
 
         bool FitsCell(FontAtlasBounds bounds) =>
-            (float.IsFinite(f: bounds.Left) && float.IsFinite(f: bounds.Top) &&
-            (bounds.Left == MathF.Truncate(x: bounds.Left)) && (bounds.Top == MathF.Truncate(x: bounds.Top)) &&
-            ((bounds.Right - bounds.Left) == atlasCellWidth) && ((bounds.Bottom - bounds.Top) == atlasCellHeight) &&
+            (PixelRectangle(bounds: bounds) &&
+            ((MathF.Ceiling(x: bounds.Right) - MathF.Floor(x: bounds.Left)) == atlasCellWidth) &&
+            ((MathF.Ceiling(x: bounds.Bottom) - MathF.Floor(x: bounds.Top)) == atlasCellHeight) &&
             (bounds.Left >= 0) && (bounds.Top >= 0) && (bounds.Right <= image.Width) && (bounds.Bottom <= image.Height));
 
         var extraCount = (extraCodePoints?.Count ?? 0);
@@ -326,8 +337,8 @@ public sealed class OverlayGlyphSdfPack {
 
         void CopyGlyphCell(int glyphIndex, FontAtlasBounds bounds) {
             var pixels = image.RgbaPixels;
-            var left = ((int)MathF.Round(x: bounds.Left));
-            var top = ((int)MathF.Round(x: bounds.Top));
+            var left = ((int)MathF.Floor(x: bounds.Left));
+            var top = ((int)MathF.Floor(x: bounds.Top));
             var glyphBase = (glyphIndex * cellStride);
 
             for (var y = 0; (y < atlasCellHeight); y++) {

@@ -3,10 +3,10 @@
   "tick": 224,
   "engineTick": 376320,
   "hashes": {
-    "authoritative": "d82785601df4cecd",
-    "capture": "30d6777a1c000a9e",
+    "authoritative": "2f0015aa6cc50c14",
+    "capture": "b5882d5c786a1b56",
     "pose": "4fc7a1cae087a921",
-    "world": "e94c9d329e444a7d"
+    "world": "d02f73520ba9d726"
   },
   "state": {
     "world": [
@@ -75,172 +75,6 @@
           {
             "key": "groundTertiary",
             "value": "#808080"
-          }
-        ]
-      },
-      {
-        "name": "arenaFighter",
-        "kind": "Int",
-        "min": 0,
-        "max": 1,
-        "capacity": 4,
-        "cells": [
-          {
-            "key": "0",
-            "value": 1
-          },
-          {
-            "key": "1",
-            "value": 0
-          }
-        ]
-      },
-      {
-        "name": "arenaPickup",
-        "kind": "Int",
-        "min": 0,
-        "max": 1,
-        "capacity": 4,
-        "cells": [
-          {
-            "key": "2",
-            "value": 1
-          },
-          {
-            "key": "3",
-            "value": 1
-          }
-        ]
-      },
-      {
-        "name": "arenaPickupClock",
-        "kind": "Int",
-        "min": 0,
-        "max": 504000,
-        "capacity": 4,
-        "cells": [
-          {
-            "key": "2",
-            "value": 0
-          },
-          {
-            "key": "3",
-            "value": 0
-          }
-        ]
-      },
-      {
-        "name": "arenaHealth",
-        "kind": "Int",
-        "min": 0,
-        "max": 100,
-        "capacity": 2,
-        "overflow": "Saturate",
-        "cells": [
-          {
-            "key": "0",
-            "value": 40,
-            "clock": {
-              "epochTick": 153,
-              "epochEngineTick": 257040
-            }
-          },
-          {
-            "key": "1",
-            "value": 0,
-            "clock": {
-              "epochTick": 153,
-              "epochEngineTick": 257040
-            }
-          }
-        ],
-        "advance": {
-          "perSecondNumerator": 6,
-          "perSecondDenominator": 1
-        }
-      },
-      {
-        "name": "arenaAlive",
-        "kind": "Int",
-        "min": 0,
-        "max": 1,
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 1
-          },
-          {
-            "key": "1",
-            "value": 0
-          }
-        ]
-      },
-      {
-        "name": "arenaRespawn",
-        "kind": "Int",
-        "min": 0,
-        "max": 504000,
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 0
-          },
-          {
-            "key": "1",
-            "value": 0
-          }
-        ]
-      },
-      {
-        "name": "arenaFrags",
-        "kind": "Int",
-        "min": 0,
-        "max": 99,
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 2
-          },
-          {
-            "key": "1",
-            "value": 1
-          }
-        ]
-      },
-      {
-        "name": "arenaDeaths",
-        "kind": "Int",
-        "min": 0,
-        "max": 99,
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 1
-          },
-          {
-            "key": "1",
-            "value": 2
-          }
-        ]
-      },
-      {
-        "name": "arenaTaken",
-        "kind": "Int",
-        "min": 0,
-        "max": 99,
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 1
-          },
-          {
-            "key": "1",
-            "value": 0
           }
         ]
       },
@@ -328,6 +162,402 @@
         "max": 2,
         "value": 1
       }
+    ],
+    "enums": [
+      {
+        "name": "ArenaBody",
+        "members": [
+          "Detached",
+          "First",
+          "Second"
+        ]
+      },
+      {
+        "name": "ArenaPickupBody",
+        "members": [
+          "Detached",
+          "Medkit",
+          "Mega"
+        ]
+      }
+    ],
+    "records": [
+      {
+        "name": "ArenaFighter",
+        "fields": [
+          {
+            "name": "body",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": "ArenaBody",
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "alive",
+            "kind": "Int",
+            "min": 0,
+            "max": 1,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": null
+          },
+          {
+            "name": "frags",
+            "kind": "Int",
+            "min": 0,
+            "max": 99,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": null
+          },
+          {
+            "name": "deaths",
+            "kind": "Int",
+            "min": 0,
+            "max": 99,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": null
+          },
+          {
+            "name": "health",
+            "kind": "Int",
+            "min": 0,
+            "max": 100,
+            "overflow": "Saturate",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": {
+              "perSecondNumerator": 6,
+              "perSecondDenominator": 1
+            },
+            "default": {
+              "kind": "Int",
+              "value": 100
+            }
+          },
+          {
+            "name": "respawn",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "taken",
+            "kind": "Int",
+            "min": 0,
+            "max": 99,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          }
+        ]
+      },
+      {
+        "name": "ArenaPickup",
+        "fields": [
+          {
+            "name": "body",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": "ArenaPickupBody",
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "active",
+            "kind": "Int",
+            "min": 0,
+            "max": 1,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 1
+            }
+          },
+          {
+            "name": "respawn",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          }
+        ]
+      }
+    ],
+    "pools": [
+      {
+        "name": "arenaFighters",
+        "record": "ArenaFighter",
+        "capacity": 2,
+        "snapshot": {
+          "generations": [
+            0,
+            0
+          ],
+          "live": [
+            {
+              "slot": 0,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "alive",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "frags",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "deaths",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "health",
+                  "clock": {
+                    "epochTick": 153,
+                    "epochEngineTick": 257040,
+                    "y0": 0,
+                    "v0": 0,
+                    "substepTicks": 0
+                  },
+                  "value": {
+                    "kind": "Int",
+                    "value": 40
+                  }
+                },
+                {
+                  "field": "respawn",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 129
+                  }
+                },
+                {
+                  "field": "taken",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                }
+              ]
+            },
+            {
+              "slot": 1,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 0
+                  }
+                },
+                {
+                  "field": "alive",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 0
+                  }
+                },
+                {
+                  "field": "frags",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "deaths",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "health",
+                  "clock": {
+                    "epochTick": 153,
+                    "epochEngineTick": 257040,
+                    "y0": 0,
+                    "v0": 0,
+                    "substepTicks": 0
+                  },
+                  "value": {
+                    "kind": "Int",
+                    "value": 0
+                  }
+                },
+                {
+                  "field": "respawn",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 183
+                  }
+                },
+                {
+                  "field": "taken",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 0
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "initial": null
+      },
+      {
+        "name": "arenaPickups",
+        "record": "ArenaPickup",
+        "capacity": 2,
+        "snapshot": {
+          "generations": [
+            0,
+            0
+          ],
+          "live": [
+            {
+              "slot": 0,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "active",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "respawn",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 117
+                  }
+                }
+              ]
+            },
+            {
+              "slot": 1,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "active",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "respawn",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 0
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "initial": null
+      }
     ]
   },
   "resolved": [
@@ -408,141 +638,6 @@
           "key": "groundTertiary",
           "value": 0,
           "text": "#808080"
-        }
-      ]
-    },
-    {
-      "row": "arenaFighter",
-      "cells": [
-        {
-          "key": "0",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 0,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaPickup",
-      "cells": [
-        {
-          "key": "2",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "3",
-          "value": 1,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaPickupClock",
-      "cells": [
-        {
-          "key": "2",
-          "value": 0,
-          "text": null
-        },
-        {
-          "key": "3",
-          "value": 0,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaHealth",
-      "cells": [
-        {
-          "key": "0",
-          "value": 54,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 14,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaAlive",
-      "cells": [
-        {
-          "key": "0",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 0,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaRespawn",
-      "cells": [
-        {
-          "key": "0",
-          "value": 0,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 0,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaFrags",
-      "cells": [
-        {
-          "key": "0",
-          "value": 2,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 1,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaDeaths",
-      "cells": [
-        {
-          "key": "0",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 2,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "arenaTaken",
-      "cells": [
-        {
-          "key": "0",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 0,
-          "text": null
         }
       ]
     },
@@ -642,6 +737,216 @@
         {
           "key": "$value",
           "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_live",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_generation",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_body",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_alive",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_frags",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_deaths",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_health",
+      "cells": [
+        {
+          "key": "0",
+          "value": 54,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 14,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_respawn",
+      "cells": [
+        {
+          "key": "0",
+          "value": 129,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 183,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaFighters_field_taken",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaPickups_live",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaPickups_generation",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaPickups_field_body",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaPickups_field_active",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_arenaPickups_field_respawn",
+      "cells": [
+        {
+          "key": "0",
+          "value": 117,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
           "text": null
         }
       ]

@@ -65,6 +65,21 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
         ));
     }
     [Fact]
+    public void ValueOnlyChange_WithPairPool_PreservesCompiledCatalog() {
+        var node = CellName.Parse(candidate: "node");
+        var edge = CellName.Parse(candidate: "edge");
+        var nodes = CellName.Parse(candidate: "nodes");
+        var original = new WorldDefinition(StateRaw: new WorldStateSection(
+            Records: [new StateRecord(Name: node), new StateRecord(Name: edge)],
+            Pools: [new StatePool(Name: nodes, Record: node, Capacity: 2)],
+            PairPools: [new StatePairPool(Name: CellName.Parse(candidate: "edges"), Record: edge, LeftPool: nodes, RightPool: nodes, MaxLive: 2)]));
+        var catalog = original.StateCatalog;
+
+        var updated = original.WithWorldState(rows: []);
+
+        Assert.Same(expected: catalog, actual: updated.StateCatalog);
+    }
+    [Fact]
     public void ValueOnlyChange_PreservesCompiledViewsAndAllocatesUnder2KiB() {
         var original = new WorldDefinition(StateRaw: BuildState());
         var catalog = original.StateCatalog;
@@ -77,10 +92,12 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
             b: "season",
             comparisonType: StringComparison.Ordinal
         )
-            ? row with { Cells = [new StateCell(
+            ? row with {
+                Cells = [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Value: CellValue.Int(value: 42L)
-                )] }
+                )],
+            }
             : row)).ToArray();
 
         // The bound is on the STEADY-STATE cost of one value-only change, so the smallest of several identical

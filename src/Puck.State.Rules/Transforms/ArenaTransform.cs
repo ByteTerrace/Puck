@@ -71,11 +71,13 @@ public abstract record ArenaTransform {
     /// <param name="Exclude">The key excluded from the candidates, or the invalid default.</param>
     /// <param name="Farthest">Whether the ranking takes the farthest rather than the nearest.</param>
     public sealed record Nearest(int IntoRowOrdinal, int FromRowOrdinal, VectorSource Query, int K, long? Threshold, int WhereRowOrdinal, CellKey Exclude, bool Farthest) : ArenaTransform;
-    /// <summary>Refreshes a knowledge board from its declared source and visibility mask.</summary>
-    /// <param name="RowOrdinal">The knowledge board's catalog ordinal.</param>
-    /// <param name="SourceRowOrdinal">The board the values are copied from.</param>
+    /// <summary>Refreshes a knowledge row from its declared source, positions, and visibility mask.</summary>
+    /// <param name="RowOrdinal">The knowledge row's catalog ordinal.</param>
+    /// <param name="SourceRowOrdinal">The token property row, or the board used by a direct projection.</param>
     /// <param name="MaskRowOrdinal">The board whose non-zero cells are visible.</param>
-    public sealed record Observe(int RowOrdinal, int SourceRowOrdinal, int MaskRowOrdinal) : ArenaTransform;
+    /// <param name="PositionsRowOrdinal">The token-keyed row mapping each token to its current board cell, or -1
+    /// for a direct board projection.</param>
+    public sealed record Observe(int RowOrdinal, int SourceRowOrdinal, int MaskRowOrdinal, int PositionsRowOrdinal) : ArenaTransform;
     /// <summary>Appends one value to a history row's ring.</summary>
     /// <param name="RowOrdinal">The history row's catalog ordinal.</param>
     /// <param name="Value">The raw literal pushed, in the row's kind; ignored when <paramref name="Bound"/> is
@@ -83,6 +85,8 @@ public abstract record ArenaTransform {
     /// <param name="Bound">Whether the pushed value arrives in the binding rather than in
     /// <paramref name="Value"/>; an application that supplies none refuses.</param>
     public sealed record Push(int RowOrdinal, long Value, bool Bound = false) : ArenaTransform;
+    /// <summary>Moves one bound live pool token and the matching selectively pushable outward run one topology cell.</summary>
+    public sealed record PushRay(int PoolOrdinal, int CellFieldOrdinal, int ValueFieldOrdinal, int OriginBindingSlot, CompiledTopology Topology, int Direction, CompiledPattern Pattern, CompiledPattern PushPattern, CompiledPattern StopPattern, long Empty) : ArenaTransform;
     /// <summary>Stores a vector into a table unless a near duplicate is already there.</summary>
     /// <param name="IntoRowOrdinal">The destination table's catalog ordinal.</param>
     /// <param name="Key">The key the stored vector takes.</param>
@@ -146,9 +150,13 @@ public readonly record struct ArenaTransformBinding {
     /// <param name="value">The resolved raw value, in the destination row's kind.</param>
     /// <param name="fromRowOrdinal">The resolved source row, or <c>-1</c> to keep the transform's own.</param>
     /// <param name="toRowOrdinal">The resolved destination row, or <c>-1</c> to keep the transform's own.</param>
-    public ArenaTransformBinding(bool bindsKey = false, CellKey key = default, bool bindsValue = false, long value = 0L, int fromRowOrdinal = -1, int toRowOrdinal = -1) {
+    /// <param name="bindsInstance">Whether <paramref name="instance"/> supplies a live pool mover.</param>
+    /// <param name="instance">The live pool mover.</param>
+    public ArenaTransformBinding(bool bindsKey = false, CellKey key = default, bool bindsValue = false, long value = 0L, int fromRowOrdinal = -1, int toRowOrdinal = -1, bool bindsInstance = false, StateInstanceHandle instance = default) {
         BindsKey = bindsKey;
         BindsValue = bindsValue;
+        BindsInstance = bindsInstance;
+        Instance = instance;
         Key = key;
         Value = value;
         m_from = Math.Max(
@@ -167,6 +175,10 @@ public readonly record struct ArenaTransformBinding {
     public bool BindsKey { get; }
     /// <summary>Gets a value indicating whether <see cref="Value"/> replaces the transform's own value.</summary>
     public bool BindsValue { get; }
+    /// <summary>Gets a value indicating whether <see cref="Instance"/> supplies a live pool mover.</summary>
+    public bool BindsInstance { get; }
+    /// <summary>Gets the live pool mover.</summary>
+    public StateInstanceHandle Instance { get; }
     /// <summary>Gets the resolved source row's catalog ordinal, or <c>-1</c>.</summary>
     public int FromRowOrdinal => (m_from - 1);
     /// <summary>Gets the resolved key; the invalid default names no cell.</summary>

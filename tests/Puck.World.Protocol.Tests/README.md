@@ -10,7 +10,9 @@ Run the focused suite from the repository root:
 dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release
 ```
 
-The project references `Puck.World.Protocol`; server execution and transport behavior are verified by their owning project checks.
+The suite also uses `Puck.Commands` to observe settlements. Deferred-command laws
+cover identical correlation IDs in separate worlds and synchronous ingress refusals
+through the real loopback transport. Server execution is verified by its owning suite.
 
 ## Documentation
 

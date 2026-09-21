@@ -40,8 +40,8 @@ public sealed class TextCommandSource : ITextCommandSink {
         //
         // The deferred-mutation barrier holds Immediate-routed lines and host operations: a pending simulation submission means an
         // inline read-back would observe pre-mutation state, so it waits for the snapshot to apply. Further
-        // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order, so a burst
-        // of scripted mutations lands in one tick instead of one per frame.
+        // Simulation-routed lines in submit-time sessions keep draining — they fold into the same pending snapshot in FIFO order, so a burst
+        // of scripted mutations lands in one tick instead of one per frame. Settling sessions hold every subsequent line.
         // Scan only the lines present at entry. A session whose read-after-write barrier is closed rotates to the
         // tail as one intact FIFO stream, allowing another seat's independent session to keep draining without
         // letting later lines from the blocked session overtake its read-back.
@@ -94,7 +94,7 @@ public sealed class TextCommandSource : ITextCommandSink {
 
             if (
                 session.HasPendingSimulationSubmission &&
-                ((line is null) || !m_registry.RoutesToSimulation(line: line))
+                (session.SettlesResults || (line is null) || !m_registry.RoutesToSimulation(line: line))
             ) {
                 (blockedSessions ??= []).Add(item: session);
                 m_pending.Enqueue(item: session);
@@ -114,15 +114,34 @@ public sealed class TextCommandSource : ITextCommandSink {
             }
 
             using (session.Scope?.Invoke()) {
-                var result = m_registry.SubmitSession(
-                    line: commandLine,
-                    session: session
+                session.QueuedLine = null;
+
+                CommandResult result;
+
+                try {
+                    result = m_registry.SubmitSession(line: commandLine, session: session);
+                } catch (OperationCanceledException) {
+                    session.Settle(line: commandLine, result: CommandResult.Error(output: "[wire.reject: the host cancelled this command; inspect state before any retry]"));
+                    throw;
+                }
+                var queued = ReferenceEquals(
+                    objA: session.QueuedLine,
+                    objB: commandLine
                 );
 
+                session.QueuedLine = null;
                 session.PublishResult(
                     line: commandLine,
                     result: result
                 );
+
+                // A queued line's result does not exist yet: it settles when its tick applies.
+                if (!queued) {
+                    session.Settle(
+                        line: commandLine,
+                        result: result
+                    );
+                }
             }
         }
     }
@@ -130,8 +149,10 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <param name="router">The input router that mints the session's fixed simulation ingress.</param>
     /// <param name="slot">The local seat slot.</param>
     /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
+    /// <param name="dueNextTick">Whether a simulation-routed line is due in the next tick that snapshots input
+    /// rather than at the capture clock's now (<see cref="TextCommandSession.DueNextTick"/>).</param>
     /// <returns>A text sink permanently stamped as <see cref="CommandPrincipal.Seat"/> for <paramref name="slot"/>.</returns>
-    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null) {
+    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null, bool dueNextTick = false) {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
 
@@ -146,10 +167,11 @@ public sealed class TextCommandSource : ITextCommandSink {
         }
 
         return CreateSession(
-            principal: CommandPrincipal.Seat(slot: slot),
+            dueNextTick: dueNextTick,
             onResult: onResult,
-            slot: slot,
-            simulationSink: router.CreateSeatTextSink(slot: slot)
+            principal: CommandPrincipal.Seat(slot: slot),
+            simulationSink: router.CreateSeatTextSink(slot: slot),
+            slot: slot
         );
     }
     /// <summary>Creates a text session over this source's shared queue and registry — the general form: a plain
@@ -169,11 +191,20 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <returns>A text sink permanently stamped with <paramref name="principal"/>.</returns>
     /// <param name="authorize">Optional command-metadata predicate checked before session dispatch; false refuses
     /// the command. Null adds no session-specific authorization predicate.</param>
-    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null) {
+    /// <param name="dueNextTick">Whether a simulation-routed line is due in the next tick that snapshots input
+    /// rather than at the capture clock's now (<see cref="TextCommandSession.DueNextTick"/>).</param>
+    /// <param name="onSettled">An optional callback invoked once per line with its settled result: the handler's own
+    /// result, which for a simulation-routed line exists only when its tick applies, or the verdict of work the
+    /// handler started (<see cref="CommandResult.Settlement"/>). A line refused at submission settles with that
+    /// refusal. A session that settles results holds its next line until the line before it has settled; one that
+    /// passes <see langword="null"/> keeps submit-time ordering.</param>
+    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null, bool dueNextTick = false, Action<string, CommandResult>? onSettled = null) {
         return new TextCommandSession(
             authorize: authorize,
+            dueNextTick: dueNextTick,
             hold: hold,
             onResult: onResult,
+            onSettled: onSettled,
             principal: principal,
             scope: scope,
             simulationSink: simulationSink,

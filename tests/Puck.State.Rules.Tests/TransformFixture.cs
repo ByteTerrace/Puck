@@ -153,22 +153,19 @@ public static class TransformFixture {
                 name: "right"
             ),
             Board(name: "target"),
-            Board(
-                cells: [
-                    Cell(
-                        key: "0",
-                        value: 4L
-                    ),
-                    Cell(
-                        key: "1",
-                        value: 5L
-                    ),
-                    Cell(
-                        key: "2",
-                        value: 6L
-                    ),
-                ],
-                name: "truth"
+            new StateRow(
+                Name: Name(value: "truth"),
+                Kind: CellKind.Int,
+                Capacity: 4,
+                Domain: new StateDomain.KeysOf(Row: Name(value: "tokens")),
+                Cells: [Cell(key: "a", value: 4L), Cell(key: "b", value: 6L)]
+            ),
+            new StateRow(
+                Name: Name(value: "positions"),
+                Kind: CellKind.Int,
+                Capacity: 4,
+                Domain: new StateDomain.KeysOf(Row: Name(value: "tokens")),
+                Cells: [Cell(key: "a", value: 0L), Cell(key: "b", value: 2L)]
             ),
             Board(
                 cells: [
@@ -183,9 +180,16 @@ public static class TransformFixture {
                 ],
                 name: "sight"
             ),
-            Board(name: "known") with {
+            new StateRow(
+                Name: Name(value: "known"),
+                Kind: CellKind.Int,
+                Capacity: 4,
+                Domain: new StateDomain.KeysOf(Row: Name(value: "tokens")),
+                Cells: [Cell(key: "a", value: 0L), Cell(key: "b", value: 0L)]
+            ) with {
                 Knowledge = new StateKnowledge(
                     Mask: Name(value: "sight"),
+                    Positions: Name(value: "positions"),
                     Source: Name(value: "truth")
                 ),
             },

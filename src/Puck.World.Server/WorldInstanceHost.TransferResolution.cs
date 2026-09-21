@@ -17,10 +17,12 @@ public sealed partial class WorldInstanceHost {
             collection: names,
             comparer: StringComparer.Ordinal
         );
-        if (m_closedTransferInventory.Count == 0) { throw new ArgumentException(
+        if (m_closedTransferInventory.Count == 0) {
+            throw new ArgumentException(
             message: "transfer inventory cannot be empty",
             paramName: nameof(names)
-        ); }
+        );
+        }
     }
 
     private void ReconcileInDoubtTransfers() {
@@ -306,7 +308,7 @@ public sealed partial class WorldInstanceHost {
     // ONLY difference between them is whether the retention rule is fixed (Persistent, always retained) or carried
     // per-call (Resolved, from the resolver's own destination durability). Extracted so the name-collision fence
     // below is written, and kept correct, exactly once.
-    private bool ResolveByStableName(string name, string documentPath, bool retain, out WorldInstance? resolved, out string resolvedName, out bool spawned, out string reason) {
+    private bool ResolveByStableName(string name, string documentPath, bool retain, out WorldInstance? resolved, out string resolvedName, out bool spawned, out string reason, PreparedInstanceDocument? prepared = null) {
         resolvedName = name;
 
         if (m_instances.TryGetValue(
@@ -353,10 +355,11 @@ public sealed partial class WorldInstanceHost {
             return true;
         }
 
-        if (!TryStart(
+        if (!TryStartCore(
             instance: out resolved,
             name: resolvedName,
             path: documentPath,
+            prepared: prepared,
             reason: out reason
         )) {
             spawned = false;
@@ -945,21 +948,27 @@ public sealed partial class WorldInstanceHost {
             catalog: m_machineCatalog
         );
 
+        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(
+            catalogFingerprint: m_catalogFingerprint,
+            resolvedPath: resolvedPath
+        );
+
         if (
-            !WorldDefinitionLoader.TryLoadFile(
+            !WorldDefinitionLoader.TryLoadFileForAdmission(
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
-            definition: out var loaded,
+            admission: out var admission,
             instanceIdentity: instanceName,
             neighbours: neighbours,
             path: resolvedPath,
             reason: out reason
         ) ||
-            (loaded is null)
+            (admission is null)
         ) {
             return false;
         }
 
+        var loaded = admission.Definition;
         if (loaded.Host.Authority is { Length: > 0 } endpoint) {
             try {
                 var remote = new WorldRemoteAuthority(
@@ -991,7 +1000,10 @@ public sealed partial class WorldInstanceHost {
             resolved: out var local,
             resolvedName: out _,
             retain: (destination.Durability == WorldDestinationDurability.Persisted),
-            spawned: out _
+            spawned: out _,
+            // This load selected local hosting; give its exclusively owned document to the ordinary admission
+            // path instead of parsing, validating, and drawing the same instance a second time.
+            prepared: new PreparedInstanceDocument(Admission: admission!, Name: instanceName, Path: resolvedPath, Shared: documentShared)
         ) &&
             (local is not null)
         ) {

@@ -7,14 +7,8 @@ using Puck.Transpiler;
 
 namespace Puck.World.Transpiler.Lowering;
 
-// `rule "name" { }` (§2, §3): gate/local/decision/option/interrupt/onNoChoice, and every effect statement
-// (set/add/push/countdown/remove/schedule/transform/transaction, plus a bare call for `generate(...)` and any
-// Puck.World.Schema extension arm). Every operand-bearing node here (ComparisonPredicateNode.LeftText/RightText,
-// LocalStatementNode.ExpressionText, RhsOperandNode.Text, ScoreStatementNode.Text) is raw source text the parser
-// already ran through ExpressionSpelling.TryParse for PUCK002 validation; this stage is the only one that inspects
-// the resulting instruction list to classify compareState/compareValue and value/fromState+fromKey/expression, and
-// it writes that text back VERBATIM (never reprinted through ExpressionSpelling.Print) so a ExpressionProgram-typed
-// field's wire spelling round-trips exactly through ExpressionProgramJsonConverter's own verbatim-Text convention.
+// Rule sugar carries parsed operand trees. Binding resolves names by position before the resulting runtime
+// instructions classify compareState/compareValue and value/fromState/expression document members.
 public static partial class WorldDocumentEmitter {
     private static void LowerRuleBlock(RuleBlockNode rule, JsonObject parent, DocumentScope scope, RuleScopeContext? scopeContext = null) {
         if (parent["rules"] is not JsonArray rulesArr) {
@@ -58,6 +52,23 @@ public static partial class WorldDocumentEmitter {
             ? written
             : (string.IsNullOrEmpty(value: written) ? scopeContext.Prefix : $"{scopeContext.Prefix}_{written}"));
 
+        // A local is read by its bare name wherever the rule spells an expression, whichever statement declares
+        // it, so the names are gathered before any of the rule's text is parsed.
+        var localNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var inherited in (scopeContext?.Locals ?? [])) {
+            if (inherited["name"]?.ToString() is { Length: > 0 } inheritedName) {
+                _ = localNames.Add(item: inheritedName);
+            }
+        }
+        foreach (var statement in rule.Statements) {
+            if (statement is LocalStatementNode declared) {
+                _ = localNames.Add(item: declared.Name);
+            }
+        }
+
+        using var ruleLocals = ExpressionSpelling.WithLocals(locals: localNames);
+
         var obj = new JsonObject { ["name"] = ruleName };
         var prevRule = (scope.Annotations.TryGetValue(key: "CurrentRule", value: out var pr) ? pr : null);
 
@@ -65,6 +76,15 @@ public static partial class WorldDocumentEmitter {
 
         var effects = new JsonArray();
         JsonArray? locals = null;
+        var poolBindings = GetPoolBindings(scope: scope);
+        var addedPoolBinding = ((rule.PoolBinding is { } binding) && poolBindings.Add(binding));
+        var bindingPools = GetPoolBindingPools(scope: scope);
+
+        if ((rule.PoolForEach is { } pool) && (rule.PoolBinding is { } poolBinding)) {
+            bindingPools[poolBinding] = pool;
+            RefusePoolBindingRowCollision(alias: poolBinding, scope: scope, span: rule.Span);
+            obj["poolForEach"] = new JsonObject { ["pool"] = pool, ["binding"] = poolBinding };
+        }
 
         if (scopeContext?.Locals is { Count: > 0 } parentLocals) {
             locals = [];
@@ -94,7 +114,7 @@ public static partial class WorldDocumentEmitter {
                         jsonPointer: $"{rulePointer}/locals/{locals.Count}",
                         span: local.Span
                     );
-                    locals.AppendNode(item: LowerLocal(local: local));
+                    locals.AppendNode(item: LowerLocal(local: local, scope: scope));
                     break;
                 case DecisionBlockNode decision:
                     scope.SourceMap?.Register(
@@ -107,11 +127,7 @@ public static partial class WorldDocumentEmitter {
                     );
                     break;
                 case PropertyNode prop:
-                    var loweredProp = LowerExpression(
-                        prop.Value,
-                        scope,
-                        prop.Name
-                    );
+                    var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: prop, scope: scope);
                     DocumentLowering.AssignOrExtend(
                         obj,
                         prop.Name,
@@ -173,14 +189,68 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.Annotations["CurrentRule"] = prevRule;
+        if (addedPoolBinding) {
+            _ = poolBindings.Remove(item: rule.PoolBinding!);
+            _ = bindingPools.Remove(key: rule.PoolBinding!);
+        }
         scope.CurrentPointer = oldPointer;
         rulesArr.AppendNode(item: obj);
     }
-    private static JsonObject LowerLocal(LocalStatementNode local) => new() {
-        ["name"] = local.Name,
-        ["kind"] = local.Kind,
-        ["expression"] = local.ExpressionText,
-    };
+
+    // The model types a rule's own property lines, its decision's and an option's fill, so each line is written in
+    // the one spelling its member takes.
+    private static readonly Type? DecisionModel = WorldCallArguments.MemberType(member: "decision", owner: typeof(WorldRule));
+    private static readonly Type? OptionModel = ((DecisionModel is null) ? null : WorldCallArguments.MemberType(member: "options", owner: DecisionModel));
+
+    private static JsonNode? LowerModelMember(Type? holder, PropertyNode property, DocumentScope scope) => DocumentLowering.LowerMember(
+        fieldKey: property.Name,
+        holder: holder,
+        holderName: null,
+        memberName: property.Name,
+        scope: scope,
+        value: property.Value
+    );
+    private static JsonObject LowerLocal(LocalStatementNode local, DocumentScope scope) {
+        var text = BindOperand(local.Expression, scope);
+
+        return new JsonObject {
+            ["name"] = local.Name,
+            ["expression"] = DocumentExpression(text: text),
+        };
+    }
+
+    // The text a document holds names a reserved channel and a rule local in full. An expression that reads one is
+    // therefore written in the document's spelling; any other stays as the author wrote it.
+    internal static string DocumentExpression(string text) {
+        if (
+            !ExpressionSpelling.TryParse(
+                error: out _,
+                program: out var program,
+                text: text
+            ) ||
+            !ReadsReserved(program: program)
+        ) {
+            return text;
+        }
+
+        return (ExpressionSpelling.TryPrint(
+            program: program,
+            text: out var printed
+        )
+            ? printed
+            : text
+        );
+
+        static bool ReadsReserved(ExpressionProgram program) => (
+            AnyReserved(instructions: program.Instructions) ||
+            program.Subprograms.Any(predicate: static subprogram => AnyReserved(instructions: subprogram.Instructions))
+        );
+        static bool AnyReserved(IReadOnlyList<Instruction> instructions) => instructions.Any(predicate: static instruction => (
+            (instruction.Payload is InstructionPayload.State state) &&
+            ((state.Name.Call is not null) || (state.Key?.Call is not null))
+        ));
+    }
+
     private static JsonObject LowerDecisionBlock(DecisionBlockNode decision, DocumentScope scope) {
         var decisionPointer = $"{scope.CurrentPointer}/decision";
         var obj = new JsonObject();
@@ -207,19 +277,11 @@ public static partial class WorldDocumentEmitter {
                     ));
                     break;
                 case PropertyNode { Name: "mode" } p:
-                    mode = (LowerExpression(
-                        p.Value,
-                        scope,
-                        p.Name
-                    )?.ToString() ?? mode);
+                    mode = (LowerModelMember(holder: DecisionModel, property: p, scope: scope)?.ToString() ?? mode);
                     sawMode = true;
                     break;
                 case PropertyNode { Name: "scoreKind" } p:
-                    scoreKind = (LowerExpression(
-                        p.Value,
-                        scope,
-                        p.Name
-                    )?.ToString() ?? scoreKind);
+                    scoreKind = (LowerModelMember(holder: DecisionModel, property: p, scope: scope)?.ToString() ?? scoreKind);
                     sawScoreKind = true;
                     break;
                 case PropertyNode { Name: "commitmentSeconds" } p:
@@ -257,11 +319,7 @@ public static partial class WorldDocumentEmitter {
                     );
                     break;
                 case PropertyNode { Name: "interrupt" } p:
-                    obj["interrupt"] = LowerExpression(
-                        p.Value,
-                        scope,
-                        p.Name
-                    );
+                    obj["interrupt"] = LowerModelMember(holder: DecisionModel, property: p, scope: scope);
                     break;
                 case OnNoChoiceBlockNode onNoChoice: {
                         var arr = new JsonArray();
@@ -358,14 +416,10 @@ public static partial class WorldDocumentEmitter {
                     );
                     break;
                 case ScoreStatementNode score:
-                    obj["score"] = score.Text;
+                    obj["score"] = DocumentExpression(text: BindOperand(score.Expression, scope));
                     break;
                 case PropertyNode p:
-                    obj[p.Name] = LowerExpression(
-                        p.Value,
-                        scope,
-                        p.Name
-                    );
+                    obj[p.Name] = LowerModelMember(holder: OptionModel, property: p, scope: scope);
                     break;
                 case EffectStatementNode or ExpressionStatementNode:
                     if (LowerEffectStatement(
@@ -389,7 +443,7 @@ public static partial class WorldDocumentEmitter {
     private static decimal ToDecimalNode(JsonNode? node) => node switch {
         JsonValue v when v.TryGetValue<decimal>(value: out var d) => d,
         JsonValue v when v.TryGetValue<long>(value: out var l) => l,
-        JsonValue v when v.TryGetValue<double>(value: out var db) => ((decimal)db),
+        JsonValue v when v.TryGetValue<double>(value: out var db) => DecimalValues.FromDouble(value: db),
         _ => 0m,
     };
     // ---- Gate lowering (§1) --------------------------------------------------------------------------------
@@ -452,70 +506,16 @@ public static partial class WorldDocumentEmitter {
         }
         return new JsonObject { ["$type"] = discriminator, [propertyName] = arr };
     }
-    // Substitutes any bare identifier naming a `let` binding or a loop local with the literal it stands for. A
-    // token carrying a state-read sigil ($, a backtick name, a `.key` or `[index]` tail) is left alone: those are
-    // reads of live state, never compile-time values.
-    private static string ResolveOperandConstants(string text, DocumentScope scope) {
-        if (
-            string.IsNullOrEmpty(value: text) ||
-            ((scope.Constants.Count == 0) && (scope.Locals.Count == 0))
-        ) {
-            return text;
-        }
-
-        return BareIdentifier.Replace(
-            input: text,
-            evaluator: match => {
-                var name = match.Value;
-
-                if (scope.TryLowerBinding(
-                    name,
-                    out var bound
-                )) {
-                    return (DocumentLowering.KeyText(node: bound) ?? name);
-                }
-
-                return name;
-            }
-        );
-    }
-
-    private static readonly System.Text.RegularExpressions.Regex BareIdentifier =
-        new(
-        options: System.Text.RegularExpressions.RegexOptions.Compiled,
-        pattern: @"(?<![\w$`.\[])[A-Za-z_][A-Za-z0-9_]*(?![\w(\[:`])"
-    );
-
     private static JsonObject LowerComparison(ComparisonPredicateNode cmp, DocumentScope scope, JsonObject? ruleObj = null) {
         // A gate operand is resolved against the `let` bindings and loop locals in scope BEFORE it is classified.
         // Without this a bare name can only ever read as a state row, so a bound named `wellFloor` silently became
         // a read of a row by that name and the author had to write the number out with a comment naming what it
         // meant. A binding shadows a state row of the same name, which is the same precedence the cartridge
         // vocabulary's operands already use.
-        var leftText = cmp.LeftText;
-        var rightText = cmp.RightText;
-
-        leftText = ResolveDerivedStateInText(text: leftText, scope: scope);
-        rightText = ResolveDerivedStateInText(text: rightText, scope: scope);
-
-        leftText = ResolveCollectionOperationsInText(scope: scope, text: leftText);
-        rightText = ResolveCollectionOperationsInText(scope: scope, text: rightText);
-
-        leftText = ResolveRecordFieldAccessesInText(scope: scope, text: leftText);
-        rightText = ResolveRecordFieldAccessesInText(scope: scope, text: rightText);
-
-        leftText = ResolveEnumsInText(scope: scope, text: leftText);
-        rightText = ResolveEnumsInText(scope: scope, text: rightText);
-
-        leftText = ResolveOperandConstants(scope: scope, text: leftText);
-        rightText = ResolveOperandConstants(scope: scope, text: rightText);
-
-        leftText = ResolveEmbeddedLiteralsInText(text: leftText, expectedSpace: null, scope: scope, span: cmp.Span);
-        rightText = ResolveEmbeddedLiteralsInText(text: rightText, expectedSpace: null, scope: scope, span: cmp.Span);
-
-        leftText = ResolveFamilyReferencesInText(scope: scope, text: leftText);
-        rightText = ResolveFamilyReferencesInText(scope: scope, text: rightText);
-
+        var authoredLeftText = cmp.Left.Text;
+        var authoredRightText = cmp.Right.Text;
+        var leftText = BindOperand(cmp.Left, scope);
+        var rightText = BindOperand(cmp.Right, scope);
         if (!PuckDslVocabulary.TryParseComparator(
             cmp.Comparator,
             out var parsedComparison
@@ -523,6 +523,19 @@ public static partial class WorldDocumentEmitter {
             throw new InvalidOperationException(message: $"'{cmp.Comparator}' is not a DSL comparison operator");
         }
         var comparison = PuckDslVocabulary.NameOf(comparison: parsedComparison);
+
+        if (
+            TryTypedPoolFieldKind(kind: out var bindingKind, scope: scope, text: authoredLeftText) ||
+            TryTypedPoolFieldKind(kind: out bindingKind, scope: scope, text: authoredRightText)
+        ) {
+            return new JsonObject {
+                ["$type"] = "compareValue",
+                ["comparison"] = comparison,
+                ["kind"] = bindingKind,
+                ["left"] = DocumentPoolFieldExpression(scope: scope, text: authoredLeftText),
+                ["right"] = DocumentPoolFieldExpression(scope: scope, text: authoredRightText),
+            };
+        }
 
         // An explicit `: Kind`/`as Kind` suffix always forces compareValue, even for two simple single-token
         // operands — CompareState carries no Kind field at all, so an authored kind annotation on it is meaningless;
@@ -532,8 +545,8 @@ public static partial class WorldDocumentEmitter {
                 ["$type"] = "compareValue",
                 ["comparison"] = comparison,
                 ["kind"] = cmp.Kind,
-                ["left"] = leftText,
-                ["right"] = rightText,
+                ["left"] = DocumentExpression(text: leftText),
+                ["right"] = DocumentExpression(text: rightText),
             };
         }
 
@@ -545,25 +558,25 @@ public static partial class WorldDocumentEmitter {
         )) {
             case BareComparisonShape.StateAgainstConstant:
                 return NewCompareState(
-                    (((InstructionPayload.State)leftToken!.Payload!)).Name,
-                    (((InstructionPayload.State)leftToken!.Payload!)).Key,
+                    (((InstructionPayload.State)leftToken!.Payload!)).Name.Spelling,
+                    (((InstructionPayload.State)leftToken!.Payload!)).Key?.Spelling,
                     comparison,
                     value: (((InstructionPayload.Constant)rightToken!.Payload!)).Value
                 );
             case BareComparisonShape.StateAgainstState:
                 return NewCompareState(
-                    (((InstructionPayload.State)leftToken!.Payload!)).Name,
-                    (((InstructionPayload.State)leftToken!.Payload!)).Key,
+                    (((InstructionPayload.State)leftToken!.Payload!)).Name.Spelling,
+                    (((InstructionPayload.State)leftToken!.Payload!)).Key?.Spelling,
                     comparison,
-                    comparandState: (((InstructionPayload.State)rightToken!.Payload!)).Name,
-                    comparandKey: (((InstructionPayload.State)rightToken!.Payload!)).Key
+                    comparandState: (((InstructionPayload.State)rightToken!.Payload!)).Name.Spelling,
+                    comparandKey: (((InstructionPayload.State)rightToken!.Payload!)).Key?.Spelling
                 );
             case BareComparisonShape.ConstantAgainstState:
                 // Operands swapped so the live State read is always the CompareState subject — the decompiler never
                 // emits this constant-first spelling, only the compiler tolerates it.
                 return NewCompareState(
-                    (((InstructionPayload.State)rightToken!.Payload!)).Name,
-                    (((InstructionPayload.State)rightToken!.Payload!)).Key,
+                    (((InstructionPayload.State)rightToken!.Payload!)).Name.Spelling,
+                    (((InstructionPayload.State)rightToken!.Payload!)).Key?.Spelling,
                     PuckDslVocabulary.NameOf(comparison: PuckDslVocabulary.Flip(comparison: parsedComparison)),
                     value: (((InstructionPayload.Constant)leftToken!.Payload!)).Value
                 );
@@ -572,10 +585,76 @@ public static partial class WorldDocumentEmitter {
                     ["$type"] = "compareValue",
                     ["comparison"] = comparison,
                     ["kind"] = "Fixed",
-                    ["left"] = leftText,
-                    ["right"] = rightText,
+                    ["left"] = DocumentExpression(text: leftText),
+                    ["right"] = DocumentExpression(text: rightText),
                 };
         }
+    }
+    private static bool IsPoolBindingField(string text, DocumentScope scope) {
+        var dot = text.IndexOf(value: '.');
+
+        return (
+            (dot > 0) &&
+            (dot == text.LastIndexOf(value: '.')) &&
+            (dot < (text.Length - 1)) &&
+            GetPoolBindings(scope: scope).Contains(item: text[..dot]) &&
+            text[(dot + 1)..].All(predicate: static c => (char.IsLetterOrDigit(c: c) || (c is '_' or '$')))
+        );
+    }
+    private static bool TryTypedPoolFieldKind(string text, DocumentScope scope, out string kind) {
+        kind = "Fixed";
+        var dot = text.IndexOf(value: '.');
+        string? pool = null;
+        string? fieldName = null;
+
+        if (IsPoolBindingField(scope: scope, text: text)) {
+            _ = GetPoolBindingPools(scope: scope).TryGetValue(key: text[..dot], value: out pool);
+            fieldName = text[(dot + 1)..];
+        } else if (TryStaticPoolField(reference: out var staticField, scope: scope, text: text)) {
+            pool = staticField.PoolField!.Pool;
+            fieldName = staticField.PoolField.Field;
+        }
+        if (
+            (pool is null) ||
+            !GetOrCreateRecordPools(scope: scope).TryGetValue(key: pool, value: out var recordName) ||
+            !GetOrCreateRecords(scope: scope).TryGetValue(key: recordName, value: out var record)
+        ) {
+            return false;
+        }
+        var field = record.Fields.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name, b: fieldName, comparisonType: StringComparison.Ordinal));
+
+        if (field is null) {
+            return false;
+        }
+        kind = ((field.TypeName is "Bool" or "Fixed" or "Text" or "Vector")
+            ? field.TypeName
+            : "Int"
+        );
+        return true;
+    }
+    private static JsonNode DocumentPoolFieldExpression(string text, DocumentScope scope) {
+        StateChannelRef? reference = null;
+
+        if (IsPoolBindingField(scope: scope, text: text)) {
+            var dot = text.IndexOf(value: '.');
+
+            reference = StateChannelRef.OfBindingField(binding: text[..dot], field: text[(dot + 1)..]);
+        } else if (TryStaticPoolField(reference: out var typed, scope: scope, text: text)) {
+            reference = typed;
+        }
+        return ((reference is null) ? DocumentExpression(text: text) : ExpressionProgramJsonConverter.ToNode(program: new ExpressionProgram(Instructions: [Instruction.Operand(name: reference)])));
+    }
+    private static bool TryStaticPoolField(string text, DocumentScope scope, out StateChannelRef reference) {
+        reference = null!;
+        var open = text.IndexOf(value: '[');
+        var close = text.IndexOf(value: ']');
+        var dot = text.IndexOf(value: '.', startIndex: Math.Max(val1: 0, val2: close));
+
+        if ((open <= 0) || (close <= open) || (dot != (close + 1)) || !int.TryParse(text[(open + 1)..close], out var slot) || !GetOrCreateRecordPools(scope: scope).ContainsKey(key: text[..open])) {
+            return false;
+        }
+        reference = StateChannelRef.OfStaticPoolField(pool: text[..open], slot: slot, field: text[(dot + 1)..]);
+        return true;
     }
 
     /// <summary>Which node an unannotated <c>left cmp right</c> comparison lowers to.</summary>
@@ -672,12 +751,6 @@ public static partial class WorldDocumentEmitter {
             scope: scope
         ),
         PushStatementNode push => LowerPush(push: push, ruleObj: ruleObj, scope: scope),
-        CountdownStatementNode countdown => LowerRowOnlyEffect(
-            discriminator: "countdownState",
-            ruleObj: ruleObj,
-            scope: scope,
-            target: countdown.Target
-        ),
         RemoveCellStatementNode remove => LowerRowOnlyEffect(
             discriminator: "removeStateCell",
             ruleObj: ruleObj,
@@ -690,8 +763,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "transfer",
-                ["from"] = ResolveFamilyReferencesInText(text: draw.From, scope: scope),
-                ["to"] = ResolveFamilyReferencesInText(text: draw.To, scope: scope),
+                ["from"] = BindRowReference(text: draw.From, scope: scope),
+                ["to"] = BindRowReference(text: draw.To, scope: scope),
                 ["selector"] = "First",
             },
         },
@@ -699,8 +772,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "transfer",
-                ["from"] = ResolveFamilyReferencesInText(text: deal.From, scope: scope),
-                ["to"] = ResolveFamilyReferencesInText(text: deal.To, scope: scope),
+                ["from"] = BindRowReference(text: deal.From, scope: scope),
+                ["to"] = BindRowReference(text: deal.To, scope: scope),
                 ["selector"] = "First",
                 ["count"] = deal.Count,
             },
@@ -709,8 +782,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "shuffle",
-                ["row"] = ResolveFamilyReferencesInText(text: shuffle.Row, scope: scope),
-                ["draw"] = ((shuffle.Draw is not null) ? ResolveFamilyReferencesInText(text: shuffle.Draw, scope: scope) : null),
+                ["row"] = BindRowReference(text: shuffle.Row, scope: scope),
+                ["draw"] = ((shuffle.Draw is not null) ? BindRowReference(text: shuffle.Draw, scope: scope) : null),
             },
         },
         TransactionStatementNode transaction => LowerTransaction(
@@ -719,9 +792,10 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             transaction: transaction
         ),
-        ExpressionStatementNode { Expression: CallExpressionNode call } => LowerExpression(
-            call,
-            scope
+        ExpressionStatementNode { Expression: CallExpressionNode call } => DocumentLowering.At(
+            scope: scope,
+            context: typeof(ActionEffect),
+            lower: () => LowerExpression(call, scope)
         )!,
         CompoundAssignStatementNode compound => RefuseCompoundAssignment(
             compound: compound,
@@ -745,8 +819,127 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             stmt: stmt
         ),
+        ClaimStatementNode claim => LowerPoolClaim(claim: claim, pointer: pointer, ruleObj: ruleObj, scope: scope),
+        ClaimPairStatementNode claim => LowerPairPoolClaim(claim: claim, pointer: pointer, ruleObj: ruleObj, scope: scope),
+        ReleaseStatementNode release => new JsonObject { ["$type"] = "release", ["binding"] = release.Alias },
+        PoolForEachStatementNode each => LowerPoolForEach(each: each, pointer: pointer, ruleObj: ruleObj, scope: scope),
         _ => throw new InvalidOperationException(message: $"unrecognized effect statement '{stmt.GetType()}'"),
     };
+    private static JsonObject LowerPoolClaim(ClaimStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+        var effects = new JsonArray();
+        var bindings = GetPoolBindings(scope: scope);
+
+        RefusePoolBindingRowCollision(alias: claim.Alias, scope: scope, span: claim.Span);
+        var added = bindings.Add(item: claim.Alias);
+        var bindingPools = GetPoolBindingPools(scope: scope);
+
+        bindingPools[claim.Alias] = claim.Pool;
+
+        try {
+            foreach (var nested in claim.Body) {
+                if (LowerEffectStatement(nested, scope, $"{pointer}/effects/{effects.Count}", ruleObj) is { } lowered) {
+                    effects.Add(item: lowered);
+                }
+            }
+        } finally {
+            if (added) {
+                bindings.Remove(item: claim.Alias);
+                bindingPools.Remove(key: claim.Alias);
+            }
+        }
+        return new JsonObject {
+            ["$type"] = "claim",
+            ["pool"] = claim.Pool,
+            ["binding"] = claim.Alias,
+            ["effects"] = effects,
+        };
+    }
+    private static JsonObject LowerPoolForEach(PoolForEachStatementNode each, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+        var effects = new JsonArray();
+        var bindings = GetPoolBindings(scope: scope);
+
+        RefusePoolBindingRowCollision(alias: each.Alias, scope: scope, span: each.Span);
+        var added = bindings.Add(item: each.Alias);
+        var bindingPools = GetPoolBindingPools(scope: scope);
+
+        bindingPools[each.Alias] = each.Pool;
+
+        try {
+            foreach (var nested in each.Body) {
+                if (LowerEffectStatement(nested, scope, $"{pointer}/effects/{effects.Count}", ruleObj) is { } lowered) {
+                    effects.Add(item: lowered);
+                }
+            }
+        } finally {
+            if (added) {
+                bindings.Remove(item: each.Alias);
+                bindingPools.Remove(key: each.Alias);
+            }
+        }
+        return new JsonObject {
+            ["$type"] = "forEachPool",
+            ["pool"] = each.Pool,
+            ["binding"] = each.Alias,
+            ["effects"] = effects,
+        };
+    }
+    private static JsonObject LowerPairPoolClaim(ClaimPairStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+        var effects = new JsonArray();
+        var bindings = GetPoolBindings(scope: scope);
+
+        RefusePoolBindingRowCollision(alias: claim.Alias, scope: scope, span: claim.Span);
+        var added = bindings.Add(item: claim.Alias);
+
+        try {
+            foreach (var nested in claim.Body) {
+                if (LowerEffectStatement(nested, scope, $"{pointer}/effects/{effects.Count}", ruleObj) is { } lowered) {
+                    effects.Add(item: lowered);
+                }
+            }
+        } finally {
+            if (added) {
+                bindings.Remove(item: claim.Alias);
+            }
+        }
+        return new JsonObject {
+            ["$type"] = "claimPair",
+            ["pool"] = claim.Pool,
+            ["left"] = claim.Left,
+            ["right"] = claim.Right,
+            ["binding"] = claim.Alias,
+            ["effects"] = effects,
+        };
+    }
+    private static HashSet<string> GetPoolBindings(DocumentScope scope) {
+        if (!scope.Annotations.TryGetValue(key: "WorldPoolBindings", value: out var value) || (value is not HashSet<string> bindings)) {
+            bindings = new HashSet<string>(comparer: StringComparer.Ordinal);
+            scope.Annotations["WorldPoolBindings"] = bindings;
+        }
+        return bindings;
+    }
+    private static Dictionary<string, string> GetPoolBindingPools(DocumentScope scope) {
+        if (!scope.Annotations.TryGetValue(key: "WorldPoolBindingPools", value: out var value) || (value is not Dictionary<string, string> bindings)) {
+            bindings = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+            scope.Annotations["WorldPoolBindingPools"] = bindings;
+        }
+        return bindings;
+    }
+    private static void RefusePoolBindingRowCollision(string alias, DocumentScope scope, SourceSpan span) {
+        if (
+            !scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rootNode) ||
+            (rootNode is not JsonObject root) ||
+            (root["state"] is not JsonObject state) ||
+            (state["world"] is not JsonArray rows) ||
+            !rows.OfType<JsonObject>().Any(predicate: row => string.Equals(a: row["name"]?.ToString(), b: alias, comparisonType: StringComparison.Ordinal))
+        ) {
+            return;
+        }
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+            message: $"pool binding '{alias}' conflicts with a state row of the same name; choose a distinct binding so '{alias}[key]' is unambiguous",
+            span: span
+        );
+    }
     // puck.world.definition.v1 carries two assignment effects, setState and addState; every other operator belongs in the
     // expression on the right, where the state engine evaluates it.
     private static JsonNode? RefuseCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope) {
@@ -831,20 +1024,34 @@ public static partial class WorldDocumentEmitter {
     private static JsonObject LowerCellEffect(string discriminator, RowRefNode target, RhsNode rhs, bool allowText, DocumentScope scope, JsonObject? ruleObj = null) {
         var targetName = target.Name;
         var targetKey = target.Key;
+        StateChannelRef? typedTarget = null;
+
+        if ((targetKey is not null) && GetPoolBindings(scope: scope).Contains(item: targetName)) {
+            typedTarget = StateChannelRef.OfBindingField(binding: targetName, field: targetKey);
+            targetName = $"{targetName}.{targetKey}";
+            targetKey = null;
+        }
 
         var fullTarget = ((targetKey is null) ? targetName : $"{targetName}[{targetKey}]");
         var originalTarget = fullTarget;
 
-        fullTarget = ResolveDerivedStateInText(text: fullTarget, scope: scope);
-        fullTarget = ResolveRecordFieldAccessesInText(scope: scope, text: fullTarget);
-        var resolved = ResolveFamilyReferencesInText(scope: scope, text: fullTarget);
+        if ((typedTarget is null) && TryStaticPoolField(reference: out var staticTarget, scope: scope, text: originalTarget)) {
+            typedTarget = staticTarget;
+            targetKey = null;
+        }
+
+        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
+        }
+        var resolved = BindRowReference(scope: scope, text: fullTarget);
 
         // A live row position stays one spelling, whatever it resolved from: the rule compiler selects the row from
         // it and the remainder, if any, is the cell key inside that row.
-        if (TryLiveRowHead(head: out var liveHead, key: out var liveKey, scope: scope, text: resolved)) {
+        if ((typedTarget is null) && TryLiveRowHead(head: out var liveHead, key: out var liveKey, scope: scope, text: resolved)) {
             targetName = liveHead;
             targetKey = liveKey;
-        } else if (resolved != originalTarget) {
+        } else if ((typedTarget is null) && (resolved != originalTarget)) {
             var bracketIdx = resolved.IndexOf(value: '[');
 
             if (bracketIdx < 0) {
@@ -858,10 +1065,13 @@ public static partial class WorldDocumentEmitter {
                 targetKey = ((closeIdx > 0) ? resolved[(bracketIdx + 1)..closeIdx] : resolved[(bracketIdx + 1)..]);
             }
         }
+        if ((targetName.Length >= 2) && (targetName[0] == '`') && (targetName[^1] == '`')) {
+            targetName = targetName[1..^1];
+        }
 
-        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = targetName };
+        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = ((typedTarget is null) ? targetName : StateChannelRefJsonConverter.ToNode(value: typedTarget)) };
 
-        if (targetKey is not null) {
+        if ((typedTarget is null) && (targetKey is not null)) {
             obj["key"] = targetKey;
         }
 
@@ -921,7 +1131,7 @@ public static partial class WorldDocumentEmitter {
                     scope: scope,
                     span: operand.Span,
                     targetRowSpace: targetRowSpace,
-                    text: operand.Text
+                    text: BindOperand(operand.Expression, scope)
                 );
                 break;
         }
@@ -934,12 +1144,13 @@ public static partial class WorldDocumentEmitter {
     // shape.
     private static void ApplyOperandRhs(JsonObject obj, string text, bool isVectorRow = false, string? targetRowSpace = null, DocumentScope? scope = null, SourceSpan span = default, JsonObject? ruleObj = null) {
         if (scope is not null) {
-            text = ResolveDerivedStateInText(text: text, scope: scope);
-            text = ResolveCollectionOperationsInText(scope: scope, text: text);
-            text = ResolveRecordFieldAccessesInText(scope: scope, text: text);
-            text = ResolveEnumsInText(scope: scope, text: text);
-            text = ResolveOperandConstants(scope: scope, text: text);
-            text = ResolveFamilyReferencesInText(scope: scope, text: text);
+            if ((DocumentPoolFieldExpression(scope: scope, text: text) is JsonObject typed) && TryTypedPoolFieldKind(kind: out _, scope: scope, text: text)) {
+                var typedProgram = ExpressionProgramJsonConverter.FromNode(node: typed);
+                var typedState = ((InstructionPayload.State)typedProgram.Instructions[0].Payload!).Name;
+
+                obj["fromState"] = StateChannelRefJsonConverter.ToNode(value: typedState);
+                return;
+            }
         }
 
         if (isVectorRow && (scope is not null)) {
@@ -1018,13 +1229,111 @@ public static partial class WorldDocumentEmitter {
             (parsed.Instructions.Count == 1) &&
             (parsed.Instructions[0] is { Payload: InstructionPayload.State { Key: null } state })
         ) {
-            obj["fromState"] = state.Name;
+            obj["fromState"] = state.Name.Spelling;
         } else {
-            obj["expression"] = text;
+            obj["expression"] = DocumentExpression(text: text);
         }
     }
+
+    // Calls, sugar and classified block members bind the same operand tree. Quoted names and computed atoms
+    // are terminal values, so binding never interprets their contents as further source syntax.
+    internal static JsonNode? LowerOperandArgument(OperandExpressionNode operand, DocumentScope scope) {
+        if ((operand.Form == DocumentValueForm.Name) &&
+            (operand.Syntax is ExpressionSpelling.SourceName { Quoted: false } name) &&
+            scope.TryLowerBinding(name.Name, out var bound) && (bound is JsonArray names)) {
+            return names.DeepClone();
+        }
+        var text = BindOperand(operand: operand, scope: scope);
+        switch (operand.Form) {
+            case DocumentValueForm.Key:
+                if (ExpressionSpelling.TryParseKey(error: out var keyError, key: out var key, text: text)) {
+                    return JsonValue.Create(value: key);
+                }
+
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.OperandParse,
+                    message: $"'{operand.Text}' {keyError}",
+                    span: operand.Span
+                );
+
+                return JsonValue.Create(value: text);
+
+            case DocumentValueForm.Name:
+                if (IsPoolBindingField(scope: scope, text: text)) {
+                    var dot = text.IndexOf(value: '.');
+
+                    return StateChannelRefJsonConverter.ToNode(value: StateChannelRef.OfBindingField(binding: text[..dot], field: text[(dot + 1)..]));
+                }
+                if (TryStaticPoolField(reference: out var field, scope: scope, text: text)) {
+                    return StateChannelRefJsonConverter.ToNode(value: field);
+                }
+
+                return JsonValue.Create(value: DocumentReference(text: text));
+
+            case DocumentValueForm.Expression:
+                return DocumentPoolFieldExpression(scope: scope, text: ResolveBooleanLiteral(text: text));
+
+            default:
+                return JsonValue.Create(value: operand.Text);
+        }
+    }
+
+
+    // A StateChannelRef member has one structural representation even when a binding or interpolation computed
+    // its spelling. Dots in a name position denote pool fields, never ordinary row names. Keys and expressions
+    // retain their separate grammars; their dotted reads need not mean a pool field.
+    internal static JsonNode? NormalizeChannelReference(JsonNode? value) {
+        if (value is JsonArray array) {
+            for (var index = 0; (index < array.Count); index++) {
+                var item = array[index];
+                var normalized = NormalizeChannelReference(value: item);
+
+                if (!ReferenceEquals(objA: item, objB: normalized)) {
+                    array[index] = normalized;
+                }
+            }
+            return array;
+        }
+        if (
+            (value is JsonValue scalar) && scalar.TryGetValue<string>(value: out var text) &&
+            text.Contains(value: '.') &&
+            ExpressionSpelling.TryParse(error: out _, program: out var program, text: text) &&
+            (program.Instructions is [{ Payload: InstructionPayload.State { Name.PoolField: not null, Key: null } state }]) &&
+            (program.Subprograms.Count == 0)
+        ) {
+            return StateChannelRefJsonConverter.ToNode(value: state.Name);
+        }
+
+        return value;
+    }
+
+    // A reference is one operand. Its document spelling is what the operand grammar prints for it; text that is not
+    // one operand (a live zone selector) is already in the document's spelling.
+    private static string DocumentReference(string text) {
+        using var noLocals = ExpressionSpelling.WithLocals(locals: System.Collections.Frozen.FrozenSet<string>.Empty);
+
+        if ((text.Length > 2) && (text[0] == '`') && (text[^1] == '`') && (text.IndexOf(startIndex: 1, value: '`') == (text.Length - 1))) {
+            return text[1..^1];
+        }
+
+        return ((
+            ExpressionSpelling.TryParse(error: out _, program: out var program, text: text) &&
+            (program.Instructions.Count == 1) &&
+            (program.Subprograms.Count == 0) &&
+            (program.Instructions[0].Payload is InstructionPayload.State { Name.Call: not null }) &&
+            ExpressionSpelling.TryPrint(program: program, text: out var printed)
+        )
+            ? printed
+            : text
+        );
+    }
+    private static string ResolveBooleanLiteral(string text) => text.Trim() switch {
+        "true" => "1",
+        "false" => "0",
+        _ => text,
+    };
     private static JsonObject LowerPush(PushStatementNode push, DocumentScope scope, JsonObject? ruleObj = null) {
-        var resolvedName = ResolveFamilyReferencesInText(text: push.RowName, scope: scope);
+        var resolvedName = BindRowReference(text: push.RowName, scope: scope);
         var obj = new JsonObject { ["$type"] = "pushState", ["state"] = resolvedName };
         // PushState carries no Text/Key/ValueSeconds field; ApplyRhs's text/seconds arms would shape JSON it
         // cannot carry, so only the classified-operand arm applies here (the parser already refuses the others).
@@ -1033,14 +1342,21 @@ public static partial class WorldDocumentEmitter {
                 obj: obj,
                 ruleObj: ruleObj,
                 scope: scope,
-                text: operand.Text
+                text: BindOperand(operand.Expression, scope)
             );
         }
         return obj;
     }
     private static JsonObject LowerRowOnlyEffect(string discriminator, RowRefNode target, DocumentScope scope, JsonObject? ruleObj = null) {
         var fullTarget = ((target.Key is null) ? target.Name : $"{target.Name}[{target.Key}]");
-        var resolved = ResolveFamilyReferencesInText(scope: scope, text: fullTarget);
+        StateChannelRef? typedTarget = null;
+
+        if ((target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: target.Name)) {
+            typedTarget = StateChannelRef.OfBindingField(binding: target.Name, field: target.Key);
+        } else if (TryStaticPoolField(reference: out var staticTarget, scope: scope, text: fullTarget)) {
+            typedTarget = staticTarget;
+        }
+        var resolved = BindRowReference(scope: scope, text: fullTarget);
         var targetName = resolved;
         string? targetKey = null;
 
@@ -1055,16 +1371,23 @@ public static partial class WorldDocumentEmitter {
             targetKey = ((closeIdx > 0) ? resolved[(bracketIdx + 1)..closeIdx] : resolved[(bracketIdx + 1)..]);
         }
 
-        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = targetName };
+        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = ((typedTarget is null) ? targetName : StateChannelRefJsonConverter.ToNode(value: typedTarget)) };
 
-        if (targetKey is not null) {
+        if ((typedTarget is null) && (targetKey is not null)) {
             obj["key"] = targetKey;
         }
         return obj;
     }
     private static JsonObject LowerSchedule(ScheduleStatementNode schedule, DocumentScope scope, JsonObject? ruleObj = null) {
         var fullTarget = ((schedule.Target.Key is null) ? schedule.Target.Name : $"{schedule.Target.Name}[{schedule.Target.Key}]");
-        var resolved = ResolveFamilyReferencesInText(scope: scope, text: fullTarget);
+        StateChannelRef? typedTarget = null;
+
+        if ((schedule.Target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: schedule.Target.Name)) {
+            typedTarget = StateChannelRef.OfBindingField(binding: schedule.Target.Name, field: schedule.Target.Key);
+        } else if (TryStaticPoolField(reference: out var staticTarget, scope: scope, text: fullTarget)) {
+            typedTarget = staticTarget;
+        }
+        var resolved = BindRowReference(scope: scope, text: fullTarget);
         var targetName = resolved;
         string? targetKey = null;
 
@@ -1081,11 +1404,11 @@ public static partial class WorldDocumentEmitter {
 
         var obj = new JsonObject {
             ["$type"] = "scheduleState",
-            ["state"] = targetName,
+            ["state"] = ((typedTarget is null) ? targetName : StateChannelRefJsonConverter.ToNode(value: typedTarget)),
             ["delaySeconds"] = schedule.DelaySeconds,
         };
 
-        if (targetKey is not null) {
+        if ((typedTarget is null) && (targetKey is not null)) {
             obj["key"] = targetKey;
         }
         return obj;

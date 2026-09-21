@@ -141,7 +141,7 @@ public class NameReaderTests {
         var comparison = Assert.IsType<ComparisonPredicateNode>(@object: gate.Predicate);
 
         Assert.Equal(
-            actual: comparison.LeftText,
+            actual: comparison.Left.Text,
             expected: "$channel:1:strafe"
         );
     }

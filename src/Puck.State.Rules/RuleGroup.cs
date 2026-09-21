@@ -36,16 +36,21 @@ public sealed record RuleGroupStep(CellName Rule, RuleGroupStepPolicy OnRefusal 
 /// <param name="Passes">The pass ceiling a fixpoint group breaches into a counted refusal, or
 /// <see langword="null"/> for <see cref="RuleGroupCapacity.DefaultPasses"/>.</param>
 /// <param name="Trigger">The gate that arms the group, or <see langword="null"/> for always.</param>
+/// <param name="Undo">The retained turn rows and depth, or <see langword="null"/> when the group has no undo history.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record RuleGroupDeclaration(CellName Name, RuleGroupShape Shape, IReadOnlyList<RuleGroupStep> Steps, int? Passes = null, ActionPredicate? Trigger = null);
-/// <summary>Hard bounds for rule groups; these are per-tick work limits, not gameplay tuning.</summary>
+public sealed record RuleGroupDeclaration(CellName Name, RuleGroupShape Shape, IReadOnlyList<RuleGroupStep> Steps, int? Passes = null, ActionPredicate? Trigger = null, RuleGroupUndo? Undo = null);
+/// <summary>The rows and retained turn depth an undo-enabled group owns.</summary>
+public sealed record RuleGroupUndo(IReadOnlyList<CellName> Rows, int Depth);
+/// <summary>Hard bounds for rule groups. A fixpoint group runs one pass a tick, so a tick's work is its members',
+/// which the work sheet prices as the rules they are; its passes count ticks.</summary>
 public static class RuleGroupCapacity {
     /// <summary>The pass ceiling a fixpoint group takes when it authors none.</summary>
     public const int DefaultPasses = 8;
-    /// <summary>The most members one group may claim.</summary>
-    public const int MaxMembers = 64;
-    /// <summary>The most passes one fixpoint group may author.</summary>
-    public const int MaxPasses = 64;
+    /// <summary>The most members one group may claim: one index and one policy each in the compiled group.</summary>
+    public const int MaxMembers = 256;
+    /// <summary>The most passes one fixpoint group may author: the ticks a cascade may take to settle before the
+    /// group reports a breach.</summary>
+    public const int MaxPasses = 256;
 }
 /// <summary>One compiled rule group: which compiled rules it claims, how it runs them, the rows a pass must leave
 /// unchanged to close, its pass ceiling, and the gate that arms it.</summary>
@@ -65,7 +70,8 @@ public static class RuleGroupCapacity {
 /// row, computed exactly as a rule's are.</param>
 /// <param name="Locals">The locals the trigger's expression keys minted, in evaluation order. The trigger's
 /// local keys address these slots, so whoever evaluates the trigger evaluates these first.</param>
-public sealed record CompiledRuleGroup(string Name, RuleGroupShape Shape, int[] Members, RuleGroupStepPolicy[] Policies, int[] WriteRows, int Passes, GateToken[] Trigger, int TerminalStep, string Describe, RuleNeeds Needs, CompiledRuleLocal[] Locals);
+/// <param name="Undo">The resolved retained turn plan, or <see langword="null"/>.</param>
+public sealed record CompiledRuleGroup(string Name, RuleGroupShape Shape, int[] Members, RuleGroupStepPolicy[] Policies, int[] WriteRows, int Passes, GateToken[] Trigger, int TerminalStep, string Describe, RuleNeeds Needs, CompiledRuleLocal[] Locals, ArenaUndoPlan? Undo = null);
 public static partial class RuleCompiler {
     /// <summary>Compiles every declared rule group against an already-compiled rule array, checking that each
     /// claims a unique, unreserved name, names only declared rules, and claims no rule another group claims.</summary>
@@ -79,6 +85,11 @@ public static partial class RuleCompiler {
         ArgumentNullException.ThrowIfNull(argument: rules);
 
         if (groups is not { Count: > 0 }) {
+            foreach (var rule in rules) {
+                if (ContainsRewind(effects: rule.Effects)) {
+                    throw new RuleException(detail: "rewindTurn names no declared undo-enabled group", refusal: RuleRefusal.RuleGroupMalformed, ruleName: rule.Name);
+                }
+            }
             return [];
         }
 
@@ -121,9 +132,47 @@ public static partial class RuleCompiler {
             );
         }
 
+        var undoNames = compiled.Where(predicate: group => (group.Undo is not null)).Select(selector: group => group.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
+        foreach (var rule in rules) {
+            var rewinds = EnumerateRewinds(effects: rule.Effects).ToArray();
+
+            if (rewinds.Length == 0) {
+                continue;
+            }
+            if ((rule.Effects.Length != 1) || (rule.Effects[0] is not RewindTurnEffect) || (rewinds.Length != 1)) {
+                throw new RuleException(detail: "rewindTurn must be the standalone rule's sole top-level effect", refusal: RuleRefusal.RuleGroupMalformed, ruleName: rule.Name);
+            }
+            if (claimed.ContainsKey(key: rule.Name)) {
+                throw new RuleException(detail: "rewindTurn belongs to a standalone rule outside every group", refusal: RuleRefusal.RuleGroupMalformed, ruleName: rule.Name);
+            }
+            if (!undoNames.Contains(item: rewinds[0].Group)) {
+                throw new RuleException(detail: $"rewindTurn names '{rewinds[0].Group}', which is not an undo-enabled group", refusal: RuleRefusal.RuleGroupMalformed, ruleName: rule.Name);
+            }
+        }
+
+        var plans = compiled.Where(predicate: group => (group.Undo is not null)).Select(selector: group => group.Undo!).ToArray();
+
+        if (plans.Length > 0) {
+            try {
+                var layout = ArenaLayout.Build(context.Catalog, context.Section);
+
+                if (StateArena.EstimateUndoBytes(context.Catalog, layout, plans) > ArenaCapacity.MaxJournalBytes) {
+                    throw new InvalidOperationException(message: $"undo groups exceed the {ArenaCapacity.MaxJournalBytes}-byte journal ceiling at their declared depths");
+                }
+                foreach (var rule in rules) {
+                    foreach (var rewind in EnumerateRewinds(effects: rule.Effects)) {
+                        var plan = plans.Single(plan => (plan.Name == rewind.Group));
+
+                        rewind.WorkUnits = StateArena.EstimateUndoBytes(context.Catalog, layout, [plan with { Depth = 1 }]);
+                    }
+                }
+            } catch (Exception exception) when ((exception is InvalidOperationException or OverflowException or ArgumentException)) {
+                throw new RuleException(detail: exception.Message, refusal: RuleRefusal.RuleGroupMalformed, ruleName: plans[0].Name);
+            }
+        }
         return compiled;
     }
-
     /// <summary>Returns the compiled rules no group claims, in the order they were compiled.</summary>
     /// <param name="rules">The compiled rules, in the order <see cref="CompileAll"/> produced them — the order
     /// <see cref="CompiledRuleGroup.Members"/> indexes.</param>
@@ -146,7 +195,7 @@ public static partial class RuleCompiler {
         foreach (var group in groups) {
             foreach (var member in group.Members) {
                 if (
-                    ((uint)member < (uint)claimed.Length) &&
+                    (((uint)member) < ((uint)claimed.Length)) &&
                     !claimed[member]
                 ) {
                     claimed[member] = true;
@@ -240,6 +289,61 @@ public static partial class RuleCompiler {
 
         context.ClearScope();
 
+        ArenaUndoPlan? undo = null;
+
+        if (group.Undo is { } declaration) {
+            if ((declaration.Depth < 1) || (declaration.Rows is not { Count: > 0 })) {
+                throw Malformed(detail: "declares undo without a positive depth and at least one row");
+            }
+            var undoRows = new SortedSet<int>();
+            var undoPools = new HashSet<int>();
+
+            foreach (var rowName in declaration.Rows) {
+                if (context.Catalog.TryGetPool(name: rowName, pool: out var namedPool)) {
+                    _ = undoPools.Add(item: namedPool.Ordinal);
+                } else {
+                    if (context.FindRow(name: rowName.Value) is null) {
+                        throw Malformed(detail: $"undo names row '{rowName}', which is not an authored row or pool");
+                    }
+                    _ = undoRows.Add(item: ResolveRowOrdinal(context: context, name: rowName.Value));
+                }
+            }
+
+            var grew = true;
+
+            while (grew) {
+                grew = false;
+                foreach (var pool in context.Catalog.Pools) {
+                    if (pool.IsPair && (undoPools.Contains(item: pool.LeftPoolOrdinal) || undoPools.Contains(item: pool.RightPoolOrdinal))) {
+                        grew |= undoPools.Add(item: pool.Ordinal);
+                    }
+                }
+            }
+            foreach (var poolOrdinal in undoPools) {
+                var pool = context.Catalog.Pools[poolOrdinal];
+
+                _ = undoRows.Add(item: pool.DomainRowOrdinal);
+                _ = undoRows.Add(item: pool.GenerationRowOrdinal);
+                foreach (var field in pool.Fields) {
+                    _ = undoRows.Add(item: field.RowOrdinal);
+                }
+            }
+            foreach (var member in members) {
+                ValidateUndoEffects(rules[member].Effects, context, name);
+                if (ContainsRewind(effects: rules[member].Effects)) {
+                    throw Malformed(detail: $"contains rewindTurn in member '{rules[member].Name}' — rewind is fired by a standalone authorizing rule");
+                }
+            }
+            undo = new ArenaUndoPlan(name, [.. undoRows], declaration.Depth);
+            foreach (var ordinal in undo.Rows) {
+                var descriptor = context.Catalog.Descriptors[ordinal];
+
+                if (descriptor.HostOwned || (descriptor.Lane != StateLane.Document)) {
+                    throw Malformed(detail: $"undo cannot own host row '{descriptor.Name}'");
+                }
+            }
+        }
+
         var trigger = CompileGate(
             context: context,
             predicate: group.Trigger,
@@ -269,7 +373,49 @@ public static partial class RuleCompiler {
                 ? (members.Length - 1)
                 : -1),
             Trigger: trigger,
-            WriteRows: [.. writeRows]
+            WriteRows: [.. writeRows],
+            Undo: undo
         );
+    }
+    private static void ValidateUndoEffects(IEnumerable<IRuleEffect> effects, RuleCompileContext context, string group) {
+        foreach (var effect in effects) {
+            if (((effect.Needs & EffectNeeds.Irreversible) != 0) || (effect.RequiredFacet is not null)) {
+                throw new RuleException(detail: $"undo group '{group}' contains irreversible or host-owned effect '{effect.Describe}'", refusal: RuleRefusal.RuleGroupMalformed, ruleName: group);
+            }
+            var writes = new List<CellAccess>();
+
+            effect.CollectWrites(into: writes);
+            foreach (var write in writes) {
+                if ((write.RowOrdinal < 0) || context.Catalog.Descriptors[write.RowOrdinal].HostOwned || (context.Catalog.Descriptors[write.RowOrdinal].Lane != StateLane.Document)) {
+                    throw new RuleException(detail: $"undo group '{group}' contains a host-owned write in '{effect.Describe}'", refusal: RuleRefusal.RuleGroupMalformed, ruleName: group);
+                }
+            }
+            foreach (var arm in effect.Arms) { ValidateUndoEffects(context: context, effects: arm, group: group); }
+        }
+    }
+    private static bool ContainsRewind(IEnumerable<IRuleEffect> effects) {
+        foreach (var effect in effects) {
+            if (effect is RewindTurnEffect) {
+                return true;
+            }
+            foreach (var arm in effect.Arms) {
+                if (ContainsRewind(effects: arm)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    private static IEnumerable<RewindTurnEffect> EnumerateRewinds(IEnumerable<IRuleEffect> effects) {
+        foreach (var effect in effects) {
+            if (effect is RewindTurnEffect rewind) {
+                yield return rewind;
+            }
+            foreach (var arm in effect.Arms) {
+                foreach (var nested in EnumerateRewinds(effects: arm)) {
+                    yield return nested;
+                }
+            }
+        }
     }
 }

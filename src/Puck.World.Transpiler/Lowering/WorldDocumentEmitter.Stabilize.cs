@@ -85,6 +85,10 @@ public static partial class WorldDocumentEmitter {
             ["steps"] = steps,
         };
 
+        if (stabilizeNode.Undo is { } undo) {
+            group["undo"] = LowerExpression(expr: undo, fieldKey: "undo", scope: scope);
+        }
+
         if (stabilizeNode.MaxPasses is { } passesExpr) {
             var passes = EvaluateGroupPasses(
                 expression: passesExpr,
@@ -168,7 +172,7 @@ public static partial class WorldDocumentEmitter {
                     break;
 
                 case LocalStatementNode local:
-                    locals.Add(item: LowerLocal(local: local));
+                    locals.Add(item: LowerLocal(local: local, scope: scope));
                     break;
 
                 case PropertyNode property:

@@ -1,8 +1,10 @@
+using Puck.Assets.Documents;
 using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>CONTRACT UNDER TEST: a <see cref="CellSetExpression"/> lowers to one <see cref="ClosedBitset256"/> over
+/// <summary>CONTRACT UNDER TEST: a <see cref="CellSetExpression"/> lowers to one topology-width
+/// <see cref="CellSet"/> over
 /// the width its sources agree on, and the operators obey the boolean algebra they spell — De Morgan over
 /// intersection, union, and complement; a set meeting its own complement is empty and joining it is everything;
 /// complement stops at the carrier's width. The three sources read the arena's own columns, so a write moves the
@@ -23,7 +25,7 @@ public sealed class CellSetAlgebraLawTests {
         Low: low,
         Row: TopologyArenaFixture.Name(value: "pile")
     );
-    private static ClosedBitset256 Lower(StateArena arena, CellSetExpression expression) {
+    private static CellSet Lower(StateArena arena, CellSetExpression expression) {
         Assert.True(
             condition: CellSetLowering.TryLower(
                 arena: arena,
@@ -69,6 +71,46 @@ public sealed class CellSetAlgebraLawTests {
             expected: 10
         );
 
+        return arena;
+    }
+    private static StateArena BoardArena(int width, int depth) {
+        var section = new StateSection(
+            Rows: [new StateRow(
+                    Name: TopologyArenaFixture.Name(value: "board"),
+                    Kind: CellKind.Int,
+                    Domain: new StateDomain.CellsOf(
+                        Empty: 0L,
+                        Topology: "map"
+                    )
+                )],
+            Lattices: [new LatticeTopology.Grid(
+                    Name: "map",
+                    Origin: new DocumentVector3(
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
+                    ),
+                    CellSize: 1f,
+                    Width: width,
+                    Depth: depth
+                )]
+        );
+        var arena = new StateArena(
+            catalog: StateCatalog.Compile(section: section),
+            options: null,
+            section: section,
+            time: ArenaTime.Origin
+        );
+
+        for (var cell = 0; (cell < (width * depth)); cell++) {
+            Assert.True(condition: arena.TryWriteBoardCell(
+                cell: cell,
+                reason: out var reason,
+                rowOrdinal: 0,
+                value: ((cell % 7) + 1L),
+                write: StateWriteKind.Set
+            ), userMessage: reason);
+        }
         return arena;
     }
 
@@ -340,5 +382,97 @@ public sealed class CellSetAlgebraLawTests {
             actualString: absent,
             expectedSubstring: "absent"
         );
+    }
+    [InlineData(63, 1)]
+    [InlineData(64, 1)]
+    [InlineData(65, 1)]
+    [InlineData(255, 1)]
+    [InlineData(256, 1)]
+    [InlineData(257, 1)]
+    [InlineData(19, 19)]
+    [InlineData(33, 18)]
+    [Theory]
+    public void AlgebraAgreesWithAScalarOracleAcrossWordAndInlineBoundaries(int width, int depth) {
+        var arena = BoardArena(
+            depth: depth,
+            width: width
+        );
+        var cells = (width * depth);
+        var expression = new CellSetExpression.Both(Items: [
+            new CellSetExpression.Any(Items: [
+                Board(high: 2L, low: 1L),
+                Board(high: 6L, low: 5L),
+            ]),
+            new CellSetExpression.Complement(Item: Board(high: 5L, low: 2L)),
+        ]);
+        var actual = Lower(
+            arena: arena,
+            expression: expression
+        );
+        var expectedCount = 0;
+
+        Assert.Equal(
+            actual: actual.Length,
+            expected: cells
+        );
+        for (var cell = 0; (cell < cells); cell++) {
+            var value = ((cell % 7) + 1L);
+            var expected = (((value is >= 1L and <= 2L) || (value is >= 5L and <= 6L)) && (value is not (>= 2L and <= 5L)));
+
+            Assert.Equal(
+                actual: actual.Contains(index: cell),
+                expected: expected
+            );
+            if (expected) {
+                expectedCount++;
+            }
+        }
+        Assert.Equal(
+            actual: actual.Count,
+            expected: expectedCount
+        );
+        Assert.True(condition: actual.Fits(count: cells));
+        Assert.False(condition: actual.Contains(index: cells));
+        Assert.False(condition: actual.Contains(index: (cells + 63)));
+    }
+    [Fact]
+    public void InlineAlgebraAllocatesNothingAfterWarmup() {
+        var arena = BoardArena(
+            depth: 1,
+            width: 256
+        );
+        var expression = new CellSetExpression.Complement(Item: Board(
+            high: 4L,
+            low: 2L
+        ));
+
+        _ = Lower(
+            arena: arena,
+            expression: expression
+        );
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var repeat = 0; (repeat < 100); repeat++) {
+            _ = Lower(
+                arena: arena,
+                expression: expression
+            );
+        }
+        Assert.Equal(
+            actual: (GC.GetAllocatedBytesForCurrentThread() - before),
+            expected: 0L
+        );
+    }
+    [Fact]
+    public void AnExplicitWidthPastTheTopologyCeilingIsRefusedBeforeStorageSizing() {
+        var arena = Seeded();
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => CellSetLowering.TryLower(
+            arena: arena,
+            expression: new CellSetExpression.Nothing(),
+            elements: int.MaxValue,
+            set: out _,
+            reason: out _
+        ));
     }
 }

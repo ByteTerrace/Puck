@@ -1,4 +1,3 @@
-using System.Globalization;
 
 namespace Puck.State;
 
@@ -13,7 +12,9 @@ public sealed partial class StateArena {
     /// <para>A cell whose five clock columns are all zero exports no <see cref="StateCellClock"/>, which is the
     /// same encoding <see cref="TryLoad"/> reads back.</para>
     /// </remarks>
-    public IReadOnlyList<StateRow> ToRows() {
+    public IReadOnlyList<StateRow> ToRows() => ExportRows(includePoolRows: false);
+
+    private IReadOnlyList<StateRow> ExportRows(bool includePoolRows) {
         var exported = new List<StateRow>(capacity: m_rows.Count);
 
         for (var rowOrdinal = 0; (rowOrdinal < m_layout.RowCount); rowOrdinal++) {
@@ -22,9 +23,12 @@ public sealed partial class StateArena {
             if (descriptor.Lane != StateLane.Document) {
                 continue;
             }
+            if (!includePoolRows && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+                continue;
+            }
 
             var row = m_rows[descriptor.LaneOrdinal];
-            var layout = m_layout[rowOrdinal];
+            ref readonly var layout = ref m_layout[rowOrdinal];
 
             exported.Add(item: (layout.IsStored
                 ? ExportRow(
@@ -38,12 +42,64 @@ public sealed partial class StateArena {
 
         return exported;
     }
+    // The three value-over-time traits are declared per cell and stored in no column, so an exported cell carries
+    // them from the authored cell of the same key. They are gathered once a row, and only for a row that declares
+    // any: finding each exported cell's authored twin by scanning the row is quadratic in its cells.
+    private static Dictionary<CellName, StateCell>? AuthoredTraits(in ArenaRowLayout layout, StateRow row) {
+        if (!layout.HasTraits) {
+            return null;
+        }
 
-    private StateCell ExportCell(in ArenaRowLayout layout, StateRow row, CellName name, int slot) {
-        var authored = StateRows.FindCell(
-            cells: row.Cells,
-            key: name
+        Dictionary<CellName, StateCell>? traits = null;
+
+        foreach (var cell in (row.Cells ?? [])) {
+            if (
+                (cell is not null) &&
+                ((cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null))
+            ) {
+                // The first authored cell of a key is the one a scan of the row would have found.
+                _ = (traits ??= []).TryAdd(
+                    key: cell.Key,
+                    value: cell
+                );
+            }
+        }
+
+        return traits;
+    }
+
+    /// <summary>Exports one document row as <see cref="ToRows"/> would: the row the arena was built over with its
+    /// stored columns written back, or the row as declared when a host owns its values.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <returns>The row.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> names no document row.</exception>
+    public StateRow ToRow(int rowOrdinal) {
+        if (
+            (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) ||
+            (m_catalog.Descriptors[rowOrdinal].Lane != StateLane.Document)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: rowOrdinal,
+                message: "The ordinal names no document row.",
+                paramName: nameof(rowOrdinal)
+            );
+        }
+
+        var row = m_rows[m_catalog.Descriptors[rowOrdinal].LaneOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
+
+        return (layout.IsStored
+            ? ExportRow(
+                layout: layout,
+                row: row,
+                rowOrdinal: rowOrdinal
+            )
+            : row
         );
+    }
+
+    private StateCell ExportCell(in ArenaRowLayout layout, Dictionary<CellName, StateCell>? traits, CellName name, int slot) {
+        var authored = traits?.GetValueOrDefault(key: name);
 
         return new StateCell(
             Advance: authored?.Advance,
@@ -93,99 +149,16 @@ public sealed partial class StateArena {
     }
     private List<StateCell>? ExportCells(int rowOrdinal, in ArenaRowLayout layout, StateRow row) {
         List<StateCell>? cells = null;
+        var traits = AuthoredTraits(
+            layout: layout,
+            row: row
+        );
 
-        switch (layout.Shape) {
-            case RowShape.Slot:
-            case RowShape.Keyed:
-            case RowShape.Ordered: {
-                    var count = ((layout.Shape == RowShape.Slot)
-                        ? 1
-                        : ((int)m_memberCounts[rowOrdinal])
-                    );
+        var cursor = 0;
 
-                    for (var position = 0; (position < count); position++) {
-                        var slot = (layout.CellStart + position);
-
-                        if (
-                            !Bit(
-                            index: slot,
-                            words: m_presence
-                        ) ||
-                            !TryKeyAt(
-                            key: out var key,
-                            position: position,
-                            rowOrdinal: rowOrdinal
-                        )
-                        ) {
-                            continue;
-                        }
-
-                        (cells ??= []).Add(item: ExportCell(
-                            layout: layout,
-                            name: m_catalog.Keys[key],
-                            row: row,
-                            slot: slot
-                        ));
-                    }
-
-                    break;
-                }
-            case RowShape.Lattice: {
-                    for (var cell = 0; (cell < layout.CellCapacity); cell++) {
-                        var slot = (layout.CellStart + cell);
-
-                        if (
-                            !Bit(
-                            index: slot,
-                            words: m_presence
-                        ) ||
-                            !CellName.TryParse(
-                            candidate: layout.Topology!.Key(cell: cell),
-                            name: out var name,
-                            reason: out _
-                        )
-                        ) {
-                            continue;
-                        }
-
-                        (cells ??= []).Add(item: ExportCell(
-                            layout: layout,
-                            name: name,
-                            row: row,
-                            slot: slot
-                        ));
-                    }
-
-                    break;
-                }
-            default: {
-                    for (var index = 0; (index < layout.CellCapacity); index++) {
-                        var slot = (layout.CellStart + index);
-
-                        if (
-                            !Bit(
-                            index: slot,
-                            words: m_presence
-                        ) ||
-                            !CellName.TryParse(
-                            candidate: index.ToString(provider: CultureInfo.InvariantCulture),
-                            name: out var name,
-                            reason: out _
-                        )
-                        ) {
-                            continue;
-                        }
-
-                        (cells ??= []).Add(item: ExportCell(
-                            layout: layout,
-                            name: name,
-                            row: row,
-                            slot: slot
-                        ));
-                    }
-
-                    break;
-                }
+        while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+            (cells ??= []).Add(item: ExportCell(layout: in layout, name: m_keys[key],
+                slot: ((layout.CellStart + cursor) - 1), traits: traits));
         }
 
         return cells;

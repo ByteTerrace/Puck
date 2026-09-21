@@ -7,12 +7,65 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    private static void WriteArenaKey(WireWriter writer, CellName key) {
+        var value = key.Value;
+        var bytes = new byte[checked((value.Length * 2))];
+
+        for (var index = 0; (index < value.Length); index++) {
+            var codeUnit = value[index];
+
+            bytes[(index * 2)] = unchecked((byte)codeUnit);
+            bytes[((index * 2) + 1)] = unchecked((byte)(codeUnit >> 8));
+        }
+
+        writer.WriteBlock(value: bytes);
+    }
+    private static CellName ReadArenaKey(ref WireReader reader) {
+        var bytes = reader.ReadBlock(
+            field: "server arena key",
+            maxBytes: ((int)ArenaCapacity.MaxBytes)
+        );
+
+        if (!reader.Failed && ((bytes.Length & 1) != 0)) {
+            reader.Fail(
+                detail: $"server arena key carries {bytes.Length} bytes, which is not a whole number of UTF-16 code units",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        var characters = (reader.Failed ? [] : new char[(bytes.Length / 2)]);
+
+        for (var index = 0; (index < characters.Length); index++) {
+            characters[index] = unchecked((char)(bytes[(index * 2)] | (bytes[((index * 2) + 1)] << 8)));
+        }
+
+        var spelling = (reader.Failed ? string.Empty : new string(value: characters));
+        var name = default(CellName);
+
+        if (
+            !reader.Failed &&
+            !CellName.TryParse(
+                candidate: spelling,
+                name: out name,
+                reason: out var parseReason
+            )
+        ) {
+            reader.Fail(
+                detail: $"server arena key '{spelling}' is invalid: {parseReason}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return name;
+    }
     private static void WriteRuleLatchEntry(WireWriter writer, WorldRuleLatchEntry entry) {
         writer.WriteString(value: entry.Rule);
         writer.WriteString(value: entry.Key);
         writer.WriteInt32(value: entry.Left);
         writer.WriteInt32(value: entry.Right);
         writer.WriteBoolean(value: entry.Held);
+        writer.WriteInt64(value: entry.LeftGeneration);
+        writer.WriteInt64(value: entry.RightGeneration);
     }
     private static WorldRuleLatchEntry ReadRuleLatchEntry(ref WireReader reader, string field) {
         var rule = reader.ReadString(
@@ -26,12 +79,20 @@ public static partial class WorldAuthorityCheckpointCodec {
         var left = reader.ReadInt32();
         var right = reader.ReadInt32();
         var held = reader.ReadBoolean();
+        var leftGeneration = reader.ReadInt64();
+        var rightGeneration = reader.ReadInt64();
+
+        if ((leftGeneration < 0) || (rightGeneration < 0)) {
+            reader.Fail(detail: $"{field} carries a negative pool generation", refusal: Puck.Networking.WireRefusal.PayloadMalformed);
+        }
 
         return new WorldRuleLatchEntry(
             Held: held,
             Key: key,
             Left: left,
+            LeftGeneration: leftGeneration,
             Right: right,
+            RightGeneration: rightGeneration,
             Rule: rule
         );
     }
@@ -333,6 +394,12 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteString(value: section.BaseOrigin);
         WriteArray(
             writer: writer,
+            items: section.ArenaKeys,
+            writeItem: WriteArenaKey
+        );
+        WriteOptionalClass(writer, section.Undo, WriteUndoHistory);
+        WriteArray(
+            writer: writer,
             items: section.Journal,
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
@@ -451,6 +518,28 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "server base origin",
             maxBytes: MaxStringBytes
         );
+        var arenaKeys = ReadArray(
+            reader: ref reader,
+            field: "server arena keys",
+            maximum: StateCapacity.MaxCellKeys,
+            readItem: static (ref WireReader r) => ReadArenaKey(reader: ref r)
+        );
+
+        if (!reader.Failed) {
+            var distinct = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < arenaKeys.Length); index++) {
+                if (!distinct.Add(item: arenaKeys[index].Value)) {
+                    reader.Fail(
+                        detail: $"server arena key '{arenaKeys[index].Value}' is duplicated",
+                        refusal: WireRefusal.PayloadMalformed
+                    );
+
+                    break;
+                }
+            }
+        }
+        var undo = ReadOptionalClass(readValue: ReadUndoHistory, reader: ref reader);
         var journal = ReadArray(
             reader: ref reader,
             field: "server journal",
@@ -578,6 +667,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldServerCheckpoint(
+            ArenaKeys: arenaKeys,
+            Undo: undo,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,
@@ -971,6 +1062,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: residue.UpNeedsReseat);
         writer.WriteInt64(value: residue.FieldUpTurnRemainder);
         writer.WriteInt64(value: residue.ContactUpTurnRemainder);
+        writer.WriteUInt64(value: residue.AsleepSinceTick);
+        writer.WriteUInt64(value: residue.SleepIdleTicks);
+        writer.WriteBoolean(value: residue.ContactFieldObservationCurrent);
         writer.WriteBoolean(value: residue.PlanarFollowerSeeded);
         writer.WriteBoolean(value: residue.VerticalFollowerSeeded);
         WriteTetherResidue(
@@ -1019,6 +1113,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         var upNeedsReseat = reader.ReadBoolean();
         var fieldUpTurnRemainder = reader.ReadInt64();
         var contactUpTurnRemainder = reader.ReadInt64();
+        var asleepSinceTick = reader.ReadUInt64();
+        var sleepIdleTicks = reader.ReadUInt64();
+        var contactFieldObservationCurrent = reader.ReadBoolean();
         var planarFollowerSeeded = reader.ReadBoolean();
         var verticalFollowerSeeded = reader.ReadBoolean();
         var tether = ReadTetherResidue(reader: ref reader);
@@ -1043,11 +1140,13 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
+            AsleepSinceTick: asleepSinceTick,
             AttitudeLeaned: attitudeLeaned,
             AttitudeTurnRemainder: attitudeTurnRemainder,
             AttitudeUp: attitudeUp,
             CarriedBy: carriedBy,
             Carrying: carrying,
+            ContactFieldObservationCurrent: contactFieldObservationCurrent,
             ContactUpTurnRemainder: contactUpTurnRemainder,
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,
             Engaged: engaged,
@@ -1060,6 +1159,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             HoldNormal: holdNormal,
             HoldSpendRemainder: holdSpendRemainder,
             Home: home,
+            LastContactFieldVersion: (contactFieldObservationCurrent ? 0UL : 1UL),
             OrdinaryAdvanceAdmitted: ordinaryAdvanceAdmitted,
             PlanarFollowerSeeded: planarFollowerSeeded,
             PositionRemainderX: positionRemainderX,
@@ -1077,6 +1177,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             RotationRemainderX: rotationRemainderX,
             RotationRemainderY: rotationRemainderY,
             RotationRemainderZ: rotationRemainderZ,
+            SleepIdleTicks: sleepIdleTicks,
             Tether: tether,
             Up: up,
             UpNeedsReseat: upNeedsReseat,

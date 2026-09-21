@@ -42,7 +42,6 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"state.lattices '{topology.Name}': {reason}.");
             }
         }
-        var totalCells = 0L;
         var derivation = new BoardDerivation(definition: definition);
 
         foreach (var row in (definition.State ?? [])) {
@@ -53,26 +52,21 @@ public static partial class WorldDefinitionValidator {
             ) {
                 continue;
             }
-            if (ValidateBoardRow(
+            _ = ValidateBoardRow(
                 board: board,
                 definition: definition,
                 derivation: derivation,
                 errors: errors,
                 row: row
-            ) is { } compiled) {
-                totalCells += compiled.CellCount;
-            }
-        }
-        if (totalCells > TopologyCompilation.MaxTotalCells) {
-            errors.Add(item: $"state board storage exceeds the {TopologyCompilation.MaxTotalCells}-cell world budget.");
+            );
         }
     }
     // One cellsOf board row's own shape (plain int/bool cells, no other storage/time trait, a value domain that
     // includes board.empty), its topology's cells, and — when it derives from tokens/codes — its derivation. Called
     // once per board row by the whole-document walk above and by a state mutation's touched-row walk
-    // (<see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>). Returns the resolved topology so the
-    // whole-document walk can total its cells against the world storage budget; null when the row names no valid
-    // topology (already refused by name).
+    // (<see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>). Returns the resolved topology; null
+    // when the row names no valid topology (already refused by name). What a board's cells occupy is counted with
+    // every other row's, by the arena's byte ceiling.
     private static CompiledTopology? ValidateBoardRow(WorldDefinition definition, WorldStateRow row, StateDomain.CellsOf board, BoardDerivation derivation, List<string> errors) {
         if (
             (row.Kind is not (CellKind.Int or CellKind.Bool)) ||
@@ -166,6 +160,23 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        var boardSymbols = ((row.Enum is { } boardEnumName)
+            ? definition.Enums.FirstOrDefault(predicate: candidate => (candidate.Name == boardEnumName))
+            : null);
+        var codeSymbols = ((codes.Enum is { } codeEnumName)
+            ? definition.Enums.FirstOrDefault(predicate: candidate => (candidate.Name == codeEnumName))
+            : null);
+
+        if (!StateRow.TryProveDerivedDomain(
+            board: row,
+            boardSymbols: boardSymbols,
+            codes: codes,
+            codeSymbols: codeSymbols,
+            reason: out var domainReason
+        )) {
+            errors.Add(item: $"state row '{row.Name}': inverse domain is incompatible — {domainReason}.");
+        }
+
         var tokenCells = (tokens.Cells ?? []);
         var codeCells = (codes.Cells ?? []);
         var sameShape = (tokenCells.Count == codeCells.Count);
@@ -198,6 +209,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"state row '{row.Name}': authored cells must be empty or match its inverse's derivation — the board is never authored, only derived.");
         }
     }
+
     // The arena's own recompute, read back as the derivation an authored board must match: loading a section is
     // what recomputes every derived board from its tokens and codes rows, so the walk checks against the store
     // rather than against a second reading of the same rule. One arena serves a whole validation pass, and is built
@@ -244,6 +256,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
+
     // Set comparison, not order-sensitive: an authored board's cell order is whatever the author or a prior save
     // wrote, while the derivation always walks cell order — the same board, spelled either way, must match.
     private static bool MatchesDerivation(IReadOnlyList<StateCell> authored, IReadOnlyList<StateCell> derived) {

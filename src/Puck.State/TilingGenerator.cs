@@ -123,7 +123,7 @@ public static class TilingGenerator {
             edges.Add(item: new GraphEdge(
                 From: $"t{fromTile}",
                 To: $"t{toTile}",
-                Direction: DirectionName(degrees: normals[fromTile][fromEdge])
+                Direction: CellName.Parse(candidate: DirectionName(degrees: normals[fromTile][fromEdge]))
             ));
         }
 

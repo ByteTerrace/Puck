@@ -21,7 +21,7 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck citations`](#puck-citationscited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck bench`](#puck-benchthe-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
+| [`puck bench`](#puck-benchthe-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, and `puck bench state-evidence` replays the cost schedule's instruction evidence. |
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1`, checked and regenerated. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
@@ -78,6 +78,31 @@ The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
 `puck nuget version` reads the release version from the current checkout.
 See [the CLI used by CI](../development/ci.md#the-cli-used-by-ci) for candidate
 installation, package installation checks, and release adoption.
+
+### Installing the checkout's CLI on PATH
+
+An editor, a terminal and a task all run `puck` from `PATH`, never from a
+project's build output: a build writes `src/Puck.Cli/bin`, and a process
+running from it holds every assembly there, so the next build cannot replace
+them. Install the checkout as the global tool:
+
+```sh
+dotnet pack src/Puck.Cli -c Release --output .tmp/puck-pack
+dotnet tool uninstall --global byteterrace.puck.cli
+dotnet tool install --global byteterrace.puck.cli --prerelease --add-source .tmp/puck-pack --no-http-cache
+puck --version
+```
+
+A running `puck` holds the installed tool, so close whatever launched one
+first: the editor's language server, an MCP client's server. The uninstall
+otherwise fails with `The file exists` and leaves the earlier install in place.
+
+`puck --version` names the revision it was packed from. The package version
+does not change between commits, so a reinstall that reports the old revision
+restored the earlier package from the NuGet cache; remove
+`byteterrace.puck.cli` from the global packages folder
+(`dotnet nuget locals global-packages --list`) and install again. CI avoids the
+same trap with a private cache per run, in `.github/actions/setup-puck`.
 
 To build the candidate directly for local development:
 
@@ -480,10 +505,15 @@ A test world carries its own test. Its `schedule` section says what command to
 submit and at exactly which simulation tick, acting as which seat; its
 `verdict`-marked `state` rows say what the rules must conclude, and the rule
 that decides each one writes the status plus the values its gate saw into that
-row's own cells. `puck test` boots each world through the real `Puck.World`
-executable, headless, and reads the verdicts back out of the canonical state
+row's own cells. A verdict row holds ints, so a value the gate saw of a `Fixed`
+or a `Bool` row is written to a `witness` row of that kind, which names its
+verdict and is printed with it (`saw=[hp=3 speed=2.25 open=false]`). `puck test` boots each world through the real `Puck.World`
+executable, headless and unpaced, and reads the verdicts back out of the canonical state
 export the world writes at the tick its schedule derives (the last scheduled
-tick plus the declared `settleTicks` margin).
+tick plus the declared `settleTicks` margin). Unpaced means the ordinary fixed
+step loop advances exactly one simulation tick per iteration without sleeping
+for wall time; command ingress, authority, physics and rules stay on their usual
+paths.
 
 A path may name a `.puck` source instead of a document, which is how a world's
 own behaviour is normally written: the source is compiled and the worlds its
@@ -529,10 +559,19 @@ puck test <path> --host server         the real Puck.World executable, headless 
 puck test <path> --world-artifact <p>  boot this already-built Puck.World.dll instead of
                                        building src/Puck.World into the run's own output
 puck test <path> --keep <dir>          run in <dir> and keep it: every generated test world
-                                       under <dir>/generated, plus both legs' transcripts,
-                                       exports and manifests
+                                       under <dir>/generated, plus transcripts, exports
+                                       and manifests
+puck test <path> --jobs <n>            run at most n isolated test worlds concurrently
+puck test <path> --reproduce           rerun every world and require byte-identical state
+                                       exports and schedule manifests
 puck test -h / --help                  this text
 ```
+
+Each collected world owns a numbered directory under `<dir>/worlds`, starting
+at `000000/run1`. Its `state` persistence, `out` exports and manifests, and
+transcripts are isolated even when input files share a basename. Each report
+names the source and its artifact directory. `--reproduce` writes `run2`
+beside `run1`.
 
 Reaching the authored export tick is part of the verdict. A run that stops
 early still writes an export — of whatever tick it reached — and the verdicts
@@ -550,19 +589,14 @@ submitted is the process's own state, never the document's — so a restored,
 re-read or rewound world submits every row again from tick 1 and measures a
 different trajectory from the one the export was asked for.
 
-Each world then runs **twice**, into sibling leg directories, and a world whose
-two exports — or two `schedule.json` manifests — differ byte for byte is refused
-rather than reported: a verdict read off a world that does not reproduce says
-nothing, and neither do the refusals a manifest reports if the manifest itself
-drifts. The manifest therefore records only facts a rerun reproduces exactly: a
-row's own authored tick, its outcome and its detail. A recorded edit verdict
-carries no tick at all — an echo reaches the runner when the host narrates it,
-which is not the tick the edit applied on. That comparison is only
-possible because the export tick is the document's rather than the runner's — a
-console fence lands on whatever tick the command pump happened to reach, and an
-export taken there carries a different tick, and hash, every run. It is also
-why the reconciliation runs per leg rather than between them: two identically
-truncated runs reproduce each other perfectly.
+Ordinary authoring runs every isolated test world once. `--reproduce` adds the
+determinism qualification pass: each world runs twice into sibling leg
+directories, and a world whose two exports or two `schedule.json` manifests
+differ byte for byte is refused rather than reported. The manifest records only
+facts a rerun reproduces exactly: a row's authored tick, outcome and detail. A
+recorded edit verdict carries no tick because an echo reaches the runner when
+the host narrates it, which is not the tick the edit applied on. The comparison
+is possible because the export tick is the document's rather than the runner's.
 
 Only a rule's own effect writes a verdict row. The rule-effect door stamps the
 firing's simulation tick into the row's reserved `$firedTick` cell — an ordinary
@@ -578,8 +612,8 @@ authored ceiling (no ceiling bounds a tick), or a cell capacity with no room for
 the stamp.
 
 A failing verdict is sticky: once a firing writes `fail`, later firings are
-absorbed, so the report names the first failing tick and the values the gate saw
-then. An expectation is therefore written at the tick it becomes decidable — a
+absorbed, for the verdict row and its witnesses alike, so the report names the
+first failing tick and the values the gate saw then. An expectation is therefore written at the tick it becomes decidable — a
 rule whose `else` branch fails pre-emptively settles the verdict on its first
 tick and can never pass.
 
@@ -593,7 +627,7 @@ verdict failed or a row's recorded outcome was not the one it declared, 2 usage 
 a world declaring no `schedule` section or no verdict row, a build or boot
 refusal, a leg that did not reach its authored export tick or account for every
 declared row, a row whose outcome the host rather than the world answered, a
-world whose two runs disagreed, or `--host browser`, which is refused by name
+world whose `--reproduce` runs disagreed, or `--host browser`, which is refused by name
 because the browser engine host has no command ingress, principal or
 authoritative server to submit a scheduled command through.
 
@@ -831,7 +865,7 @@ puck bench --filter '*SplitNormNarrow.Hand' --filter '*SplitNormNarrow.GenericSt
 puck bench --list flat
 ```
 
-Every token other than the `world` sub-verb reaches BenchmarkDotNet's switcher
+Every token outside the `world`, `startup`, and `state-evidence` sub-verbs reaches BenchmarkDotNet's switcher
 verbatim. `-h`/`--help` there is puck's own, so the switcher's help (whose `-h`
 is its `hide` option) is reached past a separator: `puck bench -- --help`.
 
@@ -862,6 +896,51 @@ wide path is deliberate and is not "fixed" here). Do not commit result artifacts
 this verb produces evidence for a decision, not baselines to pin—the
 `BenchmarkDotNet.Artifacts/` directory it writes under the cwd is git-ignored.
 
+### `puck bench state-evidence`
+
+Replays every normalized instruction form in `src/Puck.State/ReferenceSchedule.json`
+against every pinned `llvm-mca` processor model, requires the manifest's exact tool
+version, and compares the resulting latency/throughput service `q`. It finds LLVM on
+`PATH` or at the standard Windows install location; `--llvm-mca <path>` selects an
+explicit executable.
+
+```sh
+puck bench state-evidence
+```
+
+Before producing new kernel artifacts, capture the exact work list and verify that
+the checked-out sources still match the manifest:
+
+```sh
+puck bench state-evidence --inventory --output artifacts/state-evidence/inventory.json
+```
+
+The inventory records the manifest digest, pinned SDK and roll-forward policy,
+every Native AOT entry point and symbol, expected and actual source SHA-256 values,
+per-target unresolved analyzer findings, and every missing memory coefficient. A
+nonzero exit means at least one kernel source digest is stale or absent. Run it from
+the repository checkout; the command locates the checkout through `global.json`.
+
+Each kernel artifact campaign must use the inventory's exact source digest and the
+per-target `referenceBuild` settings in `ReferenceSchedule.json`: SDK 10.0.401,
+the recorded runtime pack and ILCompiler 10.0.1, Release Native AOT, explicit
+`IlcInstructionSet` (`x86-64-v3` or `armv8.2-a`), no method-body folding, and no
+PGO. Retain the complete disassembly for the named symbol and every reachable
+helper, including refusal paths. Run `llvm-mca` 19.1.6 with the target's recorded
+triple and CPU model. An x64 build is not evidence for an AArch64 target, and an
+unresolved indirect call or loop remains unresolved.
+
+Memory activation additionally requires raw evidence for every pinned processor
+family: configuration identity, clock basis, working-set sizes, access pattern,
+scalar access and dependent-access counts, transferred bytes, allocations,
+allocated bytes, and peak retained bytes. The inventory lists missing startup,
+latency, and bandwidth fields but does not infer them from the current host.
+
+This check reproduces the manifest's instruction-service rows. It does not derive
+Native AOT control flow, approve reviewed loop formulas, resolve helper bodies, or
+calibrate memory service; those remain separate evidence and unresolved rows remain
+unmodeled.
+
 ### `puck bench world`
 
 The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
@@ -872,10 +951,8 @@ project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
 allocation (median over a sampled window, after a warmup), and a scripted
 Klondike deal's per-tick time and per-mutation allocation. A server
-construction against the shipped world costs tens of seconds
-(`Puck.Physics.Navigation.NavigationRuntime.Domain.BuildEdges` sphere-casting
-through the static SDF program)—far past what an iteration-based
-BenchmarkDotNet job can amortize honestly—so this lane is a plain stopwatch
+construction includes admission, navigation, and runtime allocation, so this
+lane measures it once with a plain stopwatch
 harness (`WorldBenchmarks.cs`,
 `WorldBenchHarness.cs`) rather than a `[Benchmark]` class, and it sits beside the
 switcher as its own sub-verb rather than inside it:
@@ -888,6 +965,46 @@ Regenerate the fixture document only when
 `Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Puck.World.Tests/Fixtures.cs) or
 `src/Puck.World/Assets/worlds/games/klondike.puck` changes underneath
 it—it is a checked-in snapshot, not derived at run time.
+
+### `puck bench startup`
+
+Measures the actual World executable in fresh processes, serially. Build World
+in Release first; the benchmark never builds inside a sample. With no world
+arguments it runs a representative corpus: overworld, Moth courtyard,
+Backgammon, Reversi, the three parlor games, the complete game host fixtures
+under `tests/Puck.World.Tests/Fixtures`, and the Jump, Kart, and Dive canary
+hosts. Most other files under `Assets/worlds/games` are modules that need a
+host; they cannot be benchmarked by launching the module alone. Explicit paths
+select another corpus:
+
+```sh
+puck bench startup --samples 3
+puck bench startup worlds/parlor/chess.puck --samples 3 --width 640 --height 360
+puck bench startup --headless --world-artifact src/Puck.World/bin/Release/net10.0/Puck.World.dll
+```
+
+The default windowed run uses 1280×720. Each sample receives a new persistence
+directory, requests `world.status`, waits one tick, requests a frame capture,
+and checks `wire.errors`. Console readiness is the observed status response;
+rendered readiness is the observed capture completion with a nonempty output
+file. A host that reports unavailable overlay glyphs fails the sample, even
+if it writes a capture. Capture timing includes GPU readback, PNG writing, and pipe delivery, so
+it bounds readiness conservatively. After capture completion (or the clean
+command verdict in headless mode), the harness sends `quit`; slow rendering
+cannot lose its capture to a fixed shutdown timer. The process timeout still
+bounds failed runs. Shutdown time is excluded from both readiness intervals.
+`--headless` measures only console readiness and does not prove render startup.
+
+`--samples` defaults to 3 and `--timeout-seconds` to 120 per process. `--output`
+selects the parent of a unique run directory (default `artifacts/startup`).
+The directory holds logs, captures, and `report.json`, updated after each child.
+The report records every sample, runtime, OS, artifact, dimensions, and the
+expected sample count. Any failed or missing sample suppresses the corpus
+summary; a completed failing run exits 1. A complete successful run reports
+mean, median, nearest-rank p95, and maximum. This is process-cold startup:
+disk, driver, and shader caches are retained. Measure cold-cache behavior
+separately and label it explicitly. Use a quiet machine and repeat discrepant
+measurements before treating a difference as an improvement.
 
 ---
 
@@ -1096,11 +1213,11 @@ error or missing repository root.
 ## The `.puck` DSL verbs
 
 Seven verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
-world documents. JSON stays the wire form and the checked-in source of every
-shipped world; `.puck` is how one is written and read by hand.
+world documents. JSON stays the wire form; `.puck` is the hand-authored source
+for worlds whose JSON is generated by `build/WorldAssets.targets`.
 
 ```text
-puck compile <source.puck> [-o <out.json>] [--validate] [--bundle] [--strict] [--watch]
+puck compile <source.puck>... [-o <out.json-or-directory>] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
 puck decompile <source.json> [-o <out.puck>] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text>
@@ -1109,6 +1226,28 @@ puck lint <path> [--strict]
 puck lsp
 puck migrate <name> <path> [--check]
 ```
+
+`compile` accepts several source paths and compiles them in the supplied order
+within one process. Each source gets its normal adjacent `.world.json` or
+`.cartridge.json` output. A later source can import an earlier output; the
+first failure stops the batch, leaving earlier successful outputs in place.
+`--output` and `--watch` require exactly one source. World asset generation
+uses this batch form so a build initializes the compiler and schema metadata
+once, while preserving the dependency order in `build/WorldAssets.targets`.
+
+A source containing `world name = module(...)` declarations emits one
+`<name>.world.json` per declaration. For that source, `--output` names a
+directory rather than a JSON file. World names must be portable filename stems
+and cannot differ only by case. All declarations must compile before any output
+is published. Individual replacements are atomic; an I/O failure while
+publishing several files can leave earlier replacements in place.
+
+`asset "path"` verifies bytes against the source's sibling `.assets.json` lock.
+`--update-assets` explicitly refreshes the complete pin set, implies semantic
+validation, and cannot be combined with `--watch`. A source with asset references
+must emit beside its source so relative asset paths retain their meaning.
+See [file assets and world composition](../authoring/README.md#pinning-file-assets)
+for examples and the distinction between compilation pins and runtime assets.
 
 `--validate` composes the document's `basis` and `imports` graph **before**
 validating, rooted at the source file's own directory—the same order

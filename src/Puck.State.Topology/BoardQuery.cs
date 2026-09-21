@@ -10,6 +10,8 @@ public enum BoardQueryKind : byte {
     Neighbour,
     /// <summary>Minimum nonnegative entry cost, -1 if unreachable, -2 if the visit budget was exhausted.</summary>
     PathCost,
+    /// <summary>Fewest non-capturing hops over occupied neighbours onto empty cells; -1 if unreachable.</summary>
+    JumpDistance,
     /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range; bit c is cell ordinal c. A
     /// mask carries through the topology's point group with the <c>image</c>/<c>shift</c> expression ops.</summary>
     Mask,

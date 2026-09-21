@@ -268,7 +268,7 @@ public static class RulesFixture {
                 State: "score",
                 Value: 1m
             )]),
-        ForEach: forEach,
+        ForEach: StateChannelRef.OfNullable(spelling: forEach),
         Gate: gate,
         Zones: zones
     );

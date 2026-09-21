@@ -55,6 +55,7 @@ public sealed partial class WorldDocument {
         // A curves row retune must recompile the population's curve table index a body-motion producer's curve
         // target source resolves by ordinal, the same live-recompile rule a dynamics retune already rides.
         WorldMutation.UpsertCurve or WorldMutation.RemoveCurve));
+
     // Whether a mutation touches the addons section — the only door WorldAddonRow row content (or document order)
     // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
     // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
@@ -64,6 +65,7 @@ public sealed partial class WorldDocument {
         mutation: mutation
     ) || (mutation is
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon));
+
     // Whether a mutation touches the screens section — the transactional prepare/commit gate for screen machines.
     private static bool AffectsScreens(WorldMutation mutation) => (AnyMember(
         affects: AffectsScreens,
@@ -76,6 +78,7 @@ public sealed partial class WorldDocument {
         mutation: mutation
     ) || (mutation is
         WorldMutation.UpsertMachine or WorldMutation.RemoveMachine));
+
     // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
     // UpsertCreation re-shapes every live placement of it, so it measures too).
     internal static bool AffectsRenderEnvelope(WorldMutation mutation) => (AnyMember(
@@ -104,6 +107,7 @@ public sealed partial class WorldDocument {
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetPopulationDefaults));
+
     private static bool ContainsMember(IReadOnlyList<WorldGroupMember> members, WorldPrincipal member) {
         foreach (var existing in members) {
             if (
@@ -274,6 +278,7 @@ public sealed partial class WorldDocument {
         WorldMutation.Generate m => GrantSubject.State(name: m.Row),
         _ => null,
     };
+
     // The row-scoped Mutate subject a creations/placements mutation names, for gate 1's disjunction — null for every
     // other mutation kind (the section hold is then the only way through). The id is the mutation's own target key,
     // the same key the compose arm upserts/removes by, so a row grant admits exactly the row it names.
@@ -341,6 +346,7 @@ public sealed partial class WorldDocument {
         message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."
     ),
     };
+
     // A submitted row whose document carries `state.` references, resolved against the current definition's state
     // before anything in its compose arm reads a bound value. The copy is private (the row's own JSON round trip
     // through the same JsonTypeInfo the console and the wire parse it with): a submitter's row can share value
@@ -492,6 +498,7 @@ public sealed partial class WorldDocument {
 
         return true;
     }
+
     // Compose a candidate definition from the current one and a mutation — a with-expression over the coarse section,
     // whole-row upsert addressed by stable id. A remove of a missing id fails here (before validation) with a reason.
     // `tick` is the tick this mutation APPLIES at — the live tick boundary, or a journal entry's own tick during
@@ -544,6 +551,7 @@ public sealed partial class WorldDocument {
 
         return true;
     }
+
     // The state row a state mutation writes, or null for every other kind — the row whose bound document values
     // TryRefresh re-resolves.
     private static string? StateRowOf(WorldMutation mutation) => mutation switch {
@@ -1069,11 +1077,11 @@ public sealed partial class WorldDocument {
 
                 return true;
             case WorldMutation.SetViewSeatRig m:
-                candidate = (current with { ViewsRaw = (current.Views with { SeatRig = m.SeatRig }) });
+                candidate = (current with { ViewsRaw = (current.Views with { SeatRigRaw = m.SeatRig }) });
 
                 return true;
             case WorldMutation.SetViewSeatControl m:
-                candidate = (current with { ViewsRaw = (current.Views with { SeatControl = m.SeatControl }) });
+                candidate = (current with { ViewsRaw = (current.Views with { SeatControlRaw = m.SeatControl }) });
 
                 return true;
             case WorldMutation.SetPlayerDefaults m:
@@ -1391,10 +1399,15 @@ public sealed partial class WorldDocument {
             // cell of the row across whatever the declaration changed about its value-over-time traits.
             case WorldMutation.UpsertStateRow m: {
                     var previousRow = WorldDefinitionRows.FindStateRow(
-                        rows: current.State,
-                        name: m.Row.Name.Value
-                    );
+                      rows: current.State,
+                      name: m.Row.Name.Value
+                  );
 
+                    if (StateRows.IsGeneratedRowName(name: m.Row.Name.Value, rows: current.State)) {
+                        candidate = current;
+                        reason = $"state row '{m.Row.Name}' is generated storage; mutate its owning declaration or use a typed instance effect";
+                        return false;
+                    }
                     if (previousRow is { Inverse: { } existingInverse }) {
                         candidate = current;
                         reason = $"state row '{m.Row.Name}' is a derived board (inverse names '{existingInverse.Tokens}'/'{existingInverse.Codes}') — write those rows instead; the engine recomputes '{m.Row.Name}' on install";
@@ -1403,7 +1416,7 @@ public sealed partial class WorldDocument {
                     }
 
                     var declared = current.WithWorldState(rows: Upsert(
-                        list: current.State,
+                        list: current.AuthoredState,
                         item: m.Row,
                         keyOf: static row => row.Name
                     ));
@@ -1451,7 +1464,7 @@ public sealed partial class WorldDocument {
                 }
             case WorldMutation.RemoveStateRow m:
                 if (!Remove(
-                    list: current.State,
+                    list: current.AuthoredState,
                     key: m.Name,
                     keyOf: static row => row.Name,
                     result: out var stateRows
@@ -2165,7 +2178,6 @@ public sealed partial class WorldDocument {
 
         return tokens[0];
     }
-
     // The placement upsert arm. Everything here is about the contribution facet's server-stamped half; a row carrying
     // no facet composes exactly as it always did.
     //

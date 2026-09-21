@@ -800,6 +800,7 @@ public sealed partial class WorldDocument {
 
         return true;
     }
+
     // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
     // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
     // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/architecture/worlds.md's
@@ -811,6 +812,7 @@ public sealed partial class WorldDocument {
         stepTicks: Host.LastStepTicks,
         tick: Host.CompletedTick
     );
+
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
     // reused Host.SnapshotEntries array — the SAME borrowed-scratch shape as before the output hub: a typed subscriber
     // must fully consume (or copy) the returned WorldSnapshot before returning from DeliverSnapshot, because the next
@@ -822,6 +824,7 @@ public sealed partial class WorldDocument {
         stepTicks: stepTicks,
         tick: tick
     );
+
     private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, bool consumeContinuity) {
         var count = 0;
 
@@ -883,6 +886,7 @@ public sealed partial class WorldDocument {
             EngineTick: Host.CompletedEngineTicks
         );
     }
+
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
     // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write
     // lacking its section's Mutate hold, world.undo lacking every section's Mutate hold, and a rebuild lacking every
@@ -932,11 +936,11 @@ public sealed partial class WorldDocument {
     /// <see cref="DeliverPending"/> carries them to every attached sink.</summary>
     /// <remarks>A shape change already pending outranks this: a definition delivery carries the values too.</remarks>
     internal void MarkStateDeliveryPending() => m_pendingStateDelivery = true;
-    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null) {
+    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         m_pendingDefinitionDelivery = true;
         m_definition = definition;
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
-        definition = Host.RecompileRules(compilation: compilation, definition: definition);
+        definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
@@ -1016,24 +1020,43 @@ public sealed partial class WorldDocument {
     private readonly List<WorldPeerEventEntry> m_inhabitCountAdmitted = [];
     private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
 
-    private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation) {
+    private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) {
         m_definition = definition;
-        // A state-value install is a fresh seed of the arena: the document is the arena's serialization, so the
-        // values a mutation composed reach the store through the one import door before anything reads them.
-        Host.SyncArena(definition: definition);
+        // A state-value install is a fresh seed of the arena: ordinary rows enter through the import door, while a
+        // pool candidate arrives as the already-validated typed replacement prepared before commit.
+        if (arena is null) {
+            Host.SyncArena(definition: definition);
+        } else {
+            Host.AdoptPreparedArena(arena: arena, definition: definition);
+        }
         m_pendingStateDelivery = true;
 
-        if (TouchesDriveGate(definition: definition, mutation: mutation)) {
+        ReconcileStateConsumers(
+            bodyScale: true,
+            definition: definition,
+            driveGate: TouchesDriveGate(definition: definition, mutation: mutation),
+            fields: true
+        );
+    }
+
+    // Everything outside the arena that reads a state value and keeps its own copy: the drive gates the grant table
+    // resolved, the field lattice's input, each body's scale, and the cell-driven inhabit counts. A state value
+    // reaches the installed document through two doors, a value mutation and the arena's end-of-tick export of what
+    // the rules wrote, and both end here, so a gate a rule closed is as closed as one a command closed. Nothing here
+    // writes the arena or opens a scope. Each flag says whether a row that consumer reads moved.
+    internal void ReconcileStateConsumers(WorldDefinition definition, bool driveGate, bool fields, bool bodyScale) {
+        if (driveGate) {
             Host.GrantTable.SyncState(definition: definition);
         }
+        if (fields) {
+            Host.Population.InstallFields(definition: definition);
+        }
+        if (bodyScale) {
+            Host.Population.SyncBodyScale(definition: definition);
+        }
 
-        Host.Population.InstallFields(definition: definition);
-        Host.Population.SyncBodyScale(definition: definition);
-
-        // A cell-driven inhabit count's row lives on this same state catalog, so a value-only mutation is exactly
-        // the moment its live raw value could have moved (a rule frame's end-of-tick fold, or a direct console
-        // write) — ReconcileInhabitCounts itself compares against its own cache and is a no-op walk when the
-        // touched row is unrelated to any tracked inhabit facet.
+        // ReconcileInhabitCounts compares against its own cache and is a no-op walk when no tracked inhabit facet's
+        // row moved.
         Host.Population.ReconcileInhabitCounts(
             admitted: m_inhabitCountAdmitted,
             definition: definition,
@@ -1052,6 +1075,7 @@ public sealed partial class WorldDocument {
         m_inhabitCountAdmitted.Clear();
         m_inhabitCountDisconnected.Clear();
     }
+
     private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
         m_touchedRows.Clear();
 
@@ -1091,6 +1115,7 @@ public sealed partial class WorldDocument {
                 return false;
         }
     }
+
     internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
         compilation = null;
 
@@ -1102,6 +1127,7 @@ public sealed partial class WorldDocument {
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
+
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
     // over them, with nothing compiled.
     private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
@@ -1218,6 +1244,7 @@ public sealed partial class WorldDocument {
                 );
         }
     }
+
     // Adopt a wholesale-rebuilt field (a swap/undo), bumping the revision when the field actually moved so the status
     // read-back tracks it. A swap into an analytic world clears the field.
     internal void SwapSolids(WorldSolidField? solids) {
@@ -1229,402 +1256,7 @@ public sealed partial class WorldDocument {
             m_solidRevision++;
         }
     }
-    // Apply one mutation at the tick boundary: authority through the ONE admission predicate → compose a candidate
-    // (with-expression) → revalidate the WHOLE document → capacity-check scene/screen edits against the probed render
-    // envelope → on any failure reject loudly (definition unchanged) → on success swap the live definition, rebuild the
-    // changed section's derived state, and journal it.
-    /// <summary>Composes, validates and applies one mutation through the ordinary pipeline.</summary>
-    /// <param name="mutation">The mutation.</param>
-    /// <param name="tick">The simulation tick it applies at.</param>
-    /// <param name="engineTick">The engine tick it applies at.</param>
-    /// <param name="connectionId">The submitting envelope's connection id.</param>
-    /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
-    /// <returns>Whether the mutation applied.</returns>
-    internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
-        m_lastMutationFailureDetail = null;
-        // THE ONE ADMISSION PREDICATE decides the whole authority question — section hold, the Mutate/section kind
-        // mask, the row-scoped Edit hold and ITS mask, and the untrusted per-tick dispatch budget. Every ordered-domain
-        // ingress converges here (loopback, console, and the QUIC peer door alike), so this call is what gives the peer
-        // door exactly the masks and metering the addon seam has, from the same code rather than from a second reading
-        // of the same rules. `preMetered` says only whether THIS ingress already charged the dispatch (the addon seam
-        // meters at its own pre-flight, before decode, deliberately); it never changes which rules run.
-        if (!TryAdmitCompleteMutation(admission: out var admission, mutation: mutation, preMetered: preMetered)) {
-            var denial = admission.Describe();
 
-            m_lastMutationFailureDetail = denial;
-
-            if (Host.Output.HasNarrationSink) {
-                Host.Output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {WorldServer.Describe(mutation: mutation)} dropped]");
-            }
-            Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: $"{WorldServer.Describe(mutation: mutation)} denied: {denial}",
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                Mutation: mutation,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
-        }
-
-        if (!TryCompose(
-            current: m_definition,
-            mutation: mutation,
-            tick: tick,
-            engineTick: engineTick,
-            instanceIdentity: Host.InstanceIdentity,
-            candidate: out var candidate,
-            reason: out var composeReason,
-            evictedKey: out var evictedKey
-        )) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: composeReason
-            );
-
-            return false;
-        }
-
-        if (
-            (mutation is WorldMutation.UpsertKit upsertKit) &&
-            !Host.Population.CanReplaceKit(
-            replacement: upsertKit.Kit,
-            refusal: out var sourceReason
-        )
-        ) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: sourceReason
-            );
-
-            return false;
-        }
-
-        // Cross-document adjacency claims are proved at load, never from this tick path. An edit that can change a
-        // standing claim or one of its floor inputs must go through a document reload; unrelated edits revalidate
-        // only the facts owned by this document.
-        if (
-            (candidate.Adjacencies is { Count: > 0 }) &&
-            AdjacencyProofInputsChanged(
-            candidate: candidate,
-            current: m_definition,
-            mutation: mutation
-        )
-        ) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: "the mutation changes an adjacency overlap input; apply it through world.load/world.reload so the neighbour can be re-proved outside the tick path"
-            );
-
-            return false;
-        }
-
-        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason, compilation: out var compilation)) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: validationReason
-            );
-
-            return false;
-        }
-
-        if (ExceedsBootDerivedFaceReservation(
-            candidate: candidate,
-            reason: out var reservationReason
-        )) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: reservationReason
-            );
-
-            return false;
-        }
-
-        if (
-            AffectsRenderEnvelope(mutation: mutation) &&
-            !Host.Envelope.TryFit(
-            candidate: candidate,
-            reason: out var capacityReason
-        )
-        ) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: capacityReason
-            );
-
-            return false;
-        }
-
-        if (!Host.Population.CanInstallFields(
-            definition: candidate,
-            reason: out var fieldReason
-        )) {
-            Reject(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                mutation: mutation,
-                reason: fieldReason!
-            );
-
-            return false;
-        }
-
-        // Step 4b — the SDF contact field, built once here (before install) so the warp-free evaluator's excluded-op
-        // ceiling is a LOUD apply-time rejection (the definition and the field both stay byte-identical on failure)
-        // rather than a constructor throw at install. Only a solid-affecting mutation rebuilds it; otherwise the live
-        // field carries forward untouched.
-        var solids = m_solids;
-        var solidAffecting = AffectsSolidField(mutation: mutation);
-
-        if (solidAffecting) {
-            // A SetCollision edit touches only the collision tuning row — the compiled SDF program (screens and
-            // placements) is byte-identical — so when the live field already exists and the requirements still need it,
-            // candidate still is, re-wrap the existing evaluator with the new scalars instead of recompiling the program
-            // (a slope/skin drag never rebuilds hundreds of instructions). Every other solid-affecting edit, and a
-            // a requirement-selection flip rebuilds from scratch.
-            if (
-                (mutation is WorldMutation.SetCollision) &&
-                (m_solids is { } live) &&
-                WorldContactSelection.RequiresField(collision: candidate.Collision)
-            ) {
-                solids = live.WithTuning(tuning: FixedWorldCollision.Compile(collision: candidate.Collision));
-            } else if (!TryBuildSolids(
-                definition: candidate,
-                reason: out var solidReason,
-                solids: out solids
-            )) {
-                Reject(
-                    connectionId: connectionId,
-                    correlationId: correlationId,
-                    mutation: mutation,
-                    reason: solidReason
-                );
-
-                return false;
-            }
-        }
-
-        // Final fallible preparation gates run here after the cheap field checks. Addon and machine hosts both stage
-        // their resources against the same candidate; a refusal rejects the WHOLE mutation with the candidate and
-        // solid field discarded, leaving m_definition, field identity, and revisions byte-identical. A server with
-        // no addon host attached still refuses an addon-affecting mutation BY NAME rather than accepting a no-op.
-        // The whole sequence from here through Commit runs under ONE try/finally: addonPlan starts null and TryPrepare
-        // only ever sets it on success, so the finally is a no-op for every path that never obtains a plan, and a
-        // downstream throw — from contention-array staging, Install, or Commit alike — still disposes an uncommitted
-        // plan rather than leaking it.
-        IWorldAddonPreparedPlan? addonPlan = null;
-        int[]? newTickWrittenEntity = null;
-        WorldPrincipal[]? newTickWrittenPrincipal = null;
-        bool[]? newTickCollided = null;
-        var addonPlanCommitted = false;
-
-        IWorldMachinePreparedPlan? machinePlan = null;
-        var machinePlanCommitted = false;
-
-        try {
-            if (AffectsAddons(mutation: mutation)) {
-                if (Host.Addons is not { } addonsForPrepare) {
-                    Reject(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        mutation: mutation,
-                        reason: "no addon host is attached to this server — addon-affecting mutations are refused"
-                    );
-
-                    return false;
-                }
-
-                if (!addonsForPrepare.TryPrepare(
-                    candidate: candidate,
-                    current: m_definition,
-                    plan: out addonPlan,
-                    reason: out var addonReason
-                )) {
-                    Reject(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        mutation: mutation,
-                        reason: (addonReason ?? "addon preparation refused")
-                    );
-
-                    return false;
-                }
-
-                if (addonPlan is not null) {
-                    StageAddonContentionArrays(
-                        mountedCount: addonPlan.MountedCount,
-                        entity: out newTickWrittenEntity,
-                        principal: out newTickWrittenPrincipal,
-                        collided: out newTickCollided
-                    );
-                }
-            }
-
-            if (AffectsScreens(mutation: mutation) || AffectsMachines(mutation: mutation)) {
-                if (!Host.Machines.TryPrepare(
-                    candidate: candidate,
-                    current: m_definition,
-                    plan: out machinePlan,
-                    reason: out var machineReason
-                )) {
-                    Reject(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        mutation: mutation,
-                        reason: (machineReason ?? "screen machine preparation refused")
-                    );
-
-                    return false;
-                }
-            }
-
-            // Commit runs only after Install below succeeds, so nothing observable (registration, disclosure
-            // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
-            // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
-            // itself does.
-            // A scalar state write keeps the compiled rules, catalog, groups and machines only while the candidate
-            // still carries the SAME state catalog identity the rules were compiled against — a document-value refresh
-            // or a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild —
-            // so those cases take the full install like every other mutation.
-            var previous = m_definition;
-
-            // Publish the candidate field immediately before Install, after every addon/machine preparation gate has
-            // accepted the same candidate. This keeps a refused batch from leaking field identity or revision while
-            // still making the field visible before Install rebuilds bodies against it.
-            if (
-                solidAffecting &&
-                !ReferenceEquals(
-                objA: solids,
-                objB: m_solids
-            )
-            ) {
-                m_solids = solids;
-                m_solidRevision++;
-            }
-
-            if (
-                IsStateMutation(mutation: mutation) &&
-                ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
-                !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
-            ) {
-                InstallRuntimeStateValue(definition: candidate, mutation: mutation);
-            } else {
-                Install(
-                    definition: candidate,
-                    compilation: compilation,
-                    rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
-                    candidate: candidate,
-                    mutation: mutation
-                ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
-                );
-            }
-
-            // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
-            // cursor, drawn masks or fill — repaints that row; every other row keeps its evolved cells.
-            Host.RepaintChangedLatticeDraws(
-                current: candidate,
-                previous: previous
-            );
-
-            if (addonPlan is not null) {
-                Host.Addons!.Commit(plan: addonPlan);
-                addonPlanCommitted = true;
-
-                if (newTickWrittenEntity is not null) {
-                    Host.AdoptContentionArrays(
-                        collided: newTickCollided!,
-                        entity: newTickWrittenEntity,
-                        principal: newTickWrittenPrincipal!
-                    );
-                }
-            }
-
-            if (machinePlan is not null) {
-                Host.Machines.Commit(plan: machinePlan);
-                machinePlanCommitted = true;
-            }
-        } finally {
-            if (!addonPlanCommitted) {
-                addonPlan?.Dispose();
-            }
-
-            if (!machinePlanCommitted) {
-                machinePlan?.Dispose();
-            }
-        }
-
-        m_journal.Add(item: new WorldJournalEntry(
-            EngineTick: engineTick,
-            Mutation: mutation,
-            Tick: tick
-        ));
-        Host.MutationJournalTap?.Invoke(tick, engineTick, mutation);
-
-        if (addonPlanCommitted) {
-            Host.Addons!.Finish(plan: addonPlan!);
-        }
-
-        if (machinePlanCommitted) {
-            Host.Machines.Finish(plan: machinePlan!);
-        }
-
-        // A defaults-class mutation edits what the NEXT boot wakes on while the live
-        // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
-        // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
-        // classes at once (WorldPlacementPolicyDefaults' own remarks name which field is which) — the headroom/repeat-cap
-        // fields are boot-consumed by the frozen render-envelope probe, while candidate/layout/preview fields are
-        // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
-        // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
-        var documentOnly = IsDocumentDefaults(mutation: mutation);
-        var message = mutation switch {
-            WorldMutation.SetAuthoringDefaults => $"{WorldServer.Describe(mutation: mutation)} applied — candidate/layout/preview levers live now; headroom + max-repeat-per-segment apply at next boot",
-            // SetPopulationDefaults is a THIRD timing class: the census figures are document defaults (next boot), but
-            // the distribution is LIVE for future activations while INERT for bodies already standing — spell out the split.
-            WorldMutation.SetPopulationDefaults => $"{WorldServer.Describe(mutation: mutation)} applied — census figures next boot; spawn policy live for future activations, standing bodies unmoved",
-            WorldMutation.SetPopulationDistribution => $"{WorldServer.Describe(mutation: mutation)} applied — spawn policy live for future activations, standing bodies unmoved",
-            WorldMutation.SetPopulationCensus => $"{WorldServer.Describe(mutation: mutation)} applied — census figures next boot",
-            _ => $"{WorldServer.Describe(mutation: mutation)} applied{(documentOnly
-            ? " — document default (next boot; live levers unchanged)"
-            : string.Empty)}",
-        };
-
-        // An Evicts row's overflow policy dropped a cell to make room — named on the SAME echo line rather than a
-        // separate one, so an eviction can never scroll past unnoticed the way a second stderr line could.
-        if (evictedKey is { } evicted) {
-            message = $"{message} (evicted '{evicted}')";
-        }
-
-        if (Host.Output.HasNarrationSink) {
-            Host.Output.Narrate(channel: "world.mutation", text: $"[world.mutation: {message}]");
-        }
-        Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: message,
-            Rejected: false,
-            Kind: (documentOnly
-            ? WorldEditEchoKind.DocumentDefaults
-            : WorldEditEchoKind.Mutation),
-            Mutation: mutation,
-            ConnectionId: connectionId,
-            CorrelationId: correlationId
-        ));
-
-        return true;
-    }
     // Applies one screen op SYNCHRONOUSLY (see WorldScreenOp's own remarks for why: never buffered, so a following
     // Command.Engage in the same batch observes the effect). Authority FIRST — Control over the targeted screen(s),
     // the SAME grant subject ScreenCommandModule's pre-inversion client-side precheck used, now checked
@@ -1743,6 +1375,7 @@ public sealed partial class WorldDocument {
 
         return ok;
     }
+
     // Build the SDF contact field for a candidate — null when the requirements permit analytic contact (the set is
     // derived inside the population's compile, not here), the built field under the FIELD provider, or a
     // named failure when a solid names an op the warp-free evaluator cannot interpret.
@@ -1764,6 +1397,7 @@ public sealed partial class WorldDocument {
             reason: out reason
         );
     }
+
     // The Control check over a screen op's targeted screen(s): every op names exactly one index except Link (every
     // named member) and Unlink (every member of the ALREADY-LIVE link by that name, when one exists — mirroring the
     // pre-inversion console module's own "control over every member is required to sever" rule; a missing link
@@ -2233,7 +1867,6 @@ public sealed partial class WorldDocument {
             );
         }
     }
-
     // Pre-sizes the per-tick addon contention tracking against a plan's own MountedCount (or, at boot/AttachAddons,
     // the runtime's already-committed count) — called BEFORE the addon plan's own Commit, so the caller can adopt
     // the new arrays by reference in the same breath as the plan itself publishes, with no allocation at that
@@ -2257,7 +1890,6 @@ public sealed partial class WorldDocument {
         principal = new WorldPrincipal[capacity];
         collided = new bool[capacity];
     }
-
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
     /// definition followed by a primer snapshot of the current table, so the client renders the current state before
     /// its first ordinary tick delivery. A subscribe, not an overwrite: <see cref="WorldOutputHub"/> supports more

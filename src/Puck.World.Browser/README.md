@@ -113,8 +113,10 @@ string ParseFragment(string fragmentJson, string hostJson, string alias);  // sa
 string ComposeTree(string rootName, string documentsJson, string editedName, string editedJson); // documentsJson: {name: text}; editedName "" for none -> {ok, composed, document, deferred[]} | {ok:false, errors[], deferred[]}
 string Canonicalize(string json);                                          // same shape as Parse
 string Compile(string json);                                               // {ok, handle} | {ok:false, errors[]}
+string AnalyzeCosts(string json);                                          // {ok, validated, report, validationErrors[], deferred[]} | {ok:false, errors[]} — no session/arena
 string Release(string handle);                                             // {ok}
 string Rows(string handle);                                                // {ok, rows:[{name, kind, keyed, cells:[{key,value}]}]}
+string Costs(string handle);                                               // {ok, report, error?}
 string Rebind(string handle, string json);                                 // {ok, error?}
 string Judge(string handle, string tick);                                  // {ok, trace:{rules[{name,mode,evaluations[]}], writes[{row,key,old,new}], refusals[]}}
 string ReadRow(string handle, string row, string key);                     // {found, kind, value} — see "One cell value on the wire"
@@ -124,6 +126,23 @@ string BoardMask(string handle, string row);                               // {o
 string StateHash(string handle);                                           // {ok, hash, error?}
 string Cells(string topologyJson);                                         // {ok, cells:[{ordinal,key,x,y,z}], error?} — no handle; a topology is self-contained
 ```
+
+`Costs` projects the installed compilation's shared `WorldCostReport`. A known
+cycle bound carries a decimal-string count; an unmodeled or overflowed bound
+carries `null`, never a misleading zero. Model and evidence identities travel
+with the report. Heuristic work is a separately labelled string. Repeated reads
+reuse the compiled analysis; a successful `Rebind` replaces it. The portal's
+`costs(handle)` facade exposes exact cycle counts and multipliers as `bigint`
+in both inline and worker hosts. This is authored cost analysis, including
+operations the preview host cannot execute, not a preview timing measurement.
+`AnalyzeCosts` runs the same parse, migration, draw resolution, structural
+validation, and rule compilation over a draft without installing a session or
+allocating its arena. A draft whose programs compile still returns its report when
+ordinary validation refuses installation; `validated` remains false and
+`validationErrors` carries those refusals, so the report never implies admission.
+Here `validated` means local structural validation; platform checks the browser
+cannot perform remain explicit in `deferred`. Malformed JSON or a document whose rule programs cannot compile returns the
+ordinary analysis-failure diagnostics.
 
 `Rows` reports only a row's **authored** cells (`StateRow.Cells`); a dense
 board's un-authored cells are readable individually through `ReadRow` or in

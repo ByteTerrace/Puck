@@ -71,7 +71,7 @@ public static partial class WorldDocumentEmitter {
     // The cell key a folded value is recorded under: the operand's own row and key, with the characters a cell name
     // may not carry replaced by dashes.
     private static string SawKey(string state, string? key) {
-        var spelling = ((key is null) || (key == StateRow.SlotKey.Value)
+        var spelling = (((key is null) || (key == StateRow.SlotKey.Value))
             ? state
             : $"{state}-{key}"
         );
@@ -122,8 +122,8 @@ public static partial class WorldDocumentEmitter {
                 break;
         }
     }
-    // Whether a name is a declared Int row of any lane of the document's state section.
-    private static bool IsIntRow(JsonObject state, string name) {
+    // The kind of a declared row of any lane of the document's state section, or null for a name none declares.
+    private static CellKind? KindOfRow(JsonObject state, string name) {
         foreach (var (_, lane) in state) {
             if (lane is not JsonArray rows) {
                 continue;
@@ -131,13 +131,27 @@ public static partial class WorldDocumentEmitter {
 
             foreach (var candidate in rows.OfType<JsonObject>()) {
                 if (candidate["name"]?.GetValue<string>() == name) {
-                    return ((candidate["kind"]?.GetValue<string>() ?? nameof(CellKind.Int)) == nameof(CellKind.Int));
+                    return (Enum.TryParse<CellKind>(
+                        result: out var kind,
+                        value: (candidate["kind"]?.GetValue<string>() ?? nameof(CellKind.Int))
+                    )
+                        ? kind
+                        : null
+                    );
                 }
             }
         }
 
-        return false;
+        return null;
     }
+    // The value a witness cell is authored at before its verdict's rule fires, or null for a kind no gate reads.
+    private static JsonNode? UnseenValue(CellKind kind) => kind switch {
+        CellKind.Bool => JsonValue.Create(value: false),
+        CellKind.Fixed => JsonValue.Create(value: "0"),
+        _ => null,
+    };
+    // The row that holds what a verdict's gate saw of rows of one kind other than Int.
+    private static string WitnessRow(string verdict, CellKind kind) => $"{verdict}-{kind.ToString().ToLowerInvariant()}";
     private static JsonObject SetVerdictCell(string row, string key, long value) => new() {
         ["$type"] = "setState",
         ["key"] = key,
@@ -216,8 +230,8 @@ public static partial class WorldDocumentEmitter {
         );
 
         ApplyExpectations(
-            exportTick: exportTick,
             expectations: expectations,
+            exportTick: exportTick,
             scope: scope,
             slug: slug,
             test: test,
@@ -226,6 +240,10 @@ public static partial class WorldDocumentEmitter {
         WorldExpressionJson.Lower(
             diagnostics: scope.Diagnostics,
             node: world
+        );
+        WorldChannelNodes.Lower(
+            document: world,
+            type: typeof(WorldDefinition)
         );
 
         return new WorldTestWorld(
@@ -323,55 +341,15 @@ public static partial class WorldDocumentEmitter {
     // A given value is a literal of the row's own kind, lowered by the door an authored cell's value takes, so it
     // is spelled in the document exactly as that cell would be and refused by the same texts.
     private static JsonNode? GivenLiteral(TestGivenNode cell, string kind, DocumentScope scope) {
-        object? literal = null;
-        string? raw = null;
-
-        if (cell.Value is RhsTextNode quoted) {
-            literal = quoted.Text;
-        } else if (cell.Value is RhsOperandNode operand) {
-            raw = ResolveOperandConstants(
-                scope: scope,
-                text: operand.Text
-            ).Trim();
-
-            if (bool.TryParse(
-                result: out var flag,
-                value: raw
-            )) {
-                literal = flag;
-            } else if (long.TryParse(
-                provider: CultureInfo.InvariantCulture,
-                result: out var whole,
-                s: raw,
-                style: NumberStyles.AllowLeadingSign
-            )) {
-                literal = whole;
-            } else if (double.TryParse(
-                provider: CultureInfo.InvariantCulture,
-                result: out var real,
-                s: raw,
-                style: (NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign)
-            )) {
-                literal = real;
-            }
-        }
-
-        return ((literal is null)
-            ? null
-            : LowerStateScalarValue(
-                context: $"a given line's value for '{cell.Target.Name}'",
-                expr: new LiteralExpressionNode(
-                    Column: cell.Value.Column,
-                    Length: cell.Value.Length,
-                    Line: cell.Value.Line,
-                    Offset: cell.Value.Offset,
-                    RawText: raw,
-                    Value: literal
-                ),
-                kind: kind,
-                scope: scope
-            )
-        );
+        var expression = cell.Value switch {
+            RhsTextNode text => new LiteralExpressionNode(text.Text),
+            RhsOperandNode operand => CompileTimeOperand(operand.Expression, scope),
+            _ => null,
+        };
+        if ((expression is IdentifierExpressionNode name) && !scope.TryLowerBinding(name.Name, out _)) { return null; }
+        return ((expression is null) ? null : LowerStateScalarValue(
+            context: $"a given line's value for '{cell.Target.Name}'",
+            expr: expression, kind: kind, scope: scope));
     }
     // The tick grid: the cursor opens at the first tick a command can be submitted at and `ticks n` carries it
     // forward, so a seat step lands on the tick its preceding steps reached. The export tick is the last tick the
@@ -502,16 +480,19 @@ public static partial class WorldDocumentEmitter {
                 ["else"] = fail,
                 ["then"] = pass,
             });
-            var folded = new HashSet<string>(comparer: StringComparer.Ordinal) { VerdictStatusKey };
+            var folded = new HashSet<(CellKind Kind, string Key)> { (CellKind.Int, VerdictStatusKey) };
+            var witnesses = new SortedDictionary<CellKind, JsonArray>();
 
             foreach (var (readState, readKey) in reads) {
-                // The verdict row is an Int row, so it holds what the gate read of an Int row and nothing else: a
-                // fold out of a row of another kind is a write the validator refuses. The gate's own text still
-                // names every row it read.
-                if (!IsIntRow(
-                    name: readState,
-                    state: state
-                )) {
+                // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
+                // read of a Fixed or a Bool row is a cell of that kind's witness.
+                if (
+                    (KindOfRow(
+                        name: readState,
+                        state: state
+                    ) is not { } kind) ||
+                    ((kind != CellKind.Int) && (UnseenValue(kind: kind) is null))
+                ) {
                     continue;
                 }
 
@@ -520,17 +501,35 @@ public static partial class WorldDocumentEmitter {
                     state: readState
                 );
 
-                if ((key.Length == 0) || !folded.Add(item: key)) {
+                if ((key.Length == 0) || !folded.Add(item: (kind, key))) {
                     continue;
                 }
 
-                cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
+                var into = row;
+
+                if (kind == CellKind.Int) {
+                    cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
+                } else {
+                    into = WitnessRow(
+                        kind: kind,
+                        verdict: row
+                    );
+
+                    if (!witnesses.TryGetValue(
+                        key: kind,
+                        value: out var witnessCells
+                    )) {
+                        witnessCells = [];
+                        witnesses[kind] = witnessCells;
+                    }
+                    witnessCells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = UnseenValue(kind: kind) });
+                }
 
                 var fold = new JsonObject {
                     ["$type"] = "setState",
                     ["fromState"] = readState,
                     ["key"] = key,
-                    ["state"] = row,
+                    ["state"] = into,
                 };
 
                 if (readKey is not null) {
@@ -549,6 +548,28 @@ public static partial class WorldDocumentEmitter {
                     ["status"] = VerdictStatusKey,
                 },
             });
+            foreach (var (kind, witnessCells) in witnesses) {
+                var witness = WitnessRow(
+                    kind: kind,
+                    verdict: row
+                );
+
+                if (rows.OfType<JsonObject>().Any(predicate: candidate => (candidate["name"]?.GetValue<string>() == witness))) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.TestShapeInadmissible,
+                        message: $"test '{test.Name}' would generate the witness row '{witness}', which this world already declares",
+                        span: expectation.Span
+                    );
+
+                    continue;
+                }
+                rows.AppendNode(item: new JsonObject {
+                    ["cells"] = witnessCells,
+                    ["kind"] = kind.ToString(),
+                    ["name"] = witness,
+                    ["witness"] = row,
+                });
+            }
             rules.AppendNode(item: new JsonObject {
                 ["effects"] = effects,
                 ["gate"] = new JsonObject {

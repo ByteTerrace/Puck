@@ -6,6 +6,16 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 public sealed class WorldPlacementSpatialLawTests {
+    [Fact]
+    public void MissingPlacementPositionIsRefusedBeforeGeometryCompilation() {
+        var placement = new WorldPlacement(
+            Id: "missing-position", PrototypeId: "prototype", Position: null!, YawDegrees: 0f, Scale: 1f
+        );
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidatePlacementGeometry(placement: placement, reason: out var reason));
+        Assert.Contains(actualString: reason, expectedSubstring: "placement.position");
+    }
+
     private static WorldSpatialShape Box(float x, float y, float z, float yaw = 0f) => new(
         Kind: WorldSpatialShapeKind.Box,
         Center: new DocumentVector3(value: Vector3.Zero),
@@ -482,16 +492,22 @@ public sealed class WorldPlacementSpatialLawTests {
             WorldPlacementSpatialRole.Occupation,
             shape
         );
-        var touching = first with { Id = "touching", Position = new DocumentVector3(
+        var touching = first with {
+            Id = "touching",
+            Position = new DocumentVector3(
             x: (2 * FixedEpsilon),
             y: 0,
             z: 0
-        ) };
-        var separated = first with { Id = "separated", Position = new DocumentVector3(
+        ),
+        };
+        var separated = first with {
+            Id = "separated",
+            Position = new DocumentVector3(
             x: (3 * FixedEpsilon),
             y: 0,
             z: 0
-        ) };
+        ),
+        };
         var index = WorldSpatialQueryCompilation.Compile(placements: [first, touching, separated]);
 
         Assert.True(condition: WorldSpatialQueryIndex.TryOverlap(

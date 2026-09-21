@@ -64,7 +64,9 @@
       "mode": "Edge",
       "gate": {
         "$type": "compareState",
-        "state": "$tick",
+        "state": {
+          "channel": "tick"
+        },
         "comparison": "GreaterOrEqual",
         "value": 1
       },
@@ -72,42 +74,95 @@
         {
           "$type": "setState",
           "state": "ringOf",
-          "fromState": "$symmetry:ring:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "ring",
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "antipodeOf",
-          "fromState": "$symmetry:antipode:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "antipode",
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "canonicalOf",
-          "fromState": "$symmetry:canonicalRay:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "canonicalRay",
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "walked",
-          "fromState": "$symmetry:cycle:7:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "cycle",
+              7,
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "reflected",
-          "fromState": "$symmetry:reflect:cell:mirror:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "reflect",
+              "cell",
+              "mirror",
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "orthogonalFlag",
-          "fromState": "$symmetry:orthogonal:17:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "orthogonal",
+              17,
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "pairing",
-          "fromState": "$symmetry:innerProduct:17:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "innerProduct",
+              17,
+              "node"
+            ]
+          }
         },
         {
           "$type": "setState",
           "state": "projX",
-          "fromState": "$symmetry:projectionX:node"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "projectionX",
+              "node"
+            ]
+          }
         }
       ]
     }

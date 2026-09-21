@@ -44,7 +44,8 @@ public interface ISdfFrameDresser {
 /// (<see cref="WorstCaseProgramWordCapacity"/>/<see cref="WorstCaseInstanceCapacity"/>/<see cref="WorstCaseDynamicTransformCapacity"/>).
 /// This generalizes the per-host <c>MeasureWorstCaseEnvelope</c> pattern: any live rebuild (every real
 /// <see cref="CaptureFrame"/> call) is a program built from the same emitters' non-probe branches, which by the probe
-/// contract (see <see cref="ISdfSceneEmitter"/>) can never exceed what the probe measured.
+/// contract (see <see cref="ISdfSceneEmitter"/>) covers expected runtime variation. New authored content may exceed
+/// that initial program/instance reserve; the renderer grows it on upload. Dynamic-slot assignments remain fixed.
 /// </para>
 /// <para>
 /// Rebuild trigger: the composed program rebuilds only when some emitter's revision components

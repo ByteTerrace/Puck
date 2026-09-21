@@ -3,8 +3,8 @@
 // rules, https://en.wikipedia.org/wiki/Deathmatch_(video_games)
 //
 // Every fighter is everyone else's target. A kill scores its killer one frag and its victim one
-// death; a killed fighter leaves the match for a respawn countdown and fires nothing until the
-// countdown drains. Health regenerates on its own between hits, up to the fighter's ceiling, and
+// death; a killed fighter leaves the match until its respawn deadline passes and fires nothing
+// until then. Health regenerates on its own between hits, up to the fighter's ceiling, and
 // health pickups scattered around the arena restore more of it at once — each pickup is consumed
 // on contact and returns on its own respawn timer, the "item respawn" clock the genre is built
 // on. A participant may enter a match already under way; the first fighter is in from the start,
@@ -22,6 +22,18 @@
 // fighters are a fixed pair rather than an open lobby; armour, powerups and the self-damage rule
 // are not modelled; and the frag limit ends the match rather than a time limit.
 
+enum ArenaBody {
+  Detached
+  First
+  Second
+}
+
+enum ArenaPickupBody {
+  Detached
+  Medkit
+  Mega
+}
+
 // --- Firing, and the refusal a dead fighter earns ---------------------------------------------
 // Both shot rules write the same contended momentum follower: seat 1 pulls it toward +1, seat 2
 // toward -1. Two presses landing on the same tick both write it, document order decides which
@@ -29,33 +41,33 @@
 // velocity through — the cell's clock is where that contention is visible.
 
 rule "arena-fire-1" {
-  when $channel:1:attack >= 0.5 and arenaAlive[0] == 1 and arenaAlive[1] == 1 and arenaOver == 0
-  mode: "Edge"
-  arenaHealth[1] += -60
+  when channel(1, attack) >= 0.5 and arenaFighters[0].alive == 1 and arenaFighters[1].alive == 1 and arenaOver == 0
+  mode: Edge
+  arenaFighters[1].health += -60
   arenaShots += 1
   arenaMomentum[0] = 1
 }
 
 rule "arena-fire-2" {
-  when $channel:2:attack >= 0.5 and arenaJoined == 1 and arenaAlive[1] == 1 and arenaAlive[0] == 1 and arenaOver == 0
-  mode: "Edge"
-  arenaHealth[0] += -60
+  when channel(2, attack) >= 0.5 and arenaJoined == 1 and arenaFighters[1].alive == 1 and arenaFighters[0].alive == 1 and arenaOver == 0
+  mode: Edge
+  arenaFighters[0].health += -60
   arenaShots += 1
   arenaMomentum[0] = -1
 }
 
 // A dead fighter's attack is refused by the game's own rule: nothing fires until the respawn
-// countdown has drained. arenaRefused counts the shots the arena took away.
+// deadline has passed. arenaRefused counts the shots the arena took away.
 
 rule "arena-refuse-1" {
-  when $channel:1:attack >= 0.5 and arenaAlive[0] == 0
-  mode: "Edge"
+  when channel(1, attack) >= 0.5 and arenaFighters[0].alive == 0
+  mode: Edge
   arenaRefused += 1
 }
 
 rule "arena-refuse-2" {
-  when $channel:2:attack >= 0.5 and arenaJoined == 1 and arenaAlive[1] == 0
-  mode: "Edge"
+  when channel(2, attack) >= 0.5 and arenaJoined == 1 and arenaFighters[1].alive == 0
+  mode: Edge
   arenaRefused += 1
 }
 
@@ -71,111 +83,91 @@ rule "arena-refuse-2" {
 
 rule "arena-join" {
   when arenaEnter == 1 and arenaJoined == 0
-  mode: "Level"
+  mode: Level
   arenaJoined = 1
   arenaRoster += 1
-  arenaFighter[1] = 1
-  arenaAlive[1] = 1
-  arenaHealth[1] = 100
+  claim arenaFighters as joined {
+    joined.body = ArenaBody.Second
+    joined.alive = 1
+    joined.health = 100
+  }
 }
 
 // --- Dying ------------------------------------------------------------------------------------
 // A fighter whose health reaches its floor in the same tick it was shot leaves the match: its
 // fighter tag drops, so no pickup can reach it while it waits, its killer scores a frag, and its
-// respawn countdown is armed.
+// respawn deadline is armed.
 
 rule "arena-death-1" {
-  when arenaAlive[0] == 1 and arenaHealth[0] == 0
-  mode: "Level"
-  arenaAlive[0] = 0
-  arenaFighter[0] = 0
-  arenaDeaths[0] += 1
-  arenaFrags[1] += 1
-  arenaRespawn[0] = 1s
+  when arenaFighters[0].alive == 1 and arenaFighters[0].health == 0
+  mode: Level
+  arenaFighters[0].alive = 0
+  arenaFighters[0].body = ArenaBody.Detached
+  arenaFighters[0].deaths += 1
+  arenaFighters[1].frags += 1
+  schedule arenaFighters[0].respawn in 1s
 }
 
 rule "arena-death-2" {
-  when arenaAlive[1] == 1 and arenaHealth[1] == 0
-  mode: "Level"
-  arenaAlive[1] = 0
-  arenaFighter[1] = 0
-  arenaDeaths[1] += 1
-  arenaFrags[0] += 1
-  arenaRespawn[1] = 1s
+  when arenaFighters[1].alive == 1 and arenaFighters[1].health == 0
+  mode: Level
+  arenaFighters[1].alive = 0
+  arenaFighters[1].body = ArenaBody.Detached
+  arenaFighters[1].deaths += 1
+  arenaFighters[0].frags += 1
+  schedule arenaFighters[1].respawn in 1s
 }
 
-// --- The respawn countdowns -------------------------------------------------------------------
-// countdown drains the armed row by the step's own engine-tick width, so the wait is a real
-// duration rather than a tick count, and the spawn rule re-enters the fighter at full health the
-// step the countdown reads zero.
-
-rule "arena-respawn-count-1" {
-  when arenaAlive[0] == 0 and arenaRespawn[0] > 0
-  mode: "Level"
-  countdown arenaRespawn[0]
-}
-
-rule "arena-respawn-count-2" {
-  when arenaAlive[1] == 0 and arenaRespawn[1] > 0
-  mode: "Level"
-  countdown arenaRespawn[1]
-}
+// --- The respawn deadlines -------------------------------------------------------------------
+// Each fighter's respawn field holds the tick it may spawn again, so the wait is a real duration rather
+// than a tick count, and the spawn rule re-enters the fighter at full health the tick $tick
+// reaches it.
 
 rule "arena-spawn-1" {
-  when arenaAlive[0] == 0 and arenaRespawn[0] == 0 and arenaOver == 0
-  mode: "Edge"
-  arenaAlive[0] = 1
-  arenaHealth[0] = 100
-  arenaFighter[0] = 1
+  when arenaFighters[0].alive == 0 and $tick >= arenaFighters[0].respawn and arenaOver == 0
+  mode: Edge
+  arenaFighters[0].alive = 1
+  arenaFighters[0].health = 100
+  arenaFighters[0].body = ArenaBody.First
   arenaSpawns += 1
 }
 
 rule "arena-spawn-2" {
-  when arenaAlive[1] == 0 and arenaRespawn[1] == 0 and arenaJoined == 1 and arenaOver == 0
-  mode: "Edge"
-  arenaAlive[1] = 1
-  arenaHealth[1] = 100
-  arenaFighter[1] = 1
+  when arenaFighters[1].alive == 0 and $tick >= arenaFighters[1].respawn and arenaJoined == 1 and arenaOver == 0
+  mode: Edge
+  arenaFighters[1].alive = 1
+  arenaFighters[1].health = 100
+  arenaFighters[1].body = ArenaBody.Second
   arenaSpawns += 1
 }
 
 // --- Item respawn -----------------------------------------------------------------------------
 // A consumed pickup drops its own tag, which is what takes it out of the distance interaction
-// below; its cooldown drains the same way a fighter's respawn does and returns the tag.
-
-rule "arena-item-count-medkit" {
-  when arenaPickup[2] == 0 and arenaPickupClock[2] > 0
-  mode: "Level"
-  countdown arenaPickupClock[2]
-}
-
-rule "arena-item-count-mega" {
-  when arenaPickup[3] == 0 and arenaPickupClock[3] > 0
-  mode: "Level"
-  countdown arenaPickupClock[3]
-}
+// below; its deadline works the same way a fighter's respawn does and returns the tag.
 
 rule "arena-item-return-medkit" {
-  when arenaPickup[2] == 0 and arenaPickupClock[2] == 0
-  mode: "Edge"
-  arenaPickup[2] = 1
+  when arenaPickups[0].active == 0 and $tick >= arenaPickups[0].respawn
+  mode: Edge
+  arenaPickups[0].active = 1
+  arenaPickups[0].body = ArenaPickupBody.Medkit
   arenaItemSpawns += 1
 }
 
 rule "arena-item-return-mega" {
-  when arenaPickup[3] == 0 and arenaPickupClock[3] == 0
-  mode: "Edge"
-  arenaPickup[3] = 1
+  when arenaPickups[1].active == 0 and $tick >= arenaPickups[1].respawn
+  mode: Edge
+  arenaPickups[1].active = 1
+  arenaPickups[1].body = ArenaPickupBody.Mega
   arenaItemSpawns += 1
 }
 
 // --- The frag limit ---------------------------------------------------------------------------
 
 rule "arena-over" {
-  when arenaOver == 0 and (arenaFrags[0] >= 2 or arenaFrags[1] >= 2)
-  mode: "Edge"
+  when arenaOver == 0 and (arenaFighters[0].frags >= 2 or arenaFighters[1].frags >= 2)
+  mode: Edge
   arenaOver = 1
-  arenaWinner = arenaFrags[0] >= 2 ? 1 : 2
+  arenaWinner = arenaFighters[0].frags >= 2 ? 1 : 2
 }
 
 // --- The arena's own geometry -------------------------------------------------------------------
@@ -187,15 +179,15 @@ rule "arena-over" {
 kits {
   rows [
     {
-      bodyContact: "Overlap"
+      bodyContact: Overlap
       bodyMotionProgram: "walk"
       collider: sphere(radius: 0.25)
       motion {
         facingSnap: false
         holds [
           {
-            bond: "Free"
-            hold: "None"
+            bond: Free
+            hold: None
             name: "floating"
           }
         ]
@@ -216,10 +208,8 @@ kits {
   ]
 }
 
-// An inhabited placement claims the HIGHEST free entity slot in document order
-// (WorldPopulation.ReconcileOneInhabitedCount), and a property tag is keyed by body index, so the order these two
-// are declared in is what makes the item tags below read in ascending order against a host declaring two seats and
-// exactly two peer slots: the mega health takes 3 and the medkit takes 2.
+// Each logical pickup carries a named body role. The carrier table below resolves that role to its inhabited
+// placement, so population slot allocation never leaks into gameplay state.
 
 placements {
   placement "arenaMegaHealth" {
@@ -286,31 +276,33 @@ prototypes {
 // --- Picking an item up -------------------------------------------------------------------------
 // The one door a fighter's body opens rather than its controls: every (fighter, item) pair inside
 // the pickup radius fires once per crossing, the fighter bound as $left and the item as $right. A
-// fighter that is dead carries no tag and a consumed item carries none either, so the same table
-// that grants the heal is what enforces both.
+// dead fighter and a consumed item both select their Detached body role, excluding them until
+// their respawn rules restore the logical binding.
 
 properties {
-  names [
-    "arenaFighter",
-    "arenaPickup"
+  names []
+  carriers [
+    { pool: arenaFighters, field: body, bindings [{ member: Detached }, { member: First, seat: 0 }, { member: Second, seat: 1 }] }
+    { pool: arenaPickups, field: body, bindings [{ member: Detached }, { member: Medkit, placement: "arenaMedkit" }, { member: Mega, placement: "arenaMegaHealth" }] }
   ]
 }
 
 interactions {
   interactions [
     {
-      coOccurrence: "Distance"
+      coOccurrence: Distance
       effects [
-        addState(state: "arenaHealth", key: "$left", value: 45)
-        addState(state: "arenaTaken", key: "$left", value: 1)
-        setState(state: "arenaPickup", key: "$right", value: 0)
-        setState(state: "arenaPickupClock", key: "$right", valueSeconds: 2)
+        addState(state: left.health, value: 45)
+        addState(state: left.taken, value: 1)
+        setState(state: right.active, value: 0)
+        setState(state: right.body, value: 0)
+        scheduleState(state: right.respawn, delaySeconds: 2)
       ]
-      left: "arenaFighter"
-      mode: "Edge"
+      left: arenaFighters
+      mode: Edge
       name: "arena-item-taken"
       range: 8
-      right: "arenaPickup"
+      right: arenaPickups
     }
   ]
 }
@@ -325,58 +317,25 @@ dynamics [
 ]
 
 state {
+  // Stable fighter lifetimes keep combat state, timed health, and respawn continuation together.
+  record ArenaFighter {
+    body: ArenaBody = ArenaBody.Detached
+    alive: Int bounds(0..1)
+    frags: Int bounds(0..99)
+    deaths: Int bounds(0..99)
+    // Regeneration advances from the last explicit write and saturates at full health.
+    health: Int bounds(0..100, overflow: Saturate) advance(perSecond: 6) = 100
+    respawn: Int = 0
+    taken: Int bounds(0..99) = 0
+  }
+  record ArenaPickup {
+    body: ArenaPickupBody = ArenaPickupBody.Detached
+    active: Int bounds(0..1) = 1
+    respawn: Int = 0
+  }
+  pool arenaFighters of ArenaFighter capacity(2) = [{ body: ArenaBody.First, alive: 1 }]
+  pool arenaPickups of ArenaPickup capacity(2) = [{ body: ArenaPickupBody.Medkit }, { body: ArenaPickupBody.Mega }]
   world {
-    // The two carrier tables the interaction above reads, keyed by body index: the seats take 0 and 1, the medkit
-    // takes 2 and the mega health takes 3 (see the placements block for why that is the order they are declared in).
-    table arenaFighter: Int capacity(4) bounds(minimum: 0, maximum: 1) {
-      "0" = 1
-      "1" = 0
-    }
-
-    table arenaPickup: Int capacity(4) bounds(minimum: 0, maximum: 1) {
-      "2" = 1
-      "3" = 1
-    }
-
-    table arenaPickupClock: Int capacity(4) bounds(minimum: 0, maximum: 504000) {
-      "2" = 0
-      "3" = 0
-    }
-
-    // Health regenerates on its own between hits: the advance trait accumulates from the last
-    // explicit write's base, and the row's own ceiling clamps every read, so a fighter at full
-    // health simply stays there.
-    table arenaHealth: Int capacity(2) bounds(minimum: 0, maximum: 100, overflow: Saturate) advance(perSecond: 6) {
-      "0" = 100
-      "1" = 100
-    }
-
-    table arenaAlive: Int capacity(2) bounds(minimum: 0, maximum: 1) {
-      "0" = 1
-      "1" = 0
-    }
-
-    table arenaRespawn: Int capacity(2) bounds(minimum: 0, maximum: 504000) {
-      "0" = 0
-      "1" = 0
-    }
-
-    // The score record each fighter carries out of the match.
-    table arenaFrags: Int capacity(2) bounds(minimum: 0, maximum: 99) {
-      "0" = 0
-      "1" = 0
-    }
-
-    table arenaDeaths: Int capacity(2) bounds(minimum: 0, maximum: 99) {
-      "0" = 0
-      "1" = 0
-    }
-
-    table arenaTaken: Int capacity(2) bounds(minimum: 0, maximum: 99) {
-      "0" = 0
-      "1" = 0
-    }
-
     // The contended follower: an eased reading of which fighter last took a shot.
     row {
       cells [
@@ -394,26 +353,26 @@ state {
       name: "arenaMomentum"
     }
 
-    slot arenaEnter: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot arenaEnter = 0 bounds(0..1)
 
-    slot arenaJoined: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot arenaJoined = 0 bounds(0..1)
 
-    slot arenaRoster: Int = 1 bounds(minimum: 0, maximum: 2)
+    slot arenaRoster = 1 bounds(0..2)
 
-    slot arenaShots: Int = 0 bounds(minimum: 0, maximum: 999)
+    slot arenaShots = 0 bounds(0..999)
 
-    slot arenaRefused: Int = 0 bounds(minimum: 0, maximum: 999)
+    slot arenaRefused = 0 bounds(0..999)
 
-    slot arenaSpawns: Int = 0 bounds(minimum: 0, maximum: 999)
+    slot arenaSpawns = 0 bounds(0..999)
 
-    slot arenaItemSpawns: Int = 0 bounds(minimum: 0, maximum: 999)
+    slot arenaItemSpawns = 0 bounds(0..999)
 
-    slot arenaOver: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot arenaOver = 0 bounds(0..1)
 
-    slot arenaWinner: Int = 0 bounds(minimum: 0, maximum: 2)
+    slot arenaWinner = 0 bounds(0..2)
   }
 }
 
 export action arenaEnter
-export binding arenaHealth, arenaFrags, arenaOver
-export read arenaAlive, arenaDeaths, arenaEnter, arenaFighter, arenaFrags, arenaHealth, arenaItemSpawns, arenaJoined, arenaMomentum, arenaOver, arenaPickup, arenaPickupClock, arenaRefused, arenaRespawn, arenaRoster, arenaShots, arenaSpawns, arenaTaken, arenaWinner
+export binding arenaFighters, arenaOver
+export read arenaFighters, arenaEnter, arenaItemSpawns, arenaJoined, arenaMomentum, arenaOver, arenaPickups, arenaRefused, arenaRoster, arenaShots, arenaSpawns, arenaWinner

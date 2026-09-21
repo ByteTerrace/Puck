@@ -30,7 +30,7 @@
             ]
           },
           "value": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable16"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable42"
           },
           "cells": {
             "description": "The row\u0027s current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name \u2014 unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.",
@@ -42,7 +42,7 @@
                   "type": "string"
                 },
                 "value": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable16"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable42"
                 },
                 "advance": {
                   "$ref": "./common.schema.json#/$defs/StateAdvance"
@@ -61,13 +61,13 @@
                   ]
                 },
                 "clock": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable17"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable43"
                 },
                 "visibility": {
                   "$ref": "./common.schema.json#/$defs/StateVisibility"
                 },
                 "observation": {
-                  "description": "When a stored knowledge value was last seen and whether the latest observation still sees it.",
+                  "description": "When a stored token property was last seen and whether the latest observation still sees it.",
                   "type": "object",
                   "properties": {
                     "tick": {
@@ -75,7 +75,7 @@
                       "type": "integer"
                     },
                     "visible": {
-                      "description": "Whether the latest explicit refresh sees this cell.",
+                      "description": "Whether the latest explicit refresh sees this token.",
                       "type": "boolean"
                     }
                   },
@@ -232,16 +232,24 @@
             "$ref": "./common.schema.json#/$defs/StateVisibility"
           },
           "knowledge": {
-            "description": "A persisted knowledge layer refreshed explicitly by the authority.",
+            "description": "A persisted token-keyed knowledge layer refreshed explicitly by the authority.",
             "type": "object",
             "properties": {
               "source": {
-                "description": "The integer/boolean board observed.",
+                "description": "The integer/boolean property row keyed by stable token identity.",
                 "type": "string"
               },
               "mask": {
-                "description": "A boolean board over the same topology; true cells are currently observed.",
+                "description": "A boolean board; true cells are currently observed.",
                 "type": "string"
+              },
+              "positions": {
+                "description": "The integer row, keyed by the same tokens, whose values are cells of the mask\u0027s topology. Several tokens may occupy one cell. Null selects the direct board projection where source, mask, and knowledge share a topology.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [
@@ -394,7 +402,7 @@
             "$ref": "./common.schema.json#/$defs/StateCycle"
           },
           "clock": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable17"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable43"
           },
           "space": {
             "description": "The vector space this row belongs to; required for Vector, refused for every other kind.",
@@ -619,7 +627,7 @@
             "additionalProperties": false
           },
           "verdict": {
-            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status.",
+            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed or a Bool row is held by a witness: a row of that kind naming this one in Witness, written by the same firing, refused at every door this row is refused at, and frozen when this row settles.",
             "type": "object",
             "properties": {
               "gate": {
@@ -637,6 +645,10 @@
               "status"
             ],
             "additionalProperties": false
+          },
+          "witness": {
+            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors.",
+            "type": "string"
           }
         },
         "required": [
@@ -1409,6 +1421,7 @@
                     },
                     "direction": {
                       "description": "The direction slot.",
+                      "title": "CellName",
                       "type": "string"
                     },
                     "oneWay": {
@@ -1929,6 +1942,273 @@
         ],
         "additionalProperties": false,
         "title": "StateFamily"
+      },
+      "default": null
+    },
+    "records": {
+      "description": "The immutable record shapes used by pools.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "Declares the typed fields shared by every instance of a state pool.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "fields": {
+            "description": "Gets the immutable field declarations in authored order.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One typed field of a StateRecord.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "title": "CellName",
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "./common.schema.json#/$defs/CellKind",
+                  "default": "Int"
+                },
+                "min": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "max": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "overflow": {
+                  "enum": [
+                    "Refuse",
+                    "Saturate"
+                  ],
+                  "default": "Refuse",
+                  "title": "StateOverflow"
+                },
+                "enum": {
+                  "default": null,
+                  "title": "CellName",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "space": {
+                  "default": null,
+                  "title": "CellName",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dimensions": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "advance": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "perSecondNumerator": {
+                      "description": "The per-second rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
+                      "type": "integer"
+                    },
+                    "perSecondDenominator": {
+                      "description": "The per-second rate\u0027s denominator. Refused at zero or below.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "perSecondNumerator",
+                    "perSecondDenominator"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "StateAdvance"
+                },
+                "default": {
+                  "description": "Gets an immutable snapshot of the declared default.",
+                  "default": null,
+                  "title": "CellValue",
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "./common.schema.json#/$defs/CellValueJsonConverterIntShape"
+                    },
+                    {
+                      "$ref": "./common.schema.json#/$defs/CellValueJsonConverterFixedShape"
+                    },
+                    {
+                      "$ref": "./common.schema.json#/$defs/CellValueJsonConverterBoolShape"
+                    },
+                    {
+                      "$ref": "./common.schema.json#/$defs/CellValueJsonConverterTextShape"
+                    },
+                    {
+                      "$ref": "./common.schema.json#/$defs/CellValueJsonConverterVectorShape"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false,
+              "title": "StatePoolField"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "StateRecord"
+      },
+      "default": null
+    },
+    "pools": {
+      "description": "The bounded instance pools and their initial or captured state.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A bounded deterministic allocator over instances of one declared record.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "record": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "snapshot": {
+            "$ref": "./common.schema.json#/$defs/StatePoolSnapshot",
+            "default": null
+          },
+          "initial": {
+            "description": "Gets the immutable statically live instances.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "./common.schema.json#/$defs/StatePoolSeed"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "record",
+          "capacity"
+        ],
+        "additionalProperties": false,
+        "title": "StatePool"
+      },
+      "default": null
+    },
+    "pairPools": {
+      "description": "Gets the bounded pools of endpoint pairs.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A bounded pool whose stable slots identify pairs of live instances from two endpoint pools.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "record": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "leftPool": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "rightPool": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "maxLive": {
+            "type": "integer"
+          },
+          "directed": {
+            "type": "boolean",
+            "default": true
+          },
+          "allowSelf": {
+            "type": "boolean",
+            "default": false
+          },
+          "snapshot": {
+            "$ref": "./common.schema.json#/$defs/StatePoolSnapshot",
+            "default": null
+          },
+          "initial": {
+            "description": "Gets the immutable statically live pair slots.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "./common.schema.json#/$defs/StatePoolSeed"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "record",
+          "leftPool",
+          "rightPool",
+          "maxLive"
+        ],
+        "additionalProperties": false,
+        "title": "StatePairPool"
       },
       "default": null
     }

@@ -22,10 +22,18 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxCollectionCount = 1_000_000;
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
+    // Version 5 bounded the complete body, including the server section and every other section, to MaxSectionBytes.
+    // Version 6 adds at most one arena's MaxBytes-charged key ledger: its two bytes per UTF-16 code unit plus four
+    // framing bytes per name fit inside the table's more conservative 96 + 2*length charge. Doubling the old bounds
+    // therefore admits every previously readable body plus the complete ledger without opening an unbounded read.
+    private const int MaxServerSectionBytes = (2 * MaxSectionBytes);
+    private const int MaxCheckpointBodyBytes = (2 * MaxSectionBytes);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
-    // Version 4 adds each journal entry's engine-tick timestamp. Earlier envelopes refuse before their
-    // journal payload is read; there is no compatibility reader.
-    private const ushort SupportedVersion = 4;
+
+    /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
+    /// before its payload is read; there is no compatibility reader.</summary>
+    // Version 11 stores retained pool row offsets at fixed identity slots, including holes.
+    public const ushort SupportedVersion = 11;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;
@@ -111,7 +119,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var bodyBytes = reader.ReadBlock(
             field: "checkpoint body",
-            maxBytes: MaxSectionBytes
+            maxBytes: MaxCheckpointBodyBytes
         );
 
         if (!reader.TryFinish(failure: out var outerFailure)) {
@@ -137,7 +145,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var serverBytes = body.ReadBlock(
             field: "server section",
-            maxBytes: MaxSectionBytes
+            maxBytes: MaxServerSectionBytes
         );
         var populationBytes = body.ReadBlock(
             field: "population section",

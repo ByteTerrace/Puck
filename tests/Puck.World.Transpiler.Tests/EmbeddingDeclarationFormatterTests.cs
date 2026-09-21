@@ -7,8 +7,6 @@ namespace Puck.World.Transpiler.Tests;
 
 /// <summary>Formatter tests for embedding spaces, Vector rows, and vector transforms: formatting is idempotent and preserves lowering.</summary>
 public class EmbeddingDeclarationFormatterTests {
-    private const string SampleVectorBase64 = "fwAAAAAAAAA";
-
     private const string EmbeddingSource = """
         schema: "puck.world.definition.v1"
 
@@ -21,11 +19,11 @@ public class EmbeddingDeclarationFormatterTests {
                 }
             }
             world {
-                table memories : Vector space("lore") capacity(10) evicts {
+                table memories space("lore") capacity(10) evicts {
                     intro = "hello world"
                 }
-                slot query : Vector space("lore")
-                table loreLog : Text embeds(companionVectors, space: lore) {
+                slot query space("lore")
+                table loreLog embeds(companionVectors, space: lore) {
                     entry1 = "hello world"
                 }
             }
@@ -33,14 +31,15 @@ public class EmbeddingDeclarationFormatterTests {
 
         rule "process" {
             when similarity(query, memories[intro]) >= 0.5
-            transform mix(into: "query", terms: [
+            transform mix(into: query, terms: [
                 { from: "query", weight: 2 }
                 { from: embed("hello world"), weight: -1 }
             ])
-            transform remember(from: memories, query: "query", threshold: 0.8)
+            transform remember(from: memories, query: query, threshold: 0.8)
         }
 
         """;
+    private const string SampleVectorBase64 = "fwAAAAAAAAA";
 
     private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string source, EmbeddingLock lockFile) {
         var compilation = WorldCompiler.Compile(
@@ -53,7 +52,6 @@ public class EmbeddingDeclarationFormatterTests {
 
         return (compilation.Json, compilation.Diagnostics);
     }
-
     private static EmbeddingLock CreateSampleLock() {
         var lockFile = new EmbeddingLock();
         var space = new EmbeddingLockSpace(
@@ -62,6 +60,7 @@ public class EmbeddingDeclarationFormatterTests {
             revision: "1"
         );
         var hash = EmbeddingLock.ComputeTextHash(text: "hello world");
+
         space.Entries[hash] = new EmbeddingLockEntry(Text: "hello world", Vector: SampleVectorBase64);
         lockFile.Spaces["lore"] = space;
         return lockFile;
@@ -77,13 +76,14 @@ public class EmbeddingDeclarationFormatterTests {
             expected: pass1
         );
     }
-
     [Fact]
     public void FormattingPreservesLoweredJson() {
         var lockFile = CreateSampleLock();
-        var (beforeJson, beforeDiagnostics) = Lower(source: EmbeddingSource, lockFile: lockFile);
+
+        var (beforeJson, beforeDiagnostics) = Lower(lockFile: lockFile, source: EmbeddingSource);
         var formatted = PuckFormat.Format(EmbeddingSource);
-        var (afterJson, afterDiagnostics) = Lower(source: formatted, lockFile: lockFile);
+
+        var (afterJson, afterDiagnostics) = Lower(lockFile: lockFile, source: formatted);
 
         Assert.False(condition: beforeDiagnostics.HasErrors, userMessage: beforeDiagnostics.FormatReport(""));
         Assert.False(condition: afterDiagnostics.HasErrors, userMessage: afterDiagnostics.FormatReport(""));

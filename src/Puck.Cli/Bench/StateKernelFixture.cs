@@ -12,7 +12,6 @@ public sealed class StateKernelReader : IStateReader {
     private const string CursorRow = "cursor";
     private const string ProbeRow = "probe";
 
-    private readonly long[] m_boardScratch = new long[CellCount];
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
     private readonly long[] m_patternWord = new long[PatternCapacity.MaxWord];
 
@@ -62,7 +61,7 @@ public sealed class StateKernelReader : IStateReader {
         var keys = new CellKey[cells];
 
         for (var i = 0; (i < cells); ++i) {
-            keys[i] = Catalog.Keys.Intern(name: probe[i].Key);
+            keys[i] = Arena.Keys.Intern(name: probe[i].Key);
         }
 
         ProbeKeys = keys;
@@ -76,10 +75,6 @@ public sealed class StateKernelReader : IStateReader {
     public Span<long> Locals => m_locals;
     public Span<long> PatternWord => m_patternWord;
 
-    public Span<long> BoardScratch(int cells) => m_boardScratch.AsSpan(
-        length: cells,
-        start: 0
-    );
     public int BoundIndex(BoundKey key) => -1;
 
     private int Resolve(string name) => (Catalog.TryResolve(
@@ -100,7 +95,7 @@ public sealed class StateKernelDirectOperand : RuleOperand {
         m_row = row;
     }
 
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     public override RuleFact Read(IStateReader reader) => RuleFact.Finite(
         kind: CellKind.Int,
         value: ((long)RuleReads.ReadFixed(
@@ -124,7 +119,7 @@ public sealed class StateKernelIndirectOperand : RuleOperand {
         m_selector = selector;
     }
 
-    public override long Cost(IRuleCostContext context) => 2L;
+    public override RuleWork Cost(IRuleCostContext context) => 2L;
     public override RuleFact Read(IStateReader reader) {
         var selected = ((long)RuleReads.ReadFixed(
             key: m_selector,

@@ -48,8 +48,8 @@ public enum SeatActivationPolicy : byte {
 /// per-observer snapshot disclosure policy (default null = <see cref="WorldObserverDisclosure.Default"/>,
 /// disclose-all) — read through <see cref="ObserverDisclosure"/>, applied at the output hub's sink boundary, never
 /// inside the tick, so it changes what an observer is told and never what the simulation computes.
-/// <see cref="SleepAfterTicks"/>: the engine-tick idle floor before a non-seat body's motion program and contact
-/// solve are skipped — see <c>Server.WorldBody</c>'s own sleep remarks.</remarks>
+/// <see cref="SleepAfterSeconds"/>: the idle floor, in seconds that land on a whole engine tick, before a non-seat
+/// body's motion program and contact solve are skipped — see <c>Server.WorldBody</c>'s own sleep remarks.</remarks>
 public readonly record struct WorldBodiesDefaults(
     // ABSENT semantics below hold for every raw field: the document declares only what it wants to state; a raw
     // field's resolved sibling property (same name, no "Raw" suffix) is what every consumer reads.
@@ -80,10 +80,9 @@ public readonly record struct WorldBodiesDefaults(
     // RemoveStateCell just cleared, and a reused population slot always resyncs from the row rather than inheriting
     // a previous occupant's value.
     [property: JsonPropertyName("scaleRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ScaleRow = null,
-    // Engine ticks (the stepTicks unit Server.WorldBody.Advance accumulates), not seconds — a body's own idle
-    // floor before its motion program and contact solve stop running. 0 (the default) means never sleep, so an
-    // unauthored world runs every non-seat body every tick exactly as before this field existed.
-    int SleepAfterTicks = 0
+    // Seconds, a whole number of engine ticks (FixedTickConversion.TryDurationEngineTicksExact): a body's own idle
+    // floor before its motion program and contact solve stop running. 0 (the default) means never sleep.
+    decimal SleepAfterSeconds = 0m
 ) {
     /// <summary>Gets the total authoritative body capacity, including reserved local seats — ABSENT resolves to
     /// <see cref="LocalSeats"/> plus <see cref="NetworkPlayers"/> (no simulated peers beyond the seats the document

@@ -923,13 +923,24 @@
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "state": "$region:handheldStand",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "handheldStand"
+              ]
+            },
             "value": 1
           },
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "state": "$channel:1:jump",
+            "state": {
+              "channel": "channel",
+              "arguments": [
+                1,
+                "jump"
+              ]
+            },
             "value": 1
           }
         ]
@@ -973,7 +984,12 @@
           {
             "$type": "compareState",
             "comparison": "Less",
-            "state": "$region:handheldStand",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "handheldStand"
+              ]
+            },
             "value": 1
           }
         ]

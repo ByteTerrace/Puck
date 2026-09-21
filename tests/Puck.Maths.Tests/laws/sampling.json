@@ -1469,7 +1469,7 @@
       {
         "Kind": "SharedSubstrate",
         "Flavor": "DelegationTwin",
-        "Subject": "Pcg32Extended over several full index wraps (5k + 3 draws, k=2, 64 and 1024), its whole extension table set to zero via SetExtension right after construction",
+        "Subject": "Pcg32Extended over several full index wraps (5k + 3 draws, k=MinTableSize, 64, 1024 and MaxTableSize), its whole extension table set to zero via SetExtension right after construction",
         "Against": "Pcg32XshRr.FromRawBits built from the extended generator's own Increment, Multiplier and State",
         "Shared": "Pcg32XshRr.NextUInt32 itself: the extended generator's base field IS a Pcg32XshRr, and XOR against an all-zero word is the identity, so agreement is carriage evidence that the extension wiring adds nothing when the table is zero, not independent evidence about NextUInt32's own permutation, which sampling.pcg-reference-vector-and-state already pins",
         "Citation": "the base permutation's own evidence is sampling.pcg-reference-vector-and-state and sampling.pcg-transcribed-reference-and-decorrelation",
@@ -1554,6 +1554,8 @@
       { "Type": "Puck.Maths.Pcg32Extended", "Name": "Multiplier" },
       { "Type": "Puck.Maths.Pcg32Extended", "Name": "Extension" },
       { "Type": "Puck.Maths.Pcg32Extended", "Name": "Create" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "MaxTableSize" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "MinTableSize" },
       { "Type": "Puck.Maths.Pcg32Extended", "Name": "GetExtension" },
       { "Type": "Puck.Maths.Pcg32Extended", "Name": "SetExtension" }
     ],
@@ -1570,7 +1572,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the refusal ladder: Create refuses k=0, k=3 (not a power of two), k=2048 (above 1024) and a stream above MaxStream, each naming the argument at fault (`k` or `stream`); GetExtension and the single-word SetExtension refuse an index at -1 and at k, naming `index`; the span SetExtension refuses a span one shorter and one longer than k, naming `words`. k=2 and k=1024 (both ends of the window) and stream=MaxStream are accepted",
+        "Subject": "the refusal ladder: MinTableSize is 2 and MaxTableSize is 4096; Create refuses k=0, k=3 (not a power of two), k twice MaxTableSize and a stream above MaxStream, and admits k at MinTableSize and at MaxTableSize, each naming the argument at fault (`k` or `stream`); GetExtension and the single-word SetExtension refuse an index at -1 and at k, naming `index`; the span SetExtension refuses a span one shorter and one longer than k, naming `words`. k=2 and k=1024 (both ends of the window) and stream=MaxStream are accepted",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1615,7 +1617,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the refusal ladder: a table length of 3 (not a power of two) and 2048 (above 1024) are refused naming `table`, and a stream above MaxStream is refused naming `stream`",
+        "Subject": "the refusal ladder: a table length of 3 (not a power of two) and of twice MaxTableSize are refused naming `table`, and a stream above MaxStream is refused naming `stream`",
         "Against": "",
         "Shared": "",
         "Citation": "",

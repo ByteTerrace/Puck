@@ -10,25 +10,25 @@ export read bets, community, hand1, hand2, phase, stack, table
 
 rule "poker-transition" {
   when phase[street] != phase[next]
-  mode: "Level"
-  setState(fromKey: "next", fromState: "phase", key: "street", state: "phase")
+  mode: Level
+  setState(fromKey: next, fromState: phase, key: street, state: phase)
 }
 
 rule "poker-deal" {
   when phase[street] == 0 and table[dealRequest] == 1 and (minimum(stack[1], stack[2]) >= house[bigBlind] : Int)
-  local button: Int = 3 - table[button]
-  local blind: Int = table[button]
-  mode: "Edge"
+  local button = 3 - table[button]
+  local blind = table[button]
+  mode: Edge
   transaction {
-    transform transfer(count: 2, draw: "cardStream", from: "deck", selector: "Random", to: "hand1")
-    transform transfer(count: 2, draw: "cardStream", from: "deck", selector: "Random", to: "hand2")
+    transform transfer(count: 2, draw: cardStream, from: deck, selector: Random, to: hand1)
+    transform transfer(count: 2, draw: cardStream, from: deck, selector: Random, to: hand2)
     table[dealRequest] = 0
-    setState(expression: "$local:button", key: "button", state: "table")
-    setState(expression: "$local:button", key: "bettor", state: "table")
-    streetBet[($local:button)] = house[smallBlind]
-    streetBet[($local:blind)] = house[bigBlind]
-    stack[($local:button)] += 0 - house[smallBlind]
-    stack[($local:blind)] += 0 - house[bigBlind]
+    setState(expression: button, key: button, state: table)
+    setState(expression: button, key: bettor, state: table)
+    streetBet[(button)] = house[smallBlind]
+    streetBet[(blind)] = house[bigBlind]
+    stack[(button)] += 0 - house[smallBlind]
+    stack[(blind)] += 0 - house[bigBlind]
     table[pot] = house[smallBlind] + house[bigBlind]
     table[acted] = 0
     table[raises] = 0
@@ -47,85 +47,85 @@ rule "poker-deal" {
 
 rule "poker-see-hand1" {
   when table[evalPending] == 1
-  mode: "Level"
-  forEach: "hand1"
+  mode: Level
+  forEach: hand1
   private1[hole] = private1[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))
 }
 
 rule "poker-see-hand2" {
   when table[evalPending] == 1
-  mode: "Level"
-  forEach: "hand2"
+  mode: Level
+  forEach: hand2
   private2[hole] = private2[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))
 }
 
 rule "poker-see-board" {
   when table[evalPending] == 1
-  mode: "Level"
-  forEach: "community"
+  mode: Level
+  forEach: community
   table[boardMask] = table[boardMask] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))
 }
 
 rule "poker-evaluate-1" {
   when table[evalPending] == 1
-  local s: Int = private1[hole] | table[boardMask]
-  local l0: Int = bitField($local:s, 0, 16)
-  local l1: Int = bitField($local:s, 16, 16)
-  local l2: Int = bitField($local:s, 32, 16)
-  local l3: Int = bitField($local:s, 48, 16)
-  local ranks: Int = $local:l0 | $local:l1 | $local:l2 | $local:l3
-  local pairs: Int = ($local:l0 & $local:l1) | ($local:l0 & $local:l2) | ($local:l0 & $local:l3) | ($local:l1 & $local:l2) | ($local:l1 & $local:l3) | ($local:l2 & $local:l3)
-  local trips: Int = ($local:l0 & $local:l1 & $local:l2) | ($local:l0 & $local:l1 & $local:l3) | ($local:l0 & $local:l2 & $local:l3) | ($local:l1 & $local:l2 & $local:l3)
-  local sf: Int = ($local:s | (($local:s >> 13) & repeatBits(1, 16))) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 1) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 2) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 3) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 4)
-  local st: Int = ($local:ranks | (($local:ranks >> 13) & 1)) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 1) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 2) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 3) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 4)
-  local fl: Int = setBitCount($local:l0) >= 5 ? $local:l0 : setBitCount($local:l1) >= 5 ? $local:l1 : setBitCount($local:l2) >= 5 ? $local:l2 : setBitCount($local:l3) >= 5 ? $local:l3 : 0
-  local top2p: Int = setBitCount($local:pairs) > 2 ? clearLowestSetBit($local:pairs) : $local:pairs
-  local cat: Int = $local:sf != 0 ? 8 : ($local:l0 & $local:l1 & $local:l2 & $local:l3) != 0 ? 7 : ($local:trips != 0) & (setBitCount($local:pairs) >= 2) ? 6 : $local:fl != 0 ? 5 : $local:st != 0 ? 4 : $local:trips != 0 ? 3 : setBitCount($local:pairs) >= 2 ? 2 : $local:pairs != 0 ? 1 : 0
-  local high: Int = $local:cat == 8 ? 63 - leadingZeroCount(($local:sf | ($local:sf >> 16) | ($local:sf >> 32) | ($local:sf >> 48)) & 16383) : $local:cat == 7 ? $local:l0 & $local:l1 & $local:l2 & $local:l3 : $local:cat == 6 ? 63 - leadingZeroCount($local:trips) : $local:fl ^ parallelBitDeposit((1 << maximum(setBitCount($local:fl) - 5, 0)) - 1, $local:fl)
-  local low: Int = $local:cat == 4 ? 63 - leadingZeroCount($local:st) : $local:cat == 3 ? $local:trips : $local:cat == 2 ? $local:top2p : $local:cat == 1 ? $local:pairs : clearLowestSetBit(clearLowestSetBit($local:ranks))
-  local secondary: Int = $local:cat == 7 ? 63 - leadingZeroCount($local:ranks ^ ($local:l0 & $local:l1 & $local:l2 & $local:l3)) : $local:cat == 6 ? 63 - leadingZeroCount($local:pairs ^ (1 << maximum(63 - leadingZeroCount($local:trips), 0))) : $local:cat == 3 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:trips)) : $local:cat == 2 ? 63 - leadingZeroCount($local:ranks ^ $local:top2p) : $local:cat == 1 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:pairs)) : 0
-  mode: "Level"
-  private1[strength] = ($local:cat << 28) | (($local:cat >= 5 ? $local:high : $local:low) << 14) | $local:secondary
+  local s = private1[hole] | table[boardMask]
+  local l0 = bitField(s, 0, 16)
+  local l1 = bitField(s, 16, 16)
+  local l2 = bitField(s, 32, 16)
+  local l3 = bitField(s, 48, 16)
+  local ranks = l0 | l1 | l2 | l3
+  local pairs = (l0 & l1) | (l0 & l2) | (l0 & l3) | (l1 & l2) | (l1 & l3) | (l2 & l3)
+  local trips = (l0 & l1 & l2) | (l0 & l1 & l3) | (l0 & l2 & l3) | (l1 & l2 & l3)
+  local sf = (s | ((s >> 13) & repeatBits(1, 16))) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 1) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 2) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 3) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 4)
+  local st = (ranks | ((ranks >> 13) & 1)) & ((ranks | ((ranks >> 13) & 1)) >> 1) & ((ranks | ((ranks >> 13) & 1)) >> 2) & ((ranks | ((ranks >> 13) & 1)) >> 3) & ((ranks | ((ranks >> 13) & 1)) >> 4)
+  local fl = setBitCount(l0) >= 5 ? l0 : setBitCount(l1) >= 5 ? l1 : setBitCount(l2) >= 5 ? l2 : setBitCount(l3) >= 5 ? l3 : 0
+  local top2p = setBitCount(pairs) > 2 ? clearLowestSetBit(pairs) : pairs
+  local cat = sf != 0 ? 8 : (l0 & l1 & l2 & l3) != 0 ? 7 : (trips != 0) & (setBitCount(pairs) >= 2) ? 6 : fl != 0 ? 5 : st != 0 ? 4 : trips != 0 ? 3 : setBitCount(pairs) >= 2 ? 2 : pairs != 0 ? 1 : 0
+  local high = cat == 8 ? 63 - leadingZeroCount((sf | (sf >> 16) | (sf >> 32) | (sf >> 48)) & 16383) : cat == 7 ? l0 & l1 & l2 & l3 : cat == 6 ? 63 - leadingZeroCount(trips) : fl ^ parallelBitDeposit((1 << maximum(setBitCount(fl) - 5, 0)) - 1, fl)
+  local low = cat == 4 ? 63 - leadingZeroCount(st) : cat == 3 ? trips : cat == 2 ? top2p : cat == 1 ? pairs : clearLowestSetBit(clearLowestSetBit(ranks))
+  local secondary = cat == 7 ? 63 - leadingZeroCount(ranks ^ (l0 & l1 & l2 & l3)) : cat == 6 ? 63 - leadingZeroCount(pairs ^ (1 << maximum(63 - leadingZeroCount(trips), 0))) : cat == 3 ? clearLowestSetBit(clearLowestSetBit(ranks ^ trips)) : cat == 2 ? 63 - leadingZeroCount(ranks ^ top2p) : cat == 1 ? clearLowestSetBit(clearLowestSetBit(ranks ^ pairs)) : 0
+  mode: Level
+  private1[strength] = (cat << 28) | ((cat >= 5 ? high : low) << 14) | secondary
 }
 
 rule "poker-evaluate-2" {
   when table[evalPending] == 1
-  local s: Int = private2[hole] | table[boardMask]
-  local l0: Int = bitField($local:s, 0, 16)
-  local l1: Int = bitField($local:s, 16, 16)
-  local l2: Int = bitField($local:s, 32, 16)
-  local l3: Int = bitField($local:s, 48, 16)
-  local ranks: Int = $local:l0 | $local:l1 | $local:l2 | $local:l3
-  local pairs: Int = ($local:l0 & $local:l1) | ($local:l0 & $local:l2) | ($local:l0 & $local:l3) | ($local:l1 & $local:l2) | ($local:l1 & $local:l3) | ($local:l2 & $local:l3)
-  local trips: Int = ($local:l0 & $local:l1 & $local:l2) | ($local:l0 & $local:l1 & $local:l3) | ($local:l0 & $local:l2 & $local:l3) | ($local:l1 & $local:l2 & $local:l3)
-  local sf: Int = ($local:s | (($local:s >> 13) & repeatBits(1, 16))) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 1) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 2) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 3) & (($local:s | (($local:s >> 13) & repeatBits(1, 16))) >> 4)
-  local st: Int = ($local:ranks | (($local:ranks >> 13) & 1)) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 1) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 2) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 3) & (($local:ranks | (($local:ranks >> 13) & 1)) >> 4)
-  local fl: Int = setBitCount($local:l0) >= 5 ? $local:l0 : setBitCount($local:l1) >= 5 ? $local:l1 : setBitCount($local:l2) >= 5 ? $local:l2 : setBitCount($local:l3) >= 5 ? $local:l3 : 0
-  local top2p: Int = setBitCount($local:pairs) > 2 ? clearLowestSetBit($local:pairs) : $local:pairs
-  local cat: Int = $local:sf != 0 ? 8 : ($local:l0 & $local:l1 & $local:l2 & $local:l3) != 0 ? 7 : ($local:trips != 0) & (setBitCount($local:pairs) >= 2) ? 6 : $local:fl != 0 ? 5 : $local:st != 0 ? 4 : $local:trips != 0 ? 3 : setBitCount($local:pairs) >= 2 ? 2 : $local:pairs != 0 ? 1 : 0
-  local high: Int = $local:cat == 8 ? 63 - leadingZeroCount(($local:sf | ($local:sf >> 16) | ($local:sf >> 32) | ($local:sf >> 48)) & 16383) : $local:cat == 7 ? $local:l0 & $local:l1 & $local:l2 & $local:l3 : $local:cat == 6 ? 63 - leadingZeroCount($local:trips) : $local:fl ^ parallelBitDeposit((1 << maximum(setBitCount($local:fl) - 5, 0)) - 1, $local:fl)
-  local low: Int = $local:cat == 4 ? 63 - leadingZeroCount($local:st) : $local:cat == 3 ? $local:trips : $local:cat == 2 ? $local:top2p : $local:cat == 1 ? $local:pairs : clearLowestSetBit(clearLowestSetBit($local:ranks))
-  local secondary: Int = $local:cat == 7 ? 63 - leadingZeroCount($local:ranks ^ ($local:l0 & $local:l1 & $local:l2 & $local:l3)) : $local:cat == 6 ? 63 - leadingZeroCount($local:pairs ^ (1 << maximum(63 - leadingZeroCount($local:trips), 0))) : $local:cat == 3 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:trips)) : $local:cat == 2 ? 63 - leadingZeroCount($local:ranks ^ $local:top2p) : $local:cat == 1 ? clearLowestSetBit(clearLowestSetBit($local:ranks ^ $local:pairs)) : 0
-  mode: "Level"
-  private2[strength] = ($local:cat << 28) | (($local:cat >= 5 ? $local:high : $local:low) << 14) | $local:secondary
+  local s = private2[hole] | table[boardMask]
+  local l0 = bitField(s, 0, 16)
+  local l1 = bitField(s, 16, 16)
+  local l2 = bitField(s, 32, 16)
+  local l3 = bitField(s, 48, 16)
+  local ranks = l0 | l1 | l2 | l3
+  local pairs = (l0 & l1) | (l0 & l2) | (l0 & l3) | (l1 & l2) | (l1 & l3) | (l2 & l3)
+  local trips = (l0 & l1 & l2) | (l0 & l1 & l3) | (l0 & l2 & l3) | (l1 & l2 & l3)
+  local sf = (s | ((s >> 13) & repeatBits(1, 16))) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 1) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 2) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 3) & ((s | ((s >> 13) & repeatBits(1, 16))) >> 4)
+  local st = (ranks | ((ranks >> 13) & 1)) & ((ranks | ((ranks >> 13) & 1)) >> 1) & ((ranks | ((ranks >> 13) & 1)) >> 2) & ((ranks | ((ranks >> 13) & 1)) >> 3) & ((ranks | ((ranks >> 13) & 1)) >> 4)
+  local fl = setBitCount(l0) >= 5 ? l0 : setBitCount(l1) >= 5 ? l1 : setBitCount(l2) >= 5 ? l2 : setBitCount(l3) >= 5 ? l3 : 0
+  local top2p = setBitCount(pairs) > 2 ? clearLowestSetBit(pairs) : pairs
+  local cat = sf != 0 ? 8 : (l0 & l1 & l2 & l3) != 0 ? 7 : (trips != 0) & (setBitCount(pairs) >= 2) ? 6 : fl != 0 ? 5 : st != 0 ? 4 : trips != 0 ? 3 : setBitCount(pairs) >= 2 ? 2 : pairs != 0 ? 1 : 0
+  local high = cat == 8 ? 63 - leadingZeroCount((sf | (sf >> 16) | (sf >> 32) | (sf >> 48)) & 16383) : cat == 7 ? l0 & l1 & l2 & l3 : cat == 6 ? 63 - leadingZeroCount(trips) : fl ^ parallelBitDeposit((1 << maximum(setBitCount(fl) - 5, 0)) - 1, fl)
+  local low = cat == 4 ? 63 - leadingZeroCount(st) : cat == 3 ? trips : cat == 2 ? top2p : cat == 1 ? pairs : clearLowestSetBit(clearLowestSetBit(ranks))
+  local secondary = cat == 7 ? 63 - leadingZeroCount(ranks ^ (l0 & l1 & l2 & l3)) : cat == 6 ? 63 - leadingZeroCount(pairs ^ (1 << maximum(63 - leadingZeroCount(trips), 0))) : cat == 3 ? clearLowestSetBit(clearLowestSetBit(ranks ^ trips)) : cat == 2 ? 63 - leadingZeroCount(ranks ^ top2p) : cat == 1 ? clearLowestSetBit(clearLowestSetBit(ranks ^ pairs)) : 0
+  mode: Level
+  private2[strength] = (cat << 28) | ((cat >= 5 ? high : low) << 14) | secondary
   table[evalPending] = 0
 }
 
 rule "poker-check-call" {
   gate: all(predicates: [
-    compareState(comparison: "GreaterOrEqual", key: "street", state: "phase", value: 1)
-    compareState(comparison: "LessOrEqual", key: "street", state: "phase", value: 4)
-    compareValue(comparison: "Equal", kind: "Int", left: "(table[bettor] == 1 ? betAction1[act] : betAction2[act])", right: "0")
-    compareValue(comparison: "GreaterOrEqual", kind: "Int", left: "stack[(table[bettor])]", right: "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]")
+    compareState(comparison: GreaterOrEqual, key: street, state: phase, value: 1)
+    compareState(comparison: LessOrEqual, key: street, state: phase, value: 4)
+    compareValue(comparison: Equal, kind: Int, left: (table[bettor] == 1 ? betAction1[act] : betAction2[act]), right: 0)
+    compareValue(comparison: GreaterOrEqual, kind: Int, left: stack[(table[bettor])], right: streetBet[(3 - table[bettor])] - streetBet[(table[bettor])])
   ]
   )
-  local toCall: Int = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]
-  mode: "Level"
+  local toCall = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]
+  mode: Level
   push bets = phase[street] * 100 + table[bettor] * 10 + 0
   transaction {
-    addState(expression: "0 - $local:toCall", key: "$expr:table[bettor]", state: "stack")
-    addState(expression: "$local:toCall", key: "pot", state: "table")
-    setState(expression: "streetBet[(3 - table[bettor])]", key: "$expr:table[bettor]", state: "streetBet")
+    addState(expression: 0 - toCall, key: (table[bettor]), state: stack)
+    addState(expression: toCall, key: pot, state: table)
+    setState(expression: streetBet[(3 - table[bettor])], key: (table[bettor]), state: streetBet)
     table[acted] += 1
     betAction1[act] = -1
     betAction2[act] = -1
@@ -135,21 +135,21 @@ rule "poker-check-call" {
 
 rule "poker-raise" {
   gate: all(predicates: [
-    compareState(comparison: "GreaterOrEqual", key: "street", state: "phase", value: 1)
-    compareState(comparison: "LessOrEqual", key: "street", state: "phase", value: 4)
-    compareValue(comparison: "Equal", kind: "Int", left: "(table[bettor] == 1 ? betAction1[act] : betAction2[act])", right: "1")
-    compareState(comparandKey: "maxRaises", comparandState: "house", comparison: "Less", key: "raises", state: "table")
-    compareValue(comparison: "GreaterOrEqual", kind: "Int", left: "stack[(table[bettor])]", right: "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)")
+    compareState(comparison: GreaterOrEqual, key: street, state: phase, value: 1)
+    compareState(comparison: LessOrEqual, key: street, state: phase, value: 4)
+    compareValue(comparison: Equal, kind: Int, left: (table[bettor] == 1 ? betAction1[act] : betAction2[act]), right: 1)
+    compareState(comparandKey: maxRaises, comparandState: house, comparison: Less, key: raises, state: table)
+    compareValue(comparison: GreaterOrEqual, kind: Int, left: stack[(table[bettor])], right: streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1))
   ]
   )
-  local pay: Int = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
-  local bet: Int = house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
-  mode: "Level"
+  local pay = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
+  local bet = house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
+  mode: Level
   push bets = phase[street] * 100 + table[bettor] * 10 + 1
   transaction {
-    addState(expression: "0 - $local:pay", key: "$expr:table[bettor]", state: "stack")
-    addState(expression: "$local:pay", key: "pot", state: "table")
-    setState(expression: "streetBet[(3 - table[bettor])] + $local:bet", key: "$expr:table[bettor]", state: "streetBet")
+    addState(expression: 0 - pay, key: (table[bettor]), state: stack)
+    addState(expression: pay, key: pot, state: table)
+    setState(expression: streetBet[(3 - table[bettor])] + bet, key: (table[bettor]), state: streetBet)
     table[acted] = 1
     table[raises] += 1
     betAction1[act] = -1
@@ -160,12 +160,12 @@ rule "poker-raise" {
 
 rule "poker-fold" {
   gate: all(predicates: [
-    compareState(comparison: "GreaterOrEqual", key: "street", state: "phase", value: 1)
-    compareState(comparison: "LessOrEqual", key: "street", state: "phase", value: 4)
-    compareValue(comparison: "Equal", kind: "Int", left: "(table[bettor] == 1 ? betAction1[act] : betAction2[act])", right: "2")
+    compareState(comparison: GreaterOrEqual, key: street, state: phase, value: 1)
+    compareState(comparison: LessOrEqual, key: street, state: phase, value: 4)
+    compareValue(comparison: Equal, kind: Int, left: (table[bettor] == 1 ? betAction1[act] : betAction2[act]), right: 2)
   ]
   )
-  mode: "Level"
+  mode: Level
   push bets = phase[street] * 100 + table[bettor] * 10 + 2
   transaction {
     table[winner] = 3 - table[bettor]
@@ -180,7 +180,7 @@ rule "poker-fold" {
 
 rule "poker-street-complete" {
   when phase[street] >= 1 and phase[street] <= 4 and table[acted] >= 2 and streetBet[1] == streetBet[2]
-  mode: "Edge"
+  mode: Edge
   transaction {
     phase[next] = phase[street] + 1
     table[acted] = 0
@@ -192,44 +192,44 @@ rule "poker-street-complete" {
 }
 
 rule "poker-flop" {
-  when phase[street] == 2 and $reduce:count:community == 0
-  mode: "Edge"
+  when phase[street] == 2 and count(community) == 0
+  mode: Edge
   transaction {
-    transform transfer(count: 3, draw: "cardStream", from: "deck", selector: "Random", to: "community")
+    transform transfer(count: 3, draw: cardStream, from: deck, selector: Random, to: community)
     table[evalPending] = 1
   }
 }
 
 rule "poker-turn" {
-  when phase[street] == 3 and $reduce:count:community == 3
-  mode: "Edge"
+  when phase[street] == 3 and count(community) == 3
+  mode: Edge
   transaction {
-    transform transfer(count: 1, draw: "cardStream", from: "deck", selector: "Random", to: "community")
+    transform transfer(count: 1, draw: cardStream, from: deck, selector: Random, to: community)
     table[evalPending] = 1
   }
 }
 
 rule "poker-river" {
-  when phase[street] == 4 and $reduce:count:community == 4
-  mode: "Edge"
+  when phase[street] == 4 and count(community) == 4
+  mode: Edge
   transaction {
-    transform transfer(count: 1, draw: "cardStream", from: "deck", selector: "Random", to: "community")
+    transform transfer(count: 1, draw: cardStream, from: deck, selector: Random, to: community)
     table[evalPending] = 1
   }
 }
 
 rule "poker-showdown" {
   when phase[street] == 5 and table[evalPending] == 0
-  local winner: Int = private1[strength] > private2[strength] ? 1 : private2[strength] > private1[strength] ? 2 : 0
-  local half: Int = table[pot] >> 1
-  local odd: Int = table[pot] & 1
-  mode: "Edge"
+  local winner = private1[strength] > private2[strength] ? 1 : private2[strength] > private1[strength] ? 2 : 0
+  local half = table[pot] >> 1
+  local odd = table[pot] & 1
+  mode: Edge
   audience1[0] = "seat2"
   audience2[0] = "seat1"
   transaction {
-    setState(expression: "$local:winner", key: "winner", state: "table")
-    stack[1] += $local:winner == 1 ? table[pot] : $local:winner == 2 ? 0 : $local:half + $local:odd * (table[button] == 1)
-    stack[2] += $local:winner == 2 ? table[pot] : $local:winner == 1 ? 0 : $local:half + $local:odd * (table[button] == 2)
+    setState(expression: winner, key: winner, state: table)
+    stack[1] += winner == 1 ? table[pot] : winner == 2 ? 0 : half + odd * (table[button] == 1)
+    stack[2] += winner == 2 ? table[pot] : winner == 1 ? 0 : half + odd * (table[button] == 2)
     table[pot] = 0
     table[hands] += 1
     phase[next] = 6
@@ -237,26 +237,26 @@ rule "poker-showdown" {
 }
 
 rule "poker-collect-board" {
-  when phase[street] == 6 and $reduce:count:community > 0
-  mode: "Level"
+  when phase[street] == 6 and count(community) > 0
+  mode: Level
   deal 1 from community to deck
 }
 
 rule "poker-collect-hand1" {
-  when phase[street] == 6 and $reduce:count:hand1 > 0
-  mode: "Level"
+  when phase[street] == 6 and count(hand1) > 0
+  mode: Level
   deal 1 from hand1 to deck
 }
 
 rule "poker-collect-hand2" {
-  when phase[street] == 6 and $reduce:count:hand2 > 0
-  mode: "Level"
+  when phase[street] == 6 and count(hand2) > 0
+  mode: Level
   deal 1 from hand2 to deck
 }
 
 rule "poker-hand-over" {
-  when phase[street] == 6 and $reduce:count:community == 0 and $reduce:count:hand1 == 0 and $reduce:count:hand2 == 0
-  mode: "Edge"
+  when phase[street] == 6 and count(community) == 0 and count(hand1) == 0 and count(hand2) == 0
+  mode: Edge
   transaction {
     table[acted] = 0
     table[raises] = 0
@@ -268,14 +268,14 @@ rule "poker-hand-over" {
 }
 
 rule "poker-card-conservation" {
-  when ($reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community != $reduce:count:cards : Int)
-  mode: "Edge"
+  when (count(deck) + count(hand1) + count(hand2) + count(community) != count(cards) : Int)
+  mode: Edge
   table[leak] = 1
 }
 
 rule "poker-discard" {
   when (maximum(betAction1[act], betAction2[act]) != -1 : Int)
-  mode: "Level"
+  mode: Level
   betAction1[act] = -1
   betAction2[act] = -1
   table[refused] += 1
@@ -283,7 +283,7 @@ rule "poker-discard" {
 
 state {
   world {
-    table cards: Int capacity(52) {
+    table cards capacity(52) {
       "2C" = 0
       "2D" = 0
       "2H" = 0
@@ -550,7 +550,7 @@ state {
           value: 14
         }
       ]
-      domain: keysOf(row: "cards")
+      domain: keysOf(row: cards)
       kind: "Int"
       name: "rank"
       visibility {
@@ -770,7 +770,7 @@ state {
           value: 4
         }
       ]
-      domain: keysOf(row: "cards")
+      domain: keysOf(row: cards)
       kind: "Int"
       name: "suit"
       visibility {
@@ -990,7 +990,7 @@ state {
           value: true
         }
       ]
-      domain: keysOf(ordered: true, row: "cards")
+      domain: keysOf(ordered: true, row: cards)
       kind: "Bool"
       name: "deck"
       visibility {
@@ -1000,7 +1000,7 @@ state {
 
     row {
       capacity: 2
-      domain: keysOf(ordered: true, row: "cards")
+      domain: keysOf(ordered: true, row: cards)
       kind: "Bool"
       name: "hand1"
       visibility {
@@ -1013,7 +1013,7 @@ state {
 
     row {
       capacity: 2
-      domain: keysOf(ordered: true, row: "cards")
+      domain: keysOf(ordered: true, row: cards)
       kind: "Bool"
       name: "hand2"
       visibility {
@@ -1026,7 +1026,7 @@ state {
 
     row {
       capacity: 5
-      domain: keysOf(ordered: true, row: "cards")
+      domain: keysOf(ordered: true, row: cards)
       kind: "Bool"
       name: "community"
       visibility {}
@@ -1043,11 +1043,11 @@ state {
       name: "cardStream"
     }
 
-    table audience1: Text capacity(2) {
+    table audience1 capacity(2) {
       "0" = ""
     }
 
-    table audience2: Text capacity(2) {
+    table audience2 capacity(2) {
       "0" = ""
     }
 

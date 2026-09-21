@@ -304,4 +304,55 @@ public sealed class WorldStateHashCompositionLawTests {
             )
         );
     }
+    [Fact]
+    public void DeclarationHashDistinguishesPoolFieldAdvance() {
+        ulong Hash(StateAdvance? advance) {
+            var hash = Fnv1aHash.Create();
+
+            WorldStateHashComposition.AppendDeclaration(hash: ref hash, state: new WorldStateSection(
+                Records: [new StateRecord(Name: CellName.Parse(candidate: "actor"), Fields: [new StatePoolField(Name: CellName.Parse(candidate: "score"), Advance: advance)])],
+                Pools: [new StatePool(Name: CellName.Parse(candidate: "actors"), Record: CellName.Parse(candidate: "actor"), Capacity: 1)]));
+            return hash.Value;
+        }
+
+        Assert.NotEqual(expected: Hash(advance: null), actual: Hash(advance: new StateAdvance(PerSecondDenominator: 1L, PerSecondNumerator: 1L)));
+    }
+    [Fact]
+    public void DeclarationHashFoldsEveryRowVisibilityField() {
+        var baseline = DeclarationHash(visibility: new StateVisibility(Readers: null));
+
+        Assert.NotEqual(
+            actual: DeclarationHash(visibility: new StateVisibility(Readers: [])),
+            expected: baseline
+        );
+        Assert.NotEqual(
+            actual: DeclarationHash(visibility: new StateVisibility(
+                Hidden: HiddenCells.Count,
+                Readers: null
+            )),
+            expected: baseline
+        );
+        Assert.NotEqual(
+            actual: DeclarationHash(visibility: new StateVisibility(
+                Readers: null,
+                ReadersFrom: "audience"
+            )),
+            expected: baseline
+        );
+    }
+
+    private static ulong DeclarationHash(StateVisibility? visibility) {
+        var hash = Fnv1aHash.Create();
+
+        WorldStateHashComposition.AppendDeclaration(
+            hash: ref hash,
+            state: new WorldStateSection(World: [new WorldStateRow(
+                Name: CellName.Parse(candidate: "visible"),
+                Kind: CellKind.Int,
+                Visibility: visibility
+            )])
+        );
+
+        return hash.Value;
+    }
 }

@@ -922,7 +922,9 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$tick",
+        "state": {
+          "channel": "tick"
+        },
         "value": 700
       },
       "mode": "Edge",
@@ -939,7 +941,9 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$tick",
+        "state": {
+          "channel": "tick"
+        },
         "value": 850
       },
       "mode": "Edge",
@@ -956,7 +960,9 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$tick",
+        "state": {
+          "channel": "tick"
+        },
         "value": 1000
       },
       "mode": "Edge",
@@ -973,7 +979,9 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$tick",
+        "state": {
+          "channel": "tick"
+        },
         "value": 1100
       },
       "mode": "Edge",

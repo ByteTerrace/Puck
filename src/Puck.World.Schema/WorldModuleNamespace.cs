@@ -1,4 +1,5 @@
 using System.Text;
+using System.Runtime.CompilerServices;
 using Puck.Abstractions.Machines;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -18,23 +19,48 @@ namespace Puck.World;
 /// </summary>
 public static class WorldModuleNamespace {
     private static readonly JsonSerializerOptions Options = WorldJsonContext.Default.Options;
+    // The source-generated context is immutable. Resolve its property registrations once, without retaining
+    // document nodes: every walk still observes the current values and lets its visitor rewrite them.
+    private static readonly ConditionalWeakTable<JsonTypeInfo, VisitMemberPlan[]> VisitMembers = new();
 
+    private readonly record struct VisitMemberPlan(string Name, Type Type, WorldNameField? Field);
+
+    private static VisitMemberPlan[] BuildVisitMembers(JsonTypeInfo info) {
+        var members = new List<VisitMemberPlan>();
+
+        if (typeof(StateRow).IsAssignableFrom(c: info.Type)) {
+            foreach (var (jsonName, declaringType, member, propertyType) in WorldNameRegistry.ReflectedRowMembers(type: info.Type)) {
+                _ = WorldNameRegistry.TryResolve(declaringType: declaringType, field: out var field, member: member, propertyType: propertyType);
+                members.Add(item: new(Field: field, Name: jsonName, Type: propertyType));
+            }
+        } else {
+            foreach (var property in info.Properties) {
+                if (property.IsExtensionData || (property.Get is null) || (property.Set is null)) {
+                    continue;
+                }
+                var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
+                _ = WorldNameRegistry.TryResolve(declaringType: declaringType, member: member, propertyType: property.PropertyType, field: out var field);
+                members.Add(item: new(Name: property.Name, Type: property.PropertyType, Field: field));
+            }
+        }
+        return [.. members];
+    }
     private static Dictionary<(WorldNameKind Kind, string Name), string> CollectDeclaredNames(JsonObject module, string alias) {
         var declared = new Dictionary<(WorldNameKind Kind, string Name), string>();
 
         Visit(
             node: module,
             type: typeof(WorldDefinition),
-            visitor: (parent, name, value, field) => {
-            if (
-                (field.Role == WorldNameRole.Declares) &&
-                (value is JsonValue leaf) &&
-                leaf.TryGetValue<string>(value: out var textValue) &&
-                (textValue.Length > 0)
-            ) {
-                declared[(field.Kind, textValue)] = ((alias + WorldNameRegistry.AliasSeparator) + textValue);
+            visitor: (parent, name, value, field, _) => {
+                if (
+                    (field.Role == WorldNameRole.Declares) &&
+                    (value is JsonValue leaf) &&
+                    leaf.TryGetValue<string>(value: out var textValue) &&
+                    (textValue.Length > 0)
+                ) {
+                    declared[(field.Kind, textValue)] = ((alias + WorldNameRegistry.AliasSeparator) + textValue);
+                }
             }
-        }
         );
         return declared;
     }
@@ -174,23 +200,23 @@ public static class WorldModuleNamespace {
                 configuration: configuration,
                 descriptor: descriptor.Configuration,
                 visitor: site => {
-                if (
-                    (site.Field.Role != MachineFieldRole.Declaration) ||
-                    (site.Value is not JsonValue value) ||
-                    !value.TryGetValue<string>(value: out var name) ||
-                    (name.Length == 0)
-                ) {
-                    return;
-                }
+                    if (
+                        (site.Field.Role != MachineFieldRole.Declaration) ||
+                        (site.Value is not JsonValue value) ||
+                        !value.TryGetValue<string>(value: out var name) ||
+                        (name.Length == 0)
+                    ) {
+                        return;
+                    }
 
-                if (!local.TryAdd(
-                    key: name,
-                    value: ((alias + WorldNameRegistry.AliasSeparator) + name)
-                )) {
-                    localError = (((("machine '" + (machine["name"]?.ToString() ?? "(unnamed)")) +
-                        "' declares duplicate provider-local name '") + name) + "'.");
+                    if (!local.TryAdd(
+                        key: name,
+                        value: ((alias + WorldNameRegistry.AliasSeparator) + name)
+                    )) {
+                        localError = (((("machine '" + (machine["name"]?.ToString() ?? "(unnamed)")) +
+                            "' declares duplicate provider-local name '") + name) + "'.");
+                    }
                 }
-            }
             );
 
             if (localError.Length != 0) {
@@ -202,35 +228,35 @@ public static class WorldModuleNamespace {
                 configuration: configuration,
                 descriptor: descriptor.Configuration,
                 visitor: site => {
-                if (
-                    (site.Value is not JsonValue value) ||
-                    !value.TryGetValue<string>(value: out var textValue)
-                ) {
-                    return;
-                }
+                    if (
+                        (site.Value is not JsonValue value) ||
+                        !value.TryGetValue<string>(value: out var textValue)
+                    ) {
+                        return;
+                    }
 
-                var rewritten = site.Field.Role switch {
-                    MachineFieldRole.Declaration or MachineFieldRole.LocalReference =>
-                        (local.TryGetValue(
-                    key: textValue,
-                    value: out var localName
-                )
-                    ? localName
-                    : textValue),
-                    MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference =>
-                        (declared.TryGetValue(
-                    key: (ProviderReferenceKind(role: site.Field.Role), textValue),
-                    value: out var worldName
-                )
-                    ? worldName
-                    : textValue),
-                    _ => textValue
-                };
+                    var rewritten = site.Field.Role switch {
+                        MachineFieldRole.Declaration or MachineFieldRole.LocalReference =>
+                            (local.TryGetValue(
+                        key: textValue,
+                        value: out var localName
+                    )
+                        ? localName
+                        : textValue),
+                        MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference =>
+                            (declared.TryGetValue(
+                        key: (ProviderReferenceKind(role: site.Field.Role), textValue),
+                        value: out var worldName
+                    )
+                        ? worldName
+                        : textValue),
+                        _ => textValue
+                    };
 
-                if (rewritten != textValue) {
-                    site.Value = JsonValue.Create(rewritten);
+                    if (rewritten != textValue) {
+                        site.Value = JsonValue.Create(rewritten);
+                    }
                 }
-            }
             );
         }
 
@@ -243,12 +269,13 @@ public static class WorldModuleNamespace {
     /// <param name="text">The authored value.</param>
     /// <param name="role">How the value carries names.</param>
     /// <param name="declared">Each declared name paired with its prefixed spelling.</param>
+    /// <param name="scope">The optional source node whose ancestors establish lexical instance bindings.</param>
     /// <returns>The rewritten value; <paramref name="text"/> unchanged when it spells no declared name.</returns>
-    public static string Rewrite(string text, WorldNameRole role, IReadOnlyDictionary<string, string> declared) {
+    public static string Rewrite(string text, WorldNameRole role, IReadOnlyDictionary<string, string> declared, JsonNode? scope = null) {
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: declared);
 
-        return new Rewriter(declared: declared).Rewrite(
+        return new Rewriter(declared: declared) { Scope = scope }.Rewrite(
             role: role,
             text: text
         );
@@ -274,16 +301,16 @@ public static class WorldModuleNamespace {
         Visit(
             node: module,
             type: typeof(WorldDefinition),
-            visitor: (parent, name, value, field) => {
-            if (
-                (field.Role == WorldNameRole.Declares) &&
-                (value is JsonValue leaf) &&
-                leaf.TryGetValue<string>(value: out var text) &&
-                (text.Length > 0)
-            ) {
-                declared[text] = $"{alias}{WorldNameRegistry.AliasSeparator}{text}";
+            visitor: (parent, name, value, field, _) => {
+                if (
+                    (field.Role == WorldNameRole.Declares) &&
+                    (value is JsonValue leaf) &&
+                    leaf.TryGetValue<string>(value: out var text) &&
+                    (text.Length > 0)
+                ) {
+                    declared[text] = $"{alias}{WorldNameRegistry.AliasSeparator}{text}";
+                }
             }
-        }
         );
 
         if (declared.Count == 0) {
@@ -297,35 +324,96 @@ public static class WorldModuleNamespace {
         Visit(
             node: module,
             type: typeof(WorldDefinition),
-            visitor: (parent, name, value, field) => {
-            switch (value) {
-                case JsonArray list when (field.Role == WorldNameRole.Names):
-                    for (var index = 0; (index < list.Count); index++) {
-                        if (
-                            (list[index: index] is JsonValue element) &&
-                            element.TryGetValue<string>(value: out var item)
-                        ) {
-                            list[index: index] = rewriter.Rewrite(
-                                text: item,
-                                role: field.Role
-                            );
+            visitor: (parent, name, value, field, memberType) => {
+                rewriter.Scope = parent;
+                switch (WorldChannelNodes.Spelled(
+                    memberType: memberType,
+                    value: value
+                )) {
+                    case JsonArray list when (field.Role == WorldNameRole.Names):
+                        for (var index = 0; (index < list.Count); index++) {
+                            if (
+                                (list[index: index] is JsonValue element) &&
+                                element.TryGetValue<string>(value: out var item)
+                            ) {
+                                list[index: index] = rewriter.Rewrite(
+                                    text: item,
+                                    role: field.Role
+                                );
+                            }
                         }
-                    }
 
-                    break;
-                case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                    parent[propertyName: name] = rewriter.Rewrite(
-                        text: text,
-                        role: field.Role
-                    );
+                        break;
+                    case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
+                        var rewritten = rewriter.Rewrite(
+                            text: text,
+                            role: field.Role
+                        );
 
-                    break;
+                        // A member that holds a call node holds one again, its row arguments renamed.
+                        parent[propertyName: name] = ((value is JsonObject)
+                            ? WorldChannelNodes.Node(spelling: rewritten)
+                            : rewritten
+                        );
+
+                        break;
+                }
             }
-        }
         );
 
         reason = string.Empty;
 
+        return true;
+    }
+    /// <summary>Restores compiler-generated reference placeholders to the names captured from the module's caller.</summary>
+    /// <param name="module">The lowered module fragment; mutated.</param>
+    /// <param name="replacements">Placeholder names paired with their caller-owned names.</param>
+    /// <param name="reason">The one-line refusal, currently empty because registered reference restoration is total.</param>
+    /// <returns><see langword="true"/> when the registered references were restored.</returns>
+    /// <remarks>The replacement is limited to registered reference sites. Declaration sites are deliberately left
+    /// unchanged, so a placeholder can never rename a module-owned declaration or arbitrary document text.</remarks>
+    public static bool TryRestoreReferences(JsonObject module, IReadOnlyDictionary<string, string> replacements, out string reason) {
+        ArgumentNullException.ThrowIfNull(module);
+        ArgumentNullException.ThrowIfNull(replacements);
+
+        if (replacements.Count == 0) {
+            reason = string.Empty;
+            return true;
+        }
+
+        var rewriter = new Rewriter(declared: replacements);
+
+        Visit(
+            node: module,
+            type: typeof(WorldDefinition),
+            visitor: (parent, name, value, field, memberType) => {
+                if (field.Role == WorldNameRole.Declares) {
+                    return;
+                }
+
+                rewriter.Scope = parent;
+                switch (WorldChannelNodes.Spelled(
+                    memberType: memberType,
+                    value: value
+                )) {
+                    case JsonArray list when (field.Role == WorldNameRole.Names):
+                        for (var index = 0; (index < list.Count); index++) {
+                            if ((list[index] is JsonValue element) && element.TryGetValue<string>(value: out var item)) {
+                                list[index] = rewriter.Rewrite(item, field.Role);
+                            }
+                        }
+                        break;
+                    case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
+                        var rewritten = rewriter.Rewrite(text, field.Role);
+                        parent[name] = ((value is JsonObject)
+                            ? WorldChannelNodes.Node(spelling: rewritten)
+                            : rewritten);
+                        break;
+                }
+            }
+        );
+
+        reason = string.Empty;
         return true;
     }
     /// <summary>Applies provider metadata to an imported module.</summary>
@@ -398,30 +486,31 @@ public static class WorldModuleNamespace {
                 configuration: configuration,
                 descriptor: descriptor.Configuration,
                 visitor: site => {
-                if (
-                    (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath)) ||
-                    (site.Value is not JsonValue pathValue) ||
-                    !pathValue.TryGetValue<string>(value: out var path) ||
-                    (path.Length == 0)
-                ) {
-                    return;
-                }
+                    if (
+                        (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath)) ||
+                        (site.Value is not JsonValue pathValue) ||
+                        !pathValue.TryGetValue<string>(value: out var path) ||
+                        (path.Length == 0)
+                    ) {
+                        return;
+                    }
 
-                site.Value = JsonValue.Create(RelocateAssetPath(
-                    path: path,
-                    sourceDocumentPath: sourceDocumentPath,
-                    targetDocumentPath: targetDocumentPath
-                ));
-            }
+                    site.Value = JsonValue.Create(RelocateAssetPath(
+                        path: path,
+                        sourceDocumentPath: sourceDocumentPath,
+                        targetDocumentPath: targetDocumentPath
+                    ));
+                }
             );
         }
 
         reason = string.Empty;
         return true;
     }
+
     // The IR's wire shape flattens an instruction's payload onto the instruction object, so the walk reaches a
     // payload's registered names by the operation's payload shape rather than through a JSON type info.
-    private static void VisitExpressionProgram(JsonNode node, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+    private static void VisitExpressionProgram(JsonNode node, WorldNameVisitor visitor) {
         VisitInstructions(
             node: node?["instructions"],
             visitor: visitor
@@ -435,7 +524,7 @@ public static class WorldModuleNamespace {
             }
         }
     }
-    private static void VisitInstructions(JsonNode? node, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+    private static void VisitInstructions(JsonNode? node, WorldNameVisitor visitor) {
         if (node is not JsonArray instructions) {
             return;
         }
@@ -459,6 +548,7 @@ public static class WorldModuleNamespace {
                         declaringType: typeof(InstructionPayload.State),
                         jsonName: "name",
                         member: nameof(InstructionPayload.State.Name),
+                        memberType: typeof(StateChannelRef),
                         obj: obj,
                         visitor: visitor
                     );
@@ -466,6 +556,7 @@ public static class WorldModuleNamespace {
                         declaringType: typeof(InstructionPayload.State),
                         jsonName: "key",
                         member: nameof(InstructionPayload.State.Key),
+                        memberType: typeof(StateChannelRef),
                         obj: obj,
                         visitor: visitor
                     );
@@ -475,6 +566,7 @@ public static class WorldModuleNamespace {
                         declaringType: typeof(InstructionPayload.Board),
                         jsonName: "topology",
                         member: nameof(InstructionPayload.Board.Topology),
+                        memberType: typeof(string),
                         obj: obj,
                         visitor: visitor
                     );
@@ -484,6 +576,7 @@ public static class WorldModuleNamespace {
                         declaringType: typeof(InstructionPayload.Fold),
                         jsonName: "family",
                         member: nameof(InstructionPayload.Fold.Family),
+                        memberType: typeof(string),
                         obj: obj,
                         visitor: visitor
                     );
@@ -503,7 +596,7 @@ public static class WorldModuleNamespace {
             }
         }
     }
-    private static void VisitVectorOperand(JsonNode? node, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+    private static void VisitVectorOperand(JsonNode? node, WorldNameVisitor visitor) {
         if (
             (node is not JsonObject obj) ||
             (obj["$type"] is not JsonValue kindValue) ||
@@ -520,6 +613,7 @@ public static class WorldModuleNamespace {
             declaringType: typeof(VectorOperand.Cell),
             jsonName: "name",
             member: nameof(VectorOperand.Cell.Name),
+            memberType: typeof(StateChannelRef),
             obj: obj,
             visitor: visitor
         );
@@ -527,18 +621,19 @@ public static class WorldModuleNamespace {
             declaringType: typeof(VectorOperand.Cell),
             jsonName: "key",
             member: nameof(VectorOperand.Cell.Key),
+            memberType: typeof(StateChannelRef),
             obj: obj,
             visitor: visitor
         );
     }
-    private static void VisitMember(JsonObject obj, string jsonName, Type declaringType, string member, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+    private static void VisitMember(JsonObject obj, string jsonName, Type declaringType, string member, Type memberType, WorldNameVisitor visitor) {
         if (
             (obj[jsonName] is not { } value) ||
             !WorldNameRegistry.TryResolve(
             declaringType: declaringType,
             field: out var field,
             member: member,
-            propertyType: typeof(string)
+            propertyType: memberType
         )
         ) {
             return;
@@ -547,18 +642,22 @@ public static class WorldModuleNamespace {
             obj,
             jsonName,
             value,
-            field
+            field,
+            memberType
         );
     }
+
     /// <summary>Walks a raw tree type-directed, calling <paramref name="visitor"/> at every registered name-bearing
     /// site with the holding object, the member's JSON name, the value, and the registration: each present member
     /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
     /// converter-backed shapes (an expression's instruction list, a reaction scalar's row object) are followed by
     /// hand.</summary>
+    /// <remarks>Member registrations are cached against immutable serializer metadata. Document values,
+    /// collection contents, and discriminator choices are read afresh on every walk.</remarks>
     /// <param name="node">The tree, or the subtree to walk.</param>
     /// <param name="type">The model type <paramref name="node"/> holds.</param>
     /// <param name="visitor">Called once per registered site, in document order.</param>
-    public static void Visit(JsonNode? node, Type type, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+    public static void Visit(JsonNode? node, Type type, WorldNameVisitor visitor) {
         type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
         if (node is null) {
@@ -594,7 +693,8 @@ public static class WorldModuleNamespace {
                     scalar,
                     "row",
                     row,
-                    scalarField
+                    scalarField,
+                    typeof(string)
                 );
             }
 
@@ -622,34 +722,30 @@ public static class WorldModuleNamespace {
             typeof(StateRow).IsAssignableFrom(c: type) &&
             (node is JsonObject rowObject)
         ) {
-            foreach (var (jsonName, declaringType, member, propertyType) in WorldNameRegistry.ReflectedRowMembers(type: type)) {
+            foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: typeInfo)) {
                 if (
                     !rowObject.TryGetPropertyValue(
                     jsonNode: out var value,
-                    propertyName: jsonName
+                    propertyName: member.Name
                 ) ||
                     (value is null)
                 ) {
                     continue;
                 }
 
-                if (WorldNameRegistry.TryResolve(
-                    declaringType: declaringType,
-                    field: out var field,
-                    member: member,
-                    propertyType: propertyType
-                )) {
+                if (member.Field is { } field) {
                     visitor(
                         rowObject,
-                        jsonName,
+                        member.Name,
                         value,
-                        field
+                        field,
+                        member.Type
                     );
                 }
 
                 Visit(
                     node: value,
-                    type: propertyType,
+                    type: member.Type,
                     visitor: visitor
                 );
             }
@@ -689,13 +785,10 @@ public static class WorldModuleNamespace {
                     }
                 }
 
-                foreach (var property in typeInfo.Properties) {
+                foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: typeInfo)) {
                     if (
-                        property.IsExtensionData ||
-                        (property.Get is null) ||
-                        (property.Set is null) ||
                         !obj.TryGetPropertyValue(
-                        propertyName: property.Name,
+                        propertyName: member.Name,
                         jsonNode: out var value
                     ) ||
                         (value is null)
@@ -703,25 +796,19 @@ public static class WorldModuleNamespace {
                         continue;
                     }
 
-                    var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
-
-                    if (WorldNameRegistry.TryResolve(
-                        declaringType: declaringType,
-                        member: member,
-                        propertyType: property.PropertyType,
-                        field: out var field
-                    )) {
+                    if (member.Field is { } field) {
                         visitor(
                             obj,
-                            property.Name,
+                            member.Name,
                             value,
-                            field
+                            field,
+                            member.Type
                         );
                     }
 
                     Visit(
                         node: value,
-                        type: property.PropertyType,
+                        type: member.Type,
                         visitor: visitor
                     );
                 }
@@ -751,8 +838,54 @@ public static class WorldModuleNamespace {
     }
 
     private sealed class Rewriter(IReadOnlyDictionary<string, string> declared) {
+        public JsonNode? Scope { get; set; }
+
         private const string BindingPrefix = "state.";
 
+        private bool IsInstanceBinding(string name) {
+            for (var node = Scope; (node is not null); node = node.Parent) {
+                if (node is not JsonObject scope) {
+                    continue;
+                }
+                if ((scope["$type"]?.ToString() is "claim" or "claimPair" or "forEachPool") &&
+                    (scope["binding"]?.ToString() == name)) {
+                    return true;
+                }
+                if ((scope["poolForEach"] is JsonObject iteration) && (iteration["binding"]?.ToString() == name)) {
+                    return true;
+                }
+                if ((name is "left" or "right") && scope.ContainsKey(propertyName: "left") && scope.ContainsKey(propertyName: "right") &&
+                    scope.ContainsKey(propertyName: "effects") && IsPoolName(name: scope[name]?.ToString())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        private bool IsPoolName(string? name) {
+            if (name is null) {
+                return false;
+            }
+            var root = Scope;
+
+            while (root?.Parent is { } parent) {
+                root = parent;
+            }
+            var mapped = (declared.ContainsKey(key: name) ? Map(name: name) : name);
+
+            foreach (var section in ((ReadOnlySpan<string>)["pools", "pairPools"])) {
+                if (root?["state"]?[section] is not JsonArray pools) {
+                    continue;
+                }
+                foreach (var pool in pools) {
+                    var candidate = pool?["name"]?.ToString();
+
+                    if ((candidate == name) || (candidate == mapped)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
         private string Map(string name) =>
             (declared.TryGetValue(
                 key: name,
@@ -779,9 +912,8 @@ public static class WorldModuleNamespace {
         }
         // A declared non-cell name (a topology, table, or generator name) may itself carry a dot — SafeName admits
         // one where CellName never does — so a name found whole in `declared` is renamed whole; only a name that
-        // is NOT itself declared falls to ExpressionSpelling's own dot-access rule, which never yields a row
-        // carrying a dot (a real row name is a CellName). The key half of a split is never renamed — a cell key is
-        // never itself a `Declares` site.
+        // is NOT itself declared falls to ExpressionSpelling's typed lexical-field rule. An instance binding stays
+        // local while a qualified declaration is renamed; the field half is never itself a `Declares` site.
         private string MapNameOrSplit(string name) =>
             (declared.ContainsKey(key: name)
                 ? Map(name: name)
@@ -790,7 +922,7 @@ public static class WorldModuleNamespace {
                 name: name,
                 row: out var row
             )
-                    ? $"{Map(name: row)}.{key}"
+                    ? $"{(IsInstanceBinding(name: row) ? row : Map(name: row))}.{key}"
                     : Map(name: name))
             );
         private string RewriteBinding(string token) {
@@ -1073,7 +1205,7 @@ public static class WorldModuleNamespace {
             WorldNameRole.Declares => Map(name: text),
             WorldNameRole.Names => (text.StartsWith(value: '$')
             ? RewriteReserved(name: text)
-            : Map(name: text)),
+            : MapNameOrSplit(name: text)),
             WorldNameRole.Key => RewriteKey(key: text),
             WorldNameRole.Expression => RewriteExpression(text: text),
             WorldNameRole.Binding => RewriteBinding(token: text),

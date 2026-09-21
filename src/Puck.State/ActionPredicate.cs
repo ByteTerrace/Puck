@@ -42,12 +42,12 @@ public abstract record ActionPredicate {
     /// <param name="ComparandKey">The cell inside <paramref name="ComparandState"/>, on the same (row, key) terms as
     /// <paramref name="Key"/>. Refused when <paramref name="ComparandState"/> names a reserved channel or is absent.</param>
     public sealed record CompareState(
-        string State,
+        StateChannelRef State,
         ActionStateComparison Comparison,
         decimal? Value = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandKey = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandKey = null
     ) : ActionPredicate;
     /// <summary>Every inner predicate holds (conjunction).</summary>
     public sealed record All(IReadOnlyList<ActionPredicate> Predicates) : ActionPredicate;

@@ -61,7 +61,7 @@ public readonly struct VectorColumn : IEquatable<VectorColumn> {
             return false;
         }
 
-        var layout = arena.Layout[rowOrdinal];
+        ref readonly var layout = ref arena.Layout[rowOrdinal];
         var name = arena.Catalog.Descriptors[rowOrdinal].Name;
 
         if (layout.HostOwned || !layout.IsStored) {
@@ -120,11 +120,11 @@ public readonly struct VectorColumn : IEquatable<VectorColumn> {
     );
     /// <summary>Returns the name behind one of the column's keys, for a message naming what a caller addressed.</summary>
     /// <param name="key">The cell key.</param>
-    /// <returns>The interned name, or the key's ordinal in angle brackets when the key belongs to no catalog this
+    /// <returns>The interned name, or the key's ordinal in angle brackets when the key belongs to no arena this
     /// view can read.</returns>
     public string KeyName(CellKey key) => ((
         (m_arena is { } arena) &&
-        arena.Catalog.Keys.TryGetName(
+        arena.Keys.TryGetName(
         key: key,
         name: out var name
     )
@@ -135,23 +135,6 @@ public readonly struct VectorColumn : IEquatable<VectorColumn> {
     /// <summary>Returns the viewed row's authored name.</summary>
     /// <returns>The row name.</returns>
     public string RowName() => Arena.Catalog.Descriptors[m_rowOrdinal].Name;
-    /// <summary>Attempts to read the key at one position of the column.</summary>
-    /// <param name="position">The position within the column.</param>
-    /// <param name="key">The key on success; otherwise the invalid default.</param>
-    /// <returns><see langword="true"/> when the position carries a key.</returns>
-    public bool TryKeyAt(int position, out CellKey key) {
-        if (m_arena is { } arena) {
-            return arena.TryKeyAt(
-                key: out key,
-                position: position,
-                rowOrdinal: m_rowOrdinal
-            );
-        }
-
-        key = default;
-
-        return false;
-    }
     /// <summary>Attempts to read one cell's components as a borrowed span into the arena's storage.</summary>
     /// <param name="key">The cell key, interned by the arena's catalog.</param>
     /// <param name="components">The cell's components on success; otherwise empty.</param>

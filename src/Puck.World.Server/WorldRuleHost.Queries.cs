@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -125,6 +127,7 @@ public sealed partial class WorldRuleHost {
             Payload: rows
         );
     }
+
     /// <summary>Answers one submitted query under the caller's own Observe verdict.</summary>
     /// <param name="query">The query.</param>
     /// <param name="principal">The querying principal.</param>
@@ -162,6 +165,7 @@ public sealed partial class WorldRuleHost {
         }
         return Answer(query: query);
     }
+
     // Either side resolving to no body reads false — no sight line to nothing.
     private bool ReadBodyLineOfSight(int indexA, int indexB) => (
         (indexA >= 0) &&
@@ -194,7 +198,7 @@ public sealed partial class WorldRuleHost {
                 (index == origin) ||
                 (Host.Body(index: index) is not { } candidate) ||
                 !RuleReads.TryIndexKey(
-                catalog: Host.Arena.Catalog,
+                keys: Host.Arena.Keys,
                 index: index,
                 key: out var key
             ) ||
@@ -281,28 +285,10 @@ public sealed partial class WorldRuleHost {
     // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
     // The integer part of a Q48.16 value — the key or index a cell's value names.
     private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
-    // The static tables the definition references, in tables-row order; a validated document's rows are proven to
-    // load, so a failure here is an invariant violation, never a reachable case.
-    /// <summary>Recompiles the <c>tables</c> section from a definition — the boot compile the install path
-    /// otherwise folds into <c>RecompileRules</c>.</summary>
-    /// <param name="definition">The definition to compile from.</param>
-    internal void RecompileTables(WorldDefinition definition) => m_tables = CompileTables(definition: definition);
-    private static CompiledTable[] CompileTables(WorldDefinition definition) {
-        var rows = (definition.Tables ?? []);
-        var compiled = new CompiledTable[rows.Count];
 
-        for (var index = 0; (index < compiled.Length); index++) {
-            if (!WorldTables.TryCompile(
-                row: rows[index],
-                table: out var table,
-                error: out var error
-            )) {
-                throw new InvalidOperationException(message: $"tables[{rows[index].Name}]: {error} (a validated document must still resolve at construction)");
-            }
-            compiled[index] = table!;
-        }
-        return compiled;
-    }
+    /// <summary>Installs admission's pinned tables before boot reconciliation can query them.</summary>
+    /// <param name="compilation">The boot definition's validated programs.</param>
+    internal void InstallTables(WorldRuleCompilation compilation) => m_tables = compilation.Tables;
 
     /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
     internal string DescribeTables() {
@@ -320,26 +306,37 @@ public sealed partial class WorldRuleHost {
         )}]";
     }
 
-    // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
-    // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
-    // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
-    // large to precompute the way IndexKeyCache's single-index table is, so this grows lazily instead — the
-    // first read of a never-before-seen pair mints its key once, and every later read of that same directed pair is
-    // a dictionary hit.
-    private readonly Dictionary<long, string> m_pairKeyCache = [];
+    // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'). The span lookup avoids allocating
+    // for an absent read, so distinct pairs neither retain strings nor consume the runtime-key budget. (a, b) and
+    // (b, a) remain distinct because an observer's impression of a subject is not the reverse.
+    private CellKey ResolvePairKey(int a, int b) {
+        Span<char> name = stackalloc char[24];
 
-    private string ResolvePairKey(int a, int b) {
-        var packed = (((long)a) << 32) | ((uint)b);
-
-        if (!m_pairKeyCache.TryGetValue(
-            key: packed,
-            value: out var pairKey
+        if (!a.TryFormat(
+            destination: name,
+            charsWritten: out var aLength,
+            format: default,
+            provider: CultureInfo.InvariantCulture
         )) {
-            pairKey = $"{a}_{b}";
-            m_pairKeyCache[packed] = pairKey;
+            return default;
+        }
+        name[aLength] = '_';
+        if (!b.TryFormat(
+            destination: name[(aLength + 1)..],
+            charsWritten: out var bLength,
+            format: default,
+            provider: CultureInfo.InvariantCulture
+        )) {
+            return default;
         }
 
-        return pairKey;
+        return (Host.Arena.Keys.TryResolve(
+            name: name[..((aLength + 1) + bLength)],
+            key: out var resolved
+        )
+            ? resolved
+            : default
+        );
     }
     // The (row, key) PAIR rule at the mutation boundary: a null key means the row's SLOT cell, and a row that is
     // positively keyed (WorldStateRow.IsKeyed) has no single cell for a null key to mean — refused by name rather

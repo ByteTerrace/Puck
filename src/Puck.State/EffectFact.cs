@@ -42,7 +42,7 @@ public abstract class EffectFact<TFacet> : IEffectNeeds, IFacetFact, ICompiledFa
     /// <summary>Returns the conservative work units one firing costs.</summary>
     /// <param name="context">The compile context the effect was resolved against.</param>
     /// <returns>The work units.</returns>
-    public abstract long Cost(IRuleCostContext context);
+    public abstract RuleWork Cost(IRuleCostContext context);
     /// <summary>Fires the effect for the evaluation in flight.</summary>
     /// <param name="host">The host, which is also the reader every operand answers from and the mutation door an
     /// arena write installs through.</param>

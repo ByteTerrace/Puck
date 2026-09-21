@@ -156,12 +156,19 @@ and [project map](../project-map.md) own the dependency list.
 the deepest pair correction without knowing body identity or mutating state. A
 box-vs-box pair depenetrates by separating-axis test over world X/Y/Z plus
 each box's own three face axes (`FixedColliderBounds.BoxAxes`) rather than
-the world-bounds approximation every other volume pair uses—an oriented
+the world-bounds approximation—an oriented
 box's own face axes are what a world-axis-only overlap never tests, and
 skipping them overstates penetration for anything but an axis-aligned box.
 Face axes alone (no edge-edge cross products) bound the remaining error
 rather than eliminate it: a pure edge-edge contact can still read deeper than
 its true minimum.
+Sphere/box pairs instead use the closest point on the oriented box, including
+its faces, edges, and corners. A sphere center inside the box exits through the
+nearest face, with ties resolved X, Y, then Z. Static and dynamic sphere/box
+queries share this geometry; reversing the moving side reverses the push.
+Capsule/box pairs still use conservative world bounds. Compound correction
+selection compares full-width squared magnitudes so a shallow overlap is not
+lost by rounding its square to the scalar precision.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
 axis-aligned boxes, and half-spaces, returning only a `FixedContactPush`.
 

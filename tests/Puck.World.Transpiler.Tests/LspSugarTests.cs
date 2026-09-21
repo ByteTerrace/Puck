@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary>LSP coverage for the `.puck` DSL sugar wave: completion for the new keywords, hover on a declared state
 /// row's kind, and documentSymbol entries for `rule` blocks.</summary>
 public class LspSugarTests {
-    private const string SourceWithRuleAndStateRow = "puck: 1\nstate {\n    world: [\n        {\n            name: \"hp\"\n            kind: \"Int\"\n            capacity: 1\n        }\n    ]\n}\nrule \"heal\" {\n    when hp < 10\n    hp += 1\n}\n";
+    private const string SourceWithRuleAndStateRow = "puck: 1\nstate {\n    world: [\n        {\n            name: \"hp\"\n            kind: Int\n            capacity: 1\n        }\n    ]\n}\nrule \"heal\" {\n    when hp < 10\n    hp += 1\n}\n";
 
     private static Task<JsonNode> HoverMarkedAsync(string markedSource) {
         var offset = markedSource.IndexOf(
@@ -185,7 +185,7 @@ public class LspSugarTests {
             .ToHashSet(comparer: StringComparer.Ordinal);
 
         Assert.NotNull(@object: labels);
-        foreach (var keyword in new[] { "when", "and", "or", "not", "local", "push", "countdown", "remove", "schedule", "transform", "transaction", "onFailure", "decision", "option", "interrupt", "onNoChoice", "rule", "shape", "placements", "placement" }) {
+        foreach (var keyword in new[] { "when", "and", "or", "not", "local", "push", "remove", "schedule", "transform", "transaction", "onFailure", "decision", "option", "interrupt", "onNoChoice", "rule", "shape", "placements", "placement" }) {
             Assert.Contains(
                 expected: keyword,
                 set: labels
@@ -240,7 +240,7 @@ public class LspSugarTests {
     [InlineData("let seats = 4\nlabel: \"sea|ts\"\n")]
     [InlineData("let seats = 4\ncount: seats| + 1\n")]
     [InlineData("template tile(size = 2) { width: size }\nwidth: si|ze\n")]
-    [InlineData("rule \"x\" {\nlocal amount : Int = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
+    [InlineData("rule \"x\" {\nlocal amount = 2\nhp += amount\n}\nrule \"y\" { hp += amo|unt }\n")]
     [InlineData("let data = { exp|onent: 2.7 }\n")]
     [InlineData("schema: \"puck.cartridge.v1\"\nshape Box \"x\" { exp|onent: 2.7 }\n")]
     [InlineData("schema: \"puck.creation.v1\"\nnoise { rough|ness: 0.5 }\n")]
@@ -249,6 +249,15 @@ public class LspSugarTests {
         var response = await HoverMarkedAsync(markedSource: source);
 
         Assert.Null(@object: response["result"]);
+    }
+    [Fact]
+    public async Task HoverRecognizesAnInlineAuthoredCompositionMember() {
+        var response = await HoverMarkedAsync(markedSource: "ground floor { si|ze [8m, 6m] }");
+        var card = response["result"]?["contents"]?["value"]?.ToString();
+
+        Assert.NotNull(@object: card);
+        Assert.Contains(actualString: card, comparisonType: StringComparison.Ordinal, expectedSubstring: "A `ground` member");
+        Assert.Contains(actualString: card, comparisonType: StringComparison.Ordinal, expectedSubstring: "positive width and depth");
     }
     [InlineData("na|me: \"weathered-limestone\"", "name", "name")]
     [InlineData("palette [{ co|lor: \"#888778\" }]", "palette.color", "base color")]
@@ -316,7 +325,7 @@ public class LspSugarTests {
     [InlineData("let item = 99\nvalues: map([1, 2], item => it|em + 1)\n", "item => item + 1", "lambda parameter")]
     [InlineData("let item = 99\nvalues: map([1, 2], item => item + 1)\ncount: it|em\n", "let item = 99", "compile-time constant")]
     [InlineData("for item in range(0, 2) { value: it|em }\n", "for item in range(0, 2)", "loop variable")]
-    [InlineData("rule \"x\" {\nlocal amount : Int = 2\nhp += amo|unt\n}\n", "local amount : Int = 2", "rule local (Int)")]
+    [InlineData("rule \"x\" {\nlocal amount = 2\nhp += amo|unt\n}\n", "local amount = 2", "rule local")]
     [InlineData("values: ra|nge(3, 5)\n", "range(start, count)", "count consecutive integers")]
     [InlineData("value: cla|mp(4, 0, 3)\n", "clamp(arg1, arg2, arg3)", "Arguments: 3")]
     [InlineData("let seats = 4\nbroken: [\ncount: sea|ts\n", "let seats = 4", "compile-time constant")]

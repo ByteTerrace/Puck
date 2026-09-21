@@ -18,13 +18,15 @@ public static partial class WorldConstructs {
         new(Keyword: "for", Reason: "Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement."),
         new(Keyword: "import", Reason: "Core grammar: the module surface, described by `Puck.Transpiler`."),
         new(Keyword: "let", Reason: "Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement."),
+        new(Keyword: "module", Reason: "Core grammar: a typed compile-time module, expanded before this vocabulary sees a statement."),
         new(Keyword: "schema", Reason: "Core grammar: a document header this vocabulary does not interpret."),
         new(Keyword: "template", Reason: "Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement."),
+        new(Keyword: "use", Reason: "Core grammar: a module instantiation, expanded before this vocabulary sees a statement."),
     ];
 
     /// <summary>Gets the described constructs.</summary>
     public static WorldConstructTable Table { get; } = new(
-        constructs: [.. Sections(), .. State(), .. Rules(), .. Tests()],
+        constructs: [.. Composition(), .. Sections(), .. State(), .. Rules(), .. Tests()],
         excluded: Excluded()
     );
 }

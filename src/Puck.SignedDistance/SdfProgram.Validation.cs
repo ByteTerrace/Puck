@@ -101,12 +101,24 @@ public sealed partial class SdfProgram {
                 paramName: paramName
             );
         }
+        // Most instructions contain only finite float lanes. Check them without constructing or walking
+        // a temporary lane span; the scalar path below retains the packed-integer exemptions and exact diagnostic.
+        if (
+            float.IsFinite(f: instruction.Data0.X) && float.IsFinite(f: instruction.Data0.Y) &&
+            float.IsFinite(f: instruction.Data0.Z) && float.IsFinite(f: instruction.Data0.W) &&
+            float.IsFinite(f: instruction.Data1.X) && float.IsFinite(f: instruction.Data1.Y) &&
+            float.IsFinite(f: instruction.Data1.Z) && float.IsFinite(f: instruction.Data1.W)
+        ) {
+            return;
+        }
+
         var reinterpreted = ((instruction.Op == SdfOp.ShapeBlend)
             ? (((SdfShapeType)instruction.Shape) switch {
                 SdfShapeType.Glyph => GlyphReinterpretedLanes,
                 SdfShapeType.SampledRegion => SampledRegionReinterpretedLanes,
                 SdfShapeType.ConvexPolygon => ConvexPolygonReinterpretedLanes,
                 SdfShapeType.Sweep => SweepReinterpretedLanes,
+                SdfShapeType.Path => SweepReinterpretedLanes,
                 _ => 0u,
             })
             : 0u

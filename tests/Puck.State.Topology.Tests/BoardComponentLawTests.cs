@@ -462,6 +462,69 @@ public sealed class BoardComponentLawTests {
         );
     }
     [Fact]
+    public void NineteenByNineteenEnclosureUsesTheGeneralBoardPath() {
+        const int Width = 19;
+        var topology = TopologyCompilation.Compile(
+            topology: new LatticeTopology.Grid(
+                Name: "go19",
+                Origin: new DocumentVector3(
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                ),
+                CellSize: 1f,
+                Width: Width,
+                Depth: Width,
+                Directions: Orthogonal
+            ),
+            anchorOffset: Vector3.Zero
+        );
+        var values = new long[(Width * Width)];
+        var centre = ((9 * Width) + 9);
+        var placement = (centre - Width);
+
+        values[centre] = 1L;
+        values[(centre - 1)] = 2L;
+        values[(centre + 1)] = 2L;
+        values[(centre + Width)] = 2L;
+
+        var enclosed = new BoardComponentQuery(
+            topology,
+            lower: 1L,
+            upper: 1L,
+            maxVisits: values.Length,
+            boundaryLower: 0L,
+            boundaryUpper: 0L,
+            BoardQueryKind.EnclosedAt
+        );
+
+        Assert.Equal(
+            expected: 1L,
+            actual: BoardQueries.Evaluate(
+                query: enclosed,
+                values: values,
+                empty: 0L,
+                source: placement
+            )
+        );
+        values[placement] = 2L;
+        Assert.Equal(
+            expected: 1L,
+            actual: BoardQueries.ClearEnclosed(
+                empty: 0L,
+                lower: 1L,
+                source: placement,
+                topology: topology,
+                upper: 1L,
+                values: values
+            )
+        );
+        Assert.Equal(
+            expected: 0L,
+            actual: values[centre]
+        );
+    }
+    [Fact]
     public void TheBudgetBoundsTheFloodAndReadsMinusTwoWhenItRunsOut() {
         var topology = Board();
         var budgeted = new BoardComponentQuery(

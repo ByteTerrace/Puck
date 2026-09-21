@@ -71,12 +71,15 @@ public sealed partial class WorldDocument {
             }
 
             candidate = current.WithWorldState(rows: Upsert(
-                list: current.State,
-                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawnMasks = GeneratorEngine.MasksAfter(
+                list: current.AuthoredState,
+                item: (siteRow with {
+                    DrawCursor = (siteRow.DrawCursor + cellCount),
+                    DrawnMasks = GeneratorEngine.MasksAfter(
                     generator: fillSource,
                     fired: masksAfter,
                     previous: siteRow.DrawnMasks
-                ) }),
+                ),
+                }),
                 keyOf: static (WorldStateRow row) => row.Name
             ));
             reason = string.Empty;
@@ -112,7 +115,7 @@ public sealed partial class WorldDocument {
             }
 
             candidate = current.WithWorldState(rows: Upsert(
-                list: current.State,
+                list: current.AuthoredState,
                 item: filled,
                 keyOf: static (WorldStateRow row) => row.Name
             ));
@@ -188,12 +191,16 @@ public sealed partial class WorldDocument {
             )
         );
         var state = Upsert(
-            list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(
+            list: current.AuthoredState,
+            item: (siteRow with {
+                Cells = [cell],
+                DrawCursor = (siteRow.DrawCursor + fired.Samples),
+                DrawnMasks = GeneratorEngine.MasksAfter(
                 generator: generator,
                 fired: fired.Masks,
                 previous: siteRow.DrawnMasks
-            ) }),
+            ),
+            }),
             keyOf: static (WorldStateRow row) => row.Name
         );
 

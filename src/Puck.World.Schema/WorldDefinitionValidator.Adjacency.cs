@@ -85,6 +85,13 @@ public static partial class WorldDefinitionValidator {
                 name: $"{path}.livenessGraceSeconds",
                 errors: errors
             );
+            RequireRange(
+                value: adjacency.Hysteresis,
+                min: 0f,
+                max: float.MaxValue,
+                name: $"{path}.hysteresis",
+                errors: errors
+            );
             if (!proveNeighbours) {
                 continue;
             }
@@ -145,6 +152,9 @@ public static partial class WorldDefinitionValidator {
                 comparisonType: StringComparison.Ordinal
             )) {
                 errors.Add(item: $"{path} is not reciprocal — neighbour '{reference.NeighbourKey}'/'{counterpart.Name}' points to '{counterpart.Counterpart}', not '{adjacency.Name}'.");
+            }
+            if (adjacency.Hysteresis != counterpart.Hysteresis) {
+                errors.Add(item: $"{path}.hysteresis is {adjacency.Hysteresis}, but neighbour '{reference.NeighbourKey}'/'{counterpart.Name}' declares {counterpart.Hysteresis}; reciprocal rows must agree.");
             }
 
             var localFrame = boundary.CompileFrame();
@@ -514,6 +524,9 @@ public static partial class WorldDefinitionValidator {
             comparisonType: StringComparison.Ordinal
         )) {
             errors.Add(item: $"{path} is not reciprocal — neighbour '{document}'/'{counterpart.Name}' points to '{counterpart.Counterpart}', not '{adjacency.Name}'.");
+        }
+        if (adjacency.Hysteresis != counterpart.Hysteresis) {
+            errors.Add(item: $"{path}.hysteresis is {adjacency.Hysteresis}, but neighbour '{document}'/'{counterpart.Name}' declares {counterpart.Hysteresis}; reciprocal rows must agree.");
         }
 
         var localFrame = boundary.CompileFrame();

@@ -54,9 +54,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly IWorldAudioCueSink m_audio;
     private readonly int m_authoringHeadroomPlacements;
     // BOOT-CONSUMED authoring policy (WorldPlacementPolicyDefaults): captured ONCE at construction from the boot definition's
-    // Authoring row — never re-read live. These feed the frozen render-envelope probe (screen-slot/
-    // placement-instance reservation), so a later SetAuthoringDefaults mutation is journaled but cannot retroactively
-    // grow a running session's capacity floor; it narrates "next boot" honestly.
+    // Authoring row — never re-read live. These feed the initial screen-slot/placement-instance reserve.
+    // Later policy edits change the next boot's reserve; live content can grow the GPU buffers independently.
     private readonly int m_authoringHeadroomScreens;
     private readonly WorldClient m_client;
     private readonly WorldContinuum m_continuum;
@@ -467,8 +466,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // WorldPrototypeFacets.IsReservedFaceIndex test). A first-fit scan that knew only the authored set would, with
     // enough authored screens, hand a headroom slab an index the derived-face registration also uses. There is no
     // narrowing fallback: a headroom count the free indices cannot satisfy is a document the boot envelope cannot
-    // honour, and silently reserving fewer slots than asked only moves the failure to the runtime UpsertScreen that
-    // outgrows the probed envelope, where SdfWorldEngine.UploadProgram throws.
+    // honour. Silently reserving fewer slots would misrepresent the authored policy; buffer growth cannot add screen
+    // indices beyond the engine's screen-surface limit.
     private IReadOnlyList<WorldScreen> WithAuthoringHeadroom(IReadOnlyList<WorldScreen> screens) {
         var padded = new List<WorldScreen>(capacity: (screens.Count + m_authoringHeadroomScreens));
         var used = new HashSet<int>();

@@ -3,6 +3,7 @@ using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Client;
+using Puck.World.Client.Sdf;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -11,6 +12,49 @@ namespace Puck.World.Tests;
 
 /// <summary>Laws for the render-capacity registrations shared by the world continuum and session-screen views.</summary>
 public sealed class WorldRenderEnvelopeLawTests {
+    [Fact]
+    public void GrowingConsumerStillRefusesTheEngineInstanceCeiling() {
+        var envelope = new WorldRenderEnvelope();
+        using var registration = envelope.Configure(
+            programWordCapacity: 1,
+            instanceCapacity: 1,
+            measure: _ => (100, SdfProgramBuilder.MaxInstances + 1),
+            allowGrowth: true
+        );
+
+        Assert.False(envelope.TryFit(Fixtures.BuildDocument(), out var reason));
+        Assert.Contains("engine ceiling", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LiveDocumentCanGrowButRefusalsPreserveItsPreviousProgram() {
+        var emitter = new WorldSdfDocumentEmitter();
+        var document = """
+            {"schema":"puck.sdf.v1","materials":[{"albedo":[1,0,0]}],"ops":[{"op":"sphere","radius":1,"material":0}]}
+            """u8.ToArray();
+        emitter.Configure(1, 0, _ => (1024, 1), allowGrowth: true);
+        emitter.Load(document);
+        var accepted = emitter.CurrentProgram;
+        Span<int> before = stackalloc int[1];
+        emitter.WriteRevision(before);
+
+        emitter.Configure(1, 0, _ => (1024, SdfProgramBuilder.MaxInstances + 1), allowGrowth: true);
+        Assert.Throws<SdfDocumentException>(() => emitter.Load(document));
+        Assert.Same(accepted, emitter.CurrentProgram);
+
+        emitter.Configure(1, 0, _ => throw new InvalidOperationException("composed structural limit"), allowGrowth: true);
+        var refusal = Assert.Throws<SdfDocumentException>(() => emitter.Load(document));
+        Assert.Contains("composed structural limit", refusal.Message, StringComparison.Ordinal);
+        Assert.Same(accepted, emitter.CurrentProgram);
+
+        emitter.Configure(1, 0, _ => (1024, 1));
+        Assert.Throws<SdfDocumentException>(() => emitter.Load(document));
+        Assert.Same(accepted, emitter.CurrentProgram);
+        Span<int> after = stackalloc int[1];
+        emitter.WriteRevision(after);
+        Assert.Equal(before[0], after[0]);
+    }
+
     /// <summary>The panel case: a panelled shape emits TWO shape instructions (the plate and its eroded copy) instead
     /// of one, so a new placement referencing it must still fit inside the boot probe's already-reserved headroom
     /// (<see cref="WorldPlacementPolicy.MaxShapesPerStamp"/> covers it — see
@@ -308,8 +352,10 @@ public sealed class WorldRenderEnvelopeLawTests {
         Assert.True(condition: (measured.Words.Length <= boot.Words.Length));
         Assert.True(condition: (measured.Instances.Count <= boot.Instances.Count));
     }
-    [Fact]
-    public void AuthoredHeadroomAdmitsNewScopeFreeMultiShapePlacements() {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void LiveGrowthAdmitsNewScopeFreePlacementsWithOrWithoutHeadroom(int headroom) {
         var prototype = new WorldPrototype(
             "store",
             new(
@@ -353,7 +399,7 @@ public sealed class WorldRenderEnvelopeLawTests {
             PlacementsRaw = new(
             Rows: [],
             Policy: new(
-                AuthoringHeadroomPlacements: 1,
+                AuthoringHeadroomPlacements: headroom,
                 AuthoringHeadroomScreens: 0,
                 CandidateCap: 4,
                 CandidateRadius: 10,
@@ -419,8 +465,22 @@ public sealed class WorldRenderEnvelopeLawTests {
         );
         var measured = candidateBuilder.Build(buildInstanceGrid: false);
 
-        Assert.True(condition: (measured.Words.Length <= boot.Words.Length));
-        Assert.True(condition: (measured.Instances.Count <= boot.Instances.Count));
+        var envelope = new WorldRenderEnvelope();
+        using var growing = envelope.Configure(
+            programWordCapacity: boot.Words.Length,
+            instanceCapacity: boot.Instances.Count,
+            measure: _ => (measured.Words.Length, measured.Instances.Count),
+            allowGrowth: true
+        );
+        Assert.True(envelope.TryFit(candidate, out var reason), reason);
+        // The zero-reserve case reproduces adding the queen to an unauthored placement policy.
+        Assert.Equal(headroom == 0, measured.Instances.Count > boot.Instances.Count);
+        using var fixedConsumer = envelope.Configure(
+            programWordCapacity: boot.Words.Length,
+            instanceCapacity: boot.Instances.Count,
+            measure: _ => (measured.Words.Length, measured.Instances.Count)
+        );
+        Assert.Equal(headroom != 0, envelope.TryFit(candidate, out _));
     }
     /// <summary>Every active renderer constrains admission independently, and disposing one renderer removes only
     /// its own constraint. This pins both halves of the lease contract: no last-writer-wins overwrite and no stale

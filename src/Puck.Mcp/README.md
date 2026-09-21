@@ -2,7 +2,9 @@
 
 An optional host extension exposes Puck Console sessions and completed screenshots over local
 stdio or OAuth-protected remote Streamable HTTP. Both target MCP **2026-07-28**,
-with per-request metadata and discovery; older protocol revisions are unsupported.
+with per-request metadata and discovery. Local stdio also answers the initialize
+handshake of the earlier revisions, which is what an editor or an agent harness
+opens with; remote HTTP serves 2026-07-28 alone.
 It depends only on Puck.Hosting and its substrate. Local attachment supports
 Windows and Linux x64 under the host's OS user; in-process hosting uses the
 neutral `IControlSessionHost` interface. Clients may run on other platforms.
@@ -48,19 +50,26 @@ owns each service's authorization and disclosure limits.
 
 ## Local stdio
 
-Build World and CLI in Release, start World normally, then enter:
+[Install the checkout's CLI on PATH](../../docs/reference/cli.md#installing-the-checkouts-cli-on-path),
+start World normally, then enter:
 
 ```text
 world.control start
 ```
 
-It prints an attachment file path. Configure the MCP client to launch:
+It prints an attachment file path. The MCP client launches:
 
 ```text
-dotnet <checkout>/src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll mcp --profile operator --attach <printed-file>
+puck mcp --profile operator
 ```
 
-A published CLI uses `puck mcp` with the same arguments. Paths containing spaces
+which attaches to the most recent active World, so one configuration serves
+every run. The checkout carries it for both clients: `.mcp.json` at the root
+and `.vscode/mcp.json`. A client that starts before a World is running finds no
+attachment and fails; reconnect it after `world.control start`.
+`--attach <printed-file>` names one World where several run. Never launch the
+server from a project's build output: the running server holds every assembly
+in that folder, and the next build fails to replace them. Paths containing spaces
 must remain one argument in the client configuration. `world.control status`
 repeats the path; `world.control stop` closes attachments. Starting an already
 started endpoint retains the same path. Stopping and starting creates a new
@@ -202,6 +211,11 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. |
 | `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`) and `timeoutMs`, same range/default. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
 
+Mutation commands that provide an authority settlement wait for its applied or
+refused verdict. This is console output, not a durable persistence receipt.
+Local rebuild and undo commands wait for their tick-boundary echo. A transport
+without a local verdict reports that the outcome is unknown.
+
 For HTTP, add the required `attachmentId` to these arguments. Call serially per
 attachment; concurrent calls return busy. Capture enters this session's
 ordering and simulation barrier, including its `world.wait`, then returns one
@@ -251,7 +265,9 @@ Official C# SDK 2.2.0 clients launch the real CLI in the tests. The target is
 listing, exec, images, argument errors, cancellation, timeout, EOF and reconnect.
 Adversarial tests also cover split UTF-8 characters, invalid encodings, oversized
 and malformed input, stalled output, reply flooding and cancellation-resistant reads.
-Both servers explicitly select this revision. Remote tests use real Kestrel,
+The remote server explicitly selects this revision; the local one pins none, because a
+pinned revision turns the initialize handshake off, and its interop test runs the
+handshake revisions beside it. Remote tests use real Kestrel,
 signed JWTs, OIDC discovery/JWKS, direct TLS, tenant/subject isolation, scope and
 audience refusal, token expiry, cancellation, idle expiry, capacity and shutdown.
 Raw HTTP tests check required metadata, header mismatches and absent session

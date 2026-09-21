@@ -8,7 +8,12 @@
       "mode": "Level",
       "gate": {
         "$type": "compareState",
-        "state": "$region:diveDepth1",
+        "state": {
+          "channel": "region",
+          "arguments": [
+            "diveDepth1"
+          ]
+        },
         "comparison": "GreaterOrEqual",
         "value": 1
       },

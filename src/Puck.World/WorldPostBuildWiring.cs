@@ -32,21 +32,13 @@ internal static class WorldPostBuildWiring {
     /// and registers the shutdown drain that reports an armed capture no frame ever served. Safe to call exactly
     /// once, after the container has built but before the host starts.</summary>
     /// <remarks>
-    /// Boot validation stops being vacuous here. <c>WorldDefinitionLoader.TryResolve</c> (in <c>Program.cs</c>) loads
-    /// and validates the boot document before the DI container exists — <c>WorldDefinitionValidator.Validate</c> runs
-    /// <c>BindingVocabularyHook.VocabularyCheck</c> over every binding overlay and the compiled-in engine-default
-    /// wheels/pages at that instant, but <see cref="WorldAffordances.Installed"/> is still <see langword="false"/>
-    /// then (it flips a few lines below, in this method — the first point on the boot path where a built
-    /// <see cref="CommandRegistry"/> exists), so the command half of that check is a documented no-op
-    /// (<see cref="WorldAffordances.Validate"/>'s own remarks: "Absent means the command half of validation is
-    /// skipped — structural validation still runs — never that it passed"). Nothing before that instant ever branches
-    /// on <c>WorldHostSettings.Headless</c>, so the gap is not a headless-only bug: every boot shape validates its own
-    /// wheel/page commits vacuously at load, and only happens to get away with it windowed because
-    /// <see cref="WorldBootComposition.AddWorldPresentation"/> composes a superset registry before anything asks again. Re-running
-    /// <see cref="WorldDefinitionValidator.TryValidate"/> on the SAME (already-loaded, already-resolved) boot
-    /// definition here — immediately after <see cref="WorldAffordances.Install"/> — makes the check genuine: an
-    /// unregistered wheel or page commit now refuses BOOT by name, identically in both shapes, instead of surfacing
-    /// only later at a <c>world.instance.start</c> crossing or a live <c>player.bind</c> recompose.
+    /// The loader validates before the DI container exists. At that point the command half of
+    /// <c>BindingVocabularyHook.VocabularyCheck</c> is deferred because <see cref="WorldAffordances.Installed"/>
+    /// is false. After <see cref="WorldAffordances.Install"/>, <see cref="WorldDefinitionValidator.TryCompleteAdmission"/>
+    /// rechecks environment-dependent sections and neighbour claims against the completed host. The loader's
+    /// exact document and catalog retain their local proof and compiled programs. A boot override that changed
+    /// the document clears its receipt and takes full validation. Both headless and presented boots refuse an
+    /// unregistered wheel or page commit here, before the host starts.
     /// </remarks>
     /// <param name="services">The built root service provider.</param>
     /// <returns><see langword="true"/> when the boot may proceed; <see langword="false"/> when the re-validated boot
@@ -159,10 +151,8 @@ internal static class WorldPostBuildWiring {
             slot: slot
         );
 
-        // The genuine boot-document re-validation (see this method's remarks): the FIRST validation, at
-        // WorldDefinitionLoader.TryResolve, ran before WorldAffordances.Installed — its command half was a no-op in
-        // EVERY boot shape. This is the first point where re-running the SAME validator asks a real question, so an
-        // unregistered wheel/page commit fails the BOOT here (both shapes alike) rather than only a later crossing.
+        // The loader's rule/state proof remains valid for its exact unchanged document. Host vocabulary does not:
+        // complete that phase now that command services and every neighbour transport are available.
         var worldSource = services.GetRequiredService<WorldDefinitionSource>();
 
         // The adjacency proof's neighbour resolver, composed from every transport this boot can reach: a
@@ -187,12 +177,15 @@ internal static class WorldPostBuildWiring {
             storageNeighbours
         );
 
-        if (!WorldDefinitionValidator.TryValidate(
-            definition: worldSource.Definition,
-            reason: out var vocabularyReason,
-            neighbours: neighbours,
-            machines: machineCatalog
-        )) {
+        var admission = worldSource.Admission;
+        bool admitted;
+        string vocabularyReason;
+        if ((admission is not null) && admission.AppliesTo(worldSource.Definition, machineCatalog)) {
+            admitted = WorldDefinitionValidator.TryCompleteAdmission(admission, machineCatalog, neighbours, out vocabularyReason);
+        } else {
+            admitted = WorldDefinitionValidator.TryValidate(worldSource.Definition, out vocabularyReason, neighbours, machineCatalog);
+        }
+        if (!admitted) {
             Console.Error.WriteLine(value: $"[world] definition refused once its command vocabulary composed: {vocabularyReason}");
 
             return false;
@@ -247,6 +240,14 @@ internal static class WorldPostBuildWiring {
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
         var deferredVerbEchoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
 
+        deferredVerbEchoes.Completed += result => {
+            if (result.IsError) {
+                Console.Error.WriteLine(value: result.Output);
+            } else {
+                Console.WriteLine(value: result.Output);
+            }
+        };
+
         var scheduleRunner = services.GetRequiredService<WorldScheduleRunner>();
 
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
@@ -259,23 +260,18 @@ internal static class WorldPostBuildWiring {
                 );
             }
 
-            // The per-verb half of a deferred verdict: a buffered mutation verb registered its minted correlation at
+            // The per-verb half of a rebuild verdict: a rebuild verb registered its minted correlation at
             // submit, so a LOCAL submission's verdict prints an accountable "[<verb>: …]" line beside the
             // verb-agnostic "[world.mutation …]" narration — stderr on rejection (alongside "[world.mutation
             // rejected: …]"), stdout on acceptance (the verb's own confirmation, distinct from the narration's
             // "[world.mutation: …]" stderr line), so a script can account either verdict under the verb it submitted
             // rather than only the reason it was refused.
-            if (
-                (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) &&
-                deferredVerbEchoes.TryTake(
-                correlationId: echo.CorrelationId,
-                verb: out var submittingVerb
-            )
-            ) {
+            // The same verdict settles the submitting line, for a session that reports settled results.
+            if (deferredVerbEchoes.Settle(echo: in echo) is { } verdict) {
                 if (echo.Rejected) {
-                    Console.Error.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                    Console.Error.WriteLine(value: verdict);
                 } else {
-                    Console.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                    Console.WriteLine(value: verdict);
                 }
             }
 

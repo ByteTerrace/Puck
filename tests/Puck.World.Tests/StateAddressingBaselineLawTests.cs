@@ -132,13 +132,14 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
         output.WriteLine(message: $"  PatternOperand:                           {patternOps}");
         output.WriteLine(message: $"  Other operands (binding, tick, etc):      {otherOps}");
 
+        // Compound contact selection retains sub-millimetre corrections at raw precision; pose hashes pin that result.
         Assert.Equal(
             actual: hash31,
-            expected: 0x867dd6f9dea21e87UL
+            expected: 0x30ca3bd4f821436eUL
         );
         Assert.Equal(
             actual: hash151,
-            expected: 0xaf51fbbf4ba1d024UL
+            expected: 0x3c01dc7f46b6561cUL
         );
         Assert.True(condition: (fixedLiteralCellOps > 0));
     }

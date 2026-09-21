@@ -6,6 +6,21 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 public sealed class WorldAuthorityCheckpointLawTests {
+    [Fact]
+    public void MalformedJournalBaseRefusesBeforeReplacingTheLiveDefinition() {
+        using var fixture = Fixtures.FreshServer();
+        fixture.Step();
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: EmptyHostRow(),
+            checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
+        Assert.NotNull(@object: checkpoint);
+        var before = fixture.Server.Definition;
+        var hash = WorldStateHashComposition.HashAuthoritative(fixture.Server, tick: 0UL);
+        var malformed = checkpoint with { Server = checkpoint.Server with { BaseDefinitionJson = "{"u8.ToArray() } };
+        Assert.Throws<InvalidDataException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Same(expected: before, actual: fixture.Server.Definition);
+        Assert.Equal(expected: hash, actual: WorldStateHashComposition.HashAuthoritative(fixture.Server, tick: 0UL));
+    }
+
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [],
         AppliedTransferHighWater: null,
@@ -281,7 +296,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
     }
     [Fact]
-    public void CurrentCheckpointUsesVersionFourAndRejectsThePreviousVersion() {
+    public void ACheckpointCarriesTheCodecsVersionAndThePreviousVersionIsRefused() {
         using var fixture = Fixtures.FreshServer();
 
         Assert.True(
@@ -295,7 +310,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
 
         Assert.Equal(
-            ((ushort)4),
+            WorldAuthorityCheckpointCodec.SupportedVersion,
             System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(source: bytes.AsSpan(start: 4))
         );
         Assert.Equal(
@@ -304,7 +319,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
         Assert.Equal(
             actual: WorldFederationCodec.WireKey,
-            expected: 0x314445464B435550UL
+            expected: 0x324445464B435550UL
         );
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecode(
@@ -316,7 +331,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
             destination: bytes.AsSpan(start: 4),
-            value: 3
+            value: ((ushort)(WorldAuthorityCheckpointCodec.SupportedVersion - 1))
         );
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
             bytes: bytes,
@@ -325,7 +340,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "version 3"
+            expectedSubstring: $"version {(WorldAuthorityCheckpointCodec.SupportedVersion - 1)}"
         );
     }
     [Fact]

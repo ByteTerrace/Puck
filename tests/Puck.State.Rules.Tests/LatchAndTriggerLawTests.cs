@@ -8,6 +8,27 @@ namespace Puck.State.Rules.Tests;
 /// binds the keys the row held when the sweep opened; the latch hashes in compiled order, round-trips through
 /// <c>Flatten</c>/<c>Restore</c>, and closes a binding the sweep did not touch.</summary>
 public sealed class LatchAndTriggerLawTests {
+    [Fact]
+    public void LatchHashDistinguishesEitherInstanceGenerationAndIgnoresInsertionOrder() {
+        var (_, _, rules, _, _) = EvaluatorFixture.Arrange([Counting(mode: ActionTriggerMode.Edge, name: "edge")]);
+        var original = new RuleLatch();
+
+        original.Bindings(name: "edge").Add(key: new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 9), value: true);
+        original.Bindings(name: "edge").Add(key: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), value: false);
+        var reversed = new RuleLatch();
+
+        reversed.Bindings(name: "edge").Add(key: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), value: false);
+        reversed.Bindings(name: "edge").Add(key: new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 9), value: true);
+        Assert.Equal(Hash(latch: original, rules: rules), Hash(latch: reversed, rules: rules));
+        foreach (var key in new[] { new LatchKey(Left: 1, LeftGeneration: 8, Right: 2, RightGeneration: 9), new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 10) }) {
+            var changed = new RuleLatch();
+
+            changed.Bindings(name: "edge").Add(key: key, value: true);
+            changed.Bindings(name: "edge").Add(key: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), value: false);
+            Assert.NotEqual(Hash(latch: original, rules: rules), Hash(latch: changed, rules: rules));
+        }
+    }
+
     private static ulong Hash(RuleLatch latch, CompiledRule[] rules) {
         var hash = Fnv1aHash.Create();
 

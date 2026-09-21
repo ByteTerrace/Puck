@@ -80,14 +80,42 @@ public static partial class PuckLinter {
 
     private static void CollectReferences(SyntaxNode node, HashSet<string> references, DiagnosticBag diagnostics, bool inLet = false) {
         switch (node) {
+            case LocalStatementNode local: CollectReferences(local.Expression, references, diagnostics); break;
+            case ScoreStatementNode score: CollectReferences(score.Expression, references, diagnostics); break;
+            case DerivedStateNode derived: CollectReferences(derived.Expression, references, diagnostics); break;
+            case PatternDeclarationNode { Value: { } value }: CollectReferences(value, references, diagnostics); break;
+            case WhenStatementNode whenClause: CollectReferences(whenClause.Predicate, references, diagnostics); break;
+            case InterruptStatementNode interrupt: CollectReferences(interrupt.Predicate, references, diagnostics); break;
+            case ComparisonPredicateNode comparison:
+                CollectReferences(comparison.Left, references, diagnostics);
+                CollectReferences(comparison.Right, references, diagnostics);
+                break;
+            case AndPredicateNode conjunction:
+                foreach (var item in conjunction.Operands) { CollectReferences(item, references, diagnostics); }
+                break;
+            case OrPredicateNode disjunction:
+                foreach (var item in disjunction.Operands) { CollectReferences(item, references, diagnostics); }
+                break;
+            case NotPredicateNode negation: CollectReferences(negation.Operand, references, diagnostics); break;
+            case CallPredicateNode gate: CollectReferences(gate.Call, references, diagnostics); break;
+            case SetCellStatementNode set: CollectReferences(set.Rhs, references, diagnostics); break;
+            case AddCellStatementNode add: CollectReferences(add.Rhs, references, diagnostics); break;
+            case CompoundAssignStatementNode compound: CollectReferences(compound.Rhs, references, diagnostics); break;
+            case PushStatementNode push: CollectReferences(push.Rhs, references, diagnostics); break;
+            case RhsOperandNode rhs: CollectReferences(rhs.Expression, references, diagnostics); break;
             case IdentifierExpressionNode ident:
                 references.Add(item: ident.Name);
                 break;
 
             case CallExpressionNode call:
                 references.Add(item: call.Name);
-                if (string.Equals(call.Name, "mix", StringComparison.OrdinalIgnoreCase)) {
-                    LintVectorMix(call, diagnostics);
+                var qualifier = call.Name.IndexOf(value: '.');
+
+                if (qualifier > 0) {
+                    references.Add(item: call.Name[..qualifier]);
+                }
+                if (string.Equals(a: call.Name, b: "mix", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    LintVectorMix(call: call, diagnostics: diagnostics);
                 }
                 foreach (var arg in call.Arguments) {
                     CollectReferences(
@@ -97,6 +125,22 @@ public static partial class PuckLinter {
                         inLet
                     );
                 }
+                break;
+
+            case WorldDeclarationNode world:
+                CollectReferences(world.Name, references, diagnostics, inLet);
+                CollectReferences(world.Module, references, diagnostics, inLet);
+                break;
+
+            case WorldLinkNode link:
+                CollectReferences(link.Left, references, diagnostics, inLet);
+                CollectReferences(link.Right, references, diagnostics, inLet);
+                foreach (var property in link.Properties) {
+                    CollectReferences(property, references, diagnostics, inLet);
+                }
+                break;
+
+            case AssetExpressionNode:
                 break;
 
             case ColorExpressionNode color:
@@ -393,6 +437,18 @@ public static partial class PuckLinter {
                 );
                 break;
 
+            case OperandExpressionNode operand:
+                if (operand.Syntax is { } syntax) { CollectOperandReferences(syntax, operand.Form, references); }
+                foreach (var atom in operand.Atoms) {
+                    CollectReferences(
+                        atom.Value,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                break;
+
             case InterpolatedStringNode interpolated:
                 foreach (var hole in interpolated.Segments.OfType<InterpolationSegment.Hole>()) {
                     CollectReferences(
@@ -417,16 +473,8 @@ public static partial class PuckLinter {
                 break;
 
             case RangeExpressionNode range:
-                CollectReferences(
-                    range.Start,
-                    references,
-                    diagnostics
-                );
-                CollectReferences(
-                    range.End,
-                    references,
-                    diagnostics
-                );
+                if (range.Start is { } start) { CollectReferences(start, references, diagnostics); }
+                if (range.End is { } end) { CollectReferences(end, references, diagnostics); }
                 break;
 
             case ExpressionStatementNode exprStmt:
@@ -440,10 +488,10 @@ public static partial class PuckLinter {
             case RuleBlockNode rule:
                 foreach (var stmt in rule.Statements) {
                     CollectReferences(
-                        stmt,
-                        references,
-                        diagnostics,
-                        inLet
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: stmt,
+                        references: references
                     );
                 }
                 break;
@@ -451,10 +499,10 @@ public static partial class PuckLinter {
             case DecisionBlockNode decision:
                 foreach (var stmt in decision.Statements) {
                     CollectReferences(
-                        stmt,
-                        references,
-                        diagnostics,
-                        inLet
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: stmt,
+                        references: references
                     );
                 }
                 break;
@@ -462,10 +510,10 @@ public static partial class PuckLinter {
             case OptionBlockNode option:
                 foreach (var stmt in option.Statements) {
                     CollectReferences(
-                        stmt,
-                        references,
-                        diagnostics,
-                        inLet
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: stmt,
+                        references: references
                     );
                 }
                 break;
@@ -473,10 +521,10 @@ public static partial class PuckLinter {
             case OnNoChoiceBlockNode onNoChoice:
                 foreach (var stmt in onNoChoice.Effects) {
                     CollectReferences(
-                        stmt,
-                        references,
-                        diagnostics,
-                        inLet
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: stmt,
+                        references: references
                     );
                 }
                 break;
@@ -484,40 +532,41 @@ public static partial class PuckLinter {
             case TransactionStatementNode transaction:
                 foreach (var stmt in transaction.MainEffects) {
                     CollectReferences(
-                        stmt,
-                        references,
-                        diagnostics,
-                        inLet
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: stmt,
+                        references: references
                     );
                 }
                 if (transaction.OnFailureEffects is not null) {
                     foreach (var stmt in transaction.OnFailureEffects) {
                         CollectReferences(
-                            stmt,
-                            references,
-                            diagnostics,
-                            inLet
+                            diagnostics: diagnostics,
+                            inLet: inLet,
+                            node: stmt,
+                            references: references
                         );
                     }
                 }
                 break;
 
             case IfStatementNode ifStmt:
+                CollectReferences(ifStmt.Condition, references, diagnostics);
                 foreach (var stmt in ifStmt.Then) {
                     CollectReferences(
-                        stmt,
-                        references,
-                        diagnostics,
-                        inLet
+                        diagnostics: diagnostics,
+                        inLet: inLet,
+                        node: stmt,
+                        references: references
                     );
                 }
                 if (ifStmt.Else is not null) {
                     foreach (var stmt in ifStmt.Else) {
                         CollectReferences(
-                            stmt,
-                            references,
-                            diagnostics,
-                            inLet
+                            diagnostics: diagnostics,
+                            inLet: inLet,
+                            node: stmt,
+                            references: references
                         );
                     }
                 }
@@ -533,19 +582,19 @@ public static partial class PuckLinter {
                 break;
         }
     }
-
     private static void LintVectorMix(CallExpressionNode call, DiagnosticBag diagnostics) {
         ExpressionNode? termsExpr = null;
+
         foreach (var arg in call.Arguments) {
-            if (string.Equals(arg.Name, "terms", StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(a: arg.Name, b: "terms", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 termsExpr = arg.Value;
                 break;
             }
         }
 
-        if (termsExpr is null && call.Arguments.Count > 1) {
+        if ((termsExpr is null) && (call.Arguments.Count > 1)) {
             termsExpr = call.Arguments[1].Value;
-        } else if (termsExpr is null && call.Arguments.Count == 1 && call.Arguments[0].Value is ArrayExpressionNode) {
+        } else if ((termsExpr is null) && (call.Arguments.Count == 1) && (call.Arguments[0].Value is ArrayExpressionNode)) {
             termsExpr = call.Arguments[0].Value;
         }
 
@@ -554,14 +603,15 @@ public static partial class PuckLinter {
         }
 
         var weights = new List<(long Weight, SourceSpan Span)>();
+
         foreach (var elem in arr.Elements) {
             if (elem is ObjectExpressionNode obj) {
                 foreach (var prop in obj.Properties) {
-                    if (string.Equals(prop.Name, "weight", StringComparison.OrdinalIgnoreCase)) {
+                    if (string.Equals(a: prop.Name, b: "weight", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                         if (prop.Value is LiteralExpressionNode { Value: long wVal }) {
-                            weights.Add((wVal, prop.Span));
+                            weights.Add(item: (wVal, prop.Span));
                         } else if (prop.Value is UnaryExpressionNode { Operator: "-", Operand: LiteralExpressionNode { Value: long posW } }) {
-                            weights.Add((-posW, prop.Span));
+                            weights.Add(item: (-posW, prop.Span));
                         }
                     }
                 }
@@ -573,8 +623,9 @@ public static partial class PuckLinter {
         }
 
         var sumAbs = 0L;
+
         foreach (var (weight, _) in weights) {
-            sumAbs += Math.Abs(weight);
+            sumAbs += Math.Abs(value: weight);
         }
 
         if (sumAbs <= 0) {
@@ -582,8 +633,9 @@ public static partial class PuckLinter {
         }
 
         foreach (var (weight, span) in weights) {
-            var absW = Math.Abs(weight);
-            if (64L * absW < sumAbs) {
+            var absW = Math.Abs(value: weight);
+
+            if ((64L * absW) < sumAbs) {
                 diagnostics.ReportWarning(
                     code: PuckDiagnosticCodes.VectorMixStall,
                     message: $"Vector mix term weight {weight} has relative share below 1/64; consider mean over a history table as the alternative.",

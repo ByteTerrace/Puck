@@ -6,12 +6,12 @@ documentId: "seat-writes-a-cell"
 
 grants [
   {
-    capability: "Mutate"
+    capability: Mutate
     principal: "seat1"
     subject: "section:state"
   }
   {
-    capability: "Edit"
+    capability: Edit
     principal: "seat1"
     subject: "state:armour"
   }
@@ -19,7 +19,7 @@ grants [
 
 state {
   world {
-    slot armour: Int = 0
+    slot armour = 0
   }
 }
 

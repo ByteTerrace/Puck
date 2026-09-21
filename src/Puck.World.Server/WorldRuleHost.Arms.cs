@@ -4,13 +4,32 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The effect arms only the world can fire. A non-mutating arm (cue, body, field, save, pose) acts or
-/// refuses by name; a document-row arm submits its own ordinary mutation through the ordinary pipeline, stamped
-/// <see cref="WorldPrincipal.World"/>.</summary>
-/// <remarks>Every world arm but the identity-fact write declares <see cref="EffectNeeds.Irreversible"/>, so it is
-/// called once with <see cref="EffectFiring.Preflight"/> set — where it validates and does nothing outward — and
-/// once after the firing's scope commits.</remarks>
+/// <summary>The effect arms only the world can fire.</summary>
+/// <remarks>
+/// <para>Every world arm but the identity-fact write leaves the arena, so it is queued and called with
+/// <see cref="EffectFiring.Preflight"/> set before the firing's scope commits, where it validates and does nothing
+/// outward. The arms of one firing are preflighted as a sequence: what one would do is what the next is judged
+/// against.</para>
+/// <para>A document-row arm is <see cref="EffectNeeds.Transactional"/>. The firing's rows compose, in order, into one
+/// <see cref="WorldMutation.Batch"/> stamped <see cref="WorldPrincipal.World"/>. Each preflight composes the batch
+/// so far against the document the firing proposes, so a row is judged against what the rows before it leave. Once
+/// every arm has passed, the whole batch is prepared through the ordinary mutation door: every gate that can refuse
+/// it runs while the firing can still rewind. The commit adopts the proposed document and installs the prepared
+/// batch, and neither can refuse, so a firing's rows land with its arena writes or not at all.</para>
+/// <para>A cue, a body motion, an impulse, a field paint, a pose and a save are delivered after the commit. A
+/// delivery that refuses is counted and undoes nothing.</para>
+/// </remarks>
 public sealed partial class WorldRuleHost {
+    // What one firing's preflights carry from each arm to the next: the document rows it has queued so far, which
+    // are the unit its commit installs, and the velocity its impulses would leave each rigid body at. Preflighting
+    // clears both.
+    private readonly List<WorldMutation> m_documentArms = [];
+    private readonly Dictionary<int, FixedVector3> m_preflightRigidVelocity = [];
+
+    private WorldArenaPublication? m_proposedPublication;
+    // The firing's document rows, past every gate and waiting on the commit.
+    private WorldPreparedMutation? m_preparedDocument;
+
     /// <inheritdoc/>
     public bool Apply(in Mutation mutation, out EffectRefusal refusal) => Host.ArenaHost.Apply(
         mutation: in mutation,
@@ -23,11 +42,83 @@ public sealed partial class WorldRuleHost {
         refusal: out refusal,
         transform: transform
     );
-    // Committed and Fire implement IEffectHost members that carry default bodies. Narrowing either one compiles
+    // Committed, Preflighting and Fire implement IEffectHost members that carry default bodies. Narrowing one compiles
     // clean and rebinds to the interface's own implementation, which flushes no identity fact and refuses every
     // world arm as unbound, so their accessibility is load-bearing.
     /// <inheritdoc/>
     public void Committed(int scope) => FlushIdentityFacts();
+    /// <inheritdoc/>
+    public void Preflighting() {
+        // A unit prepared for a firing that then did not commit is released here.
+        m_preparedDocument?.Dispose();
+        m_preparedDocument = null;
+        m_documentArms.Clear();
+        m_preflightRigidVelocity.Clear();
+        m_proposedPublication = null;
+    }
+    /// <inheritdoc/>
+    public bool PrepareTransactional(in EffectFiring firing, out EffectRefusal refusal) {
+        refusal = EffectRefusal.None;
+
+        if (m_documentArms.Count == 0) {
+            return true;
+        }
+        if (!Host.Document.TryPrepareMutation(
+            current: Proposed().Definition,
+            denied: out _,
+            engineTick: firing.EngineTick,
+            mutation: DocumentUnit(),
+            preMetered: false,
+            prepared: out var prepared,
+            reason: out var reason,
+            tick: firing.Tick
+        )) {
+            return Refuse(
+                code: RuleEffectRefusal.MutationRejected,
+                reason: reason,
+                refusal: out refusal
+            );
+        }
+
+        m_preparedDocument = prepared;
+
+        return true;
+    }
+    /// <inheritdoc/>
+    public void CommitTransactional(in EffectFiring firing) {
+        if (m_preparedDocument is not { } prepared) {
+            return;
+        }
+
+        m_preparedDocument = null;
+        m_documentArms.Clear();
+
+        // The unit was composed against the proposed document, and its install re-seeds the arena from what it
+        // composed, so that proposal is what is installed under it. The scope has committed with nothing written
+        // since, so the arena holds exactly what the proposal read.
+        _ = Host.AdoptPublication(
+            publication: Proposed(),
+            reconcile: false
+        );
+        m_proposedPublication = null;
+        Host.Document.InstallPrepared(
+            connectionId: SubmissionEnvelope.LocalConnectionId,
+            correlationId: 0,
+            prepared: prepared
+        );
+    }
+
+    // The proposal is taken once per firing: its preflights run after the firing's last arena write.
+    private WorldArenaPublication Proposed() => (m_proposedPublication ??= Host.ProposePublication());
+    // One row travels as itself, so its journal entry is the mutation it always was; several travel as one batch.
+    private WorldMutation DocumentUnit() => ((m_documentArms.Count == 1)
+        ? m_documentArms[0]
+        : new WorldMutation.Batch(
+            Mutations: [.. m_documentArms],
+            Principal: WorldPrincipal.World
+        )
+    );
+
     /// <inheritdoc/>
     public bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         switch (effect) {
@@ -60,6 +151,8 @@ public sealed partial class WorldRuleHost {
                     preflight: firing.Preflight,
                     refusal: out refusal
                 );
+            case WorldPoseCellEffect cellPose:
+                return FirePoseCell(effect: cellPose, preflight: firing.Preflight, refusal: out refusal);
             case WorldPoseEffect pose:
                 return FirePose(
                     effect: pose,
@@ -102,7 +195,7 @@ public sealed partial class WorldRuleHost {
         );
 
         return ((RuleReads.TryKeyIndex(
-            catalog: Host.Arena.Catalog,
+            keys: Host.Arena.Keys,
             index: out var index,
             key: resolved
         ) && (index >= 0L) && (index <= int.MaxValue))
@@ -279,16 +372,37 @@ public sealed partial class WorldRuleHost {
 
         refusal = EffectRefusal.None;
 
-        if (preflight) {
-            return true;
-        }
-
         var magnitude = FixedQ4816.FromRawBits(value: magnitudeFact.ToRaw(kind: CellKind.Fixed));
+        var impulse = (heading.FixedOrientation.Rotate(vector: RigidImpulseLocalForward) * magnitude);
+        var accepted = true;
 
-        if (!target.TryApplyRigidImpulse(
-            impulse: (heading.FixedOrientation.Rotate(vector: RigidImpulseLocalForward) * magnitude),
-            velocityCeiling: Host.Population.RigidVelocityCeiling
-        )) {
+        // A preflighted impulse lands on the velocity the firing's earlier impulses would leave the body at, so two
+        // that each fit and together pass the ceiling are refused before the commit, where the firing still rewinds.
+        if (preflight) {
+            accepted = target.TryProjectRigidImpulse(
+                impulse: impulse,
+                projected: out var projected,
+                velocity: (m_preflightRigidVelocity.TryGetValue(
+                    key: targetIndex,
+                    value: out var pending
+                )
+                    ? pending
+                    : target.RigidVelocity),
+                velocityCeiling: Host.Population.RigidVelocityCeiling
+            );
+
+            if (accepted) {
+                m_preflightRigidVelocity[targetIndex] = projected;
+
+                return true;
+            }
+        } else {
+            accepted = target.TryApplyRigidImpulse(
+                impulse: impulse,
+                velocityCeiling: Host.Population.RigidVelocityCeiling
+            );
+        }
+        if (!accepted) {
             return Refuse(
                 code: WorldRuleEffectRefusal.RigidImpulseOutOfRange,
                 reason: $"body:{targetIndex} impulse is not representable or would exceed the world's declared speed ceiling ({((double)Host.Population.RigidVelocityCeiling):0.###})",
@@ -347,6 +461,25 @@ public sealed partial class WorldRuleHost {
     }
     // Body state, not document state: the same WorldBody.Pose door body.pose uses, as the world's own act — no
     // drive-gate or grant check, since a gated body is one a rule still needs to move.
+    private bool FirePoseCell(WorldPoseCellEffect effect, bool preflight, out EffectRefusal refusal) {
+        var index = ResolveWorldBodyRef(bodyRef: effect.Body);
+        var topology = WorldTopologyCompilation.Find(definition: Host.Definition, name: effect.Topology);
+
+        if (Host.Body(index: index) is not { } body) {
+            return Refuse(code: WorldRuleEffectRefusal.BodyInactive, reason: $"body:{index} is inactive", refusal: out refusal);
+        }
+        if ((topology is null) || !RuleExpressions.TryEvaluate(fault: out _, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell) || (cell < 0) || (cell >= topology.CellCount)) {
+            return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
+        }
+        refusal = EffectRefusal.None;
+        if (!preflight) {
+            var centre = topology.CellCentre(cell: ((int)cell));
+
+            body.Pose(position: new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z)),
+                yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        }
+        return true;
+    }
     private bool FirePose(WorldPoseEffect effect, bool preflight, out EffectRefusal refusal) {
         var bodyIndex = ((effect.KeyFrom is { } keyFrom)
             ? ResolveBodyKeyIndex(
@@ -478,7 +611,7 @@ public sealed partial class WorldRuleHost {
         )) {
             if (!Host.Arena.TryMint(
                 key: out _,
-                name: Host.Arena.Catalog.Keys[key],
+                name: Host.Arena.Keys[key],
                 reason: out reason,
                 rowOrdinal: laneOrdinal,
                 value: CellValue.Int(value: value)
@@ -566,10 +699,6 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        // A document mutation composes against the installed document and its install re-seeds the arena from what
-        // it composed, so the tick's rule writes go into the document first or the re-seed drops them.
-        _ = Host.InstallArenaExport();
-
         WorldMutation mutation = (effect.Write switch {
             WorldDocumentWrite.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
             Panel: effect.HudPanel!,
@@ -589,56 +718,36 @@ public sealed partial class WorldRuleHost {
         ),
         });
 
-        if (firing.Preflight) {
-            // A host preflights what it can so a post-commit refusal is a host failure, never an authored one.
-            if (!WorldDocument.TryCompose(
-                candidate: out var candidate,
-                current: Host.Definition,
-                engineTick: firing.EngineTick,
-                evictedKey: out _,
-                instanceIdentity: Host.InstanceIdentity,
-                mutation: mutation,
-                reason: out var composeReason,
-                tick: firing.Tick
-            )) {
-                return Refuse(
-                    code: RuleEffectRefusal.MutationRejected,
-                    reason: composeReason,
-                    refusal: out refusal
-                );
-            }
-            if (!Host.Document.TryValidateMutationCandidate(
-                candidate: candidate,
-                compilation: out _,
-                mutation: mutation,
-                reason: out var validateReason,
-                retainCompilation: false
-            )) {
-                return Refuse(
-                    code: RuleEffectRefusal.MutationRejected,
-                    reason: validateReason,
-                    refusal: out refusal
-                );
-            }
-
-            return true;
-        }
-        if (!Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            engineTick: firing.EngineTick,
-            mutation: mutation,
-            preMetered: false,
-            tick: firing.Tick
-        )) {
+        // A document row is never fired on its own: the evaluator preflights it, the firing's rows are prepared as one
+        // unit (PrepareTransactional), and the commit installs that unit (CommitTransactional).
+        if (!firing.Preflight) {
             return Refuse(
                 code: RuleEffectRefusal.MutationRejected,
-                reason: "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason",
+                reason: "a document row is installed with its firing's commit, never delivered after it",
                 refusal: out refusal
             );
         }
 
-        return true;
+        // The batch so far is composed against the document the firing proposes, so each row is judged against what
+        // the rows before it leave and a row that cannot follow them is refused by name. Every other gate runs once,
+        // over the whole unit, in PrepareTransactional. Nothing is installed here: the firing's scope is still open,
+        // and a document carrying writes that may yet rewind would keep them.
+        m_documentArms.Add(item: mutation);
+
+        return (WorldDocument.TryCompose(
+            candidate: out _,
+            current: Proposed().Definition,
+            engineTick: firing.EngineTick,
+            evictedKey: out _,
+            instanceIdentity: Host.InstanceIdentity,
+            mutation: DocumentUnit(),
+            reason: out var composeReason,
+            tick: firing.Tick
+        ) || Refuse(
+            code: RuleEffectRefusal.MutationRejected,
+            reason: composeReason,
+            refusal: out refusal
+        ));
     }
     private int ResolveWorldBodyRef(WorldBodyRef bodyRef) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
@@ -650,7 +759,7 @@ public sealed partial class WorldRuleHost {
         ? ((int)cellIndex)
         : -1),
         CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is not null)
-        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Catalog.Keys.TryGetName(
+        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Keys.TryGetName(
             key: BoundEachKey,
             name: out var placementName
         )

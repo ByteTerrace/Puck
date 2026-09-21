@@ -11,7 +11,9 @@ namespace Puck.World.Tests;
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class WorldVerdictDoorLawTests {
     private const string Counter = "counter";
+    private const string Flag = "flag";
     private const string Verdict = "answer";
+    private const string Witness = "answerSeen";
 
     private static WorldDefinition Document(long passWhen, long failWhen) => (Fixtures.BuildDocument().WithWorldState(rows: [
         new WorldStateRow(
@@ -39,6 +41,23 @@ public sealed class WorldVerdictDoorLawTests {
                 Gate: "the counter reached its mark",
                 Status: CellName.Parse(candidate: "ok")
             )
+        ),
+        new WorldStateRow(
+            Name: CellName.Parse(candidate: Flag),
+            Kind: CellKind.Bool,
+            Cells: [new StateCell(
+                    Key: CellName.Parse(candidate: "f"),
+                    Value: CellValue.Bool(value: true)
+                )]
+        ),
+        new WorldStateRow(
+            Name: CellName.Parse(candidate: Witness),
+            Kind: CellKind.Bool,
+            Cells: [new StateCell(
+                    Key: CellName.Parse(candidate: "f"),
+                    Value: CellValue.Bool(value: false)
+                )],
+            Witness: CellName.Parse(candidate: Verdict)
         ),
     ]) with {
         Rules = [
@@ -75,8 +94,28 @@ public sealed class WorldVerdictDoorLawTests {
                 Key: "saw",
                 State: Verdict
             ),
+            new ActionEffect.SetState(
+                FromKey: "f",
+                FromState: Flag,
+                Key: "f",
+                State: Witness
+            ),
         ]
     );
+    private static long? Seen(WorldFixture fixture) => StateRows.FindCell(
+        cells: WorldDefinitionRows.FindStateRow(
+            rows: fixture.Server.Definition.State,
+            name: Witness
+        )!.Cells,
+        key: CellName.Parse(candidate: "f")
+    )?.Value.Raw;
+    private static void Lower(WorldFixture fixture) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+        Key: "f",
+        Kind: WorldDocumentWriteKind.Set,
+        Principal: WorldPrincipal.Console,
+        Row: Flag,
+        Value: 0L
+    ));
     private static long? Cell(WorldFixture fixture, string key) => StateRows.FindCell(
         cells: WorldDefinitionRows.FindStateRow(
             rows: fixture.Server.Definition.State,
@@ -177,7 +216,12 @@ public sealed class WorldVerdictDoorLawTests {
             expected: WorldVerdict.Fail
         );
         Assert.NotNull(value: settled);
+        Assert.Equal(
+            actual: Seen(fixture: fixture),
+            expected: 1L
+        );
 
+        Lower(fixture: fixture);
         Set(
             fixture: fixture,
             value: 7L
@@ -185,6 +229,11 @@ public sealed class WorldVerdictDoorLawTests {
         fixture.Step();
         fixture.Step();
         fixture.Step();
+
+        Assert.Equal(
+            actual: Seen(fixture: fixture),
+            expected: 1L
+        );
 
         // The control: the pass rule's gate is open now, and a verdict that had NOT failed would read Pass here.
         Assert.Equal(
@@ -222,6 +271,7 @@ public sealed class WorldVerdictDoorLawTests {
         );
         fixture.Step();
         fixture.Step();
+        Lower(fixture: fixture);
         Set(
             fixture: fixture,
             value: 7L
@@ -236,6 +286,47 @@ public sealed class WorldVerdictDoorLawTests {
                 key: "ok"
             ),
             expected: WorldVerdict.Pass
+        );
+        Assert.Equal(
+            actual: Seen(fixture: fixture),
+            expected: 0L
+        );
+    }
+    [Fact]
+    public void TheCellMutationDoorRefusesAWriteToAWitnessByName() {
+        var previous = Console.Error;
+        var captured = new StringWriter();
+
+        try {
+            Console.SetError(newError: captured);
+
+            using var fixture = Fixtures.FreshServer(definition: Document(
+                failWhen: 9L,
+                passWhen: 5L
+            ));
+
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+                Key: "f",
+                Kind: WorldDocumentWriteKind.Set,
+                Principal: WorldPrincipal.Console,
+                Row: Witness,
+                Value: 1L
+            ));
+            fixture.Step();
+            fixture.Step();
+
+            Assert.Equal(
+                actual: Seen(fixture: fixture),
+                expected: 0L
+            );
+        } finally {
+            Console.SetError(newError: previous);
+        }
+
+        Assert.Contains(
+            actualString: captured.ToString(),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"'{Witness}' is a witness of the verdict '{Verdict}'"
         );
     }
     [Fact]
@@ -279,7 +370,14 @@ public sealed class WorldVerdictDoorLawTests {
         Assert.Contains(
             actualString: captured.ToString(),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: WorldVerdict.RefuseWrite(row: CellName.Parse(candidate: Verdict))
+            expectedSubstring: WorldVerdict.RefuseWrite(row: new WorldStateRow(
+                Name: CellName.Parse(candidate: Verdict),
+                Kind: CellKind.Int,
+                Verdict: new WorldVerdictTrait(
+                    Gate: "the counter reached its mark",
+                    Status: CellName.Parse(candidate: "ok")
+                )
+            ))
         );
     }
 }

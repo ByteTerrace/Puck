@@ -160,6 +160,18 @@
       ]
     }
   },
+  "machines": [
+    {
+      "name": "instrument",
+      "engine": "tune-instrument",
+      "configuration": {
+        "schema": "puck.tune-instrument.configuration.v1",
+        "content": {
+          "path": "fast-instrument.audio.json"
+        }
+      }
+    }
+  ],
   "screens": [
     {
       "index": 0,
@@ -184,9 +196,8 @@
       "round": 0,
       "source": {
         "$type": "machine",
-        "engine": "tune-instrument",
-        "contentPath": "fast-instrument.audio.json",
-        "options": null
+        "instance": "instrument",
+        "output": "video"
       },
       "route": {
         "engageable": true,

@@ -27,6 +27,89 @@ Compilation checks the source; vocabulary validation checks whether the
 resulting content is admitted. Native cartridge compilation and shader
 compilation add their own target requirements.
 
+## Pinning file assets
+
+Use `asset "path"` when a world value names bytes that live beside the source,
+for example a machine cartridge:
+
+```puck
+machines [
+  {
+    name: "cabinet"
+    engine: "gaming-brick"
+    configuration {
+      schema: "puck.gaming-brick.configuration.v1"
+      model: "cgb"
+      content { path: asset "content/game.gb" }
+    }
+    running: false
+  }
+]
+```
+
+The path uses forward slashes and resolves from the file that wrote it. An
+imported module therefore owns paths relative to that module, even when a root
+source instantiates it. Compilation writes the equivalent path relative to the
+root source so the emitted world can still find the same bytes.
+
+The root source has one sibling `<stem>.assets.json` lock. It records the full
+SHA-256 digest of every `asset` reference. An ordinary compile refuses a missing
+lock entry, changed bytes, an unreadable file, or a path or asset set over the
+language's bounds. It never accepts a byte change on its own.
+
+Refresh the complete lock only when the asset change is intentional:
+
+```powershell
+puck compile path/to/world.puck --validate --update-assets
+```
+
+The refresh happens only after compilation and validation succeed. It replaces
+the lock's asset set, so pins no longer referenced by the source are removed.
+Sources with asset references currently compile beside their source directory;
+`--output` may choose another filename there, but not another directory, because
+the compiled paths remain relative to that location. Each output and the lock
+is replaced atomically as its own file. Publication spans several files, so an
+I/O failure partway through cannot make the whole set atomic.
+
+## Composing neighbouring worlds
+
+One `.puck` source can emit several sibling documents and connect them without repeating topology rows:
+
+```puck
+module patch(origin: Point) {
+  ground floor { center: origin  size [12m, 12m] }
+  spawn arrival { at: origin + [0, 0, 4m]  yaw: 180deg }
+}
+
+world west = patch(origin: [0m, 0m, 0m])
+world east = patch(origin: [12m, 0m, 0m])
+border west.east, east.west { height: 6m  hysteresis: 2m }
+```
+
+Each `world` becomes `<name>.world.json`. A `border` writes reciprocal references, persisted global destinations,
+and adjacency rows. A bare cardinal endpoint selects the side of the world's only ground; with several grounds,
+write the ground name too, such as `west.floor.east`. The selected edges must have equal size and meet at the same
+composition coordinate. `width` may narrow both edges around their centres; it cannot exceed either edge.
+
+A floor or ceiling boundary writes its frame instead of deriving it from ground geometry:
+
+```puck
+border island.under, cavern.sky {
+  center [0m, 80m, 0m]  yaw: 0deg  pitch: -90deg
+  width: 90m  height: 90m  hysteresis: 2m
+}
+```
+
+The reciprocal frame reverses yaw and pitch. `hysteresis` is a minimum ownership deadband in world units; the
+runtime uses the larger of this value and its collider/motion-derived safety threshold, and reciprocal rows must
+agree.
+
+`door island.arch1, parlor.arrival` connects an authored placement face (`arch1/portal` by default) to the named
+spawn and creates a return copy of that arch in the destination. Travel maps through the two face frames in both
+directions, so the spawn pose locates and turns the return arch. The source arch must have a self-contained world
+transform, prototype, and face source; a parented arch or a face that depends on another camera or machine is
+refused rather than copied incompletely.
+
 Keep a runnable example small while learning. Make one change, validate it,
 then inspect the result in the actual host. A successful source compilation
 alone does not prove that a shader renders correctly or that a cartridge plays

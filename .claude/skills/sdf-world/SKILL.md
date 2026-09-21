@@ -21,7 +21,16 @@ For scoped material composition, `mapCore` must save/reset/restore
 A losing scope must not tint the parent; a winning hard-union scope must retain
 its internal seam. Verify both cases with contrasting scoped materials against
 an unrelated ground surface. The two-material outer-seam behavior is described
-in `docs/rendering/sdf/materials-and-primitives.md`.
+in `docs/rendering/sdf/reference/materials-and-primitives.md`.
+
+Path (#21) is a bounded presentation profile: the author compiler flattens
+line/Bezier/arc contours and varying-width strokes into at most 128 edges.
+Keep SdfPathProfile/SdfPathCompiler, SdfProgram.Path's validation/packing,
+SdfProgramBuilder.Path, sdfPathSolid, and the Full kernel selector aligned.
+Each edge spends two uint4 table entries. Capacity probes use ReservePathTables
+instead of allocating dummy contours. The deterministic query evaluator refuses
+Path; it must never silently substitute a collider field. Verify with the path
+laws and the separate `tests/Puck.Parity/paths.puck` fixture on both backends.
 
 Factual and procedural only: settled contracts, their exact sync points, and
 how to verify. The user's current instruction outranks it — if this file
@@ -159,10 +168,11 @@ measured march or GPU-time multipliers.
 
 ## Engine semantics (settled)
 
-- **Capacities freeze at construction**: program word count, instance-mask
-  width, dynamic-transform slots. `UploadProgram` REJECTS a program exceeding
-  any of them (loud `ArgumentException`). A hot-swapping frame source declares
-  its envelope up front: `SdfWorldEngineOptions.ProgramWordCapacity` /
+- **Program and instance capacities grow on upload** after all frame-ring fences retire.
+  Growth replaces the program, masks, tile bounds, and staging/device instance grids;
+  rebind cull-args, beam, instance-cull, views, composite and frame-upload consumers together.
+  Images, baked bricks and pipelines persist. Dynamic-transform slots remain fixed.
+  A frame source declares its initial reserve: `SdfWorldEngineOptions.ProgramWordCapacity` /
   `InstanceCapacity` / `DynamicTransformCapacity` (floors, maxed with the
   initial program) — mirrored as `SdfEngineNode` ctor params and as
   `SdfWorldRenderSpec.ProgramWordCapacity`/`InstanceCapacity` in the render

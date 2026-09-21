@@ -90,7 +90,8 @@ public static class WorldModuleExports {
         _ = WorldModuleNamespace.Rewrite(
             text: text,
             role: field.Role,
-            declared: probe
+            declared: probe,
+            scope: site
         );
 
         foreach (var name in probe.Seen) {
@@ -129,17 +130,17 @@ public static class WorldModuleExports {
                 configuration: configuration,
                 descriptor: descriptor.Configuration,
                 visitor: site => {
-                if (
-                    (site.Field.Role is not (MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference)) ||
-                    (site.Value is not JsonValue value) ||
-                    !value.TryGetValue<string>(value: out var text) ||
-                    (text.Length == 0)
-                ) {
-                    return;
-                }
+                    if (
+                        (site.Field.Role is not (MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference)) ||
+                        (site.Value is not JsonValue value) ||
+                        !value.TryGetValue<string>(value: out var text) ||
+                        (text.Length == 0)
+                    ) {
+                        return;
+                    }
 
-                layer.References.Add(item: (text, WorldExportFacet.Read, site.Value!));
-            }
+                    layer.References.Add(item: (text, WorldExportFacet.Read, site.Value!));
+                }
             );
         }
     }
@@ -149,49 +150,52 @@ public static class WorldModuleExports {
         WorldModuleNamespace.Visit(
             node: tree,
             type: typeof(WorldDefinition),
-            visitor: (_, _, value, field) => {
-            if (field.Role == WorldNameRole.Declares) {
-                if (
-                    (value is JsonValue leaf) &&
-                    leaf.TryGetValue<string>(value: out var text) &&
-                    (text.Length > 0)
-                ) {
-                    _ = layer.Declared.Add(item: text);
-                }
-
-                return;
-            }
-
-            switch (value) {
-                case JsonArray list when (field.Role == WorldNameRole.Names):
-                    foreach (var element in list) {
-                        if (
-                            (element is JsonValue item) &&
-                            item.TryGetValue<string>(value: out var spelled)
-                        ) {
-                            Collect(
-                                field: field,
-                                layer: layer,
-                                probe: probe,
-                                site: element,
-                                text: spelled
-                            );
-                        }
+            visitor: (_, _, value, field, memberType) => {
+                if (field.Role == WorldNameRole.Declares) {
+                    if (
+                        (value is JsonValue leaf) &&
+                        leaf.TryGetValue<string>(value: out var text) &&
+                        (text.Length > 0)
+                    ) {
+                        _ = layer.Declared.Add(item: text);
                     }
 
-                    break;
-                case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                    Collect(
-                        field: field,
-                        layer: layer,
-                        probe: probe,
-                        site: value,
-                        text: text
-                    );
+                    return;
+                }
 
-                    break;
+                switch (WorldChannelNodes.Spelled(
+                    memberType: memberType,
+                    value: value
+                )) {
+                    case JsonArray list when (field.Role == WorldNameRole.Names):
+                        foreach (var element in list) {
+                            if (
+                                (element is JsonValue item) &&
+                                item.TryGetValue<string>(value: out var spelled)
+                            ) {
+                                Collect(
+                                    field: field,
+                                    layer: layer,
+                                    probe: probe,
+                                    site: element,
+                                    text: spelled
+                                );
+                            }
+                        }
+
+                        break;
+                    case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
+                        Collect(
+                            field: field,
+                            layer: layer,
+                            probe: probe,
+                            site: value,
+                            text: text
+                        );
+
+                        break;
+                }
             }
-        }
         );
 
         if (catalog is not null) {
@@ -202,7 +206,52 @@ public static class WorldModuleExports {
             );
         }
 
+        CollectPoolBindingWrites(tree, new Dictionary<string, string>(comparer: StringComparer.Ordinal), layer);
+
         return layer;
+    }
+    // Lexical instance bindings deliberately do not name module rows. Follow each binding back to its pool so
+    // a write/release through it requires the pool's action export, even when iteration needed only a read export.
+    private static void CollectPoolBindingWrites(JsonNode node, IReadOnlyDictionary<string, string> bindings, Layer layer) {
+        if (node is JsonArray array) {
+            foreach (var child in array) {
+                if (child is not null) { CollectPoolBindingWrites(bindings: bindings, layer: layer, node: child); }
+            }
+            return;
+        }
+        if (node is not JsonObject obj) { return; }
+
+        var scope = bindings;
+        var kind = obj["$type"]?.ToString();
+        Dictionary<string, string>? locals = null;
+
+        void Bind(string? alias, string? pool) {
+            if (string.IsNullOrEmpty(value: alias) || string.IsNullOrEmpty(value: pool)) { return; }
+            locals ??= new Dictionary<string, string>(collection: bindings, comparer: StringComparer.Ordinal);
+            locals[alias] = pool;
+            scope = locals;
+        }
+        if (obj["poolForEach"] is JsonObject each) { Bind(alias: each["binding"]?.ToString(), pool: each["pool"]?.ToString()); }
+        if (kind is "claim" or "claimPair" or "forEachPool") { Bind(alias: obj["binding"]?.ToString(), pool: obj["pool"]?.ToString()); }
+        if (obj.ContainsKey(propertyName: "left") && obj.ContainsKey(propertyName: "right") && obj.ContainsKey(propertyName: "effects") && (kind is null)) {
+            Bind(alias: "left", pool: obj["left"]?.ToString());
+            Bind(alias: "right", pool: obj["right"]?.ToString());
+        }
+        if ((kind == "release") && (obj["binding"] is { } release) && scope.TryGetValue(key: release.ToString(), value: out var releasedPool)) {
+            layer.References.Add(item: (releasedPool, WorldExportFacet.Action, release));
+        }
+        if (kind is "setState" or "addState" or "pushState" or "removeStateCell" or "scheduleState") {
+            if ((obj["state"] is JsonValue value) && value.TryGetValue<string>(value: out var text)) {
+                var separator = text.IndexOf(value: '.');
+
+                if ((separator > 0) && scope.TryGetValue(key: text[..separator], value: out var writtenPool)) {
+                    layer.References.Add(item: (writtenPool, WorldExportFacet.Action, value));
+                }
+            }
+        }
+        foreach (var child in obj) {
+            if (child.Value is not null) { CollectPoolBindingWrites(child.Value, scope, layer); }
+        }
     }
 
     /// <summary>Checks every layer of one file's composition: walks each import once to learn what it declares and

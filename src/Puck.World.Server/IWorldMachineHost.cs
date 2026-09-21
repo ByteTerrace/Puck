@@ -167,8 +167,11 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="candidate">The candidate definition to prepare against.</param>
     /// <param name="plan">The prepared plan on success; must be disposed if not committed.</param>
     /// <param name="reason">A refusal reason on failure.</param>
+    /// <param name="admission">The unchanged candidate's validation result from this preparation operation,
+    /// or null to validate here. A result for another document or catalog is refused.</param>
     /// <returns><see langword="true"/> when preparation succeeded.</returns>
-    bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason);
+    bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason,
+        WorldDefinitionAdmission? admission = null);
     /// <summary>Commits a previously prepared plan.</summary>
     /// <param name="plan">The prepared plan.</param>
     void Commit(IWorldMachinePreparedPlan plan);

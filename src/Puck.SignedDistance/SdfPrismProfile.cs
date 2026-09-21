@@ -18,6 +18,8 @@ public enum SdfPrismProfileKind {
     /// <see cref="SdfPrismProfile.CornerRadius"/> reused as a uniform corner-rounding radius. The exact
     /// convex-polygon SDF, not the study's smoothed half-plane intersection.</summary>
     Convex,
+    /// <summary>Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget.</summary>
+    Path,
 }
 /// <summary>Authored profile controls for a solid prism. The profile is extruded along local Z.</summary>
 /// <param name="Kind">The profile family.</param>
@@ -28,7 +30,8 @@ public enum SdfPrismProfileKind {
 /// <param name="Vertices"><see cref="SdfPrismProfileKind.Convex"/> only: 3 to <see cref="MaxConvexVertices"/> local
 /// XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no
 /// coincident or collinear vertices, and convex. Ignored by every other kind.</param>
-public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadius = 0.15f, int Sides = 6, IReadOnlyList<Vector2>? Vertices = null) {
+/// <param name="Path">Required only for Path; its points are normalized profile coordinates.</param>
+public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadius = 0.15f, int Sides = 6, IReadOnlyList<Vector2>? Vertices = null, SdfPathProfile? Path = null) {
     /// <summary>The most vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry — the side table's
     /// per-shape budget (<see cref="SdfProgramBuilder.MaxConvexPolygonWordsPerShape"/> covers it) and the packed
     /// instruction's 4-bit vertex-count lane.</summary>
@@ -42,7 +45,14 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
         (Enum.IsDefined(value: Kind) &&
         float.IsFinite(f: CornerRadius) && (CornerRadius >= 0f) && (CornerRadius <= 1f) &&
         (Sides >= 3) && (Sides <= 32) &&
-        ((Kind != SdfPrismProfileKind.Convex) || IsValidConvexHull(vertices: Vertices)));
+        ((Kind != SdfPrismProfileKind.Convex) || IsValidConvexHull(vertices: Vertices)) &&
+        ((Kind == SdfPrismProfileKind.Path) ? IsValidPath() : (Path is null)));
+
+    private bool IsValidPath() {
+        if ((Path is null) || (CornerRadius != 0f) || (Vertices is not null)) { return false; }
+        try { _ = Path.Compile(); return true; } catch (ArgumentException) { return false; }
+    }
+
     /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex polygon: 3 to
     /// <see cref="MaxConvexVertices"/> finite points inside the unit square (each coordinate in [-1, 1] — the
     /// profile is scaled by the shape's own XY scale like every other Prism profile, and the Prism's cull reach

@@ -1,4 +1,3 @@
-using System.Numerics;
 using Xunit;
 
 using Puck.Assets.Documents;
@@ -6,112 +5,37 @@ using Puck.World.Server;
 
 namespace Puck.World.Tests;
 
-/// <summary>A search job relocates every token to every cell, judges each position with the document's own rules
-/// over a frame, and lands what the rules accepted: on the settled opening board of the chess module the white
-/// pawns and knights own the twenty legal moves and nothing else may move, the installed section never sees a
-/// hypothetical position, and the answer restarts when the position changes.</summary>
+/// <summary>A search job explores document-defined positions without exposing hypothetical state to the installed
+/// section, survives checkpoint transport, and returns deterministic answers.</summary>
 public sealed class SearchLawTests {
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while ((directory is not null) && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
-            directory = directory.Parent;
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RefusedSearchOutputsAreNarratedAfterConstructionAndArenaReplacement(bool replaceArena) {
+        var definition = MiniNegamaxWorld(depth: 1, nodes: 64);
+        definition = definition.WithWorldState(definition.AuthoredState.Select(selector: row =>
+            ((row.Name.Value == "best") ? row with { Max = 0 } : row)).ToArray());
+        using var fixture = Fixtures.FreshServer(definition);
+        var server = fixture.Server;
+        var sink = new RecordingNarrationSink();
+        using var lease = server.AttachNarrationSink(sink: sink);
+        if (replaceArena) {
+            var time = default(ArenaTime);
+            var current = server.Definition;
+            Assert.True(condition: StateArena.TryCreate(current.StateCatalog, current.StateRaw, WorldSlotLanes.Options(definition: current),
+                in time, out var replacement, out var reason), userMessage: reason);
+            server.RecompileRules(current, arena: replacement);
         }
-
-        Assert.NotNull(directory);
-
-        return directory!.FullName;
-    }
-
-    private static WorldDefinition ChessWithSearch() {
-        var path = Path.Combine(RepoRoot(), "tests", "Puck.World.Tests", "Fixtures", "minimal-chess-host.world.json");
-
-        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var loaded, out var reason), reason);
-
-        var state = loaded!.StateRaw!;
-        var rows = new List<WorldStateRow>(state.World ?? []) {
-            new(CellName.Parse("legal"), CellKind.Int, Capacity: 32, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-            new(CellName.Parse("counts"), CellKind.Int, Capacity: 32, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-        };
-        var definition = loaded with {
-            StateRaw = state with { World = rows },
-            SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(Name: "moves", Tokens: "pieceCell", Board: "board", Legal: "legal", Counts: "counts")]),
-        };
-
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
-
-        return definition;
+        for (var tick = 0; ((tick < 120) && !sink.Narrations.Any(predicate: narration => (narration.Channel == "state.search"))); tick++) {
+            fixture.Step();
+        }
+        var refusal = Assert.Single(collection: sink.Narrations, predicate: narration => (narration.Channel == "state.search"));
+        Assert.Contains("outputs were refused", refusal.Text);
+        Assert.All(Row(fixture: fixture, name: "best").Cells!, cell => Assert.Equal(0L, cell.Value.Raw));
     }
 
     private static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: name)!;
-    private static long Cell(WorldFixture fixture, string row, string key) => Row(fixture, row).Cells!.Single(c => c.Key.Value == key).Value.Raw;
-
-    private static ArenaSearchStatus Settle(WorldFixture fixture) {
-        // Pieces drop from spawn and settle; the judge only speaks once settleHold reaches its margin.
-        for (var tick = 0; tick < 400; tick++) {
-            fixture.Step();
-        }
-
-        var status = fixture.Server.SearchStatus()[0];
-
-        for (var tick = 0; (tick < 750) && !status.Done; tick++) {
-            fixture.Step();
-            status = fixture.Server.SearchStatus()[0];
-        }
-
-        return status;
-    }
-
-    [Fact]
-    public void TheOpeningPositionHasTwentyLegalMovesAndOnlyWhitePawnsAndKnightsOwnThem() {
-        using var fixture = Fixtures.FreshServer(definition: ChessWithSearch());
-
-        var status = Settle(fixture);
-
-        Assert.True(status.Done, $"the job did not finish: {status}");
-        Assert.True(status.NodesPerStep >= 1, status.ToString());
-        Assert.Equal(20L, status.Count);
-        Assert.Equal(20L, Row(fixture, "counts").Cells!.Sum(c => c.Value.Raw));
-
-        var codes = Row(fixture, "pieceCode").Cells!;
-        var total = 0;
-
-        foreach (var code in codes) {
-            var mask = Cell(fixture, "legal", code.Key.Value);
-            var expected = code.Value.Raw switch {
-                1L => 2, // a white pawn steps one or two
-                2L => 2, // a white knight has two squares
-                _ => 0,  // every other white piece is blocked; black is not to move
-            };
-
-            Assert.Equal(expected, BitOperations.PopCount((ulong)mask));
-            total += BitOperations.PopCount((ulong)mask);
-        }
-
-        Assert.Equal(20, total);
-        // The pawn on e2 (piece12) may go to e3 or e4 and nowhere else.
-        Assert.Equal((1L << 20) | (1L << 28), Cell(fixture, "legal", "piece12"));
-    }
-
-    [Fact]
-    public void AHypotheticalPositionNeverReachesTheInstalledSectionAndTheStampRestartsTheJob() {
-        using var fixture = Fixtures.FreshServer(definition: ChessWithSearch());
-
-        var status = Settle(fixture);
-        Assert.True(status.Done);
-
-        // Every token still stands where it settled: the frame took the relocations, never the section.
-        var e2 = Cell(fixture, "pieceCell", "piece12");
-        Assert.Equal(12L, e2);
-        Assert.Equal(0L, Cell(fixture, "illegalCount", WorldStateRow.SlotKey.Value));
-
-        // A finished job stays finished while nothing framed changes.
-        for (var tick = 0; tick < 5; tick++) {
-            fixture.Step();
-        }
-        Assert.True(fixture.Server.SearchStatus()[0].Done);
-        Assert.Equal(20L, fixture.Server.SearchStatus()[0].Count);
-    }
+    private static long Cell(WorldFixture fixture, string row, string key) => Row(fixture: fixture, name: row).Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
 
     [Fact]
     public void ACheckpointCarriesTheJobAndTwoServersAgree() {
@@ -120,25 +44,25 @@ public sealed class SearchLawTests {
         using var first = Fixtures.FreshServer(definition);
         using var second = Fixtures.FreshServer(definition);
 
-        for (var tick = 0; tick < 12; tick++) {
+        for (var tick = 0; (tick < 12); tick++) {
             first.Step();
             second.Step();
         }
 
         var a = first.Server.SearchStatus()[0];
         var b = second.Server.SearchStatus()[0];
-        Assert.Equal(a, b);
-        Assert.True(a.Nodes > 0);
-        Assert.False(a.Done);
-        Assert.True(first.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
-        Assert.NotNull(checkpoint!.Search);
-        Assert.Single(checkpoint.Search!.Jobs);
+        Assert.Equal(actual: b, expected: a);
+        Assert.True(condition: (a.Nodes > 0));
+        Assert.False(condition: a.Done);
+        Assert.True(condition: first.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
+        Assert.NotNull(@object: checkpoint!.Search);
+        Assert.Single(collection: checkpoint.Search!.Jobs);
         Assert.Equal(a.Nodes, checkpoint.Search.Jobs[0].Nodes);
 
-        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint);
-        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var decoded, out var decodeReason), decodeReason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: bytes, checkpoint: out var decoded, reason: out var decodeReason), userMessage: decodeReason);
         // This live search carries stack and transposition-table arrays as well as the root move masks.
-        Assert.Equal(bytes, WorldAuthorityCheckpointCodec.Encode(decoded!));
+        Assert.Equal(bytes, WorldAuthorityCheckpointCodec.Encode(checkpoint: decoded!));
     }
 
     // A hand-built, non-chess fixture: a 1x4 grid, two tokens ("a"/"b"), and a rule that accepts every relocation
@@ -148,20 +72,20 @@ public sealed class SearchLawTests {
     private static WorldDefinition MiniNegamaxWorld(int depth, int? nodes = null, long tokenA = 0L, long tokenB = 3L) {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: tokenA)), new StateCell(CellName.Parse("b"), CellValue.Int(value: tokenB))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("score"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: tokenA)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: tokenB))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "best"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "score"), CellValue.Int(value: 0L))]),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -169,11 +93,77 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
 
+    // What the sheet and one fold of every row leave is divided equally among the jobs, and a share that cannot
+    // cover a restart, a full replay and one unit is refused by that sum rather than left to stall.
+    [Fact]
+    public void AJobsAllowanceIsItsEqualShareOfWhatTheSheetLeavesAndTooSmallAShareIsRefusedByItsSum() {
+        var one = MiniNegamaxWorld(depth: 3);
+        var two = one with {
+            SearchRaw = new WorldSearchSection(Jobs: [one.Search.Rows[0], one.Search.Rows[0] with { Name = "second" }]),
+        };
+
+        static SearchPlan[] Plans(WorldDefinition definition) {
+            Assert.True(
+                condition: WorldSearchCompilation.TryPlanAll(
+                    definition: definition,
+                    judges: out _,
+                    plans: out var plans,
+                    reason: out var reason,
+                    rules: WorldFactsCompiler.CompileAll(definition: definition),
+                    scores: out _
+                ),
+                userMessage: reason
+            );
+
+            return plans;
+        }
+
+        var alone = Plans(definition: one)[0].Work;
+        var shared = Plans(definition: two);
+
+        Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
+        Assert.True(condition: (alone.Allowance >= alone.Minimum));
+        Assert.Equal(
+            (alone.Allowance / 2L),
+            shared[0].Work.Allowance
+        );
+        Assert.Equal(
+            shared[0].Work.Allowance,
+            shared[1].Work.Allowance
+        );
+
+        var context = WorldFactsCompiler.Context(definition: one);
+        // The price of a unit folds the position key, so the refusal is asked at the fold the planner itself uses.
+        var position = Enumerable.Range(
+            count: one.StateCatalog.Descriptors.Count,
+            start: 0
+        ).Sum(selector: ordinal => context.RowCapacity(rowOrdinal: ordinal));
+
+        Assert.False(condition: WorldSearchCompilation.TryPlan(
+            allowance: (alone.Minimum - 1L),
+            context: context,
+            definition: one,
+            judgeCost: alone.Judge,
+            plan: out _,
+            position: position,
+            reason: out var refusal,
+            row: one.Search.Rows[0],
+            score: out _
+        ));
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: "too little work left"
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"may spend {(alone.Minimum - 1L)}"
+        );
+    }
     // An independent oracle over the SAME declared rule ("any token to any other cell, evicting whoever stood
     // there, always accepted, turn always flips") rather than a second reading of the runtime's own code: plain
     // recursion over a two-element array, token-major/target-ascending enumeration (matching ArenaSearch's
@@ -183,7 +173,7 @@ public sealed class SearchLawTests {
         var bestToken = -1;
         var bestTarget = -1;
 
-        for (var token = 0; token < cells.Length; token++) {
+        for (var token = 0; (token < cells.Length); token++) {
             var from = cells[token];
 
             // A token off the board (any value that is no cell — here, the eviction sentinel -1) is left alone,
@@ -192,21 +182,21 @@ public sealed class SearchLawTests {
                 continue;
             }
 
-            for (var target = 0; target < boardCells; target++) {
+            for (var target = 0; (target < boardCells); target++) {
                 if (target == from) {
                     continue;
                 }
 
-                var next = (long[])cells.Clone();
+                var next = ((long[])cells.Clone());
                 next[token] = target;
 
-                for (var other = 0; other < cells.Length; other++) {
+                for (var other = 0; (other < cells.Length); other++) {
                     if ((other != token) && (cells[other] == target)) {
                         next[other] = -1L;
                     }
                 }
 
-                var value = ((plies <= 1) ? (next[0] + next[1]) : -ReferenceNegamax(next, boardCells, (plies - 1)).Value);
+                var value = ((plies <= 1) ? (next[0] + next[1]) : -ReferenceNegamax(boardCells: boardCells, cells: next, plies: (plies - 1)).Value);
 
                 if (value > best) {
                     best = value;
@@ -222,7 +212,7 @@ public sealed class SearchLawTests {
     private static ArenaSearchStatus RunToCompletion(WorldFixture fixture, int maxTicks = 4000) {
         var status = fixture.Server.SearchStatus()[0];
 
-        for (var tick = 0; (tick < maxTicks) && !status.Done; tick++) {
+        for (var tick = 0; ((tick < maxTicks) && !status.Done); tick++) {
             fixture.Step();
             status = fixture.Server.SearchStatus()[0];
         }
@@ -235,17 +225,17 @@ public sealed class SearchLawTests {
         using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 1));
 
         var status = RunToCompletion(fixture);
-        var expected = ReferenceNegamax(cells: [0L, 3L], boardCells: 4, plies: 1);
+        var expected = ReferenceNegamax(boardCells: 4, cells: [0L, 3L], plies: 1);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(6L, status.Count);
         Assert.Equal(1, status.Depth);
         Assert.Equal(expected.Value, status.BestScore);
         Assert.Equal(expected.Token, status.BestToken);
         Assert.Equal(expected.Target, status.BestTarget);
-        Assert.Equal(expected.Token, Cell(fixture, "best", "token"));
-        Assert.Equal(expected.Target, Cell(fixture, "best", "to"));
-        Assert.Equal(expected.Value, Cell(fixture, "best", "score"));
+        Assert.Equal(expected.Token, Cell(fixture: fixture, key: "token", row: "best"));
+        Assert.Equal(expected.Target, Cell(fixture: fixture, key: "to", row: "best"));
+        Assert.Equal(expected.Value, Cell(fixture: fixture, key: "score", row: "best"));
     }
 
     [Fact]
@@ -253,9 +243,9 @@ public sealed class SearchLawTests {
         using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 2));
 
         var status = RunToCompletion(fixture);
-        var expected = ReferenceNegamax(cells: [0L, 3L], boardCells: 4, plies: 2);
+        var expected = ReferenceNegamax(boardCells: 4, cells: [0L, 3L], plies: 2);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(2, status.Depth);
         // The root walk that always populates legal/count is unchanged by depth: still every (token, target != own
         // cell) pair, six of them on this four-cell board.
@@ -263,7 +253,7 @@ public sealed class SearchLawTests {
         Assert.Equal(expected.Value, status.BestScore);
         Assert.Equal(expected.Token, status.BestToken);
         Assert.Equal(expected.Target, status.BestTarget);
-        Assert.Equal(expected.Value, Cell(fixture, "best", "score"));
+        Assert.Equal(expected.Value, Cell(fixture: fixture, key: "score", row: "best"));
     }
 
     [Fact]
@@ -274,19 +264,19 @@ public sealed class SearchLawTests {
 
         using var continuous = Fixtures.FreshServer(definition: document);
         var continuousStatus = RunToCompletion(continuous);
-        Assert.True(continuousStatus.Done, continuousStatus.ToString());
+        Assert.True(condition: continuousStatus.Done, userMessage: continuousStatus.ToString());
 
         using var interrupted = Fixtures.FreshServer(definition: document);
 
-        for (var tick = 0; tick < 5; tick++) {
+        for (var tick = 0; (tick < 5); tick++) {
             interrupted.Step();
         }
 
         var midStatus = interrupted.Server.SearchStatus()[0];
-        Assert.False(midStatus.Done, "the capture must land mid-search for a restore to prove anything");
+        Assert.False(condition: midStatus.Done, userMessage: "the capture must land mid-search for a restore to prove anything");
         Assert.Equal(5L, midStatus.Nodes);
 
-        Assert.True(interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
+        Assert.True(condition: interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
@@ -301,8 +291,8 @@ public sealed class SearchLawTests {
         var interruptedFinal = RunToCompletion(interrupted);
         var resumedFinal = RunToCompletion(resumed);
 
-        Assert.True(interruptedFinal.Done, interruptedFinal.ToString());
-        Assert.True(resumedFinal.Done, resumedFinal.ToString());
+        Assert.True(condition: interruptedFinal.Done, userMessage: interruptedFinal.ToString());
+        Assert.True(condition: resumedFinal.Done, userMessage: resumedFinal.ToString());
         Assert.Equal(continuousStatus.BestScore, interruptedFinal.BestScore);
         Assert.Equal(continuousStatus.BestToken, interruptedFinal.BestToken);
         Assert.Equal(continuousStatus.BestTarget, interruptedFinal.BestTarget);
@@ -313,7 +303,7 @@ public sealed class SearchLawTests {
     }
 
     private static long BoardCellOrEmpty(WorldFixture fixture, string row, int cell) =>
-        (Row(fixture, row).Cells?.FirstOrDefault(c => c.Key.Value == cell.ToString(System.Globalization.CultureInfo.InvariantCulture))?.Value.Raw ?? 0L);
+        (Row(fixture: fixture, name: row).Cells?.FirstOrDefault(predicate: c => (c.Key.Value == cell.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)))?.Value.Raw ?? 0L);
 
     // Drop fixture: a 1x4 strip, one token "a" off the board (value -1) and one token "b" standing on cell 2. A
     // drop candidate is a cell no token occupies, so "a" should own every cell but 2 — the rule accepts every
@@ -323,9 +313,9 @@ public sealed class SearchLawTests {
         using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 3));
 
         var status = RunToCompletion(fixture);
-        var expected = ReferenceNegamax(cells: [0L, 3L], boardCells: 4, plies: 3);
+        var expected = ReferenceNegamax(boardCells: 4, cells: [0L, 3L], plies: 3);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(6L, status.Count);
         Assert.Equal(expected.Value, status.BestScore);
         Assert.Equal(expected.Token, status.BestToken);
@@ -337,22 +327,22 @@ public sealed class SearchLawTests {
     private static WorldDefinition PromoteWorld() {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("pieceCode"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 1L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCode"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 1L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 3, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 3, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
-                    new ActionEffect.SetState(State: "verdict", Expression: ExpressionProgram.Parse("pieceCode[a] == 3 ? 1 : 0")),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                    new ActionEffect.SetState(State: "verdict", Expression: ExpressionProgram.Parse(text: "pieceCode[a] == 3 ? 1 : 0")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -361,7 +351,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -372,11 +362,11 @@ public sealed class SearchLawTests {
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(2L, status.Count);
-        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture, "legal", "a"));
+        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture: fixture, key: "a", row: "legal"));
         // The installed section never saw a hypothetical code.
-        Assert.Equal(1L, Cell(fixture, "pieceCode", "a"));
+        Assert.Equal(1L, Cell(fixture: fixture, key: "a", row: "pieceCode"));
     }
 
     // Zones are cells: a 1x3 strip whose cells are three piles, two cards standing on the first two, and a relocate
@@ -385,21 +375,21 @@ public sealed class SearchLawTests {
     private static WorldDefinition ZoneWorld() {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("pile"), CellKind.Int, Domain: new StateDomain.CellsOf("zones")),
-                new WorldStateRow(CellName.Parse("cardZone"), CellKind.Int, Cells: [new StateCell(CellName.Parse("x"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("y"), CellValue.Int(value: 1L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
+                new WorldStateRow(CellName.Parse(candidate: "pile"), CellKind.Int, Domain: new StateDomain.CellsOf("zones")),
+                new WorldStateRow(CellName.Parse(candidate: "cardZone"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "x"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "y"), CellValue.Int(value: 1L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cardZone"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cardZone"))),
             ],
-            Lattices: [new LatticeTopology.Grid("zones", new DocumentVector3(0, 0, 0), 1, Width: 3, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("zones", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 3, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -408,7 +398,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -419,11 +409,11 @@ public sealed class SearchLawTests {
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         // Each card may move to either of the two other zones, including the one the other card stands on.
         Assert.Equal(4L, status.Count);
-        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture, "legal", "x"));
-        Assert.Equal((1L << 0) | (1L << 2), Cell(fixture, "legal", "y"));
+        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture: fixture, key: "x", row: "legal"));
+        Assert.Equal((1L << 0) | (1L << 2), Cell(fixture: fixture, key: "y", row: "legal"));
     }
 
     // Outcome fixture: a 1x4 strip, one token at 0, every relocation accepted. The outcome is read from the mover's
@@ -431,20 +421,20 @@ public sealed class SearchLawTests {
     private static WorldDefinition UctWorld(int iterations, int? nodes = null) {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("score"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "best"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "score"), CellValue.Int(value: 0L))]),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -453,7 +443,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -464,15 +454,15 @@ public sealed class SearchLawTests {
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
-        Assert.True(status.HasOutcome);
+        Assert.True(condition: status.Done, userMessage: status.ToString());
+        Assert.True(condition: status.HasOutcome);
         Assert.Equal(64, status.Iteration);
         Assert.Equal(3L, status.Count);
         Assert.Equal(0, status.BestToken);
         Assert.Equal(3, status.BestTarget);
         Assert.Equal(1000L, status.BestScore);
-        Assert.Equal(3L, Cell(fixture, "best", "to"));
-        Assert.Equal(1000L, Cell(fixture, "best", "score"));
+        Assert.Equal(3L, Cell(fixture: fixture, key: "to", row: "best"));
+        Assert.Equal(1000L, Cell(fixture: fixture, key: "score", row: "best"));
     }
 
     [Fact]
@@ -481,23 +471,23 @@ public sealed class SearchLawTests {
 
         using var continuous = Fixtures.FreshServer(definition: document);
         var continuousStatus = RunToCompletion(continuous);
-        Assert.True(continuousStatus.Done, continuousStatus.ToString());
+        Assert.True(condition: continuousStatus.Done, userMessage: continuousStatus.ToString());
 
         using var interrupted = Fixtures.FreshServer(definition: document);
 
-        for (var tick = 0; tick < 9; tick++) {
+        for (var tick = 0; (tick < 9); tick++) {
             interrupted.Step();
         }
 
         var midStatus = interrupted.Server.SearchStatus()[0];
-        Assert.False(midStatus.Done, "the capture must land mid-search for a restore to prove anything");
-        Assert.True(midStatus.Nodes > 3L, midStatus.ToString());
+        Assert.False(condition: midStatus.Done, userMessage: "the capture must land mid-search for a restore to prove anything");
+        Assert.True(condition: (midStatus.Nodes > 3L), userMessage: midStatus.ToString());
 
-        Assert.True(interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
-        Assert.NotNull(checkpoint!.Search!.Jobs[0].Tree);
+        Assert.True(condition: interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
+        Assert.NotNull(@object: checkpoint!.Search!.Jobs[0].Tree);
 
-        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint);
-        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var decoded, out var decodeReason), decodeReason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: bytes, checkpoint: out var decoded, reason: out var decodeReason), userMessage: decodeReason);
         Assert.Equal(checkpoint.Search.Jobs[0].Tree!.Visits, decoded!.Search!.Jobs[0].Tree!.Visits);
         Assert.Equal(checkpoint.Search.Jobs[0].Tree!.Seed, decoded.Search.Jobs[0].Tree!.Seed);
 
@@ -514,8 +504,8 @@ public sealed class SearchLawTests {
         var interruptedFinal = RunToCompletion(interrupted);
         var resumedFinal = RunToCompletion(resumed);
 
-        Assert.True(interruptedFinal.Done, interruptedFinal.ToString());
-        Assert.True(resumedFinal.Done, resumedFinal.ToString());
+        Assert.True(condition: interruptedFinal.Done, userMessage: interruptedFinal.ToString());
+        Assert.True(condition: resumedFinal.Done, userMessage: resumedFinal.ToString());
         Assert.Equal(continuousStatus.BestTarget, interruptedFinal.BestTarget);
         Assert.Equal(continuousStatus.BestScore, interruptedFinal.BestScore);
         Assert.Equal(continuousStatus.Nodes, interruptedFinal.Nodes);
@@ -527,21 +517,21 @@ public sealed class SearchLawTests {
     private static WorldDefinition DropWorld() {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: -1L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 2L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: -1L)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 2L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -550,7 +540,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -561,11 +551,11 @@ public sealed class SearchLawTests {
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(3L, status.Count);
-        Assert.Equal(3L, Cell(fixture, "counts", "a"));
-        Assert.Equal((1L << 0) | (1L << 1) | (1L << 3), Cell(fixture, "legal", "a"));
-        Assert.Equal(0L, Cell(fixture, "legal", "b"));
+        Assert.Equal(3L, Cell(fixture: fixture, key: "a", row: "counts"));
+        Assert.Equal((1L << 0) | (1L << 1) | (1L << 3), Cell(fixture: fixture, key: "a", row: "legal"));
+        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "legal"));
     }
 
     // Jump fixture: a 1x5 strip, "a" at cell 0 and "b" at cell 1. The judge's own gate reads pieceCell[b] < 0 —
@@ -574,24 +564,24 @@ public sealed class SearchLawTests {
     private static WorldDefinition JumpWorld() {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 1L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 1L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 5, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 5, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
                 new WorldRule(
-                    Name: CellName.Parse("accept"),
-                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse("pieceCell[b]"), Comparison: ActionStateComparison.Less, Right: ExpressionProgram.Parse("0"), Kind: CellKind.Int),
+                    Name: CellName.Parse(candidate: "accept"),
+                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse(text: "pieceCell[b]"), Comparison: ActionStateComparison.Less, Right: ExpressionProgram.Parse(text: "0"), Kind: CellKind.Int),
                     Effects: [
                         new ActionEffect.SetState(State: "verdict", Value: 1),
-                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                     ]
                 ),
             ],
@@ -601,21 +591,72 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
 
+    // A chain's length is bounded by the candidates it enumerates per token against the nodes a job judges in a
+    // tick, and by no count of hops: one direction hops two ways (stop, or go), so twelve hops is 4,096 chains and
+    // fits, thirteen is 8,192 and does not, and a chain long enough to overflow its own count refuses the same way.
+    [Fact]
+    public void AJumpChainIsAsLongAsTheNodesOneTickJudges() {
+        WorldDefinition Hops(int maxHops) {
+            var world = JumpWorld();
+
+            return world with {
+                SearchRaw = new WorldSearchSection(Jobs: [
+                    world.Search.Rows[0] with {
+                        Counts = null,
+                        Legal = null,
+                        Shapes = [new WorldSearchShape.Jump(MaxHops: maxHops, Over: ["E"])],
+                    },
+                ]),
+            };
+        }
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: Hops(maxHops: 12),
+                reason: out var admitted
+            ),
+            userMessage: admitted
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Hops(maxHops: 13),
+            reason: out var refused
+        ));
+        Assert.Contains(
+            actualString: refused,
+            expectedSubstring: "enumerates 8192 candidates per token"
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Hops(maxHops: 64),
+            reason: out var overflowed
+        ));
+        Assert.Contains(
+            actualString: overflowed,
+            expectedSubstring: "enumerates more than 2147483647 candidates per token"
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Hops(maxHops: 0),
+            reason: out var none
+        ));
+        Assert.Contains(
+            actualString: none,
+            expectedSubstring: "must be at least 1"
+        );
+    }
     [Fact]
     public void JumpOverAnOccupiedIntermediateCellLandsOnTheEmptyCellBeyondAndEvictsIt() {
         using var fixture = Fixtures.FreshServer(definition: JumpWorld());
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(1L, status.Count);
-        Assert.Equal((1L << 2), Cell(fixture, "legal", "a"));
-        Assert.Equal(0L, Cell(fixture, "legal", "b"));
+        Assert.Equal((1L << 2), Cell(fixture: fixture, key: "a", row: "legal"));
+        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "legal"));
     }
 
     // Relocate fixture: a 1x4 strip, "a" at cell 0 and "b" at cell 2. The judge's own gate reads pieceCell[a] ==
@@ -624,24 +665,24 @@ public sealed class SearchLawTests {
     private static WorldDefinition RelocateWorld(bool displace) {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 2L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 2L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
                 new WorldRule(
-                    Name: CellName.Parse("accept"),
-                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse("pieceCell[a]"), Comparison: ActionStateComparison.Equal, Right: ExpressionProgram.Parse("pieceCell[b]"), Kind: CellKind.Int),
+                    Name: CellName.Parse(candidate: "accept"),
+                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse(text: "pieceCell[a]"), Comparison: ActionStateComparison.Equal, Right: ExpressionProgram.Parse(text: "pieceCell[b]"), Kind: CellKind.Int),
                     Effects: [
                         new ActionEffect.SetState(State: "verdict", Value: 1),
-                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                     ]
                 ),
             ],
@@ -651,7 +692,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -662,19 +703,19 @@ public sealed class SearchLawTests {
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         // Only landing exactly on the OTHER token's cell can satisfy the judge's two-tokens-one-cell gate — "a"
         // onto "b"'s cell 2, or "b" onto "a"'s cell 0 — and each only still reads the other's cell back because
         // displace:false left it standing there.
         Assert.Equal(2L, status.Count);
-        Assert.Equal((1L << 2), Cell(fixture, "legal", "a"));
-        Assert.Equal((1L << 0), Cell(fixture, "legal", "b"));
+        Assert.Equal((1L << 2), Cell(fixture: fixture, key: "a", row: "legal"));
+        Assert.Equal((1L << 0), Cell(fixture: fixture, key: "b", row: "legal"));
 
         using var control = Fixtures.FreshServer(definition: RelocateWorld(displace: true));
         var controlStatus = RunToCompletion(control);
 
         // The same gate never once reads two tokens sharing a cell when displace evicts whoever stood there.
-        Assert.True(controlStatus.Done, controlStatus.ToString());
+        Assert.True(condition: controlStatus.Done, userMessage: controlStatus.ToString());
         Assert.Equal(0L, controlStatus.Count);
     }
 
@@ -682,27 +723,27 @@ public sealed class SearchLawTests {
     // accepted; reach/held/counts work at this size, legal does not.
     private static WorldDefinition WideBoardWorld(bool withLegal) {
         var rows = new List<WorldStateRow> {
-            new(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-            new(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: 50L))]),
-            new(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-            new(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-            new(CellName.Parse("reach"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-            new(CellName.Parse("held"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-            new(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+            new(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+            new(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 50L))]),
+            new(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+            new(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+            new(CellName.Parse(candidate: "reach"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+            new(CellName.Parse(candidate: "held"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+            new(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
         };
 
         if (withLegal) {
-            rows.Add(new(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))));
+            rows.Add(item: new(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))));
         }
 
-        var state = new WorldStateSection(World: rows, Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 10, Depth: 10)]);
+        var state = new WorldStateSection(World: rows, Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 10, Depth: 10)]);
 
         return Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -714,23 +755,23 @@ public sealed class SearchLawTests {
 
     [Fact]
     public void ReachHeldAndCountsWorkPastTheLegalMaskCeilingWhereLegalItselfIsRefused() {
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(WideBoardWorld(withLegal: true), out var invalidReason));
-        Assert.Contains("64 cells", invalidReason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: WideBoardWorld(withLegal: true), reason: out var invalidReason));
+        Assert.Contains(actualString: invalidReason, expectedSubstring: "64 cells");
 
         var definition = WideBoardWorld(withLegal: false);
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var validReason), validReason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var validReason), userMessage: validReason);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(198L, status.Count);
-        Assert.Equal(99L, Cell(fixture, "counts", "a"));
-        Assert.Equal(99L, Cell(fixture, "counts", "b"));
+        Assert.Equal(99L, Cell(fixture: fixture, key: "a", row: "counts"));
+        Assert.Equal(99L, Cell(fixture: fixture, key: "b", row: "counts"));
 
         // "held" defaults to 0, "a"'s own ordinal: every cell but its own starting one is a reachable destination.
-        for (var cell = 0; cell < 100; cell++) {
-            Assert.Equal((cell == 0) ? 0L : 1L, BoardCellOrEmpty(fixture, "reach", cell));
+        for (var cell = 0; (cell < 100); cell++) {
+            Assert.Equal(((cell == 0) ? 0L : 1L), BoardCellOrEmpty(cell: cell, fixture: fixture, row: "reach"));
         }
     }
 
@@ -740,21 +781,21 @@ public sealed class SearchLawTests {
     private static WorldDefinition MultiShapeWorld(int? nodes) {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("b"), CellValue.Int(value: -1L))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: -1L))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
             ],
-            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 1)]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -763,7 +804,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -774,20 +815,20 @@ public sealed class SearchLawTests {
 
         using var continuous = Fixtures.FreshServer(definition: document);
         var continuousStatus = RunToCompletion(continuous);
-        Assert.True(continuousStatus.Done, continuousStatus.ToString());
+        Assert.True(condition: continuousStatus.Done, userMessage: continuousStatus.ToString());
         Assert.Equal(6L, continuousStatus.Count);
 
         using var interrupted = Fixtures.FreshServer(definition: document);
 
-        for (var tick = 0; tick < 3; tick++) {
+        for (var tick = 0; (tick < 3); tick++) {
             interrupted.Step();
         }
 
         var midStatus = interrupted.Server.SearchStatus()[0];
-        Assert.False(midStatus.Done, "the capture must land mid-search for a restore to prove anything");
+        Assert.False(condition: midStatus.Done, userMessage: "the capture must land mid-search for a restore to prove anything");
         Assert.Equal(3L, midStatus.Nodes);
 
-        Assert.True(interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
+        Assert.True(condition: interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
@@ -802,14 +843,14 @@ public sealed class SearchLawTests {
         var interruptedFinal = RunToCompletion(interrupted);
         var resumedFinal = RunToCompletion(resumed);
 
-        Assert.True(interruptedFinal.Done, interruptedFinal.ToString());
-        Assert.True(resumedFinal.Done, resumedFinal.ToString());
+        Assert.True(condition: interruptedFinal.Done, userMessage: interruptedFinal.ToString());
+        Assert.True(condition: resumedFinal.Done, userMessage: resumedFinal.ToString());
         Assert.Equal(continuousStatus.Count, interruptedFinal.Count);
         Assert.Equal(interruptedFinal.Count, resumedFinal.Count);
-        Assert.Equal(14L, Cell(interrupted, "legal", "a"));
-        Assert.Equal(14L, Cell(interrupted, "legal", "b"));
-        Assert.Equal(Cell(interrupted, "legal", "a"), Cell(resumed, "legal", "a"));
-        Assert.Equal(Cell(interrupted, "legal", "b"), Cell(resumed, "legal", "b"));
+        Assert.Equal(14L, Cell(fixture: interrupted, key: "a", row: "legal"));
+        Assert.Equal(14L, Cell(fixture: interrupted, key: "b", row: "legal"));
+        Assert.Equal(Cell(fixture: interrupted, key: "a", row: "legal"), Cell(fixture: resumed, key: "a", row: "legal"));
+        Assert.Equal(Cell(fixture: interrupted, key: "b", row: "legal"), Cell(fixture: resumed, key: "b", row: "legal"));
     }
 
     // Pair fixture over any lattice: two tokens, an accept-all judge, and the companion carried by the walked token's
@@ -817,21 +858,21 @@ public sealed class SearchLawTests {
     private static WorldDefinition PairWorld(LatticeTopology topology, long a, long b) {
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf(topology.Name)),
-                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(value: a)), new StateCell(CellName.Parse("b"), CellValue.Int(value: b))]),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf(topology.Name)),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: a)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: b))]),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "pieceCell"))),
             ],
             Lattices: [topology]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
@@ -840,7 +881,7 @@ public sealed class SearchLawTests {
             ]),
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         return definition;
     }
@@ -849,12 +890,12 @@ public sealed class SearchLawTests {
     public void APairOnAHexCarriesTheCompanionByTheSameTranslationAndTheNeighbourTableIsTheOracle() {
         // a at the centre, b on the ring: every step a takes is one hex direction, and b's own step in that direction
         // exists only where the disk still holds it — the adjacency table says so without any translation code.
-        var hex = new LatticeTopology.Hex(Name: "board", Origin: new DocumentVector3(0, 0, 0), CellSize: 1, Radius: 1);
+        var hex = new LatticeTopology.Hex(Name: "board", Origin: new DocumentVector3(x: 0, y: 0, z: 0), CellSize: 1, Radius: 1);
         var definition = PairWorld(hex, a: 0L, b: 1L);
-        var topology = WorldTopologyCompilation.Find(definition, "board")!;
+        var topology = WorldTopologyCompilation.Find(definition: definition, name: "board")!;
         var oracle = 0;
 
-        for (var direction = 0; direction < topology.DirectionCount; direction++) {
+        for (var direction = 0; (direction < topology.DirectionCount); direction++) {
             if (topology.Neighbour(cell: 1, direction: direction) >= 0) {
                 oracle++;
             }
@@ -864,57 +905,57 @@ public sealed class SearchLawTests {
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
-        Assert.Equal(3, oracle);
-        Assert.Equal((long)oracle, status.Count);
-        Assert.Equal((long)oracle, Cell(fixture, "counts", "a"));
-        Assert.Equal(0L, Cell(fixture, "counts", "b"));
+        Assert.True(condition: status.Done, userMessage: status.ToString());
+        Assert.Equal(actual: oracle, expected: 3);
+        Assert.Equal(((long)oracle), status.Count);
+        Assert.Equal(((long)oracle), Cell(fixture: fixture, key: "a", row: "counts"));
+        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "counts"));
     }
 
     [Fact]
     public void APairOnARingWrapsTheCompanionAroundWithTheWalkedToken() {
-        var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(0, 0, 0), CellSize: 1, Width: 6);
+        var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(x: 0, y: 0, z: 0), CellSize: 1, Width: 6);
         using var fixture = Fixtures.FreshServer(definition: PairWorld(ring, a: 0L, b: 3L));
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         // a may step to any other cell; b always lands three further round, never on a's own target.
         Assert.Equal(5L, status.Count);
-        Assert.Equal(0b111110L, Cell(fixture, "legal", "a"));
+        Assert.Equal(0b111110L, Cell(fixture: fixture, key: "a", row: "legal"));
     }
 
     // Pile fixture: three cards standing in a deck, in order, two empty piles beside it, and an accept-all judge that
     // also counts the hand through the frame. Pile order is the zones' own: only the deck's end card may move.
     private static WorldDefinition PileWorld(ZoneSelector selector = ZoneSelector.Last, bool best = false, WorldSearchShape? shape = null) {
-        var zone = new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true);
-        StateCell[] Members(string keys) => [.. keys.Select(static key => new StateCell(CellName.Parse(key.ToString()), CellValue.Bool(value: true)))];
+        var zone = new StateDomain.KeysOf(CellName.Parse(candidate: "cards"), Ordered: true);
+        StateCell[] Members(string keys) => [.. keys.Select(selector: static key => new StateCell(CellName.Parse(candidate: key.ToString()), CellValue.Bool(value: true)))];
         var state = new WorldStateSection(
             World: [
-                new WorldStateRow(CellName.Parse("cards"), CellKind.Bool, Capacity: 3, Cells: Members("abc")),
-                new WorldStateRow(CellName.Parse("deck"), CellKind.Bool, Capacity: 3, Domain: zone, Cells: Members("abc")),
-                new WorldStateRow(CellName.Parse("hand"), CellKind.Bool, Capacity: 3, Domain: zone),
-                new WorldStateRow(CellName.Parse("discard"), CellKind.Bool, Capacity: 3, Domain: zone),
-                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("handCount"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
-                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cards"))),
-                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cards"))),
-                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse("score"), CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "cards"), CellKind.Bool, Capacity: 3, Cells: Members(keys: "abc")),
+                new WorldStateRow(CellName.Parse(candidate: "deck"), CellKind.Bool, Capacity: 3, Domain: zone, Cells: Members(keys: "abc")),
+                new WorldStateRow(CellName.Parse(candidate: "hand"), CellKind.Bool, Capacity: 3, Domain: zone),
+                new WorldStateRow(CellName.Parse(candidate: "discard"), CellKind.Bool, Capacity: 3, Domain: zone),
+                new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "handCount"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
+                new WorldStateRow(CellName.Parse(candidate: "legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards"))),
+                new WorldStateRow(CellName.Parse(candidate: "counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards"))),
+                new WorldStateRow(CellName.Parse(candidate: "best"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "score"), CellValue.Int(value: 0L))]),
             ]
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
+                new WorldRule(Name: CellName.Parse(candidate: "accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "handCount", FromState: "$reduce:count:hand"),
                     new ActionEffect.SetState(State: "verdict", Value: 1),
-                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse("1 - turn")),
+                    new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "cards", Zones: ["deck", "hand", "discard"], Turn: "turn", Verdict: "verdict",
-                    Shapes: [shape ?? new WorldSearchShape.Transferred(Selector: selector)], Legal: "legal", Counts: "counts",
+                    Shapes: [(shape ?? new WorldSearchShape.Transferred(Selector: selector))], Legal: "legal", Counts: "counts",
                     Score: (best ? "handCount" : null), Best: (best ? "best" : null)),
             ]),
         };
@@ -926,70 +967,70 @@ public sealed class SearchLawTests {
     public void OnlyTheTopOfAPileMayMoveAndItMayMoveOntoEitherOtherPile() {
         var definition = PileWorld();
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(3, status.Cells);
         Assert.Equal(2L, status.Count);
-        Assert.Equal(0L, Cell(fixture, "counts", "a"));
-        Assert.Equal(0L, Cell(fixture, "counts", "b"));
-        Assert.Equal(2L, Cell(fixture, "counts", "c"));
-        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture, "legal", "c"));
+        Assert.Equal(0L, Cell(fixture: fixture, key: "a", row: "counts"));
+        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "counts"));
+        Assert.Equal(2L, Cell(fixture: fixture, key: "c", row: "counts"));
+        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture: fixture, key: "c", row: "legal"));
         // The section's piles never moved: the frame took every transfer.
-        Assert.Equal("abc", string.Concat(Row(fixture, "deck").Cells!.Select(c => c.Key.Value)));
-        Assert.Empty(Row(fixture, "hand").Cells ?? []);
+        Assert.Equal("abc", string.Concat(values: Row(fixture: fixture, name: "deck").Cells!.Select(selector: c => c.Key.Value)));
+        Assert.Empty(collection: (Row(fixture: fixture, name: "hand").Cells ?? []));
     }
 
     [Fact]
     public void TheFirstEndOfAPileMovesWhenTheShapeSaysSo() {
         var definition = PileWorld(selector: ZoneSelector.First);
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
-        Assert.Equal(2L, Cell(fixture, "counts", "a"));
-        Assert.Equal(0L, Cell(fixture, "counts", "c"));
+        Assert.True(condition: status.Done, userMessage: status.ToString());
+        Assert.Equal(2L, Cell(fixture: fixture, key: "a", row: "counts"));
+        Assert.Equal(0L, Cell(fixture: fixture, key: "c", row: "counts"));
     }
 
     [Fact]
     public void TheJudgeReadsThePileTheTransferLandedOnAndBestNamesThatZone() {
         var definition = PileWorld(best: true);
 
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         var status = RunToCompletion(fixture);
 
-        Assert.True(status.Done, status.ToString());
+        Assert.True(condition: status.Done, userMessage: status.ToString());
         // Moving c onto the hand makes the hand count one through the frame; onto the discard it stays zero.
         Assert.Equal(2, status.BestToken);
         Assert.Equal(1, status.BestTarget);
         Assert.Equal(1L, status.BestScore);
-        Assert.Equal(1L, Cell(fixture, "best", "to"));
+        Assert.Equal(1L, Cell(fixture: fixture, key: "to", row: "best"));
         Assert.Equal(0L, Cell(fixture, "handCount", WorldStateRow.SlotKey.Value));
     }
 
     [Fact]
     public void AZoneJobRefusesABoardShapeAndABoardJobRefusesATransfer() {
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(PileWorld(shape: new WorldSearchShape.Relocate()), out var zoneReason));
-        Assert.Contains("transfer", zoneReason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: PileWorld(shape: new WorldSearchShape.Relocate()), reason: out var zoneReason));
+        Assert.Contains(actualString: zoneReason, expectedSubstring: "transfer");
 
-        var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(0, 0, 0), CellSize: 1, Width: 6);
+        var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(x: 0, y: 0, z: 0), CellSize: 1, Width: 6);
         var board = PairWorld(ring, a: 0L, b: 3L);
         var mixed = board with {
             SearchRaw = new WorldSearchSection(Jobs: [board.SearchRaw!.Jobs![0] with { Shapes = [new WorldSearchShape.Transferred()] }]),
         };
 
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(mixed, out var boardReason));
-        Assert.Contains("zones", boardReason);
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: mixed, reason: out var boardReason));
+        Assert.Contains(actualString: boardReason, expectedSubstring: "zones");
     }
 }

@@ -117,6 +117,42 @@ public sealed class ArenaHashLawTests {
         );
     }
     [Fact]
+    public void PublicAndAuthorityOnlyVisibilityFoldDifferently() {
+        Assert.NotEqual(
+            actual: VisibilityHash(
+                readers: [],
+                readersFrom: null
+            ),
+            expected: VisibilityHash(
+                readers: null,
+                readersFrom: null
+            )
+        );
+    }
+    [Fact]
+    public void HiddenAndReadersFromEachMoveTheVisibilityHash() {
+        var baseline = VisibilityHash(
+            readers: ["reader"],
+            readersFrom: null
+        );
+
+        Assert.NotEqual(
+            actual: VisibilityHash(
+                hidden: true,
+                readers: ["reader"],
+                readersFrom: null
+            ),
+            expected: baseline
+        );
+        Assert.NotEqual(
+            actual: VisibilityHash(
+                readers: ["reader"],
+                readersFrom: "audience"
+            ),
+            expected: baseline
+        );
+    }
+    [Fact]
     public void ASectionAuthoringCellsOnAHostOwnedRowRefusesByName() {
         var section = ArenaFixture.Section();
         var rows = new List<StateRow>(collection: section.Rows!);
@@ -161,7 +197,7 @@ public sealed class ArenaHashLawTests {
         );
     }
 
-    private static ulong VisibilityHash(string? readersFrom, string[] readers) {
+    private static ulong VisibilityHash(string? readersFrom, string[]? readers, bool hidden = false) {
         var (catalog, arena) = ArenaFixture.Build();
 
         Assert.True(condition: arena.TryWriteVisibility(
@@ -171,6 +207,7 @@ public sealed class ArenaHashLawTests {
             ),
             rowOrdinal: ArenaFixture.Tokens,
             visibility: new StateVisibility(
+                Hidden: (hidden ? HiddenCells.Count : HiddenCells.Omit),
                 Readers: readers,
                 ReadersFrom: readersFrom
             )

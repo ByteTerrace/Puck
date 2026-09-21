@@ -41,6 +41,66 @@ public interface IDocumentVocabulary {
     /// <remarks>An identifier not followed by <c>(</c> otherwise belongs to whatever statement comes next, so
     /// answering <c>false</c> leaves the cursor rewound past it.</remarks>
     bool IsBareModifier(string keyword, string modifier) => false;
+    /// <summary>Returns how a call's argument is written: bare, or as quoted text.</summary>
+    /// <param name="callName">The call's name as written.</param>
+    /// <param name="argumentName">The argument's resolved name.</param>
+    /// <returns>The argument's form, or <see cref="DocumentValueForm.Unclassified"/> when the vocabulary holds no
+    /// opinion and the value is read as an ordinary compile-time expression.</returns>
+    /// <remarks>The parser asks this, and it has no position to offer; lowering asks
+    /// <see cref="ClassifyMember"/> with the position it has reached.</remarks>
+    DocumentValueForm ClassifyArgument(string callName, string argumentName) => this.ClassifyMember(
+        context: this.CallContext(callName: callName, context: null),
+        memberName: argumentName
+    );
+    /// <summary>Returns the position a call's arguments fill: the vocabulary's own token for the shape the call
+    /// names, read from <paramref name="context"/> where the call stands in a position that narrows it.</summary>
+    /// <param name="context">The position the call itself fills, or <see langword="null"/> when unknown.</param>
+    /// <param name="callName">The call's name as written.</param>
+    /// <returns>The position, or <see langword="null"/> when the vocabulary does not own the call at this position.</returns>
+    /// <remarks>A declared arm at a known position takes precedence over a compile-time builtin of the same name.
+    /// Do not return an arm from an unrelated position when <paramref name="context"/> is known.</remarks>
+    object? CallContext(object? context, string callName) => null;
+    /// <summary>Returns the position a member's value fills, with a list reduced to its element.</summary>
+    /// <param name="context">The position of the object or call holding the member.</param>
+    /// <param name="memberName">The member's name.</param>
+    /// <returns>The position, or <see langword="null"/> when the vocabulary does not know the member.</returns>
+    object? MemberContext(object? context, string memberName) => null;
+    /// <summary>Returns how a member's value is written: bare, or as quoted text.</summary>
+    /// <param name="context">The position of the object or call holding the member.</param>
+    /// <param name="memberName">The member's name.</param>
+    /// <returns>The member's form, or <see cref="DocumentValueForm.Unclassified"/>.</returns>
+    DocumentValueForm ClassifyMember(object? context, string memberName) => DocumentValueForm.Unclassified;
+    /// <summary>Returns whether a bare word is one of the words a <see cref="DocumentValueForm.Choice"/> member
+    /// admits. Such a word is the value itself, never a read of a compile-time binding that shares its name.</summary>
+    /// <param name="context">The position of the object or call holding the member.</param>
+    /// <param name="memberName">The member's name.</param>
+    /// <param name="word">The bare word.</param>
+    /// <returns><c>true</c> when the word is one of the member's choices.</returns>
+    bool IsChoiceWord(object? context, string memberName, string word) => false;
+    /// <summary>Materializes a computed member value in its document representation after evaluation.</summary>
+    /// <param name="value">The owned, lowered value, including results of interpolation or bindings.</param>
+    /// <param name="form">The member's classified form.</param>
+    /// <param name="scope">The active scope, positioned at the member's value type.</param>
+    /// <returns>The document value. The default leaves it unchanged.</returns>
+    JsonNode? NormalizeMemberValue(JsonNode? value, DocumentValueForm form, DocumentScope scope) => value;
+}
+/// <summary>How the value of a call argument is written in source.</summary>
+/// <remarks>A bare form is written without quotes and is never a string literal; <see cref="Text"/> is always a
+/// string literal and never a bare word. The two never overlap, so an argument has one spelling.</remarks>
+public enum DocumentValueForm {
+    /// <summary>The vocabulary holds no opinion: a number, a flag, an array, an object, or a call it does not own.</summary>
+    Unclassified,
+    /// <summary>A reference to a declared name, written bare; a name computed at compile time is an interpolated
+    /// string.</summary>
+    Name,
+    /// <summary>A cell key, written bare in the key grammar.</summary>
+    Key,
+    /// <summary>A value expression, written bare in the operand grammar.</summary>
+    Expression,
+    /// <summary>One word of a closed vocabulary, written bare.</summary>
+    Choice,
+    /// <summary>Free text, written as a string literal.</summary>
+    Text,
 }
 /// <summary>One lowering pass's carried state: the constants and templates in scope, where diagnostics and source
 /// spans go, and the document vocabulary answering the schema-specific questions.</summary>
@@ -148,9 +208,15 @@ public sealed class DocumentScope(
                 : ForConstant()
             );
 
-            value = DocumentLowering.EvaluateValue(
-                expr: expression,
-                fieldKey: fieldKey,
+            // A binding's value is data until something uses it, and its result is cached across uses, so it is
+            // evaluated at no position: what it holds is classified where it lands, never where it was first read.
+            value = DocumentLowering.At(
+                context: null,
+                lower: () => DocumentLowering.EvaluateValue(
+                    expr: expression,
+                    fieldKey: fieldKey,
+                    scope: lexical
+                ),
                 scope: lexical
             );
             m_values[key] = (expression, value);
@@ -176,16 +242,29 @@ public sealed class DocumentScope(
             schema: Schema,
             currentPointer: CurrentPointer
         ) {
-        Budget = Budget,
-        m_arguments = m_arguments,
-        m_evaluating = m_evaluating,
-        m_templateScopes = m_templateScopes,
-        m_values = m_values,
-    }
+            Budget = Budget,
+            m_arguments = m_arguments,
+            m_evaluating = m_evaluating,
+            m_templateScopes = m_templateScopes,
+            m_values = m_values,
+        }
     );
     /// <summary>Indexes document-level declarations before either vocabulary emits rows.</summary>
     /// <param name="statements">The statements in this lexical document scope.</param>
     public void IndexDeclarations(IReadOnlyList<StatementNode> statements) {
+        if (!Annotations.TryGetValue(key: "DeclaredRows", value: out var rowsValue)) {
+            rowsValue = new HashSet<string>(comparer: StringComparer.Ordinal);
+            Annotations["DeclaredRows"] = rowsValue;
+        }
+        if (!Annotations.TryGetValue(key: "DeclaredPools", value: out var poolsValue)) {
+            poolsValue = new HashSet<string>(comparer: StringComparer.Ordinal);
+            Annotations["DeclaredPools"] = poolsValue;
+        }
+        if (!Annotations.TryGetValue(key: "DeclaredGates", value: out var gatesValue)) {
+            gatesValue = new HashSet<string>(comparer: StringComparer.Ordinal);
+            Annotations["DeclaredGates"] = gatesValue;
+        }
+        IndexStructuralNames(gates: ((HashSet<string>)gatesValue!), pools: ((HashSet<string>)poolsValue!), rows: ((HashSet<string>)rowsValue!), statements: statements);
         foreach (var statement in statements) {
             if (statement is LetNode let) {
                 if (!Constants.TryAdd(
@@ -219,6 +298,30 @@ public sealed class DocumentScope(
             }
         }
     }
+
+    private static void IndexStructuralNames(IReadOnlyList<StatementNode> statements, HashSet<string> rows, HashSet<string> pools, HashSet<string> gates) {
+        foreach (var statement in statements) {
+            switch (statement) {
+                case StatePoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
+                case StatePairPoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
+                case StateTableDeclarationNode row:
+                    rows.Add(item: row.Name);
+                    if ((row.Kind == "Bool") || ((row.Cells.Count > 0) && row.Cells.All(predicate: static cell => IsBoolean(value: cell.Value)))) { gates.Add(item: row.Name); }
+                    break;
+                case StateSlotDeclarationNode row:
+                    rows.Add(item: row.Name);
+                    if ((row.Kind == "Bool") || IsBoolean(value: row.Value)) { gates.Add(item: row.Name); }
+                    break;
+                case StatePileDeclarationNode row: rows.Add(item: row.Name); break;
+                case StateGridDeclarationNode row: rows.Add(item: row.Name); break;
+                case BlockNode block: IndexStructuralNames(block.Statements, rows, pools, gates); break;
+                case ForStatementNode loop: IndexStructuralNames(loop.Body, rows, pools, gates); break;
+            }
+        }
+
+        static bool IsBoolean(ExpressionNode? value) => (value is LiteralExpressionNode { Value: bool });
+    }
+
     /// <summary>Resolves a lexical binding into an independently owned JSON value.</summary>
     /// <param name="name">The binding's name.</param>
     /// <param name="value">The resolved value, which may be null.</param>
@@ -247,11 +350,58 @@ public sealed class DocumentScope(
         );
         return found;
     }
+    /// <summary>Lowers a binding at its use site's document position without caching contextual output as data.</summary>
+    /// <param name="name">The lexical binding's name.</param>
+    /// <param name="fieldKey">The destination field used to validate units.</param>
+    /// <param name="value">The independently owned document value.</param>
+    /// <returns>Whether a constant or template argument bears the name.</returns>
+    /// <remarks>Constants and arguments keep their defining lexical environment. Only lowering annotations come
+    /// from the use site, including its model position and active runtime bindings.</remarks>
+    public bool TryLowerContextualBinding(string name, string? fieldKey, out JsonNode? value) {
+        value = null;
+        if (Locals.ContainsKey(key: name) || !Constants.TryGetValue(key: name, value: out var expression)) {
+            return false;
+        }
+        if (!m_evaluating.Add(item: name)) {
+            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue);
+        }
+
+        try {
+            var lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+            var positioned = new DocumentScope(
+                vocabulary: Vocabulary,
+                basePath: lexical.BasePath,
+                constants: lexical.Constants,
+                templates: lexical.Templates,
+                sourceMap: SourceMap,
+                diagnostics: Diagnostics,
+                schema: Schema,
+                currentPointer: CurrentPointer,
+                annotations: Annotations
+            ) {
+                Budget = Budget,
+                Locals = lexical.Locals,
+                m_arguments = lexical.m_arguments,
+                m_evaluating = m_evaluating,
+                m_templateScopes = lexical.m_templateScopes,
+                m_values = lexical.m_values,
+            };
+
+            value = DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: positioned);
+            return true;
+        } finally {
+            m_evaluating.Remove(item: name);
+        }
+    }
     /// <summary>Creates a scope identical to this one but carrying a different constant set, for a template
     /// invocation's bound parameters.</summary>
     /// <param name="invocationConstants">The constants the nested scope sees.</param>
+    /// <param name="annotations">An optional annotation set isolated to the invocation.</param>
     /// <returns>The nested scope.</returns>
-    public DocumentScope WithConstants(Dictionary<string, ExpressionNode> invocationConstants) => new(
+    public DocumentScope WithConstants(
+        Dictionary<string, ExpressionNode> invocationConstants,
+        Dictionary<string, object?>? annotations = null
+    ) => new(
         vocabulary: Vocabulary,
         basePath: BasePath,
         constants: invocationConstants,
@@ -260,12 +410,30 @@ public sealed class DocumentScope(
         diagnostics: Diagnostics,
         schema: Schema,
         currentPointer: CurrentPointer,
-        annotations: Annotations
+        annotations: (annotations ?? Annotations)
     ) {
         m_arguments = new(
         m_arguments,
         StringComparer.Ordinal
     ),
+        m_templateScopes = m_templateScopes,
+        Budget = Budget,
+    };
+    /// <summary>Creates a scope whose relative paths resolve from a defining source directory.</summary>
+    /// <param name="basePath">The defining source directory.</param>
+    /// <returns>The rebased lexical scope.</returns>
+    public DocumentScope WithBasePath(string? basePath) => new(
+        vocabulary: Vocabulary,
+        basePath: basePath,
+        constants: Constants,
+        templates: Templates,
+        sourceMap: SourceMap,
+        diagnostics: Diagnostics,
+        schema: Schema,
+        currentPointer: CurrentPointer,
+        annotations: Annotations
+    ) {
+        m_arguments = new(m_arguments, StringComparer.Ordinal),
         m_templateScopes = m_templateScopes,
         Budget = Budget,
     };

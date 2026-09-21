@@ -35,8 +35,11 @@ public static partial class ArenaVectorTransforms {
             return false;
         }
 
-        var vectors = new ReadOnlyMemory<sbyte>[terms.Length];
-        var weights = new int[terms.Length];
+        using var vectorsLease = arena.Scratch.Rent<ReadOnlyMemory<sbyte>>(length: terms.Length);
+        using var weightsLease = arena.Scratch.Rent<int>(length: terms.Length);
+
+        var vectors = vectorsLease.Span;
+        var weights = weightsLease.Span;
 
         for (var index = 0; (index < terms.Length); index++) {
             var term = terms[index];
@@ -55,11 +58,15 @@ public static partial class ArenaVectorTransforms {
             weights[index] = term.Weight;
         }
 
-        Span<sbyte> destination = stackalloc sbyte[into.Dimensions];
+        using var destinationLease = arena.Scratch.Rent<sbyte>(length: into.Dimensions);
+        using var sumLease = arena.Scratch.Rent<long>(length: into.Dimensions);
+
+        var destination = destinationLease.Span;
 
         if (!VectorTransforms.TryMix(
             destination: destination,
             refusal: out var code,
+            sum: sumLease.Span,
             vectors: vectors,
             weights: weights
         )) {

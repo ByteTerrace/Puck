@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Puck.Maths;
 
@@ -65,12 +66,6 @@ public static partial class RuleCompiler {
                     verb: "addState",
                     write: StateWriteKind.Add
                 );
-            case ActionEffect.CountdownState countdown:
-                return ResolveCountdown(
-                    context: context,
-                    effect: countdown,
-                    ruleName: ruleName
-                );
             case ActionEffect.Generate generate:
                 return ResolveGenerate(
                     context: context,
@@ -101,6 +96,16 @@ public static partial class RuleCompiler {
                     effect: branch,
                     ruleName: ruleName
                 );
+            case ActionEffect.Claim claim:
+                return ResolveClaim(context: context, effect: claim, ruleName: ruleName);
+            case ActionEffect.Release release:
+                return ResolveRelease(context: context, effect: release, ruleName: ruleName);
+            case ActionEffect.ForEachPool each:
+                return ResolveForEachPool(context: context, effect: each, ruleName: ruleName);
+            case ActionEffect.ClaimPair pair:
+                return ResolveClaimPair(context: context, effect: pair, ruleName: ruleName);
+            case ActionEffect.RewindTurn rewind:
+                return new RewindTurnEffect(group: rewind.Group.Value);
             default:
                 if (context.Vocabulary.EffectOf(effect: effect) is { } family) {
                     var compiled = family.Compile(
@@ -121,6 +126,106 @@ public static partial class RuleCompiler {
                 );
         }
     }
+
+    private static IRuleEffect ResolveClaim(ActionEffect.Claim effect, string ruleName, RuleCompileContext context) {
+        if (!CellName.TryParse(candidate: effect.Pool.Spelling, name: out var poolName, reason: out _) || !context.Catalog.TryGetPool(name: poolName, pool: out var pool) || (pool is null)) {
+            throw new RuleException(detail: $"'claim' names no declared pool '{effect.Pool}'", refusal: RuleRefusal.StateRowUnknown, ruleName: ruleName);
+        }
+        if (effect.Effects is not { Count: > 0 }) {
+            throw new RuleException(detail: "a claim must carry a non-empty effect list", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        if (pool.IsPair) {
+            throw new RuleException(detail: $"pair pool '{pool.Name.Value}' must be claimed with 'claimPair'", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        RuleInstanceBinding binding;
+
+        try {
+            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool);
+        } catch (InvalidOperationException error) {
+            throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        try {
+            var effects = CompileEffects(effects: effect.Effects, ruleName: ruleName, context: context, subject: "claim");
+
+            return new ClaimEffect(pool: pool, bindingSlot: binding.Slot, effects: effects, describe: $"claim {pool.Name.Value} as {binding.Name}");
+        } finally {
+            context.PopInstanceBinding(binding: binding);
+        }
+    }
+    private static IRuleEffect ResolveRelease(ActionEffect.Release effect, string ruleName, RuleCompileContext context) {
+        if (!context.TryInstanceBinding(name: effect.Binding.Value, binding: out var binding)) {
+            throw new RuleException(detail: $"'release' names no live pool binding '{effect.Binding}'", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        var reachable = new HashSet<int> { binding.Pool.Ordinal };
+        var cascade = new List<StatePoolDescriptor>();
+        var discovered = true;
+
+        while (discovered) {
+            discovered = false;
+            foreach (var candidate in context.Catalog.Pools) {
+                if (!candidate.IsPair || reachable.Contains(item: candidate.Ordinal) ||
+                    (!reachable.Contains(item: candidate.LeftPoolOrdinal) && !reachable.Contains(item: candidate.RightPoolOrdinal))) {
+                    continue;
+                }
+                _ = reachable.Add(item: candidate.Ordinal);
+                cascade.Add(item: candidate);
+                discovered = true;
+            }
+        }
+        context.ReleaseInstanceBinding(binding: binding);
+        return new ReleaseEffect(pool: binding.Pool, bindingSlot: binding.Slot, cascadePools: cascade, describe: $"release {binding.Name}");
+    }
+    private static IRuleEffect ResolveClaimPair(ActionEffect.ClaimPair effect, string ruleName, RuleCompileContext context) {
+        if (!CellName.TryParse(candidate: effect.Pool.Spelling, name: out var poolName, reason: out _) || !context.Catalog.TryGetPool(name: poolName, pool: out var pool) || (pool is null) || !pool.IsPair) {
+            throw new RuleException(detail: $"'claimPair' names no declared pair pool '{effect.Pool}'", refusal: RuleRefusal.StateRowUnknown, ruleName: ruleName);
+        }
+        if (!context.TryInstanceBinding(name: effect.Left.Value, binding: out var left) || (left.Pool.Ordinal != pool.LeftPoolOrdinal)) {
+            throw new RuleException(detail: $"'claimPair' left endpoint '{effect.Left}' is not bound to '{context.Catalog.Pools[pool.LeftPoolOrdinal].Name.Value}'", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        if (!context.TryInstanceBinding(name: effect.Right.Value, binding: out var right) || (right.Pool.Ordinal != pool.RightPoolOrdinal)) {
+            throw new RuleException(detail: $"'claimPair' right endpoint '{effect.Right}' is not bound to '{context.Catalog.Pools[pool.RightPoolOrdinal].Name.Value}'", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        if (effect.Effects is not { Count: > 0 }) {
+            throw new RuleException(detail: "a pair claim must carry a non-empty effect list", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+
+        RuleInstanceBinding binding;
+
+        try {
+            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool);
+        } catch (InvalidOperationException error) {
+            throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+        try {
+            return new ClaimPairEffect(
+                pool: pool,
+                leftPool: left.Pool,
+                rightPool: right.Pool,
+                leftBindingSlot: left.Slot,
+                rightBindingSlot: right.Slot,
+                bindingSlot: binding.Slot,
+                effects: CompileEffects(effects: effect.Effects, ruleName: ruleName, context: context, subject: "pair claim"),
+                describe: $"claim pair {pool.Name.Value}({left.Name}, {right.Name}) as {binding.Name}"
+            );
+        } finally {
+            context.PopInstanceBinding(binding: binding);
+        }
+    }
+    private static IRuleEffect ResolveForEachPool(ActionEffect.ForEachPool effect, string ruleName, RuleCompileContext context) {
+        if (!CellName.TryParse(candidate: effect.Pool.Spelling, name: out var poolName, reason: out _) || !context.Catalog.TryGetPool(name: poolName, pool: out var pool) || (pool is null)) {
+            throw new RuleException(detail: $"'for each' names no declared pool '{effect.Pool}'", refusal: RuleRefusal.StateRowUnknown, ruleName: ruleName);
+        }
+
+        if (effect.Effects is not { Count: > 0 }) {
+            throw new RuleException(detail: "a pool foreach must carry a non-empty effect list", refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
+        }
+
+        RuleInstanceBinding binding;
+
+        try { binding = context.PushInstanceBinding(name: effect.Binding, pool: pool); } catch (InvalidOperationException error) { throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName); }
+        try { return new ForEachPoolEffect(pool: pool, bindingSlot: binding.Slot, effects: CompileEffects(effects: effect.Effects, ruleName: ruleName, context: context, subject: "pool foreach"), describe: $"for each {binding.Name} in {pool.Name.Value}"); } finally { context.PopInstanceBinding(binding: binding); }
+    }
+
     /// <summary>Compiles an effect list, refusing an empty or absent one in the subject's own noun.</summary>
     /// <param name="effects">The authored effects.</param>
     /// <param name="ruleName">The rule being compiled.</param>
@@ -219,12 +324,12 @@ public static partial class RuleCompiler {
             ? candidates[0].RowOrdinal
             : -1);
     }
-    private static (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveDestination(StateRow row, string? key, string verb, string ruleName, RuleCompileContext context) {
+    private static (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveDestination(StateRow row, StateChannelRef? key, string verb, string ruleName, RuleCompileContext context) {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: key,
             keyFieldLabel: "key",
+            reference: key,
             ruleName: ruleName,
             verb: verb
         )) {
@@ -236,11 +341,11 @@ public static partial class RuleCompiler {
                 );
             }
 
-            return (default, dynamicKey, key!);
+            return (default, dynamicKey, key!.Spelling);
         }
 
         var resolved = ResolveKey(
-            key: key,
+            key: key?.Spelling,
             keyFieldLabel: "key",
             row: row,
             ruleName: ruleName,
@@ -252,47 +357,11 @@ public static partial class RuleCompiler {
             name: resolved
         ), null, resolved);
     }
-    private static IRuleEffect ResolveCountdown(ActionEffect.CountdownState effect, string ruleName, RuleCompileContext context) {
-        var row = (context.FindRow(name: effect.State)
-            ?? throw new RuleException(
-            detail: $"'countdownState' names no state row '{effect.State}'",
-            refusal: RuleRefusal.StateRowUnknown,
-            ruleName: ruleName
-        ));
-
-        if (
-            (row.Kind != CellKind.Int) ||
-            (row.Min != 0L)
-        ) {
-            throw new RuleException(
-                detail: $"state row '{effect.State}' is kind={StateSpelling.Kind(kind: row.Kind)} min={(row.Min?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} — 'countdownState' requires kind=Int min=0 so its computed final partial step can saturate at zero",
-                refusal: RuleRefusal.StateCellUnaddressable,
-                ruleName: ruleName
-            );
-        }
-
-        var destination = ResolveDestination(
-            context: context,
-            key: effect.Key,
-            row: row,
-            ruleName: ruleName,
-            verb: "countdownState"
-        );
-
-        return new CountdownEffect(
-            describe: $"countdownState {effect.State}.{destination.Spelling} by runtime step",
-            key: destination.Key,
-            keyFrom: destination.KeyFrom,
-            rowOrdinal: ResolveRowOrdinal(
-                context: context,
-                name: effect.State
-            )
-        );
-    }
     // A 'generate' effect names one thing: the site to redraw. The source is the site's own facet, so there is no
     // second row to resolve and no key to address — a draw site is a scalar slot by construction.
     private static IRuleEffect ResolveGenerate(ActionEffect.Generate generate, string ruleName, RuleCompileContext context) {
-        var row = (context.FindRow(name: generate.Row)
+        var rowName = generate.Row.Spelling;
+        var row = (context.FindRow(name: rowName)
             ?? throw new RuleException(
             detail: $"'generate' names no state row '{generate.Row}'",
             refusal: RuleRefusal.StateRowUnknown,
@@ -348,7 +417,7 @@ public static partial class RuleCompiler {
             ),
             rowOrdinal: ResolveRowOrdinal(
                 context: context,
-                name: generate.Row
+                name: rowName
             )
         );
     }
@@ -400,7 +469,8 @@ public static partial class RuleCompiler {
     // pushState is a write whose destination is the ring's next slot rather than a named cell: it borrows the write
     // resolver for its one source spelling and its kind proof, then carries the effect as its own kind.
     private static IRuleEffect ResolvePush(ActionEffect.PushState push, string ruleName, RuleCompileContext context) {
-        var row = (context.FindRow(name: push.State)
+        var stateName = push.State.Spelling;
+        var row = (context.FindRow(name: stateName)
             ?? throw new RuleException(
             detail: $"'pushState' names no state row '{push.State}'",
             refusal: RuleRefusal.StateRowUnknown,
@@ -420,7 +490,7 @@ public static partial class RuleCompiler {
             expression: push.Expression,
             fromKey: push.FromKey,
             fromState: push.FromState,
-            key: "0",
+            key: StateChannelRef.OfName(name: "0"),
             rowName: push.State,
             ruleName: ruleName,
             target: ActionTarget.Self,
@@ -438,7 +508,8 @@ public static partial class RuleCompiler {
         );
     }
     private static IRuleEffect ResolveRemoveStateCell(ActionEffect.RemoveStateCell effect, string ruleName, RuleCompileContext context) {
-        var row = (context.FindRow(name: effect.State)
+        var stateName = effect.State.Spelling;
+        var row = (context.FindRow(name: stateName)
             ?? throw new RuleException(
             detail: $"'removeStateCell' names no state row '{effect.State}'",
             refusal: RuleRefusal.StateRowUnknown,
@@ -458,12 +529,36 @@ public static partial class RuleCompiler {
             keyFrom: destination.KeyFrom,
             rowOrdinal: ResolveRowOrdinal(
                 context: context,
-                name: effect.State
+                name: stateName
             )
         );
     }
     private static IRuleEffect ResolveScheduleState(ActionEffect.ScheduleState effect, string ruleName, RuleCompileContext context) {
-        var row = (context.FindRow(name: effect.State)
+        var ticks = DurationSimulationTicks(
+            ratePerSecond: context.SimulationRateHz,
+            ruleName: ruleName,
+            seconds: effect.DelaySeconds,
+            verb: "scheduleState"
+        );
+
+        if (TryResolveInstanceField(binding: out var binding, context: context, field: out var field, reference: effect.State)) {
+            if ((effect.Key is not null) || (field.Kind != CellKind.Int)) {
+                throw new RuleException(detail: $"'scheduleState' requires an unkeyed kind=Int pool field; '{effect.State}' is {StateSpelling.Kind(kind: field.Kind)}", refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName);
+            }
+            return new InstanceFieldScheduleEffect(pool: binding.Pool, field: field, bindingSlot: binding.Slot, delayTicks: ticks, describe: $"scheduleState {effect.State} after {effect.DelaySeconds.ToString(provider: CultureInfo.InvariantCulture)}s");
+        }
+        if (TryResolveStaticInstanceField(cell: effect.Key, context: context, field: out var staticField, handle: out var handle, pool: out var pool, reference: effect.State)) {
+            if (staticField.Kind != CellKind.Int) {
+                throw new RuleException(detail: $"'scheduleState' requires a kind=Int pool field; '{effect.State}' is {StateSpelling.Kind(kind: staticField.Kind)}", refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName);
+            }
+            return new InstanceFieldScheduleEffect(pool: pool!, field: staticField, handle: handle, delayTicks: ticks, describe: $"scheduleState {effect.State} after {effect.DelaySeconds.ToString(provider: CultureInfo.InvariantCulture)}s");
+        }
+        if (effect.State.PoolField is not null) {
+            _ = ResolveOperand(context: context, cell: effect.Key, operand: effect.State, site: new OperandSite(AllowText: false, FieldLabel: "state", KeyFieldLabel: "key", RuleName: ruleName, Verb: "scheduleState"));
+            throw new UnreachableException();
+        }
+        var stateName = effect.State.Spelling;
+        var row = (context.FindRow(name: stateName)
             ?? throw new RuleException(
             detail: $"'scheduleState' names no state row '{effect.State}'",
             refusal: RuleRefusal.StateRowUnknown,
@@ -478,12 +573,6 @@ public static partial class RuleCompiler {
             );
         }
 
-        var ticks = DurationSimulationTicks(
-            ratePerSecond: context.SimulationRateHz,
-            ruleName: ruleName,
-            seconds: effect.DelaySeconds,
-            verb: "scheduleState"
-        );
         var destination = ResolveDestination(
             context: context,
             key: effect.Key,
@@ -499,7 +588,7 @@ public static partial class RuleCompiler {
             keyFrom: destination.KeyFrom,
             rowOrdinal: ResolveRowOrdinal(
                 context: context,
-                name: effect.State
+                name: stateName
             )
         );
     }
@@ -558,7 +647,7 @@ public static partial class RuleCompiler {
     }
     // value XOR valueSeconds XOR (fromState, fromKey) XOR expression XOR text: the same duality ResolvePredicate
     // enforces for compareState's comparand, applied to the write side.
-    private static IRuleEffect ResolveWrite(string rowName, string? key, ActionTarget target, StateWriteKind write, decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string? text, ExpressionProgram? expression, string ruleName, RuleCompileContext context, string verb, string? vector = null) {
+    private static IRuleEffect ResolveWrite(StateChannelRef rowName, StateChannelRef? key, ActionTarget target, StateWriteKind write, decimal? value, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? valueSeconds, string? text, ExpressionProgram? expression, string ruleName, RuleCompileContext context, string verb, string? vector = null) {
         if (target != ActionTarget.Self) {
             throw new RuleException(
                 detail: $"'{verb}' carries target '{target}' — a rule has no entity to address, so a target is refused rather than parsed and discarded",
@@ -566,12 +655,44 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
+        if (TryResolveInstanceField(binding: out var instance, context: context, field: out var field, reference: rowName)) {
+            return ResolveInstanceWrite(binding: instance, context: context, expression: expression, field: field, fromKey: fromKey, fromState: fromState, key: key, ruleName: ruleName, text: text, value: value, valueSeconds: valueSeconds, vector: vector, verb: verb, write: write);
+        }
+        if (TryResolveStaticInstanceField(cell: key, context: context, field: out var staticField, handle: out var staticHandle, pool: out var staticPool, reference: rowName)) {
+            if ((staticField.Kind == CellKind.Vector) || (vector is not null) || (valueSeconds is not null)) {
+                throw new RuleException(detail: $"direct pool field '{rowName}' requires an ordinary typed value source", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+            }
+            var count = (((((value is not null) ? 1 : 0) + ((fromState is not null) ? 1 : 0)) + ((text is not null) ? 1 : 0)) + ((expression is not null) ? 1 : 0));
+
+            if ((count != 1) || ((fromKey is not null) && (fromState is null)) || (((staticField.Kind == CellKind.Text) && (text is null) && (fromState is null)) || ((staticField.Kind != CellKind.Text) && (text is not null))) || ((staticField.Kind == CellKind.Text) && (write == StateWriteKind.Add))) {
+                throw new RuleException(detail: $"'{verb}' must name one {StateSpelling.Kind(kind: staticField.Kind)} source for direct pool field '{rowName}'", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+            }
+            CompiledValueSource staticSource = default;
+
+            if (value is not null) {
+                staticSource = CompiledValueSource.Constant(rawValue: LiteralToRaw(kind: staticField.Kind, literal: value.Value, ruleName: ruleName, verb: verb));
+            } else if (expression is not null) {
+                staticSource = CompiledValueSource.FromExpression(expression: CompileExpression(context: context, expression: expression, kind: ((staticField.Kind == CellKind.Bool) ? CellKind.Int : staticField.Kind), ruleName: ruleName, verb: verb));
+            } else if (fromState is not null) {
+                var sourceOperand = ResolveOperand(context: context, cell: fromKey, operand: fromState, site: new OperandSite(AllowText: (staticField.Kind == CellKind.Text), FieldLabel: "fromState", KeyFieldLabel: "fromKey", RuleName: ruleName, Verb: verb));
+
+                if (sourceOperand.ValueKind != staticField.Kind) {
+                    throw new RuleException(detail: $"direct pool field '{rowName}' and source '{fromState}' have different kinds", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+                }
+                staticSource = CompiledValueSource.FromOperand(operand: sourceOperand.Operand);
+            }
+            return new StaticInstanceFieldWriteEffect(describe: $"{verb} {rowName}", field: staticField, handle: staticHandle, pool: staticPool!, source: staticSource, text: text, write: write);
+        }
+        if (rowName.PoolField is not null) {
+            _ = ResolveOperand(context: context, cell: key, operand: rowName, site: new OperandSite(AllowText: true, FieldLabel: "state", KeyFieldLabel: "key", RuleName: ruleName, Verb: verb));
+            throw new UnreachableException();
+        }
 
         // A live destination selects one row of a zone table or a declared family per firing; the selection's first
         // candidate stands for the whole set at compile time, because every member shares its kind and shape.
         _ = TryResolveLiveRow(
             context: context,
-            name: rowName,
+            name: rowName.Spelling,
             row: out var liveRow,
             ruleName: ruleName,
             where: verb
@@ -583,7 +704,7 @@ public static partial class RuleCompiler {
                 refusal: RuleRefusal.StateRowUnknown,
                 ruleName: ruleName
             ))
-            : (context.FindRow(name: rowName)
+            : (context.FindRow(name: rowName.Spelling)
             ?? throw new RuleException(
             detail: $"'{verb}' names no state row '{rowName}'",
             refusal: RuleRefusal.StateRowUnknown,
@@ -617,7 +738,7 @@ public static partial class RuleCompiler {
         var rowOrdinal = ((liveRow is null)
             ? ResolveRowOrdinal(
                 context: context,
-                name: rowName
+                name: rowName.Spelling
             )
             : -1);
 
@@ -732,7 +853,7 @@ public static partial class RuleCompiler {
                 throw new RuleException(
                     detail: DescribeInexactDuration(
                         literalSeconds: literalSeconds,
-                        rowName: rowName,
+                        rowName: rowName.Spelling,
                         verb: verb
                     ),
                     refusal: RuleRefusal.DurationNotExactEngineTicks,
@@ -797,8 +918,8 @@ public static partial class RuleCompiler {
 
         var source = ResolveOperand(
             context: context,
-            key: fromKey,
-            name: fromState!,
+            cell: fromKey,
+            operand: fromState!,
             site: new OperandSite(
                 AllowText: isTextRow,
                 FieldLabel: "fromState",
@@ -826,7 +947,72 @@ public static partial class RuleCompiler {
             write: write
         );
     }
-    private static IRuleEffect ResolveVectorWrite(StateRow row, int rowOrdinal, (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) destination, string? vector, string? fromState, string? fromKey, decimal? value, decimal? valueSeconds, string? text, ExpressionProgram? expression, StateWriteKind write, string ruleName, RuleCompileContext context, string verb) {
+    private static IRuleEffect ResolveInstanceWrite(RuleInstanceBinding binding, StatePoolFieldDescriptor field, StateChannelRef? key, StateWriteKind write, decimal? value, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? valueSeconds, string? text, ExpressionProgram? expression, string? vector, string ruleName, RuleCompileContext context, string verb) {
+        if (key is not null) {
+            throw new RuleException(detail: $"'{verb}' addresses pool field '{binding.Name}.{field.Name}' with a cell key", refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName);
+        }
+
+        if (field.Kind == CellKind.Vector) {
+            if ((write != StateWriteKind.Set) || (value is not null) || (valueSeconds is not null) || (text is not null) || (expression is not null) || (key is not null) || (fromKey is not null) || ((vector is null) == (fromState is null))) {
+                throw new RuleException(detail: $"'{verb}' on vector pool field '{binding.Name}.{field.Name}' requires exactly one vector or fromState source", refusal: RuleRefusal.VectorEffectNotAdmitted, ruleName: ruleName);
+            }
+            var space = (context.FindSpace(name: field.Declaration.Space) ?? throw new RuleException(detail: $"pool field '{binding.Name}.{field.Name}' names no vector space '{field.Declaration.Space}'", refusal: RuleRefusal.VectorSpaceMismatch, ruleName: ruleName));
+            InstanceVectorSource vectorSource;
+
+            if (vector is not null) {
+                vectorSource = new InstanceVectorSource(vector: ResolveVectorLiteral(context: context, expectedSpace: space, ruleName: ruleName, spelling: vector, where: verb));
+            } else if (TryResolveInstanceField(binding: out var sourceBinding, context: context, field: out var sourceField, reference: fromState!)) {
+                if ((sourceField.Kind != CellKind.Vector) || !string.Equals(a: sourceField.Declaration.Space, b: field.Declaration.Space, comparisonType: StringComparison.Ordinal)) {
+                    throw new RuleException(detail: $"pool vector source '{fromState}' does not share target space '{field.Declaration.Space}'", refusal: RuleRefusal.VectorSpaceMismatch, ruleName: ruleName);
+                }
+                vectorSource = new InstanceVectorSource(pool: sourceBinding.Pool, field: sourceField, bindingSlot: sourceBinding.Slot);
+            } else {
+                vectorSource = new InstanceVectorSource(vector: ResolveVectorCellOperand(context: context, expectedSpace: space, key: null, rowName: fromState!, ruleName: ruleName, where: verb));
+            }
+            return new InstanceFieldVectorWriteEffect(pool: binding.Pool, field: field, bindingSlot: binding.Slot, source: vectorSource, describe: $"{verb} {binding.Name}.{field.Name}");
+        }
+        if (vector is not null) {
+            throw new RuleException(detail: $"'{verb}' vector source requires a vector pool field", refusal: RuleRefusal.VectorEffectNotAdmitted, ruleName: ruleName);
+        }
+
+        var count = ((((((value is not null) ? 1 : 0) + ((fromState is not null) ? 1 : 0)) + ((valueSeconds is not null) ? 1 : 0)) + ((text is not null) ? 1 : 0)) + ((expression is not null) ? 1 : 0));
+
+        if ((count != 1) || ((fromKey is not null) && (fromState is null))) {
+            throw new RuleException(detail: $"'{verb}' must name exactly one source for pool field '{binding.Name}.{field.Name}'", refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName);
+        }
+
+        if (((field.Kind == CellKind.Text) && (text is null) && (fromState is null)) || ((field.Kind != CellKind.Text) && (text is not null))) {
+            throw new RuleException(detail: $"pool field '{binding.Name}.{field.Name}' requires its declared {StateSpelling.Kind(kind: field.Kind)} source", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+        }
+
+        if ((field.Kind == CellKind.Text) && (write == StateWriteKind.Add)) {
+            throw new RuleException(detail: $"'{verb}' cannot add to text pool field '{binding.Name}.{field.Name}'", refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName);
+        }
+
+        if (text is not null) {
+            return new InstanceFieldWriteEffect(pool: binding.Pool, field: field, bindingSlot: binding.Slot, write: write, source: default, text: text, describe: $"{verb} {binding.Name}.{field.Name} = text");
+        }
+
+        CompiledValueSource source;
+
+        if (value is not null) {
+            source = CompiledValueSource.Constant(rawValue: LiteralToRaw(kind: field.Kind, literal: value.Value, ruleName: ruleName, verb: verb));
+        } else if (expression is not null) {
+            source = CompiledValueSource.FromExpression(expression: CompileExpression(context: context, expression: expression, kind: ((field.Kind == CellKind.Bool) ? CellKind.Int : field.Kind), ruleName: ruleName, verb: verb));
+        } else if (fromState is not null) {
+            var operand = ResolveOperand(context: context, cell: fromKey, operand: fromState, site: new OperandSite(AllowText: (field.Kind == CellKind.Text), FieldLabel: "fromState", KeyFieldLabel: "fromKey", RuleName: ruleName, Verb: verb));
+
+            if (operand.ValueKind != field.Kind) {
+                throw new RuleException(detail: $"pool field '{binding.Name}.{field.Name}' is kind={StateSpelling.Kind(kind: field.Kind)} but source '{fromState}' is kind={StateSpelling.Kind(kind: operand.ValueKind)}", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+            }
+
+            source = CompiledValueSource.FromOperand(operand: operand.Operand);
+        } else {
+            throw new RuleException(detail: $"'{verb}' valueSeconds is not admitted for pool field '{binding.Name}.{field.Name}'", refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName);
+        }
+        return new InstanceFieldWriteEffect(pool: binding.Pool, field: field, bindingSlot: binding.Slot, write: write, source: source, text: null, describe: $"{verb} {binding.Name}.{field.Name}");
+    }
+    private static IRuleEffect ResolveVectorWrite(StateRow row, int rowOrdinal, (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) destination, string? vector, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? value, decimal? valueSeconds, string? text, ExpressionProgram? expression, StateWriteKind write, string ruleName, RuleCompileContext context, string verb) {
         var rowName = row.Name.Value;
 
         if (write != StateWriteKind.Set) {

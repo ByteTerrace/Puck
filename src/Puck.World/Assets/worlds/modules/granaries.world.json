@@ -55,18 +55,36 @@
         "$type": "not",
         "predicate": {
           "$type": "compareState",
-          "state": "$influence:water:granaryStores",
-          "key": "$each",
+          "state": {
+            "channel": "influence",
+            "arguments": [
+              "water",
+              "granaryStores"
+            ]
+          },
+          "key": {
+            "channel": "each"
+          },
           "comparison": "Equal",
-          "comparandState": "$influence:water:granaryStores",
-          "comparandKey": "$each"
+          "comparandState": {
+            "channel": "influence",
+            "arguments": [
+              "water",
+              "granaryStores"
+            ]
+          },
+          "comparandKey": {
+            "channel": "each"
+          }
         }
       },
       "effects": [
         {
           "$type": "removeStateCell",
           "state": "granaryWaterCoverage",
-          "key": "$each"
+          "key": {
+            "channel": "each"
+          }
         }
       ],
       "mode": "Level"
@@ -78,18 +96,36 @@
         "$type": "not",
         "predicate": {
           "$type": "compareState",
-          "state": "$influence:power:granaryStores",
-          "key": "$each",
+          "state": {
+            "channel": "influence",
+            "arguments": [
+              "power",
+              "granaryStores"
+            ]
+          },
+          "key": {
+            "channel": "each"
+          },
           "comparison": "Equal",
-          "comparandState": "$influence:power:granaryStores",
-          "comparandKey": "$each"
+          "comparandState": {
+            "channel": "influence",
+            "arguments": [
+              "power",
+              "granaryStores"
+            ]
+          },
+          "comparandKey": {
+            "channel": "each"
+          }
         }
       },
       "effects": [
         {
           "$type": "removeStateCell",
           "state": "granaryPowerCoverage",
-          "key": "$each"
+          "key": {
+            "channel": "each"
+          }
         }
       ],
       "mode": "Level"
@@ -102,19 +138,39 @@
         "predicate": {
           "$type": "compareState",
           "state": "granaryWaterCoverage",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "comparison": "Equal",
-          "comparandState": "$influence:water:granaryStores",
-          "comparandKey": "$each"
+          "comparandState": {
+            "channel": "influence",
+            "arguments": [
+              "water",
+              "granaryStores"
+            ]
+          },
+          "comparandKey": {
+            "channel": "each"
+          }
         }
       },
       "effects": [
         {
           "$type": "setState",
           "state": "granaryWaterCoverage",
-          "key": "$each",
-          "fromState": "$influence:water:granaryStores",
-          "fromKey": "$each"
+          "key": {
+            "channel": "each"
+          },
+          "fromState": {
+            "channel": "influence",
+            "arguments": [
+              "water",
+              "granaryStores"
+            ]
+          },
+          "fromKey": {
+            "channel": "each"
+          }
         }
       ],
       "mode": "Level"
@@ -127,19 +183,39 @@
         "predicate": {
           "$type": "compareState",
           "state": "granaryPowerCoverage",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "comparison": "Equal",
-          "comparandState": "$influence:power:granaryStores",
-          "comparandKey": "$each"
+          "comparandState": {
+            "channel": "influence",
+            "arguments": [
+              "power",
+              "granaryStores"
+            ]
+          },
+          "comparandKey": {
+            "channel": "each"
+          }
         }
       },
       "effects": [
         {
           "$type": "setState",
           "state": "granaryPowerCoverage",
-          "key": "$each",
-          "fromState": "$influence:power:granaryStores",
-          "fromKey": "$each"
+          "key": {
+            "channel": "each"
+          },
+          "fromState": {
+            "channel": "influence",
+            "arguments": [
+              "power",
+              "granaryStores"
+            ]
+          },
+          "fromKey": {
+            "channel": "each"
+          }
         }
       ],
       "mode": "Level"
@@ -227,7 +303,21 @@
               "$type": "setState",
               "state": "granaryIrrigationSelected",
               "fromState": "granaryIrrigationChoices",
-              "fromKey": "$expr:granaryIrrigationRequest"
+              "fromKey": {
+                "channel": "expr",
+                "arguments": [
+                  {
+                    "expression": {
+                      "instructions": [
+                        {
+                          "op": "Operand",
+                          "name": "granaryIrrigationRequest"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
             }
           ]
         }
@@ -262,7 +352,21 @@
               "$type": "setState",
               "state": "granaryPowerSelected",
               "fromState": "granaryPowerChoices",
-              "fromKey": "$expr:granaryPowerRequest"
+              "fromKey": {
+                "channel": "expr",
+                "arguments": [
+                  {
+                    "expression": {
+                      "instructions": [
+                        {
+                          "op": "Operand",
+                          "name": "granaryPowerRequest"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
             }
           ]
         }

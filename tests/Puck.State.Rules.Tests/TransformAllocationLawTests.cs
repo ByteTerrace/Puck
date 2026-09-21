@@ -37,7 +37,7 @@ public sealed class TransformAllocationLawTests {
             To: "hand"
         ), 48L),
         ("setRay", new StateTransform.SetRay(
-            Direction: "E",
+            Direction: CellName.Parse(candidate: "E"),
             From: "0",
             Pattern: "ones",
             Row: "board",
@@ -49,11 +49,11 @@ public sealed class TransformAllocationLawTests {
             Row: "deck"
         ), 48L),
         // A key table sized by the row's live cell count, one column per sort key.
-        ("sortZone", new StateTransform.SortZone(
+        ("sort by attributes", new StateTransform.Sort(
             By: [new SortKey(Row: "rank")],
             Row: "deck"
         ), 96L),
-        ("sortKeyed", new StateTransform.SortKeyed(Row: "scores"), 64L),
+        ("sort", new StateTransform.Sort(Row: "scores", By: [new SortKey(Row: "scores")]), 64L),
         ("writeSet", new StateTransform.WriteSet(
             Row: "target",
             Set: "mask",
@@ -187,7 +187,9 @@ public sealed class TransformAllocationLawTests {
         var measured = Cases
             .Select(selector: static entry => entry.Transform.GetType().Name)
             .ToHashSet(comparer: StringComparer.Ordinal);
-        var vectors = new[] { "Mean", "Mix", "Nearest", "Remember" };
+        // Vector transforms have their own vector-column allocation laws. PushRay needs a live instance binding and
+        // is measured by PushRayLawTests rather than this fixture's unbound scalar firing.
+        var separatelyMeasured = new[] { "Mean", "Mix", "Nearest", "Remember", "PushRay" };
 
         foreach (var name in typeof(StateTransform)
             .GetNestedTypes(bindingAttr: BindingFlags.Public)
@@ -195,7 +197,7 @@ public sealed class TransformAllocationLawTests {
             .Select(selector: static type => type.Name)
         ) {
             Assert.True(
-                condition: (vectors.Contains(
+                condition: (separatelyMeasured.Contains(
                     comparer: StringComparer.Ordinal,
                     value: name
                 ) || measured.Contains(item: name)),

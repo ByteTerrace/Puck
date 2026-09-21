@@ -1513,24 +1513,36 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             );
             WorldServer server;
             WorldPopulation population;
+            var adjacencies = new WorldAdjacencyFields(
+                instances: Instances,
+                sourceInstanceName: identity.World.Value
+            );
 
-            if (checkpoint is { } cp) {
-                (server, population) = WorldServer.FromCheckpoint(
-                    checkpoint: cp,
-                    instanceIdentity: identity.World.Value,
-                    machines: machines,
-                    profiles: profiles
-                );
-            } else {
-                population = new WorldPopulation(definition: definition);
-                server = new WorldServer(
-                    definition: definition,
-                    envelope: new WorldRenderEnvelope(),
-                    instanceIdentity: identity.World.Value,
-                    machines: machines,
-                    population: population,
-                    profiles: profiles
-                );
+            try {
+                if (checkpoint is { } cp) {
+                    (server, population) = WorldServer.FromCheckpoint(
+                        adjacencies: adjacencies,
+                        checkpoint: cp,
+                        instanceIdentity: identity.World.Value,
+                        machines: machines,
+                        profiles: profiles
+                    );
+                } else {
+                    population = new WorldPopulation(definition: definition);
+                    server = new WorldServer(
+                        definition: definition,
+                        envelope: new WorldRenderEnvelope(),
+                        instanceIdentity: identity.World.Value,
+                        machines: machines,
+                        population: population,
+                        profiles: profiles
+                    );
+                    server.Adjacencies = adjacencies;
+                }
+            } catch {
+                adjacencies.Dispose();
+                machines.Dispose();
+                throw;
             }
 
             server.Neighbours = origin.Neighbours;
@@ -1554,6 +1566,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         (mutation is null)
                     ) {
                         Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal decode: {failure})]");
+                        adjacencies.Dispose();
                         machines.Dispose();
 
                         return false;
@@ -1565,6 +1578,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         engineTick: entry.EngineTick
                     )) {
                         Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal replay rejected a recorded mutation)]");
+                        adjacencies.Dispose();
                         machines.Dispose();
 
                         return false;
@@ -1592,6 +1606,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 worldRow: worldRow
             )) {
                 Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({federationReason})]");
+                adjacencies.Dispose();
                 machines.Dispose();
 
                 return false;
@@ -1606,13 +1621,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 profiles: profiles,
                 transport: link
             );
-            var adjacencies = new WorldAdjacencyFields(
-                instances: Instances,
-                sourceInstanceName: identity.World.Value
-            );
-
-            server.Adjacencies = adjacencies;
-
             var door = new WorldPeerHost(
                 authenticator: federation.Authenticator,
                 network: federation.Network,

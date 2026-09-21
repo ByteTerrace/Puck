@@ -1,4 +1,5 @@
-using System.Text.RegularExpressions;
+using System.Globalization;
+using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
@@ -7,7 +8,8 @@ namespace Puck.World.Transpiler.Lowering;
 
 public static partial class WorldDocumentEmitter {
     internal sealed record EnumDefinition(string Name, IReadOnlyList<string> Members);
-    internal sealed record RecordDefinition(string Name, IReadOnlyList<(string Name, string TypeName)> Fields);
+    internal sealed record RecordFieldDefinition(string Name, string TypeName, IReadOnlyList<StateModifierNode> Modifiers, ExpressionNode? Default, SourceSpan Span);
+    internal sealed record RecordDefinition(string Name, IReadOnlyList<RecordFieldDefinition> Fields);
 
     internal static Dictionary<string, EnumDefinition> GetOrCreateEnums(DocumentScope scope) {
         if (!scope.Annotations.TryGetValue(key: "WorldEnums", value: out var obj) || (obj is not Dictionary<string, EnumDefinition> dict)) {
@@ -23,17 +25,17 @@ public static partial class WorldDocumentEmitter {
         }
         return dict;
     }
-    internal static Dictionary<string, (string ExprText, SourceSpan Span)> GetOrCreateDerivedState(DocumentScope scope) {
-        if (!scope.Annotations.TryGetValue(key: "WorldDerivedState", value: out var obj) || (obj is not Dictionary<string, (string ExprText, SourceSpan Span)> dict)) {
-            dict = new Dictionary<string, (string ExprText, SourceSpan Span)>(comparer: StringComparer.Ordinal);
+    internal static Dictionary<string, OperandExpressionNode> GetOrCreateDerivedState(DocumentScope scope) {
+        if (!scope.Annotations.TryGetValue(key: "WorldDerivedState", value: out var obj) || (obj is not Dictionary<string, OperandExpressionNode> dict)) {
+            dict = new Dictionary<string, OperandExpressionNode>(comparer: StringComparer.Ordinal);
             scope.Annotations["WorldDerivedState"] = dict;
         }
         return dict;
     }
-    internal static Dictionary<string, string> GetOrCreateRecordTables(DocumentScope scope) {
-        if (!scope.Annotations.TryGetValue(key: "WorldRecordTables", value: out var obj) || (obj is not Dictionary<string, string> dict)) {
+    internal static Dictionary<string, string> GetOrCreateRecordPools(DocumentScope scope) {
+        if (!scope.Annotations.TryGetValue(key: "WorldRecordPools", value: out var obj) || (obj is not Dictionary<string, string> dict)) {
             dict = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-            scope.Annotations["WorldRecordTables"] = dict;
+            scope.Annotations["WorldRecordPools"] = dict;
         }
         return dict;
     }
@@ -41,7 +43,7 @@ public static partial class WorldDocumentEmitter {
         var enums = GetOrCreateEnums(scope: scope);
         var records = GetOrCreateRecords(scope: scope);
         var derived = GetOrCreateDerivedState(scope: scope);
-        var recordTables = GetOrCreateRecordTables(scope: scope);
+        var recordPools = GetOrCreateRecordPools(scope: scope);
 
         foreach (var stmt in statements) {
             switch (stmt) {
@@ -56,313 +58,243 @@ public static partial class WorldDocumentEmitter {
                     break;
 
                 case RecordDeclarationNode recordNode:
-                    var fieldsList = recordNode.Fields.Select(selector: f => (f.Name, f.TypeName)).ToList();
+                    var fieldsList = recordNode.Fields.Select(selector: f => new RecordFieldDefinition(
+                        Default: f.Default,
+                        Modifiers: f.Modifiers,
+                        Name: f.Name,
+                        TypeName: f.TypeName,
+                        Span: f.Span
+                    )).ToList();
                     records[recordNode.Name] = new RecordDefinition(Name: recordNode.Name, Fields: fieldsList);
                     break;
 
                 case DerivedStateNode deriveNode:
-                    derived[deriveNode.Name] = ((deriveNode.RawExpression ?? (deriveNode.Expression.ToString() ?? string.Empty)), deriveNode.Span);
+                    derived[deriveNode.Name] = deriveNode.Expression;
+                    break;
+
+                case StatePoolDeclarationNode poolNode:
+                    recordPools[poolNode.Name] = poolNode.RecordName;
                     break;
 
                 case BlockNode block when ((block.Identifier == "state") || (block.Identifier == "world")):
                     IndexTypesAndDerivedState(statements: block.Statements, scope: scope);
                     break;
 
-                case StateTableDeclarationNode table:
-                    if (records.ContainsKey(key: table.Kind)) {
-                        recordTables[table.Name] = table.Kind;
+            }
+        }
+    }
+    internal static JsonObject LowerRecordDeclaration(RecordDeclarationNode declaration, JsonObject state, DocumentScope scope) {
+        var records = GetOrCreateRecords(scope: scope);
+        var definition = records[declaration.Name];
+        var fields = new JsonArray();
+
+        foreach (var field in definition.Fields) {
+            var kind = ((field.TypeName is "Bool" or "Fixed" or "Text" or "Vector")
+                ? field.TypeName
+                : "Int");
+            var fieldObj = new JsonObject {
+                ["name"] = field.Name,
+                ["kind"] = kind,
+            };
+
+            if (GetOrCreateEnums(scope: scope).ContainsKey(key: field.TypeName)) {
+                fieldObj["enum"] = field.TypeName;
+                MaterializeRuntimeEnum(name: field.TypeName, state: state, scope: scope);
+            } else if (field.TypeName is not ("Int" or "Bool" or "Fixed" or "Text" or "Vector")) {
+                scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.StateDeclarationInvalidDefault, message: $"record '{declaration.Name}' field '{field.Name}' names unknown type or enum '{field.TypeName}'", span: field.Span);
+            }
+            if (field.Default is { } defaultExpr) {
+                var loweredDefault = ((kind == "Vector")
+                    ? DocumentLowering.LowerValue(expr: defaultExpr, scope: scope)
+                    : LowerStateScalarValue(
+                        context: $"record '{declaration.Name}' field '{field.Name}' default",
+                        expr: defaultExpr,
+                        kind: kind,
+                        scope: scope
+                    ));
+
+                fieldObj["default"] = TaggedCellValue(kind: kind, value: loweredDefault!);
+            }
+            foreach (var modifier in field.Modifiers) {
+                switch (modifier.Name) {
+                    case "bounds":
+                        LowerStateBoundsModifier(
+                            modifier: modifier,
+                            rowObj: fieldObj,
+                            kind: kind,
+                            rowName: $"{declaration.Name}.{field.Name}",
+                            scope: scope
+                        );
+                        NormalizeRecordFixedBounds(field: fieldObj, kind: kind);
+                        break;
+                    case "space" when (modifier.Arguments.Count == 1):
+                        fieldObj["space"] = DocumentLowering.LowerValue(expr: modifier.Arguments[0].Value, scope: scope);
+                        break;
+                    case "advance":
+                        fieldObj["advance"] = LowerStateAdvanceModifier(
+                            context: $"record field '{declaration.Name}.{field.Name}' advance",
+                            modifier: modifier,
+                            scope: scope
+                        );
+                        break;
+                    default:
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationUnknownModifier,
+                            message: $"record field '{declaration.Name}.{field.Name}' does not admit modifier '{modifier.Name}'",
+                            span: modifier.Span
+                        );
+                        break;
+                }
+            }
+            fields.Add(item: fieldObj);
+        }
+
+        return new JsonObject {
+            ["name"] = declaration.Name,
+            ["fields"] = fields,
+        };
+    }
+
+    private static void MaterializeRuntimeEnum(string name, JsonObject state, DocumentScope scope) {
+        var enums = ((state["enums"] as JsonArray) ?? new JsonArray());
+
+        state["enums"] = enums;
+        if (enums.Any(predicate: node => (node?["name"]?.ToString() == name))) {
+            return;
+        }
+        var source = GetOrCreateEnums(scope: scope)[name];
+
+        enums.Add(item: ((JsonNode)new JsonObject { ["name"] = name, ["members"] = new JsonArray([.. source.Members.Select(selector: static member => ((JsonNode)member))]) }));
+    }
+    private static void NormalizeRecordFixedBounds(JsonObject field, string kind) {
+        if (kind != "Fixed") {
+            return;
+        }
+
+        foreach (var member in ((string[])["min", "max"])) {
+            if (field[member] is { } value) {
+                field[member] = TaggedCellValue(kind: kind, value: value.DeepClone())["value"]!.DeepClone();
+            }
+        }
+    }
+
+    internal static JsonObject LowerPoolDeclaration(StatePoolDeclarationNode declaration, DocumentScope scope) {
+        var records = GetOrCreateRecords(scope: scope);
+
+        records.TryGetValue(key: declaration.RecordName, value: out var record);
+        var capacity = 0;
+
+        if (declaration.Capacity is { } capacityExpr) {
+            var loweredCapacity = DocumentLowering.LowerValue(expr: capacityExpr, scope: scope);
+
+            if ((loweredCapacity is JsonValue value) && value.TryGetValue<long>(value: out var count) && (count > 0) && (count <= int.MaxValue)) {
+                capacity = ((int)count);
+            } else {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                    message: $"pool '{declaration.Name}' capacity must be a positive whole number",
+                    span: declaration.Span
+                );
+            }
+        }
+
+        var seeds = new JsonArray();
+
+        if (declaration.Initializer is { } initializer) {
+            var lowered = DocumentLowering.LowerValue(expr: initializer, scope: scope);
+
+            if (lowered is JsonArray instances) {
+                for (var slot = 0; (slot < instances.Count); slot++) {
+                    if (instances[slot] is not JsonObject instance) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"pool '{declaration.Name}' initializer entry {slot} must be an object",
+                            span: declaration.Span
+                        );
+                        continue;
                     }
-                    break;
-            }
-        }
-    }
-    internal static bool IsRecordType(string kind, DocumentScope scope) {
-        var records = GetOrCreateRecords(scope: scope);
+                    var values = new JsonArray();
 
-        return records.ContainsKey(key: kind);
-    }
-    internal static IEnumerable<StateTableDeclarationNode> ExpandRecordTable(StateTableDeclarationNode table, DocumentScope scope) {
-        var records = GetOrCreateRecords(scope: scope);
+                    foreach (var (field, value) in instance) {
+                        var recordField = record?.Fields.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name, b: field, comparisonType: StringComparison.Ordinal));
 
-        if (!records.TryGetValue(key: table.Kind, value: out var recDef)) {
-            yield return table;
-            yield break;
-        }
-
-        var enums = GetOrCreateEnums(scope: scope);
-        var cells = new List<StateCellEntryNode>();
-
-        if (table.FamilySize is LiteralExpressionNode { Value: long count }) {
-            for (var i = 0; (i < count); i++) {
-                cells.Add(item: new StateCellEntryNode(
-                    Column: table.Column,
-                    Key: i.ToString(),
-                    Length: 0,
-                    Line: table.Line,
-                    Modifiers: [],
-                    Offset: table.Offset,
-                    Value: new LiteralExpressionNode(Value: 0L)
-                ));
-            }
-        } else if (table.Cells.Count > 0) {
-            cells.AddRange(collection: table.Cells);
-        }
-
-        foreach (var (fieldName, fieldType) in recDef.Fields) {
-            var colName = $"{table.Name}_{fieldName}";
-            var colKind = "Int";
-
-            if (enums.ContainsKey(key: fieldType)) {
-                colKind = "Int";
-            } else if (fieldType is "Bool" or "Fixed" or "Text" or "Vector") {
-                colKind = fieldType;
-            }
-
-            yield return new StateTableDeclarationNode(
-                Cells: cells,
-                Column: table.Column,
-                FamilySize: null,
-                Initializer: null,
-                Kind: colKind,
-                Length: table.Length,
-                Line: table.Line,
-                Modifiers: table.Modifiers,
-                Name: colName,
-                Offset: table.Offset
-            );
-        }
-    }
-
-    private static readonly Regex RecordFieldWithIndexRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\b([A-Za-z_][A-Za-z0-9_]*)\[([^\]]+)\]\.([A-Za-z_][A-Za-z0-9_]*)\b"
-    );
-    private static readonly Regex RecordFieldBareRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\b([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*[\(\[])"
-    );
-
-    internal static string ResolveRecordFieldAccessesInText(string text, DocumentScope scope) {
-        if (string.IsNullOrEmpty(value: text)) {
-            return text;
-        }
-
-        var recordTables = GetOrCreateRecordTables(scope: scope);
-
-        if (recordTables.Count == 0) {
-            return text;
-        }
-
-        var rewritten = RecordFieldWithIndexRegex.Replace(
-            input: text,
-            evaluator: m => {
-                var tableName = m.Groups[1].Value;
-                var indexPart = m.Groups[2].Value;
-                var fieldName = m.Groups[3].Value;
-
-                if (recordTables.ContainsKey(key: tableName)) {
-                    return $"{tableName}_{fieldName}[{indexPart}]";
-                }
-                return m.Value;
-            }
-        );
-
-        rewritten = RecordFieldBareRegex.Replace(
-            input: rewritten,
-            evaluator: m => {
-                var tableName = m.Groups[1].Value;
-                var fieldName = m.Groups[2].Value;
-
-                if (recordTables.ContainsKey(key: tableName)) {
-                    return $"{tableName}_{fieldName}";
-                }
-                return m.Value;
-            }
-        );
-
-        return rewritten;
-    }
-
-    private static readonly Regex EnumQualifiedRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\b([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\b"
-    );
-
-    internal static string ResolveEnumsInText(string text, DocumentScope scope) {
-        if (string.IsNullOrEmpty(value: text)) {
-            return text;
-        }
-
-        var enums = GetOrCreateEnums(scope: scope);
-
-        if (enums.Count == 0) {
-            return text;
-        }
-
-        return EnumQualifiedRegex.Replace(
-            input: text,
-            evaluator: m => {
-                var enumName = m.Groups[1].Value;
-                var memberName = m.Groups[2].Value;
-
-                if (enums.TryGetValue(key: enumName, value: out var def)) {
-                    for (var i = 0; (i < def.Members.Count); i++) {
-                        if (string.Equals(a: def.Members[i], b: memberName, comparisonType: StringComparison.Ordinal)) {
-                            return i.ToString();
+                        if ((record is not null) && (recordField is null)) {
+                            scope.Diagnostics.ReportError(
+                                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
+                                message: $"pool '{declaration.Name}' initializer names unknown field '{field}' of record '{declaration.RecordName}'",
+                                span: declaration.Span
+                            );
+                            continue;
                         }
+                        values.Add(item: new JsonObject {
+                            ["field"] = field,
+                            ["value"] = TaggedCellValue(
+                                kind: ((recordField?.TypeName is "Bool" or "Fixed" or "Text" or "Vector") ? recordField.TypeName : "Int"),
+                                value: (value?.DeepClone() ?? JsonValue.Create(0L)!)
+                            ),
+                        });
                     }
+                    seeds.Add(item: new JsonObject { ["slot"] = slot, ["values"] = values });
                 }
-                return m.Value;
-            }
-        );
-    }
-
-    private static readonly Regex DerivedIdentifierRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"(?<![\w$`.\[])[A-Za-z_][A-Za-z0-9_]*(?![\w(\[:`])"
-    );
-
-    internal static string ResolveDerivedStateInText(string text, DocumentScope scope, HashSet<string>? visiting = null) {
-        if (string.IsNullOrEmpty(value: text)) {
-            return text;
-        }
-
-        var derived = GetOrCreateDerivedState(scope: scope);
-
-        if (derived.Count == 0) {
-            return text;
-        }
-
-        visiting ??= new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        return DerivedIdentifierRegex.Replace(
-            input: text,
-            evaluator: m => {
-                var name = m.Value;
-
-                if (!derived.TryGetValue(key: name, value: out var def)) {
-                    return name;
-                }
-
-                if (visiting.Contains(item: name)) {
+                if ((capacity > 0) && (instances.Count > capacity)) {
                     scope.Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.DerivedStateCycle,
-                        message: $"Cyclic dependency detected in derived state '{name}'",
-                        span: def.Span
+                        code: PuckDiagnosticCodes.StateDeclarationCapacityTooSmall,
+                        message: $"pool '{declaration.Name}' capacity {capacity} is smaller than its {instances.Count} static instances",
+                        span: declaration.Span
                     );
-                    return name;
                 }
-
-                visiting.Add(item: name);
-                var expanded = ResolveDerivedStateInText(scope: scope, text: def.ExprText, visiting: visiting);
-
-                visiting.Remove(item: name);
-
-                return $"({expanded})";
+                if (capacity == 0) {
+                    capacity = instances.Count;
+                }
             }
-        );
-    }
-
-    private static readonly Regex CollectionAllRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\ball\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:->|=>)\s*([^)]+)\)"
-    );
-    private static readonly Regex CollectionAnyRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\bany\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:->|=>)\s*([^)]+)\)"
-    );
-    private static readonly Regex CollectionCountRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\bcount\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:->|=>)\s*([^)]+)\)"
-    );
-    private static readonly Regex CollectionSumRegex = new(
-        options: RegexOptions.Compiled,
-        pattern: @"\bsum\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:->|=>)\s*([^)]+)\)"
-    );
-
-    internal static string ResolveCollectionOperationsInText(string text, DocumentScope scope) {
-        if (string.IsNullOrEmpty(value: text)) {
-            return text;
         }
 
-        var families = GetOrCreateStateFamilies(scope: scope);
-
-        if (families.Count == 0) {
-            return text;
+        if (capacity == 0) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                message: $"pool '{declaration.Name}' must declare a positive capacity",
+                span: declaration.Span
+            );
+            capacity = 1;
         }
 
-        var rewritten = CollectionAllRegex.Replace(
-            input: text,
-            evaluator: m => {
-                var famName = m.Groups[1].Value;
-                var varName = m.Groups[2].Value;
-                var body = m.Groups[3].Value.Trim();
-
-                if (!families.TryGetValue(key: famName, value: out var fam)) {
-                    return m.Value;
-                }
-
-                var terms = Enumerable.Range(0, fam.Size)
-                    .Select(selector: i => $"({Regex.Replace(input: body, pattern: $@"\b{varName}\b", replacement: $"{famName}{i}")})");
-
-                return $"({string.Join(separator: " and ", values: terms)})";
-            }
-        );
-
-        rewritten = CollectionAnyRegex.Replace(
-            input: rewritten,
-            evaluator: m => {
-                var famName = m.Groups[1].Value;
-                var varName = m.Groups[2].Value;
-                var body = m.Groups[3].Value.Trim();
-
-                if (!families.TryGetValue(key: famName, value: out var fam)) {
-                    return m.Value;
-                }
-
-                var terms = Enumerable.Range(0, fam.Size)
-                    .Select(selector: i => $"({Regex.Replace(input: body, pattern: $@"\b{varName}\b", replacement: $"{famName}{i}")})");
-
-                return $"({string.Join(separator: " or ", values: terms)})";
-            }
-        );
-
-        rewritten = CollectionCountRegex.Replace(
-            input: rewritten,
-            evaluator: m => {
-                var famName = m.Groups[1].Value;
-                var varName = m.Groups[2].Value;
-                var body = m.Groups[3].Value.Trim();
-
-                if (!families.TryGetValue(key: famName, value: out var fam)) {
-                    return m.Value;
-                }
-
-                var terms = Enumerable.Range(0, fam.Size)
-                    .Select(selector: i => $"({Regex.Replace(input: body, pattern: $@"\b{varName}\b", replacement: $"{famName}{i}")} ? 1 : 0)");
-
-                return $"({string.Join(separator: " + ", values: terms)})";
-            }
-        );
-
-        rewritten = CollectionSumRegex.Replace(
-            input: rewritten,
-            evaluator: m => {
-                var famName = m.Groups[1].Value;
-                var varName = m.Groups[2].Value;
-                var body = m.Groups[3].Value.Trim();
-
-                if (!families.TryGetValue(key: famName, value: out var fam)) {
-                    return m.Value;
-                }
-
-                var terms = Enumerable.Range(0, fam.Size)
-                    .Select(selector: i => $"({Regex.Replace(input: body, pattern: $@"\b{varName}\b", replacement: $"{famName}{i}")})");
-
-                return $"({string.Join(separator: " + ", values: terms)})";
-            }
-        );
-
-        return rewritten;
+        return new JsonObject {
+            ["name"] = declaration.Name,
+            ["record"] = declaration.RecordName,
+            ["capacity"] = capacity,
+            ["initial"] = seeds,
+        };
     }
+
+    private static JsonObject TaggedCellValue(string kind, JsonNode value) {
+        if ((kind == "Fixed") && (value is JsonValue fixedValue) && fixedValue.TryGetValue<string>(value: out var text) &&
+            Puck.Maths.FixedQ4816.TryParse(text, CultureInfo.InvariantCulture, out var fixedNumber)) {
+            value = JsonValue.Create(fixedNumber.Value)!;
+        } else if ((kind == "Fixed") && (value is JsonValue numericValue) && numericValue.TryGetValue<double>(value: out var number)) {
+            value = JsonValue.Create(Puck.Maths.FixedQ4816.FromDouble(value: number).Value)!;
+        }
+        return new JsonObject {
+            ["kind"] = kind,
+            ["value"] = value,
+        };
+    }
+
+    internal static JsonObject LowerPairPoolDeclaration(StatePairPoolDeclarationNode declaration, DocumentScope scope) {
+        var value = DocumentLowering.LowerValue(expr: declaration.MaxLive, scope: scope);
+
+        if ((value is not JsonValue number) || !number.TryGetValue<long>(value: out var maxLive) || (maxLive <= 0) || (maxLive > int.MaxValue)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.StateDeclarationInvalidDefault, message: $"pairPool '{declaration.Name}' maxLive must be a positive whole number", span: declaration.Span);
+            maxLive = 1;
+        }
+        return new JsonObject {
+            ["name"] = declaration.Name,
+            ["record"] = declaration.RecordName,
+            ["leftPool"] = declaration.LeftPool,
+            ["rightPool"] = declaration.RightPool,
+            ["maxLive"] = maxLive,
+            ["directed"] = declaration.Directed,
+            ["allowSelf"] = declaration.AllowSelf,
+        };
+    }
+
 }

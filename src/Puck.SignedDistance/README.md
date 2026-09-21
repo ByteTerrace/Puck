@@ -2,6 +2,8 @@
 
 Puck.SignedDistance provides the signed-distance-function instruction ISA,
 packed program representation, authoring builder, and deterministic CPU evaluator.
+The evaluators expose structural line-of-sight work envelopes derived from their
+compiled programs and fixed march budgets. These counts carry no cycle price.
 
 ## Documentation
 

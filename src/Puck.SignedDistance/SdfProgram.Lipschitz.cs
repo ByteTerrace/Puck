@@ -42,13 +42,9 @@ public sealed partial class SdfProgram {
     // The depth-0 chain with the largest factor: the chain that binds the global step scale below 1 (a scoped chain's
     // factor is clamped to 1 at its pop, see AnalyzeLipschitz). Null when no unscoped chain carries a factor above 1,
     // which is every isometric program. A diagnostic, never an input to the packed words.
-    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
-        var chainFactors = AnalyzeChainLipschitz(
-            chainHasShape: out _,
-            convexPolygonProfiles: convexPolygonProfiles,
-            instructions: instructions,
-            sweepCurves: sweepCurves
-        );
+    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, List<float> chainFactors) {
+        // Reuse admission's chain factors: AnalyzeLipschitz only patches PopField.Data1.Y, which the chain
+        // analysis ignores. Repeating that analysis here would walk the full capacity-probe program twice.
         SdfStepScaleBinder? best = null;
         var chainIndex = 0;
         var depth = 0;
@@ -113,8 +109,8 @@ public sealed partial class SdfProgram {
 
         return -1;
     }
-    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
-        var chainFactors = AnalyzeChainLipschitz(
+    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, out List<float> chainFactors) {
+        chainFactors = AnalyzeChainLipschitz(
             chainHasShape: out var chainHasShape,
             convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions,
@@ -265,7 +261,7 @@ public sealed partial class SdfProgram {
     //
     // A blend's own factor is deliberately ABSENT here: composition is not a property of the chain a candidate was
     // built in, and folding chamfer in at this level is precisely the latch AnalyzeLipschitz's remarks retire.
-    private static List<float> AnalyzeChainLipschitz(IReadOnlyList<SdfInstruction> instructions, out List<bool> chainHasShape, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
+    private static List<float> AnalyzeChainLipschitz(SdfInstruction[] instructions, out List<bool> chainHasShape, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
         var chainFactors = new List<float>();
         var hasShapeByChain = new List<bool>();
         var chainHasShapeBlend = false;
@@ -288,7 +284,7 @@ public sealed partial class SdfProgram {
         var chainReachWarps = new List<(SdfInstruction Warp, float MinScale, float MaxScale)>(); // Reversed at chain close to bound each warp's actual input domain.
         var chainScale = Vector3.One;     // accumulated local coordinate scale within the chain
 
-        for (var index = 0; (index < instructions.Count); index++) {
+        for (var index = 0; (index < instructions.Length); index++) {
             var instruction = instructions[index];
 
             // Segments split BEFORE each ResetPoint, so a ResetPoint past the first instruction closes the chain that
@@ -623,5 +619,38 @@ public sealed partial class SdfProgram {
         var shearNorm = (((reach * maxS) * dsdyBound) / (minSClamped * minSClamped));
 
         return (distanceScale * (diagonalNorm + shearNorm));
+    }
+    // Largest singular value of a unit shear with magnitude a.
+    private static float TwistOperatorNorm(float a) {
+        var aSquared = (a * a);
+
+        return MathF.Sqrt(x: (((2.0f + aSquared) + (a * MathF.Sqrt(x: (aSquared + 4.0f)))) / 2.0f));
+    }
+    // SdfOp.Shear's Jacobian is exactly [[1, s(y), 0], [0, 1, 0], [0, 0, 1]] with s(y) = linear + 2*quadratic*y + 3*cubic*y^2 — a
+    // rank-1 perturbation of the identity driven by a coordinate (y) OUTSIDE the axis it perturbs (x), the same
+    // structure TwistOperatorNorm's derivation covers (its key axis is likewise orthogonal to the plane it rotates),
+    // so the two share the identical sqrt((2 + a^2 + a*sqrt(a^2 + 4)) / 2) singular-value bound, monotone in
+    // |s|. Over reach rho, bound |s| by |linear| + 2*|quadratic|*rho + 3*|cubic|*rho^2.
+    private static float ShearOperatorNorm(float linear, float quadratic, float cubic, float reach) => TwistOperatorNorm(a: ((MathF.Abs(x: linear) + ((2.0f * MathF.Abs(x: quadratic)) * reach)) + (((3f * MathF.Abs(x: cubic)) * reach) * reach)));
+    // SdfOp.GaussianPush's Jacobian is I - Push (outer) gradG, gradG = -2*g(p)*(offset/Radii) (offset = (p-Center)/Radii,
+    // g = exp(-dot(offset,offset))) — a rank-1 perturbation of the identity, operator norm <= 1 + |Push|*sup|gradG|.
+    // sup|gradG|: each component of offset/Radii is bounded by |offset|/min(Radii), so |gradG| <= 2*g*|offset|/min(Radii);
+    // the scalar s*exp(-s^2) (s = |offset| >= 0) maximizes at s = 1/sqrt(2), value 1/sqrt(2e), giving
+    // sup|gradG| = sqrt(2/e)/min(Radii) — REACH-INDEPENDENT (the Gaussian decays to 0 away from Center), unlike
+    // ShearOperatorNorm. Push = 0 or an unbounded Radii component returns exactly 1.
+    private static float GaussianPushLipschitz(Vector3 radii, Vector3 push) {
+        const float SqrtTwoOverE = 0.8577638f;   // sqrt(2/e)
+        var minRadius = MathF.Min(
+            x: MathF.Abs(x: radii.X),
+            y: MathF.Min(
+                x: MathF.Abs(x: radii.Y),
+                y: MathF.Abs(x: radii.Z)
+            )
+        );
+
+        return ((minRadius > 0.0f)
+            ? (1.0f + ((push.Length() * SqrtTwoOverE) / minRadius))
+            : float.PositiveInfinity
+        );
     }
 }

@@ -49,7 +49,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal
         ) ||
             !layout.HasTraits ||
-            !m_catalog.Keys.TryGetName(
+            !m_keys.TryGetName(
             key: key,
             name: out var name
         ) ||
@@ -73,108 +73,68 @@ public sealed partial class StateArena {
     /// rule, a write's operand, a disclosure and a hash all take; only <see cref="StateReader.TryReadEased"/>
     /// eases, for a presentation binding.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="time">The clocks the traits are evaluated against.</param>
     /// <param name="value">The live value on success; otherwise the carrier holding no case.</param>
     /// <returns><see langword="true"/> when the row holds the cell.</returns>
     /// <remarks>A cell under no trait, and every <see cref="CellKind.Text"/> or <see cref="CellKind.Vector"/>
-    /// cell, reads exactly what <see cref="TryRead"/> answers.</remarks>
+    /// cell, reads exactly what <see cref="StateArena.TryRead(int, CellKey, out CellValue)"/> answers.</remarks>
     public bool TryReadLive(int rowOrdinal, CellKey key, in ArenaTime time, out CellValue value) {
-        if (!TryRead(
-            key: key,
-            rowOrdinal: rowOrdinal,
-            value: out value
-        )) {
+        if (!TryCellSlot(key: key, rowOrdinal: rowOrdinal, slot: out var slot) || !Bit(index: slot, words: m_presence)) {
+            value = default;
             return false;
         }
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
-        var layout = m_layout[rowOrdinal];
-
-        if (
-            !layout.HasTraits ||
-            (layout.Kind is (CellKind.Text or CellKind.Vector)) ||
-            !m_catalog.Keys.TryGetName(
-            key: key,
-            name: out var name
-        ) ||
-            !TryCellSlot(
-            key: key,
-            rowOrdinal: rowOrdinal,
-            slot: out var slot
-        )
-        ) {
-            return true;
+        if (!layout.HasTraits || (layout.Kind is CellKind.Text or CellKind.Vector)) {
+            value = ValueAt(layout: in layout, slot: slot);
+        } else {
+            value = NumericValue(kind: layout.Kind, raw: LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time));
         }
-
-        var row = DocumentRow(rowOrdinal: rowOrdinal);
-        var behavior = BehaviorAt(
-            name: name,
-            row: row,
-            slot: slot
-        );
-
-        if (behavior.IsNone) {
-            return true;
-        }
-
-        var live = LiveNumber(
-            baseValue: m_numbers[slot],
-            behavior: behavior,
-            row: row,
-            slot: slot,
-            time: time
-        );
-
-        value = (layout.Kind switch {
-            CellKind.Fixed => CellValue.Fixed(rawBits: live),
-            CellKind.Bool => CellValue.Bool(value: (live != 0L)),
-            _ => CellValue.Int(value: live),
-        });
-
         return true;
     }
-    /// <summary>Reads one numeric cell's live value.</summary>
+    /// <summary>Reads one numeric cell's live value without materializing a carrier.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="time">The clocks the traits are evaluated against.</param>
     /// <param name="value">The live raw value on success; otherwise zero.</param>
     /// <returns><see langword="true"/> when the row holds a numeric cell there.</returns>
     public bool TryReadLiveNumber(int rowOrdinal, CellKey key, in ArenaTime time, out long value) {
-        if (TryReadLive(
-            key: key,
-            rowOrdinal: rowOrdinal,
-            time: time,
-            value: out var carried
-        )) {
-            switch (carried.Kind) {
-                case CellKind.Int:
-                    value = carried.AsInt;
-
-                    return true;
-                case CellKind.Fixed:
-                    value = carried.AsFixed;
-
-                    return true;
-                case CellKind.Bool:
-                    value = (carried.AsBool
-                        ? 1L
-                        : 0L
-                    );
-
-                    return true;
-                default:
-                    break;
-            }
+        if (TryCellSlot(key: key, rowOrdinal: rowOrdinal, slot: out var slot) &&
+            Bit(index: slot, words: m_presence) && (m_layout[rowOrdinal].Kind is not (CellKind.Text or CellKind.Vector))) {
+            value = LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time);
+            return true;
         }
-
         value = 0L;
-
         return false;
     }
+
+    // Both public read forms share the same numeric evaluator after resolving storage exactly once.
+    // Boolean normalization matches CellValue.Bool even when an advancing trait produces a nonzero integer.
+    private long LiveNumberAt(int rowOrdinal, int slot, CellKey key, in ArenaTime time) {
+        ref readonly var layout = ref m_layout[rowOrdinal];
+        var raw = m_numbers[slot];
+
+        if (layout.HasTraits && m_keys.TryGetName(key: key, name: out var name)) {
+            var row = DocumentRow(rowOrdinal: rowOrdinal);
+            var behavior = BehaviorAt(name: name, row: row, slot: slot);
+
+            if (!behavior.IsNone) {
+                raw = LiveNumber(baseValue: raw, behavior: in behavior, row: row, slot: slot, time: in time);
+            }
+        }
+        return ((layout.Kind == CellKind.Bool) ? ((raw != 0L) ? 1L : 0L) : raw);
+    }
+    private static CellValue NumericValue(CellKind kind, long raw) => kind switch {
+        CellKind.Fixed => CellValue.Fixed(rawBits: raw),
+        CellKind.Bool => CellValue.Bool(value: (raw != 0L)),
+        _ => CellValue.Int(value: raw),
+    };
+
     /// <summary>Attempts an explicit numeric write against a cell's live value, rebasing the clock the trait reads
     /// from.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="operand">The replacement for a set, or the addend for an add.</param>
     /// <param name="write">Set or add.</param>
     /// <param name="time">The clocks the write settles the cell's clock to.</param>
@@ -199,7 +159,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Kind is (CellKind.Text or CellKind.Vector)) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is a {layout.Kind} row, which takes no numeric write";
@@ -208,7 +168,7 @@ public sealed partial class StateArena {
         }
 
         var row = DocumentRow(rowOrdinal: rowOrdinal);
-        var name = m_catalog.Keys[key];
+        var name = m_keys[key];
         var behavior = (layout.HasTraits
             ? BehaviorAt(
                 name: name,

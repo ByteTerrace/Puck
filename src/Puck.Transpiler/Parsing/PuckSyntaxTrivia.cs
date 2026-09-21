@@ -402,6 +402,34 @@ public static class PuckSyntaxTrivia {
         }
         public StatementNode VisitStatement(StatementNode statement) {
             switch (statement) {
+                case WorldDeclarationNode world: {
+                        return (world with {
+                            Module = ((CallExpressionNode)VisitExpression(expression: world.Module)),
+                            Name = VisitExpression(expression: world.Name),
+                        });
+                    }
+                case WorldLinkNode link when (link.Kind == "border"): {
+                        var (properties, inner, header) = Braced(
+                            headerFrom: link.Offset,
+                            limit: ContentEnd(node: link),
+                            openFrom: ContentEnd(node: link.Right),
+                            opener: '{',
+                            statements: link.Properties
+                        );
+
+                        return (link with {
+                            Left = VisitExpression(expression: link.Left),
+                            Properties = properties,
+                            Right = VisitExpression(expression: link.Right),
+                            Trivia = (link.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
+                        });
+                    }
+                case WorldLinkNode link: {
+                        return (link with {
+                            Left = VisitExpression(expression: link.Left),
+                            Right = VisitExpression(expression: link.Right),
+                        });
+                    }
                 case BlockNode block: {
                         var (statements, inner, header) = Braced(
                             headerFrom: block.Offset,
@@ -447,7 +475,7 @@ public static class PuckSyntaxTrivia {
                         var (statements, inner, header) = Braced(
                             headerFrom: group.Offset,
                             limit: ContentEnd(node: group),
-                            openFrom: group.Offset,
+                            openFrom: Math.Max(val1: group.Offset, val2: ((group.Undo is { } undo) ? (undo.Offset + undo.Length) : group.Offset)),
                             opener: '{',
                             statements: group.Statements
                         );
@@ -456,7 +484,7 @@ public static class PuckSyntaxTrivia {
                     }
                 case WorkflowNode workflow: {
                         var open = FindNext(
-                            from: workflow.Offset,
+                            from: ((workflow.Undo is { } undo) ? (undo.Offset + undo.Length) : workflow.Offset),
                             limit: ContentEnd(node: workflow),
                             target: '{'
                         );
@@ -652,6 +680,18 @@ public static class PuckSyntaxTrivia {
                             Trivia = (loop.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
+                case ClaimStatementNode claim: {
+                        var (statements, inner, header) = Braced(headerFrom: claim.Offset, limit: ContentEnd(node: claim), openFrom: claim.Offset, opener: '{', statements: claim.Body);
+                        return (claim with { Body = statements, Trivia = (claim.Trivia with { Header = header, Inner = inner, Opening = m_opening }) });
+                    }
+                case ClaimPairStatementNode claim: {
+                        var (statements, inner, header) = Braced(headerFrom: claim.Offset, limit: ContentEnd(node: claim), openFrom: claim.Offset, opener: '{', statements: claim.Body);
+                        return (claim with { Body = statements, Trivia = (claim.Trivia with { Header = header, Inner = inner, Opening = m_opening }) });
+                    }
+                case PoolForEachStatementNode each: {
+                        var (statements, inner, header) = Braced(headerFrom: each.Offset, limit: ContentEnd(node: each), openFrom: each.Offset, opener: '{', statements: each.Body);
+                        return (each with { Body = statements, Trivia = (each.Trivia with { Header = header, Inner = inner, Opening = m_opening }) });
+                    }
                 case PropertyNode property: {
                         return (property with { Value = VisitExpression(expression: property.Value) });
                     }
@@ -659,7 +699,7 @@ public static class PuckSyntaxTrivia {
                         return (declaration with { Value = VisitExpression(expression: declaration.Value) });
                     }
                 case DerivedStateNode derived: {
-                        return (derived with { Expression = VisitExpression(expression: derived.Expression) });
+                        return (derived with { Expression = ((OperandExpressionNode)VisitExpression(expression: derived.Expression)) });
                     }
                 case ExpressionStatementNode expression: {
                         return (expression with { Expression = VisitExpression(expression: expression.Expression) });
@@ -765,11 +805,21 @@ public static class PuckSyntaxTrivia {
                             bodyEnd: close,
                             bodyStart: (open + 1),
                             items: declaration.Fields,
-                            visit: static field => field
+                            visit: field => (field with {
+                                Default = VisitOptional(expression: field.Default),
+                                Modifiers = VisitModifiers(modifiers: field.Modifiers),
+                            })
                         );
 
                         return (declaration with { Fields = fields, Trivia = (declaration.Trivia with { Inner = inner, Opening = m_opening }) });
                     }
+                case StatePoolDeclarationNode pool:
+                    return (pool with {
+                        Capacity = VisitOptional(expression: pool.Capacity),
+                        Initializer = VisitOptional(expression: pool.Initializer),
+                    });
+                case StatePairPoolDeclarationNode pool:
+                    return pool;
                 case StateTableDeclarationNode table: {
                         var (cells, inner, header) = Cells(
                             cells: table.Cells,
@@ -969,8 +1019,8 @@ public static class PuckSyntaxTrivia {
                     }
                 case RangeExpressionNode range: {
                         return (range with {
-                            End = VisitExpression(expression: range.End),
-                            Start = VisitExpression(expression: range.Start),
+                            End = ((range.End is { } end) ? VisitExpression(expression: end) : null),
+                            Start = ((range.Start is { } start) ? VisitExpression(expression: start) : null),
                         });
                     }
                 case MemberAccessExpressionNode member: {

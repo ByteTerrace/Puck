@@ -133,11 +133,16 @@ public sealed class BrowserSession {
     public const string AdmissionRefusalCategory = "RuleNotAdmitted";
 
     private readonly StateArena m_arena;
+
     private readonly RuleGroupState m_groupState = new();
+
     private readonly BrowserRuleReader m_host;
 
     private BrowserRefusal[] m_admissionRefusals;
     private WorldFactsCompileContext m_context;
+
+    private Lazy<WorldCostReport> m_costReport = null!;
+
     private CompiledRuleGroup[] m_groups;
     private CompiledRule[] m_rules;
     // The members of m_rules no group claims: a claimed rule runs only under its group's pass or cursor, so
@@ -180,6 +185,9 @@ public sealed class BrowserSession {
 
     /// <summary>Gets the currently installed document.</summary>
     public WorldDefinition Definition { get; private set; }
+    /// <summary>Gets the shared authored cost report, including operations this preview host cannot execute.
+    /// Rebinding replaces the compilation and its report; repeated reads do not compile programs again.</summary>
+    public WorldCostReport CostReport => m_costReport.Value;
 
     // A cell the arena does not hold reads as the default carrier, which holds no case at all: it answers 0 and no
     // text rather than throwing on Kind.
@@ -204,7 +212,13 @@ public sealed class BrowserSession {
         var admitted = new List<CompiledRule>();
         var refusals = new List<BrowserRefusal>();
 
-        foreach (var rule in WorldFactsCompiler.CompileAll(definition: definition)) {
+        var compiled = WorldFactsCompiler.CompileAll(definition: definition);
+        var context = m_context;
+
+        m_costReport = new(() => WorldCostReport.AnalyzePrograms(context, compiled,
+            WorldFactsCompiler.CompileAllInteractions(context: context, definition: definition)));
+
+        foreach (var rule in compiled) {
             if (RuleNeeds.Admit(
                 needs: rule.Needs,
                 reader: m_host,
@@ -369,17 +383,16 @@ public sealed class BrowserSession {
                 continue;
             }
 
-            var count = m_arena.CellCount(rowOrdinal: ordinal);
+            var cursor = 0;
 
-            for (var position = 0; (position < count); position++) {
+            while (m_arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: ordinal
+            )) {
                 if (
-                    !m_arena.TryKeyAt(
-                    key: out var key,
-                    position: position,
-                    rowOrdinal: ordinal
-                ) ||
-                    !m_arena.TryReadAt(
-                    position: position,
+                    !m_arena.TryRead(
+                    key: key,
                     rowOrdinal: ordinal,
                     value: out var after
                 )
@@ -403,7 +416,7 @@ public sealed class BrowserSession {
                 }
 
                 writes.Add(item: new BrowserWrite(
-                    Key: catalog.Keys[key: key].Value,
+                    Key: m_arena.Keys[key: key].Value,
                     New: Raw(value: in after),
                     Old: Raw(value: in stored),
                     Row: catalog.Descriptors[ordinal].Name
@@ -422,17 +435,16 @@ public sealed class BrowserSession {
                 continue;
             }
 
-            var count = m_arena.CellCount(rowOrdinal: ordinal);
+            var cursor = 0;
 
-            for (var position = 0; (position < count); position++) {
+            while (m_arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: ordinal
+            )) {
                 if (
-                    m_arena.TryKeyAt(
-                    key: out var key,
-                    position: position,
-                    rowOrdinal: ordinal
-                ) &&
-                    m_arena.TryReadAt(
-                    position: position,
+                    m_arena.TryRead(
+                    key: key,
                     rowOrdinal: ordinal,
                     value: out var value
                 )
@@ -467,7 +479,7 @@ public sealed class BrowserSession {
             candidate: key,
             name: out var parsed,
             reason: out _
-        ) && m_arena.Catalog.Keys.TryIntern(
+        ) && m_arena.Keys.TryIntern(
             key: out cellKey,
             name: parsed,
             reason: out _
@@ -633,7 +645,7 @@ public sealed class BrowserSession {
             return false;
         }
 
-        var layout = m_arena.Layout[handle.Ordinal];
+        ref readonly var layout = ref m_arena.Layout[handle.Ordinal];
 
         if (
             (layout.Topology is not { } topology) ||

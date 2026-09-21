@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Puck.State;
 
@@ -78,6 +79,21 @@ public readonly record struct ArenaColumnRange(StateLane Lane, RowShape Shape, C
 /// out identically and a hash folded in layout order compares across hosts.</para>
 /// </remarks>
 public sealed class ArenaLayout {
+    // A settle keeps one eight-byte stamp and one flag for every position a journal entry can name.
+    private const long ChangeBytesPerPosition = (sizeof(long) + sizeof(bool));
+    private const long ArrayOverheadBytes = 32L;
+    // A cell slot's share of the indexes: the row it belongs to, and a key-to-slot map that spans at most four
+    // key ordinals a cell.
+    private const long IndexBytesPerCellSlot = (sizeof(int) + (4L * sizeof(int)));
+    // A row's bookkeeping: its layout record, its versions, generations and stamps, and its key map's slack.
+    private const long BytesPerRow = 512L;
+    // A string a reference column points at: the object's header, length and terminator, then two bytes a UTF-16
+    // code unit. Every cell slot may carry a provenance, and every slot of a text row a text, each at the length
+    // ceiling its write doors hold it to.
+    private const long StringOverheadBytes = 32L;
+    private const long ProvenanceBytesPerCellSlot = (StringOverheadBytes + (2L * StateCapacity.MaxProvenanceLength));
+    private const long TextBytesPerTextSlot = (StringOverheadBytes + (2L * StateCapacity.MaxTextValueLength));
+
     private readonly int[] m_changeBases;
     private readonly ArenaColumnRange[] m_columns;
     private readonly int[] m_columnRows;
@@ -105,6 +121,8 @@ public sealed class ArenaLayout {
         int laneSlotCount,
         int laneRosterCount,
         int maskWordCount,
+        int poolCount,
+        int poolWordCount,
         ArenaOptions options
     ) {
         m_codeDependents = codeDependents;
@@ -125,6 +143,26 @@ public sealed class ArenaLayout {
         Options = options;
         VectorByteCount = vectorByteCount;
 
+        var textSlots = 0L;
+
+        foreach (var row in rows) {
+            if (row.Kind == CellKind.Text) {
+                textSlots += row.CellCapacity;
+            }
+        }
+
+        Bytes = Measure(
+            cellSlots: cellSlotCount,
+            laneRoster: laneRosterCount,
+            laneSlots: laneSlotCount,
+            maskWords: maskWordCount,
+            poolCount: poolCount,
+            poolWords: poolWordCount,
+            rowCount: rows.Length,
+            textSlots: textSlots,
+            vectorBytes: vectorByteCount
+        );
+
         m_changeBases = new int[ArenaColumns.All.Length];
 
         var next = 0;
@@ -137,6 +175,10 @@ public sealed class ArenaLayout {
         ChangeSlotCount = next;
     }
 
+    /// <summary>Gets the bytes an arena over this layout reserves for its columns, indexes, and fixed-ceiling text
+    /// and provenance payloads. <see cref="StateArena.Bytes"/> adds the bounded visibility payload and retained
+    /// key storage currently in use.</summary>
+    public long Bytes { get; }
     /// <summary>Gets how many cell slots the layout reserves across every column.</summary>
     public int CellSlotCount { get; }
     /// <summary>Gets how many distinct positions a journal entry can name, across every column.</summary>
@@ -162,7 +204,7 @@ public sealed class ArenaLayout {
     /// <summary>Gets one row's place in the arena.</summary>
     /// <param name="ordinal">The row's catalog ordinal.</param>
     /// <returns>The row's layout.</returns>
-    public ArenaRowLayout this[int ordinal] => m_rows[ordinal];
+    public ref readonly ArenaRowLayout this[int ordinal] => ref m_rows[ordinal];
 
     private static int Dimensions(IStateSection? section, StateRow row) {
         if (row.Kind != CellKind.Vector) {
@@ -170,12 +212,18 @@ public sealed class ArenaLayout {
         }
 
         var name = row.Space;
+        var spaces = (section?.Spaces ?? []);
 
+        // A vector row that names no space lives in the section's only one, the rule the validator and the rule
+        // compiler read a row by.
         if (string.IsNullOrEmpty(value: name)) {
-            throw new InvalidOperationException(message: $"State row '{row.Name.Value}' is a vector row naming no space.");
+            return (((spaces.Count == 1) && (spaces[0] is { } only))
+                ? only.Dimensions
+                : throw new InvalidOperationException(message: $"State row '{row.Name.Value}' is a vector row naming no space, and the section declares {spaces.Count}; a row may leave its space out only when there is exactly one.")
+            );
         }
 
-        foreach (var space in (section?.Spaces ?? [])) {
+        foreach (var space in spaces) {
             if (
                 (space is not null) &&
                 string.Equals(
@@ -210,6 +258,59 @@ public sealed class ArenaLayout {
 
         return false;
     }
+    private static long Measure(long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
+        var bytes = vectorBytes;
+
+        bytes += (cellSlots * ProvenanceBytesPerCellSlot);
+        bytes += (textSlots * TextBytesPerTextSlot);
+
+        foreach (var column in ArenaColumns.All) {
+            var size = (ArenaColumns.Space(column: column) switch {
+                ArenaIndexSpace.Cell => cellSlots,
+                ArenaIndexSpace.Row => rowCount,
+                ArenaIndexSpace.MaskWord => maskWords,
+                ArenaIndexSpace.LaneSlot => laneSlots,
+                _ => laneRoster,
+            });
+
+            bytes += (ArenaColumns.StorageBytes(
+                column: column,
+                size: size
+            ) + (size * ChangeBytesPerPosition));
+        }
+
+        bytes += (cellSlots * IndexBytesPerCellSlot);
+        bytes += ((maskWords + laneSlots) * sizeof(int));
+        bytes += (rowCount * BytesPerRow);
+        if (poolCount > 0L) {
+            // One row-to-pool array, one jagged occupancy array, and one ulong backing array per pool. Array headers
+            // and the outer array's references are charged explicitly because these indexes scale independently of
+            // cells. Catalogs without pools share empty arrays and pay none of this storage.
+            bytes += (2L * ArrayOverheadBytes);
+            bytes += (rowCount * sizeof(int));
+            bytes += (poolCount * (sizeof(long) + ArrayOverheadBytes));
+            bytes += (poolWords * sizeof(ulong));
+        }
+
+        return bytes;
+    }
+    private static void RequireFits(string what, long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
+        var bytes = Measure(
+            cellSlots: cellSlots,
+            laneRoster: laneRoster,
+            laneSlots: laneSlots,
+            maskWords: maskWords,
+            poolCount: poolCount,
+            poolWords: poolWords,
+            rowCount: rowCount,
+            textSlots: textSlots,
+            vectorBytes: vectorBytes
+        );
+
+        if (bytes > ArenaCapacity.MaxBytes) {
+            throw new InvalidOperationException(message: $"{what} brings the arena to {bytes} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling; lower a row's capacity, lay a board over a smaller topology, or drop a row.");
+        }
+    }
     private static int SlotCapacity(StateRow row, CompiledTopology? topology) => (row.Shape switch {
         RowShape.Slot => 1,
         RowShape.Ring => ((StateDomain.Ring)row.EffectiveDomain).Capacity,
@@ -226,13 +327,14 @@ public sealed class ArenaLayout {
     /// <returns>The layout.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="catalog"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A lattice row names a topology the section does not declare, a
-    /// vector row names a space it does not declare, or a draw site declares more masks than
-    /// <see cref="ArenaCapacity.MaxDrawnMasks"/>.</exception>
+    /// vector row names a space it does not declare, a draw site declares more masks than
+    /// <see cref="ArenaCapacity.MaxDrawnMasks"/>, or the section lays out past
+    /// <see cref="ArenaCapacity.MaxBytes"/>.</exception>
     public static ArenaLayout Build(StateCatalog catalog, IStateSection? section, ArenaOptions? options = null) {
         ArgumentNullException.ThrowIfNull(argument: catalog);
 
         var built = (options ?? ArenaOptions.Default);
-        var rows = (section?.Rows ?? []);
+        var rows = StateCatalog.ExpandRows(section: section);
         var layouts = new ArenaRowLayout[catalog.Count];
         var columns = new List<ArenaColumnRange>();
         var columnRows = new List<int>();
@@ -240,6 +342,15 @@ public sealed class ArenaLayout {
         var vectorBytes = 0;
         var laneSlots = 0;
         var maskWords = 0;
+        // The same extents in a width a hostile capacity cannot wrap, checked as each row is placed so nothing is
+        // allocated for a section that does not fit.
+        var cellTotal = 0L;
+        var textTotal = 0L;
+        var vectorTotal = 0L;
+        var laneTotal = 0L;
+        var maskTotal = 0L;
+        var poolCount = catalog.Pools.Count;
+        var poolWords = catalog.Pools.Sum(selector: static pool => ((pool.Capacity + 63L) / 64L));
         var ordinalsByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var ordinal = 0; (ordinal < catalog.Count); ordinal++) {
@@ -252,10 +363,34 @@ public sealed class ArenaLayout {
 
         var laneRosterBase = new int[Enum.GetValues<StateLane>().Length];
         var laneRosterCount = 0;
+        var rosterTotal = 0L;
 
+        // A lane may be zero wide, which admits no ordinal; it may not be negative. The roster is measured before
+        // any row is placed, so widths alone can refuse a section that declares no row at all.
         foreach (var lane in Enum.GetValues<StateLane>()) {
+            var width = built.Capacity(lane: lane);
+
+            if (width < 0) {
+                throw new InvalidOperationException(message: $"The {lane} lane is {width} ordinals wide; a lane's width is zero or more.");
+            }
+
+            rosterTotal += width;
+
+            RequireFits(
+                cellSlots: 0L,
+                laneRoster: rosterTotal,
+                laneSlots: 0L,
+                maskWords: 0L,
+                poolCount: poolCount,
+                poolWords: poolWords,
+                rowCount: catalog.Count,
+                textSlots: 0L,
+                vectorBytes: 0L,
+                what: $"The {lane} lane's roster"
+            );
+
             laneRosterBase[((int)lane)] = laneRosterCount;
-            laneRosterCount += built.Capacity(lane: lane);
+            laneRosterCount = ((int)rosterTotal);
         }
 
         // Columns are visited lane-major, then shape, then kind, so every row sharing the triple occupies one
@@ -318,8 +453,30 @@ public sealed class ArenaLayout {
                                 }
 
                                 maskStart = maskWords;
-                                maskWords += (maskCount * 4);
+                                maskTotal += (maskCount * 4L);
                             }
+
+                            cellTotal += capacity;
+                            textTotal += ((row.Kind == CellKind.Text)
+                                ? capacity
+                                : 0L
+                            );
+                            vectorTotal += (((long)dimensions) * capacity);
+
+                            RequireFits(
+                                cellSlots: cellTotal,
+                                laneRoster: laneRosterCount,
+                                laneSlots: laneTotal,
+                                maskWords: maskTotal,
+                                poolCount: poolCount,
+                                poolWords: poolWords,
+                                rowCount: catalog.Count,
+                                textSlots: textTotal,
+                                what: $"State row '{row.Name.Value}'",
+                                vectorBytes: vectorTotal
+                            );
+
+                            maskWords = ((int)maskTotal);
 
                             layouts[ordinal] = new ArenaRowLayout(
                                 CellCapacity: capacity,
@@ -376,6 +533,21 @@ public sealed class ArenaLayout {
                             vectorBytes += (dimensions * capacity);
                         } else {
                             var width = built.Capacity(lane: lane);
+
+                            laneTotal += width;
+
+                            RequireFits(
+                                cellSlots: cellTotal,
+                                laneRoster: laneRosterCount,
+                                laneSlots: laneTotal,
+                                maskWords: maskTotal,
+                                poolCount: poolCount,
+                                poolWords: poolWords,
+                                rowCount: catalog.Count,
+                                textSlots: textTotal,
+                                what: $"State row '{descriptor.Name}'",
+                                vectorBytes: vectorTotal
+                            );
 
                             layouts[ordinal] = new ArenaRowLayout(
                                 CellCapacity: 0,
@@ -495,12 +667,40 @@ public sealed class ArenaLayout {
             laneSlotCount: laneSlots,
             maskWordCount: maskWords,
             options: built,
+            poolCount: poolCount,
+            poolWordCount: checked((int)poolWords),
             rowOfCellSlot: rowOfCellSlot,
             rowOfLaneSlot: rowOfLaneSlot,
             rowOfMaskWord: rowOfMaskWord,
             rows: layouts,
             vectorByteCount: vectorBytes
         );
+    }
+    /// <summary>Builds the column plan, answering a section the arena cannot lay out with the reason instead of
+    /// an exception.</summary>
+    /// <param name="catalog">The compiled catalog whose descriptors the layout covers.</param>
+    /// <param name="section">The authored section the catalog was compiled from.</param>
+    /// <param name="options">The lane widths to build, or <see langword="null"/> for the defaults.</param>
+    /// <param name="layout">The layout, on success.</param>
+    /// <param name="reason">Why the section does not lay out, or empty.</param>
+    /// <returns><see langword="true"/> when the section lays out.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="catalog"/> is <see langword="null"/>.</exception>
+    public static bool TryBuild(StateCatalog catalog, IStateSection? section, ArenaOptions? options, [NotNullWhen(true)] out ArenaLayout? layout, out string reason) {
+        try {
+            layout = Build(
+                catalog: catalog,
+                options: options,
+                section: section
+            );
+            reason = string.Empty;
+
+            return true;
+        } catch (InvalidOperationException exception) {
+            layout = null;
+            reason = exception.Message;
+
+            return false;
+        }
     }
     /// <summary>Returns the base a column's indices occupy in the change-slot space.</summary>
     /// <param name="column">The column to place.</param>

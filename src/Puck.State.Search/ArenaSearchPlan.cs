@@ -28,8 +28,8 @@ public sealed record ArenaSearchChancePlan(int RowOrdinal, int AtDepth, int Cell
 /// <param name="TurnOrdinal">The slot row whose change marks an accepted relocation.</param>
 /// <param name="VerdictOrdinal">The slot row the judge writes its verdict into.</param>
 /// <param name="Off">The token value meaning off the board.</param>
-/// <param name="Nodes">The candidates judged per step.</param>
-/// <param name="JudgeCost">The work units one judge run costs.</param>
+/// <param name="Nodes">The most candidates judged per step, whatever the allowance leaves.</param>
+/// <param name="Work">What a step may spend on the job and what each unit of its walk costs.</param>
 /// <param name="Depth">How many plies the job searches ahead.</param>
 /// <param name="Scored">Whether the job compares plies by a score; a scored job's judge reads one.</param>
 /// <param name="Shapes">The candidate shapes, in declared order.</param>
@@ -49,6 +49,8 @@ public sealed record ArenaSearchChancePlan(int RowOrdinal, int AtDepth, int Cell
 /// <param name="ScoresOrdinal">The keyed row holding one score per seat, in the turn row's own ordinal order, or
 /// <c>-1</c>; a level maximizes the mover seat's own entry rather than negating the reply.</param>
 /// <param name="DrawSeed">The draw stream a <see cref="SearchMethod.Tree"/> job's playouts advance from.</param>
+/// <param name="EnabledOrdinal">The enabling slot, or -1 for always enabled.</param>
+/// <param name="RevisionOrdinal">The position revision slot copied into the best output, or -1.</param>
 public sealed record ArenaSearchPlan(
     string Name,
     int TokensOrdinal,
@@ -59,7 +61,7 @@ public sealed record ArenaSearchPlan(
     int VerdictOrdinal,
     long Off,
     int Nodes,
-    long JudgeCost,
+    SearchWork Work,
     int Depth,
     bool Scored,
     SearchShapePlan[] Shapes,
@@ -74,7 +76,9 @@ public sealed record ArenaSearchPlan(
     int Iterations = 0,
     ArenaSearchChancePlan? Chance = null,
     int ScoresOrdinal = -1,
-    ulong DrawSeed = 0UL
+    ulong DrawSeed = 0UL,
+    int EnabledOrdinal = -1,
+    int RevisionOrdinal = -1
 ) {
     private static bool TryRow(StateCatalog catalog, string job, string? name, out int ordinal, out string reason) {
         ordinal = -1;
@@ -93,13 +97,19 @@ public sealed record ArenaSearchPlan(
 
             return false;
         }
+        if (catalog.Descriptors[handle.Ordinal].Generated) {
+            reason = $"search '{job}' names generated row '{name}', which is engine-owned storage and cannot be authored as a search row";
+
+            return false;
+        }
 
         ordinal = handle.Ordinal;
 
         return true;
     }
 
-    /// <summary>Resolves a name-addressed plan against a catalog into an ordinal-addressed one.</summary>
+    /// <summary>Resolves a name-addressed plan against a catalog's authored rows into an ordinal-addressed one.
+    /// Generated storage rows are engine-owned and cannot be named by a plan.</summary>
     /// <param name="plan">The name-addressed plan.</param>
     /// <param name="catalog">The catalog whose ordinals address the arena.</param>
     /// <param name="resolved">The ordinal-addressed plan on success; otherwise <see langword="null"/>.</param>
@@ -131,6 +141,8 @@ public sealed record ArenaSearchPlan(
             return false;
         }
         if (
+            !TryRow(catalog: catalog, job: plan.Name, name: plan.Enabled, ordinal: out var enabled, reason: out reason) ||
+            !TryRow(catalog: catalog, job: plan.Name, name: plan.Revision, ordinal: out var revision, reason: out reason) ||
             !TryRow(
             catalog: catalog,
             job: plan.Name,
@@ -253,7 +265,7 @@ public sealed record ArenaSearchPlan(
             VerdictOrdinal: verdict,
             Off: plan.Off,
             Nodes: plan.Nodes,
-            JudgeCost: plan.JudgeCost,
+            Work: plan.Work,
             Depth: plan.Depth,
             Scored: plan.Scored,
             Shapes: plan.Shapes,
@@ -276,6 +288,8 @@ public sealed record ArenaSearchPlan(
             LegalOrdinal: legal,
             Method: plan.Method,
             ReachOrdinal: reach,
+            EnabledOrdinal: enabled,
+            RevisionOrdinal: revision,
             ScoresOrdinal: scores
         );
         reason = string.Empty;

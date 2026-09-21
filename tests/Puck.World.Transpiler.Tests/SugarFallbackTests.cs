@@ -16,6 +16,10 @@ public class SugarFallbackTests {
         var original = JsonNode.Parse(json);
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var puck = WorldDecompiler.Decompile(jsonText: original!.ToJsonString());
 
@@ -123,7 +127,7 @@ public class SugarFallbackTests {
         );
     }
     [InlineData("    when hp > 0 // a trailing comment on the gate line\n    hp = 1")]
-    [InlineData("    when hp > 0\n    local tmp : Int = hp + 1 // after a local\n    hp = 1")]
+    [InlineData("    when hp > 0\n    local tmp = hp + 1 // after a local\n    hp = 1")]
     [Theory]
     public void ATrailingCommentEndsAGateOrLocalOperandRatherThanJoiningIt(string body) {
         var lowered = Recompile(puck: $"schema: \"puck.world.definition.v1\"\nrule \"r\" {{\n{body}\n}}\n");
@@ -144,7 +148,6 @@ public class SugarFallbackTests {
     [InlineData("""{"$type":"addState","state":"d","value":null,"fromState":"e"}""")]
     [InlineData("""{"$type":"setState","state":"f","value":1,"target":"Self"}""")]
     [InlineData("""{"$type":"pushState","state":"g","fromState":"h","value":null}""")]
-    [InlineData("""{"$type":"countdownState","state":"i","target":"Self"}""")]
     [InlineData("""{"$type":"scheduleState","state":"j","delaySeconds":2,"target":"Self"}""")]
     [Theory]
     public void AnEffectCarryingAKeyTheSugarWouldNotReprintFallsToCallForm(string effectJson) {
@@ -159,7 +162,7 @@ public class SugarFallbackTests {
         Assert.Contains(
             actualString: puck,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "(state: \""
+            expectedSubstring: "(state: "
         );
     }
     [Fact]
@@ -198,7 +201,7 @@ public class SugarFallbackTests {
         Assert.Contains(
             actualString: puck,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "gate: compareState(comparison: \"Equal\", state: \"a\", value: null)"
+            expectedSubstring: "gate: compareState(comparison: Equal, state: a, value: null)"
         );
         Assert.DoesNotContain(
             actualString: puck,

@@ -1,0 +1,4 @@
+wire.errors reset
+world.row.set placements card position "state.spot"
+world.wait 4
+world.status

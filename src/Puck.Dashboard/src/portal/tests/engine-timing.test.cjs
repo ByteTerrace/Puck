@@ -112,18 +112,14 @@ if (!fs.existsSync(mainMjs)) {
 
       await engine.release(handle);
 
-      // Cells: the largest topology among the shipped fragments — games/chess.world.json's own
-      // state.lattices[0] ("chessBoard"), an 8x8 = 64-cell grid. hexlines.world.json's hex
-      // radius-4 board (61 cells: 3*4^2 + 3*4 + 1) is the only other lattice authored in the
-      // island and is smaller. Read as a plain JS object (JSON.parse of the whole fragment is safe
-      // here — the lattice definition itself carries no Int64.Min/MaxValue sentinel, unlike this
-      // fragment's own state rows).
-      const chessFragment = JSON.parse(fs.readFileSync(path.join(worldsDir, 'games', 'chess.world.json'), 'utf8'));
-      const chessBoard = chessFragment.state.lattices.find((l) => l.name === 'chessBoard');
-      assert.ok(chessBoard, 'games/chess.world.json must author a "chessBoard" lattice');
-      assert.equal(chessBoard.width * chessBoard.depth, 64);
+      // Cells: the composed island's 4x4x4 tic-tac-toe topology. Read as a plain JS object because
+      // the lattice definition itself carries no Int64 sentinels.
+      const tictactoeFragment = JSON.parse(fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8'));
+      const cube = tictactoeFragment.state.lattices.find((l) => l.name === 'tttCube');
+      assert.ok(cube, 'games/tictactoe.world.json must author a "tttCube" lattice');
+      assert.equal(cube.width * cube.depth * cube.layers, 64);
 
-      const cells = await time('Cells (largest topology: chessBoard, 8x8 grid)', () => engine.cells(JSON.stringify(chessBoard)));
+      const cells = await time('Cells (tttCube, 4x4x4 box)', () => engine.cells(JSON.stringify(cube)));
       assert.equal(cells.ok, true, JSON.stringify(cells));
       assert.equal(cells.cells.length, 64);
     } finally {

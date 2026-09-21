@@ -1,7 +1,7 @@
 namespace Puck.State.Rules;
 
 /// <summary>Names why a state transform did not apply. One group of members per
-/// <see cref="ArenaTransform"/> case, named after the transform it belongs to, so the eleven scalar transforms'
+/// <see cref="ArenaTransform"/> case, named after the transform it belongs to, so the twelve scalar transforms'
 /// refusals are enumerated here and nowhere else.</summary>
 /// <remarks>The four vector transforms report the catalogued codes
 /// <see cref="ArenaVectorTransforms"/> already draws (<see cref="RuleRefusal"/> for a shape refusal,
@@ -118,6 +118,14 @@ public enum TransformRefusal : byte {
     /// <summary>A push reads its value from a live source, and the application supplied no resolved value.</summary>
     [Refusal(door: "state.transform", condition: "a push reads its value from a live source the application resolved none for", kind: RefusalKind.Verdict)]
     PushValueUnbound,
+
+    /// <summary>A pushRay has no live origin token, reaches an edge or cycle before an admitted terminator, or its pattern rejects the run.</summary>
+    [Refusal(door: "state.transform", condition: "a pushRay has no live origin token or no admitted terminating cell", kind: RefusalKind.Verdict)]
+    PushRayBlocked,
+
+    /// <summary>A pushRay addresses an invalid pool, field, topology, or direction.</summary>
+    [Refusal(door: "state.transform", condition: "a pushRay addresses an invalid pool, field, topology, or direction", kind: RefusalKind.Verdict)]
+    PushRayAddressing,
 
     /// <summary>A clearEnclosed addresses no integer board row.</summary>
     [Refusal(door: "state.transform", condition: "a clearEnclosed addresses no integer board row", kind: RefusalKind.Verdict)]

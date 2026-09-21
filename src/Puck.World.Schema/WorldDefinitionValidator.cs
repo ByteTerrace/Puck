@@ -1022,16 +1022,6 @@ public static partial class WorldDefinitionValidator {
         public HashSet<string> PrototypeIds { get; set; } = [];
     }
 
-    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) =>
-        ValidateCore(
-            definition,
-            neighbours,
-            validateAdjacencyClaims,
-            retainCompilation,
-            throwOnErrors: true,
-            errorSink: null,
-            deferredSink: null
-        );
     // The collecting twin ValidateCore's throwing overload wraps: throwOnErrors selects RefuseCollected's
     // aggregate-and-throw ending (every existing caller) versus copying the same per-message list into errorSink and
     // returning a compilation only when the candidate is sound — the shape TryValidateLocally's structured-errors
@@ -1043,6 +1033,8 @@ public static partial class WorldDefinitionValidator {
 
         var errors = new List<string>();
         var scope = new ValidationScope { Machines = machines };
+
+        if (!ValidatePoolExpansion(definition: definition, errorSink: errorSink, throwOnErrors: throwOnErrors)) { return null; }
 
         if (!string.Equals(
             a: definition.Schema,
@@ -1179,23 +1171,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldBodiesLimits.CapacityCeiling}.");
         }
 
-        if (definition.Population.CapacityRow is { } capacityRow) {
-            // A literal beside the row is legitimate AFTER the boot resolver settles the row into it — the row is
-            // the source and overwrites the literal on every fresh load, so nothing shadows silently.
-
-            if (WorldDefinitionRows.FindStateRow(
-                rows: definition.State,
-                name: capacityRow
-            ) is not { } censusRow) {
-                errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which the document does not declare.");
-            } else if (
-                (censusRow.Kind != CellKind.Int) ||
-                censusRow.IsKeyed ||
-                (censusRow.Field is not null)
-            ) {
-                errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which must be a scalar kind=Int row.");
-            }
-        }
+        ValidatePopulationCapacityRow(definition.Population, definition.State, errors);
 
         if (definition.Population.ScaleRow is { } scaleRow) {
             if (WorldDefinitionRows.FindStateRow(
@@ -1271,8 +1247,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        if (definition.Population.SleepAfterTicks < 0) {
-            errors.Add(item: $"bodies.sleepAfterTicks {definition.Population.SleepAfterTicks} must be 0 (never sleep) or positive.");
+        if (!FixedTickConversion.TryDurationEngineTicksExact(
+            seconds: definition.Population.SleepAfterSeconds,
+            ticks: out _
+        )) {
+            errors.Add(item: $"bodies.sleepAfterSeconds {definition.Population.SleepAfterSeconds.ToString(provider: CultureInfo.InvariantCulture)} must be 0 (never sleep) or a positive whole number of engine ticks (a multiple of 1/800 s).");
         }
 
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
@@ -1549,6 +1528,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             rules: compiledRules
         );
+
         ValidateCellSets(
             definition: definition,
             errors: errors
@@ -1568,6 +1548,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             context: ref ruleContext
         );
+        (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null;
 
         if (errors.Count == 0) {
             foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(
@@ -1576,23 +1557,36 @@ public static partial class WorldDefinitionValidator {
             )) {
                 errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
             }
-            var ruleBudget = WorldRuleWorkBudget.Measure(
+            work = WorldRuleWorkBudget.Analyze(
+                context: ruleContext,
                 definition: definition,
                 interactions: compiledInteractions,
                 rules: compiledRules
             );
 
-            if (ruleBudget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick) {
-                var costliest = string.Join(
-                    separator: ", ",
-                    values: WorldRuleWorkBudget.Contributors(
-                        definition: definition,
-                        interactions: compiledInteractions,
-                        rules: compiledRules
-                    ).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
-                );
-
-                errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
+            if (WorldRuleWorkBudget.Refuse(
+                contributors: () => work.Value.Contributors,
+                work: work.Value.Budget.WorkUnitsPerTick
+            ) is { } refusal) {
+                errors.Add(item: refusal);
+            }
+            // The other real limit: what the document's state occupies, laid out exactly as the server lays it out.
+            if (!ArenaLayout.TryBuild(
+                catalog: definition.StateCatalog,
+                layout: out var arenaLayout,
+                options: WorldSlotLanes.Options(definition: definition),
+                reason: out var layoutRefusal,
+                section: definition.StateRaw
+            )) {
+                errors.Add(item: $"state: {layoutRefusal}");
+            } else if (!StateArena.TryMeasureVisibility(
+                bytes: out var visibilityBytes,
+                reason: out var visibilityRefusal,
+                section: definition.StateRaw
+            )) {
+                errors.Add(item: $"state: {visibilityRefusal}");
+            } else if (((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes) > ArenaCapacity.MaxBytes) {
+                errors.Add(item: $"state: visibility and retained keys bring the arena to {((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes)} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
             }
         }
         if (errors.Count == 0) {
@@ -1995,6 +1989,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (
+                    (screen.Origin is null) || (screen.Right is null) || (screen.Up is null) ||
                     !IsFinite(value: screen.Origin) ||
                     !IsFinite(value: screen.Right) ||
                     !IsFinite(value: screen.Up)
@@ -2175,7 +2170,7 @@ public static partial class WorldDefinitionValidator {
                     WorldRuleCompilation.CompileTables(
                         context: ruleContext,
                         definition: definition
-                    )
+                    ), context: ruleContext, work: work
                 )
                 : null
             );
@@ -2196,7 +2191,7 @@ public static partial class WorldDefinitionValidator {
                 WorldRuleCompilation.CompileTables(
                     context: ruleContext,
                     definition: definition
-                )
+                ), context: ruleContext, work: work
             )
             : null
         );

@@ -13,7 +13,7 @@ public sealed class SeatFollowLawTests {
     private static WorldDefinition WithControl(WorldSeatViewControl control) {
         var document = Fixtures.BuildDocument();
 
-        return (document with { ViewsRaw = document.Views with { SeatControl = control } });
+        return (document with { ViewsRaw = document.Views with { SeatControlRaw = control } });
     }
 
     [Fact]

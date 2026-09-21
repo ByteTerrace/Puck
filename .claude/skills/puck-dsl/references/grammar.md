@@ -201,9 +201,10 @@ occurrence. `sort` is stable and total over a mixed array: numbers order
 before strings before booleans before everything else. `groupBy` yields an
 object keyed by the lambda's result, in first-seen key order. A lambda
 parameter shadows a same-named `let` for the length of one application. The
-builtin names are reserved in **value position only** — a statement-position
-call of the same name belongs to its own vocabulary (a cartridge's
-`map(row:, column:, tile:)` step is untouched).
+builtin names apply in compile-time value positions. A call constructing a
+declared document arm takes its meaning from that position: array `sort(...)`
+and a world's `sort` transform coexist. Statement-position calls likewise
+belong to their own vocabulary (a cartridge's `map` step is untouched).
 
 ## Comparisons are 1 or 0
 

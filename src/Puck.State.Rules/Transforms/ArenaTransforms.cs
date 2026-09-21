@@ -4,7 +4,7 @@ namespace Puck.State.Rules;
 /// The evaluator, a search judge, the console, and a host's own command path all apply a transform through
 /// <see cref="TryApply"/>.</summary>
 /// <remarks>A transform writes inside whatever journal scope its caller has open, so a refused transform is rewound
-/// by the firing that submitted it. The eleven scalar kernels open no scope of their own; the four vector kernels
+/// by the firing that submitted it. The twelve scalar kernels open no scope of their own; the four vector kernels
 /// open one around their store, which nests inside the caller's and is undone by the caller's rewind either way. A
 /// random selection reads and advances its site's draw cursor through that same scope, so the draw is consumed only
 /// when the scope commits.</remarks>
@@ -82,6 +82,13 @@ public static partial class ArenaTransforms {
             context: in context,
             moved: out moved,
             push: push,
+            refusal: out refusal
+        ),
+            ArenaTransform.PushRay pushRay => TryPushRay(
+            binding: in binding,
+            context: in context,
+            moved: out moved,
+            push: pushRay,
             refusal: out refusal
         ),
             ArenaTransform.Remember remember => TryRemember(

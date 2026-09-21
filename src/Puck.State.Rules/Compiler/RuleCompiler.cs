@@ -61,11 +61,7 @@ public static partial class RuleCompiler {
                 ruleName: rule.Name,
                 subject: "rule"
             );
-            var forEachZones = ((rule.ForEach is { } spelled) && string.Equals(
-                a: spelled,
-                b: RuleFacts.ForEachZones,
-                comparisonType: StringComparison.Ordinal
-            ));
+            var forEachZones = IteratesZones(forEach: rule.ForEach);
             var forEachOrdinal = -1;
 
             if (
@@ -74,8 +70,16 @@ public static partial class RuleCompiler {
             ) {
                 forEachOrdinal = ResolveRowOrdinal(
                     context: context,
-                    name: forEachName
+                    name: forEachName.Spelling
                 );
+            }
+            var poolForEach = (((rule.PoolForEach is { } poolIteration) && context.Catalog.TryGetPool(name: CellName.Parse(candidate: poolIteration.Pool.Spelling), pool: out var resolvedPool))
+                ? resolvedPool
+                : null);
+            var poolBindingSlot = -1;
+
+            if ((poolForEach is not null) && context.TryInstanceBinding(name: rule.PoolForEach!.Binding.Value, binding: out var poolBinding)) {
+                poolBindingSlot = poolBinding.Slot;
             }
 
             RuleDataflow.CollectGateFacts(
@@ -114,6 +118,8 @@ public static partial class RuleCompiler {
                 Mode: rule.Mode,
                 Name: rule.Name.Value,
                 Needs: context.Needs.Build(),
+                PoolBindingSlot: poolBindingSlot,
+                PoolForEach: poolForEach,
                 Zones: context.Zones
             );
 
@@ -155,11 +161,7 @@ public static partial class RuleCompiler {
         );
 
         if (rule.ForEach is { } forEach) {
-            if (string.Equals(
-                a: forEach,
-                b: RuleFacts.ForEachZones,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (IteratesZones(forEach: forEach)) {
                 if (zones is null) {
                     throw new RuleException(
                         detail: $"iterates 'forEach' over '{RuleFacts.ForEachZones}' but declares no 'zones' table",
@@ -172,10 +174,23 @@ public static partial class RuleCompiler {
                     channel: "forEach",
                     context: context,
                     malformed: RuleRefusal.StateRowUnknown,
-                    name: forEach,
+                    name: forEach.Spelling,
                     requireKeyed: true,
                     ruleName: rule.Name
                 );
+            }
+        }
+        if (rule.PoolForEach is { } poolIteration) {
+            if (rule.ForEach is not null) {
+                throw new RuleException(detail: "a rule may declare either 'forEach' or 'poolForEach', not both", refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
+            }
+            if (!CellName.TryParse(candidate: poolIteration.Pool.Spelling, name: out var poolName, reason: out _) || !context.Catalog.TryGetPool(name: poolName, pool: out var pool) || (pool is null)) {
+                throw new RuleException(detail: $"'poolForEach' names no declared pool '{poolIteration.Pool}'", refusal: RuleRefusal.StateRowUnknown, ruleName: rule.Name);
+            }
+            try {
+                _ = context.PushInstanceBinding(name: poolIteration.Binding, pool: pool);
+            } catch (InvalidOperationException error) {
+                throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
             }
         }
 
@@ -183,7 +198,7 @@ public static partial class RuleCompiler {
             ? []
             : [BoundKey.Each]
         );
-        context.ForEachRow = rule.ForEach;
+        context.ForEachRow = rule.ForEach?.Spelling;
         context.Zones = zones;
     }
     /// <summary>Compiles every rule in the list, in document order, checking that each carries a unique, unreserved
@@ -257,6 +272,25 @@ public static partial class RuleCompiler {
 
         return [.. compiled];
     }
+
+    // A rule iterates its own zone table when its `forEach` is the reserved word alone (RuleFacts.ForEachZones): the
+    // zones channel called with no argument.
+    private static bool IteratesZones(StateChannelRef? forEach) => (forEach?.Call is { Channel: "zones", Count: 0 });
+    private static bool IsFractionalConstantExpression(ExpressionProgram? expression) {
+        if (expression is null) {
+            return false;
+        }
+
+        var instructions = expression.Instructions.Concat(second: expression.Subprograms.SelectMany(selector: static subprogram => subprogram.Instructions));
+
+        return (
+            !instructions.Any(predicate: static instruction => (instruction.Payload is InstructionPayload.State)) &&
+            instructions.Any(predicate: static instruction => (
+                (instruction.Payload is InstructionPayload.Constant constant) &&
+                (decimal.Truncate(d: constant.Value) != constant.Value)
+            ))
+        );
+    }
     private static void CompileLocal(List<CompiledRuleLocal> compiled, RuleCompileContext context, RuleLocal? local, Rule rule) {
         var name = (local?.Name.Value ?? string.Empty);
 
@@ -267,9 +301,9 @@ public static partial class RuleCompiler {
                 ruleName: rule.Name
             );
         }
-        if (local!.Kind is not (CellKind.Int or CellKind.Fixed)) {
+        if (local!.Kind is { } declared and not (CellKind.Int or CellKind.Fixed)) {
             throw new RuleException(
-                detail: $"local '{name}' is kind={StateSpelling.Kind(kind: local.Kind)} — a local value is int or fixed",
+                detail: $"local '{name}' is kind={StateSpelling.Kind(kind: declared)} — a local value is int or fixed",
                 refusal: RuleRefusal.EffectKindInadmissible,
                 ruleName: rule.Name
             );
@@ -290,13 +324,50 @@ public static partial class RuleCompiler {
 
         // A computed key inside the expression mints its own local on this same list before the declared one
         // lands, so the ceiling is priced here, after them, over declared and implicit locals together.
-        var expression = CompileExpression(
-            context: context,
-            expression: local.Expression,
-            kind: local.Kind,
-            ruleName: rule.Name,
-            verb: $"local '{name}'"
-        );
+        // Every numeric operand shares one carrier kind, so a row or local selects it. Constants alone compile under
+        // either, where an Int reading rounds a fraction away, so a fraction there starts the binding under Fixed.
+        // The expression can still *leave* Int: comparisons and Sign consume exact Fixed operands but return a
+        // Boolean-like or sign value. The binding therefore records the compiler's result kind, not its carrier.
+        // An expression that compiles under neither is refused for the reason its first reading gave. A key binding
+        // the first attempt minted stays: a key expression is Int under either kind, and the second attempt reads it
+        // back through the key-expression cache by the ordinal it holds.
+        var kind = (local.Kind ?? (IsFractionalConstantExpression(expression: local.Expression)
+            ? CellKind.Fixed
+            : CellKind.Int
+        ));
+        CompiledExpressionToken[] expression;
+        CellKind result;
+
+        try {
+            expression = CompileExpression(
+                context: context,
+                expression: local.Expression,
+                kind: kind,
+                result: out result,
+                resultKind: local.Kind,
+                ruleName: rule.Name,
+                verb: $"local '{name}'"
+            );
+        } catch (RuleException first) when ((local.Kind is null)) {
+            kind = ((kind == CellKind.Int)
+                ? CellKind.Fixed
+                : CellKind.Int
+            );
+
+            try {
+                expression = CompileExpression(
+                    context: context,
+                    expression: local.Expression,
+                    kind: kind,
+                    result: out result,
+                    resultKind: local.Kind,
+                    ruleName: rule.Name,
+                    verb: $"local '{name}'"
+                );
+            } catch (RuleException) {
+                throw first;
+            }
+        }
 
         if (compiled.Count >= RuleCapacity.MaxLocalsPerRule) {
             throw new RuleException(
@@ -307,11 +378,13 @@ public static partial class RuleCompiler {
         }
 
         compiled.Add(item: new CompiledRuleLocal(
+            CarrierKind: kind,
             Expression: expression,
-            Kind: local.Kind,
+            Kind: result,
             Name: name
         ));
     }
+
     /// <summary>Compiles a rule's <see cref="Rule.Zones"/> table: every non-empty entry a declared ordered zone, all
     /// over one token domain and of one kind, none twice; an empty entry a gap.</summary>
     /// <param name="rule">The authored rule.</param>
@@ -496,7 +569,7 @@ public static partial class RuleCompiler {
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="name">The channel name.</param>
     /// <param name="keyFieldLabel">The field the key was spelled in.</param>
-    public static void RefuseKeyOnReservedChannel(string? key, string ruleName, string name, string keyFieldLabel) {
+    public static void RefuseKeyOnReservedChannel(StateChannelRef? key, string ruleName, string name, string keyFieldLabel) {
         if (key is not null) {
             throw new RuleException(
                 detail: $"reserved channel '{name}' is a single quantity and carries no cells — drop the '{keyFieldLabel}'",

@@ -17,9 +17,8 @@ WP11d, WP11e, the costing evidence, S1, S2, and the dashboard schema-id
 sweep, each reviewed once by a fresh agent and merged with its suites green.
 The sweep — parts A, B, and C, the `StateCell` collapse and the nine deferred
 items included — and WP8's relocation are merged into `state/rebuild` too.
-The old substrate no longer builds beside the new one. Each package branches
-from `state/rebuild` and merges straight back to it; the integration branch is
-retired. What remains is WP13 and WP14.
+The old substrate is deleted, and the whole of it is squashed onto `main`;
+`state/rebuild` and the integration branch are retired.
 
 The automatic canary set is green on that head when the machine is quiet.
 Three proofs pin exact values at fences measured from where a piped console
@@ -98,8 +97,7 @@ fold of content, so a restored world continues as the uninterrupted one does.
 Each package lists **Owns**, **Deliverables**, **Check** (the command and the
 observable pass condition), and **Hand-off**. Load the skills each package
 names before starting. The order was the sweep, then the relocation and WP9b's
-remainder, then WP13, WP14; the sweep, the relocation (WP8) and WP13 are
-landed, and what remains is WP14. One
+remainder, then WP13, WP14, and all of it is landed. One
 integrator serializes edits to project references, `build/Architecture.props`,
 the generated project map, shared fact bases, and World ingress and
 serialization.
@@ -522,12 +520,12 @@ The rest are limits, each with the package that owns it.
 | `puck fmt` unindents a wrapped `export` facet's continuation lines, after which the parser reads the facet as empty | Formatting silently drops exports | WP12b |
 | The baseline runner's steps issue `UpsertStateCell` only, which carries no phase guard | `phase` and `phaseOf` are authored and exported by Stratego and Hearts, and the generation advance is unproved | WP14: a runner step that submits a guarded transform |
 | A rule's `bind` shares its name with the input system's bindings and chords, authored in the same sources | Authors and readers confused the two | LANDED: `bind` is `local` and `$bind:` is `$local:`, rewritten once with no alias ([decisions](../decisions/state-and-language.md#capacities)) |
-| One entity is a dozen separately declared rows that share keys, and a family is hand-numbered | Nothing states that the rows are one thing, and sixteen players are sixteen copies or a convention | [S7](state-and-language.md#s7--records-and-pools): a record and a pool, after this plan lands |
-| Knowledge is indexed by board cell, so a revealed piece that moves leaves its rank on the cell it was revealed on | Any hidden-information game inherits it | Knowledge becomes keyed by token: [G16](state-and-language.md#g16--baba-is-you) with [C3](state-and-language.md#c3--a-match-answers-where)'s match work, which is where a token row and a match position first meet |
+| One entity is a dozen separately declared rows that share keys, and a family is hand-numbered | Nothing states that the rows are one thing, and sixteen players are sixteen copies or a convention | PARTIAL: S7 records and pools landed; timed record-field traits and the promised Pong/Arena migrations remain ([S7](state-and-language.md#s7--records-and-pools)) |
+| Knowledge is indexed by board cell, so a revealed piece that moves leaves its rank on the cell it was revealed on | Any hidden-information game inherits it | LANDED: C3 observations can key knowledge by token and resolve visibility through a token-position row; Stratego uses that projection ([C3](state-and-language.md#c3--a-match-answers-where)) |
 | A Bool row refuses an expression as its write source, and an expression refuses to carry a Bool cell into an Int destination | Codenames keeps its live masks as Int and converts by hand | WP12b, in the new compiler: a comparison's Int is admitted into a Bool cell, and a Bool cell reads as 0 or 1 |
 | The transpiler manual says an `sql { }` column can declare `TEXT EMBEDS (<table>)`; nothing implements it | Codenames authors its embedded tables natively | WP12b: implement it or delete the sentence |
 | `nearest` and `remember` always took the cross-row path and the frame refused them, so no search judge could evaluate a vector game | The arena runs both wherever it runs (WP9), so the limit goes with the frame | WP11; Codenames' baseline is the check |
-| A `properties` carrier tag is keyed by a literal body index, and an inhabited placement takes the highest free body slot, so a module's tags depend on its host's body capacity | Pong and Arena derive their keys from their fixture host | [S7](state-and-language.md#s7--records-and-pools): the literal index is replaced by a pool instance reference, so a tag names an instance and never a slot number |
+| A `properties` carrier tag is keyed by a literal body index, and an inhabited placement takes the highest free body slot, so a module's tags depend on its host's body capacity | Pong and Arena derive their keys from their fixture host | OPEN: S7 declares instance attachments, but runtime attach/detach and a real host witness remain ([S7](state-and-language.md#s7--records-and-pools)) |
 | The baseline runner's `pose` step writes a zero yaw, and it has no `leave` step | A placed body loses its authored facing; leaving a live match is unproved | WP14, with the guarded-transform step |
 | An Edge rule latches its gate, not an input crossing, so a gate that becomes true partway through a held press fires on that transition | An authoring hazard, stated in the rules chapter | WP13 |
 

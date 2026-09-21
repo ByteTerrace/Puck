@@ -83,6 +83,21 @@ public sealed class SdfDistanceGridLawTests {
             grid: grid
         ));
     }
+
+    [Fact]
+    public void BandedLineOfSightWorkUsesTheFiniteGridTraversalAndTerminalSample() {
+        var (_, _, banded) = BuildFixture();
+        var work = banded.LineOfSightWork;
+
+        Assert.InRange(actual: work.BoundSampleBudget, low: 1, high: int.MaxValue);
+        Assert.Equal(expected: ((((long)work.ExactSampleBudget) + work.BoundSampleBudget) + 1L), actual: work.MaximumSamples);
+        Assert.Equal(expected: (2L * work.MaximumSamples), actual: work.MaximumProgramEvaluations);
+        Assert.Equal(
+            expected: (((UInt128)((ulong)work.MaximumProgramEvaluations)) * ((uint)work.ProgramInstructionCount)),
+            actual: work.MaximumInstructionVisits
+        );
+    }
+
     // A floor plane (finite bound impossible, so it never sizes the grid) under a row of hard-union instances, one
     // smooth-union instance, and one scoped instance carving a box out of a sphere — every compose family the exact
     // evaluator treats differently, so the bound and the band are proven across all of them.

@@ -27,7 +27,7 @@ public class ConstructSpanLawTests {
             return false;
         }
         for (var index = documentMember.IndexOf(value: '['); (index >= 0); index = documentMember.IndexOf(startIndex: (index + 1), value: '[')) {
-            if (documentMember[index + 1] != ']') {
+            if (documentMember[(index + 1)] != ']') {
                 return false;
             }
         }
@@ -130,7 +130,7 @@ public class ConstructSpanLawTests {
     private static string OpeningWordAt(string source, int line) {
         var lines = source.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
         var text = (((line >= 1) && (line <= lines.Length))
-            ? lines[line - 1].TrimStart()
+            ? lines[(line - 1)].TrimStart()
             : ""
         );
         var end = text.AsSpan().IndexOfAny(values: " \t({[:\"");
@@ -140,7 +140,6 @@ public class ConstructSpanLawTests {
             : text[..end]
         );
     }
-
     // The keywords of the constructs that write `documentMember` itself, which are the only words a line carrying
     // a node registered AT that member may open with. Narrower than <see cref="OpeningWords"/>, which also admits
     // every enclosing construct's keyword because an unregistered node resolves at the nearest ancestor: a probe
@@ -155,7 +154,6 @@ public class ConstructSpanLawTests {
 
     public static TheoryData<string> Described() => new(values: WorldConstructs.Table.Keywords);
     public static TheoryData<string> ShippedSources() => ShippedWorlds.Sources();
-
     [MemberData(nameof(Described))]
     [Theory]
     public void EveryConstructRegisteringASpanRegistersItOverItsOwnProbe(string keyword) {
@@ -191,6 +189,7 @@ public class ConstructSpanLawTests {
             var sourceMap = new SourceMap();
             var compilation = WorldCompiler.Compile(
                 cancellationToken: TestContext.Current.CancellationToken,
+                embeddings: ConstructProbes.Lock,
                 source: probe.Source,
                 sourceMap: sourceMap
             );
@@ -230,7 +229,6 @@ public class ConstructSpanLawTests {
             )
         );
     }
-
     [Fact]
     public void EveryDescribedConstructNamesADocumentMemberThisLawCanWalk() {
         var unwalkable = WorldConstructs.Table.Constructs
@@ -247,7 +245,7 @@ public class ConstructSpanLawTests {
                 separator: ", ",
                 values: unwalkable
             ),
-            expected: "countdown, deal, derive, draw, enum, if, onFailure, push, record, remove, schedule, shuffle, test, transaction, transform"
+            expected: "asset, border, claim, claim pair, deal, derive, door, draw, enum, for each, ground, if, onFailure, push, record, release, remove, schedule, shuffle, spawn, test, transaction, transform, world"
         );
     }
     [MemberData(nameof(ShippedSources))]

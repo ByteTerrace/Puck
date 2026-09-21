@@ -7,10 +7,11 @@ namespace Puck.State.Rules.Tests;
 /// compiler only inside a read-back spelling.</summary>
 public sealed class OrdinalAddressLawTests {
     // What a read-back may carry: a rule's own name, an effect's or gate's authored spelling, a family's or
-    // subprogram's name, a zone table's authored entries and token domain, and a text literal. Every other
+    // subprogram's name, a stable undo-group target, a zone table's authored entries and token domain, and a text literal. Every other
     // text-valued member of a compiled shape would be an address in disguise.
     private static readonly string[] ReadBackMembers = [
         "Describe",
+        "Group",
         "Name",
         "Names",
         "Spelling",

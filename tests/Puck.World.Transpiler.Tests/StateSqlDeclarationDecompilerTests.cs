@@ -54,6 +54,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
 
@@ -95,6 +99,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
 
@@ -124,6 +132,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
 
@@ -154,6 +166,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
 
@@ -190,6 +206,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
 
@@ -214,11 +234,15 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: false);
 
         Assert.DoesNotContain("sql {", decompiled, StringComparison.Ordinal);
-        Assert.Contains("slot gold : Int", decompiled, StringComparison.Ordinal);
+        Assert.Contains("slot gold", decompiled, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -249,6 +273,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         // hp and mana may decompile to DECLARE in sql { }, but copyManaToHp must NOT be emitted as an UPDATE in sql { }
@@ -291,6 +319,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.DoesNotContain("CREATE RULE checkHpMana", decompiled, StringComparison.Ordinal);
@@ -332,6 +364,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.DoesNotContain("CREATE RULE checkHpInt", decompiled, StringComparison.Ordinal);
@@ -374,6 +410,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.DoesNotContain("CREATE RULE regenAll", decompiled, StringComparison.Ordinal);
@@ -422,6 +462,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.DoesNotContain("CREATE RULE checkHeroHp", decompiled, StringComparison.Ordinal);
@@ -463,6 +507,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.DoesNotContain("CREATE RULE checkComplex", decompiled, StringComparison.Ordinal);
@@ -530,6 +578,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.Contains("CREATE RULE checkBoard ON ENTER AS", decompiled, StringComparison.Ordinal);
@@ -562,6 +614,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.Contains("sql {", decompiled, StringComparison.Ordinal);
@@ -590,6 +646,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.Contains("sql {", decompiled, StringComparison.Ordinal);
@@ -636,6 +696,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.Contains("CREATE RULE checkSimilarity ON ENTER AS", decompiled, StringComparison.Ordinal);
@@ -674,6 +738,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.Contains("CREATE RULE copyEmbedding ON ENTER AS", decompiled, StringComparison.Ordinal);
@@ -718,6 +786,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.True(decompiled.Contains("CREATE RULE recallMemories ON ENTER AS"), decompiled);
@@ -769,6 +841,10 @@ public class StateSqlDeclarationDecompilerTests {
             """));
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
 
         var decompiled = WorldDecompiler.Decompile(root: original, sql: true);
         Assert.Contains("CREATE RULE recallFarthest ON ENTER AS", decompiled, StringComparison.Ordinal);

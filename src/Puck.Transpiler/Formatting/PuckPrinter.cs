@@ -69,6 +69,19 @@ public static class PuckPrinter {
 
         return writer.ToString();
     }
+    /// <summary>Returns <paramref name="expression"/> printed as an author would write it.</summary>
+    /// <param name="expression">The expression to print.</param>
+    /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
+    /// <returns>The printed expression, with no trailing newline.</returns>
+    public static string PrintExpression(ExpressionNode expression, PuckPrintOptions? options = null) {
+        ArgumentNullException.ThrowIfNull(argument: expression);
+
+        var writer = new Writer(options: (options ?? PuckPrintOptions.Default));
+
+        writer.Value(expression: expression);
+
+        return writer.ToString();
+    }
     /// <summary>Parses <paramref name="source"/> and prints it back.</summary>
     /// <param name="source">The source text to format.</param>
     /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
@@ -143,6 +156,7 @@ public static class PuckPrinter {
         ? name
         : Quote(text: name)
     );
+    private static string ExportName(string name) => string.Join(separator: '.', values: name.Split('.').Select(selector: Name));
     // A property name is quoted only where printing it bare would open a different production.
     private static string PropertyName(string name, int level) => ((IsBareName(name: name) &&
         !PropertyKeywords.Contains(item: name) &&
@@ -235,7 +249,6 @@ public static class PuckPrinter {
                 value: "//"
             )
         );
-
         // One of a test's three blocks: the keyword, its own body, and the trivia standing before its closing brace.
         private void TestBlock(string keyword, int level, SyntaxTrivia trivia, Action write) {
             Leading(
@@ -255,6 +268,7 @@ public static class PuckPrinter {
             m_builder.Append(value: '}');
             Trailing(trivia: trivia);
         }
+
         public void Gate(PredicateNode predicate) => Predicate(
             parenthesize: false,
             predicate: predicate
@@ -341,6 +355,25 @@ public static class PuckPrinter {
             }
             Indent(level: level);
             switch (statement) {
+                case WorldDeclarationNode world: {
+                        m_builder.Append(value: "world ");
+                        Expression(expression: world.Name, level: level);
+                        m_builder.Append(value: " = ");
+                        Expression(expression: world.Module, level: level);
+
+                        break;
+                    }
+                case WorldLinkNode link: {
+                        m_builder.Append(value: link.Kind).Append(value: ' ');
+                        Expression(expression: link.Left, level: level);
+                        m_builder.Append(value: ", ");
+                        Expression(expression: link.Right, level: level);
+                        if (link.Kind == "border") {
+                            Body(closing: link.Trivia.Inner, level: level, opening: link.Trivia.Opening, statements: link.Properties);
+                        }
+
+                        break;
+                    }
                 case ImportNode import: {
                         m_builder.Append(value: "import ").Append(value: Quote(text: import.Path));
                         if (import.Alias is not null) { m_builder.Append(value: " as ").Append(value: import.Alias); }
@@ -348,12 +381,13 @@ public static class PuckPrinter {
                         break;
                     }
                 case ExportNode export: {
-                        m_builder.Append(value: "export ").Append(value: export.Facet);
+                        m_builder.Append(value: "export");
+                        if (export.FacetExplicit) { m_builder.Append(value: ' ').Append(value: export.Facet); }
                         for (var index = 0; (index < export.Names.Count); index++) {
                             m_builder.Append(value: ((index == 0)
                                 ? " "
                                 : ", "
-                            )).Append(value: Name(name: export.Names[index]));
+                            )).Append(value: ExportName(name: export.Names[index]));
                         }
 
                         break;
@@ -368,12 +402,18 @@ public static class PuckPrinter {
                         break;
                     }
                 case TemplateNode template: {
-                        m_builder.Append(value: "template");
+                        m_builder.Append(value: (template.IsModule ? "module" : "template"));
                         InlineHeader(trivia: template.Trivia);
                         m_builder.Append(value: ' ').Append(value: template.Name).Append(value: '(');
                         for (var index = 0; (index < template.Parameters.Count); index++) {
                             if (index > 0) { m_builder.Append(value: ", "); }
                             m_builder.Append(value: template.Parameters[index].Name);
+                            if (template.Parameters[index].Kind is { } kind) {
+                                m_builder.Append(value: ": ").Append(value: kind);
+                                if (template.Parameters[index].RequiredExports.Count > 0) {
+                                    m_builder.Append(value: " exporting ").AppendJoin(separator: ", ", values: template.Parameters[index].RequiredExports);
+                                }
+                            }
                             if (template.Parameters[index].DefaultValue is { } fallback) {
                                 m_builder.Append(value: " = ");
                                 Expression(
@@ -459,10 +499,16 @@ public static class PuckPrinter {
                         break;
                     }
                 case ExpressionStatementNode expression: {
-                        Expression(
-                            expression: expression.Expression,
-                            level: level
-                        );
+                        if (expression.IsUse && (expression.Expression is CallExpressionNode use)) {
+                            m_builder.Append(value: "use ").Append(value: use.Name);
+                            if (expression.UseAlias is { } alias) { m_builder.Append(value: " as ").Append(value: alias); }
+                            m_builder.Append(value: '(');
+                            Arguments(arguments: use.Arguments, level: level, multiLine: use.Trivia.MultiLine);
+                            if (use.Trivia.MultiLine) { EndLine(); Indent(level: level); }
+                            m_builder.Append(value: ')');
+                        } else {
+                            Expression(expression: expression.Expression, level: level);
+                        }
 
                         break;
                     }
@@ -498,12 +544,12 @@ public static class PuckPrinter {
                         break;
                     }
                 case ScoreStatementNode score: {
-                        m_builder.Append(value: "score: ").Append(value: score.Text);
+                        m_builder.Append(value: "score: ").Append(value: score.Expression.Text);
 
                         break;
                     }
                 case LocalStatementNode local: {
-                        m_builder.Append(value: "local ").Append(value: local.Name).Append(value: ": ").Append(value: local.Kind).Append(value: " = ").Append(value: local.ExpressionText);
+                        m_builder.Append(value: "local ").Append(value: local.Name).Append(value: " = ").Append(value: local.Expression.Text);
 
                         break;
                     }
@@ -518,6 +564,9 @@ public static class PuckPrinter {
                             );
                         } else {
                             m_builder.Append(value: Quote(text: rule.Name));
+                        }
+                        if ((rule.PoolForEach is { } pool) && (rule.PoolBinding is { } binding)) {
+                            m_builder.Append(value: " for each ").Append(value: binding).Append(value: " in ").Append(value: pool);
                         }
                         Body(
                             closing: rule.Trivia.Inner,
@@ -552,6 +601,11 @@ public static class PuckPrinter {
                         m_builder.Append(value: "stabilize");
                         InlineHeader(trivia: group.Trivia);
                         m_builder.Append(value: ' ').Append(value: Name(name: group.Name));
+                        if (group.Undo is { } undo) {
+                            m_builder.Append(value: " undo(");
+                            Expression(expression: undo, level: level);
+                            m_builder.Append(value: ')');
+                        }
                         if (group.MaxPasses is { } passes) {
                             m_builder.Append(value: " maxPasses(");
                             Expression(
@@ -580,6 +634,11 @@ public static class PuckPrinter {
                         m_builder.Append(value: "workflow");
                         InlineHeader(trivia: workflow.Trivia);
                         m_builder.Append(value: ' ').Append(value: Name(name: workflow.Name));
+                        if (workflow.Undo is { } undo) {
+                            m_builder.Append(value: " undo(");
+                            Expression(expression: undo, level: level);
+                            m_builder.Append(value: ')');
+                        }
                         Body(
                             closing: workflow.Trivia.Inner,
                             level: level,
@@ -718,6 +777,11 @@ public static class PuckPrinter {
                             );
                             Indent(level: (level + 1));
                             m_builder.Append(value: field.Name).Append(value: ": ").Append(value: field.TypeName);
+                            Modifiers(level: (level + 1), modifiers: field.Modifiers);
+                            if (field.Default is { } defaultValue) {
+                                m_builder.Append(value: " = ");
+                                Expression(expression: defaultValue, level: (level + 1));
+                            }
                             Trailing(trivia: field.Trivia);
                         }
                         Inner(
@@ -729,12 +793,31 @@ public static class PuckPrinter {
 
                         break;
                     }
+                case StatePoolDeclarationNode pool: {
+                        m_builder.Append(value: "pool");
+                        InlineHeader(trivia: pool.Trivia);
+                        m_builder.Append(value: ' ').Append(value: pool.Name).Append(value: " of ").Append(value: pool.RecordName);
+                        if (pool.Capacity is { } capacity) {
+                            m_builder.Append(value: " capacity(");
+                            Expression(expression: capacity, level: level);
+                            m_builder.Append(value: ')');
+                        }
+                        if (pool.Initializer is { } initializer) {
+                            m_builder.Append(value: " = ");
+                            Expression(expression: initializer, level: level);
+                        }
+
+                        break;
+                    }
+                case StatePairPoolDeclarationNode pool: {
+                        m_builder.Append(value: "pairPool ").Append(value: pool.Name).Append(value: " record ").Append(value: pool.RecordName).Append(value: " left ").Append(value: pool.LeftPool).Append(value: " right ").Append(value: pool.RightPool).Append(value: " maxLive ");
+                        Expression(expression: pool.MaxLive, level: level);
+                        m_builder.Append(value: " directed ").Append(value: (pool.Directed ? "true" : "false")).Append(value: " allowSelf ").Append(value: (pool.AllowSelf ? "true" : "false"));
+                        break;
+                    }
                 case DerivedStateNode derived: {
                         m_builder.Append(value: "derive ").Append(value: derived.Name).Append(value: " = ");
-                        Expression(
-                            expression: derived.Expression,
-                            level: level
-                        );
+                        Expression(expression: derived.Expression, level: level);
 
                         break;
                     }
@@ -847,7 +930,11 @@ public static class PuckPrinter {
                             members: table.FamilyMembers,
                             size: table.FamilySize
                         );
-                        m_builder.Append(value: ": ").Append(value: table.Kind);
+                        // A cell kind is never printed — WorldDocumentEmitter infers it. A non-empty `Kind` here
+                        // names a record type the table still expands into one row per field.
+                        if (!string.IsNullOrEmpty(value: table.Kind)) {
+                            m_builder.Append(value: ": ").Append(value: table.Kind);
+                        }
                         Modifiers(
                             level: level,
                             modifiers: table.Modifiers
@@ -878,7 +965,6 @@ public static class PuckPrinter {
                             members: grid.FamilyMembers,
                             size: grid.FamilySize
                         );
-                        m_builder.Append(value: ": ").Append(value: grid.Kind);
                         Modifiers(
                             level: level,
                             modifiers: grid.Modifiers
@@ -900,7 +986,6 @@ public static class PuckPrinter {
                             members: slot.FamilyMembers,
                             size: slot.FamilySize
                         );
-                        m_builder.Append(value: ": ").Append(value: slot.Kind);
                         if (slot.Value is { } value) {
                             m_builder.Append(value: " = ");
                             Expression(
@@ -1005,12 +1090,6 @@ public static class PuckPrinter {
 
                         break;
                     }
-                case CountdownStatementNode countdown: {
-                        m_builder.Append(value: "countdown ");
-                        Row(row: countdown.Target);
-
-                        break;
-                    }
                 case RemoveCellStatementNode remove: {
                         m_builder.Append(value: "remove ");
                         Row(row: remove.Target);
@@ -1107,6 +1186,25 @@ public static class PuckPrinter {
 
                         break;
                     }
+                case ClaimStatementNode claim: {
+                        m_builder.Append(value: "claim ").Append(value: claim.Pool).Append(value: " as ").Append(value: claim.Alias);
+                        Body(closing: claim.Trivia.Inner, level: level, opening: claim.Trivia.Opening, statements: claim.Body);
+                        break;
+                    }
+                case ClaimPairStatementNode claim: {
+                        m_builder.Append(value: "claim pair ").Append(value: claim.Pool).Append(value: " between ").Append(value: claim.Left).Append(value: ", ").Append(value: claim.Right).Append(value: " as ").Append(value: claim.Alias);
+                        Body(closing: claim.Trivia.Inner, level: level, opening: claim.Trivia.Opening, statements: claim.Body);
+                        break;
+                    }
+                case PoolForEachStatementNode each: {
+                        m_builder.Append(value: "for each ").Append(value: each.Alias).Append(value: " in ").Append(value: each.Pool);
+                        Body(closing: each.Trivia.Inner, level: level, opening: each.Trivia.Opening, statements: each.Body);
+                        break;
+                    }
+                case ReleaseStatementNode release: {
+                        m_builder.Append(value: "release ").Append(value: release.Alias);
+                        break;
+                    }
                 case BreakStatementNode: {
                         m_builder.Append(value: "break");
 
@@ -1176,10 +1274,14 @@ public static class PuckPrinter {
             if (row.Key is null) {
                 return;
             }
+            if (row.FieldAccess) {
+                m_builder.Append(value: '.').Append(value: row.Key);
+                return;
+            }
             // A key reads back in the document's own spelling — `$cell:row:key`, `$expr:<infix>` — which is not
             // what an author writes. `Puck.State` owns that fold, so it does it.
             m_builder.Append(value: '[');
-            ExpressionSpelling.AppendKey(
+            ExpressionSpelling.AppendSourceKey(
                 into: m_builder,
                 key: row.Key
             );
@@ -1198,7 +1300,7 @@ public static class PuckPrinter {
                         break;
                     }
                 case RhsOperandNode operand: {
-                        m_builder.Append(value: operand.Text);
+                        m_builder.Append(value: operand.Expression.Text);
 
                         break;
                     }
@@ -1308,7 +1410,7 @@ public static class PuckPrinter {
             }
             if (pattern.Value is not null) {
                 Indent(level: (level + 1));
-                m_builder.Append(value: "value: ").Append(value: Quote(text: pattern.Value));
+                m_builder.Append(value: "value: ").Append(value: Quote(text: pattern.Value.Text));
                 EndLine();
             }
             if (pattern.MaximumStates is { } budget) {
@@ -1342,7 +1444,7 @@ public static class PuckPrinter {
                         var annotated = (comparison.Kind is not null);
 
                         if (annotated) { m_builder.Append(value: '('); }
-                        m_builder.Append(value: comparison.LeftText).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: comparison.RightText);
+                        m_builder.Append(value: comparison.Left.Text).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: comparison.Right.Text);
                         if (annotated) { m_builder.Append(value: " : ").Append(value: comparison.Kind).Append(value: ')'); }
 
                         break;
@@ -1574,8 +1676,22 @@ public static class PuckPrinter {
             Indent(level: level);
             m_builder.Append(value: '}');
         }
+
+        public void Value(ExpressionNode expression) => this.Expression(expression: expression, level: 0);
+
         private void Expression(ExpressionNode expression, int level) {
+            if (expression.Parenthesized) {
+                m_builder.Append(value: '(');
+                Expression(expression: expression with { Parenthesized = false }, level: level);
+                m_builder.Append(value: ')');
+                return;
+            }
             switch (expression) {
+                case AssetExpressionNode asset: {
+                        m_builder.Append(value: "asset ").Append(value: Quote(text: asset.Path));
+
+                        break;
+                    }
                 case LiteralExpressionNode literal: {
                         m_builder.Append(value: Literal(literal: literal));
 
@@ -1654,16 +1770,19 @@ public static class PuckPrinter {
 
                         break;
                     }
+                case OperandExpressionNode operand: {
+                        m_builder.Append(value: operand.Text);
+
+                        break;
+                    }
                 case RangeExpressionNode range: {
-                        Expression(
-                            expression: range.Start,
-                            level: level
-                        );
+                        if (range.Start is { } start) {
+                            Expression(expression: start, level: level);
+                        }
                         m_builder.Append(value: "..");
-                        Expression(
-                            expression: range.End,
-                            level: level
-                        );
+                        if (range.End is { } end) {
+                            Expression(expression: end, level: level);
+                        }
 
                         break;
                     }
@@ -1714,6 +1833,7 @@ public static class PuckPrinter {
             }
         }
         private void Operand(ExpressionNode operand, bool parenthesize, int level) {
+            parenthesize &= !operand.Parenthesized;
             if (parenthesize) { m_builder.Append(value: '('); }
             Expression(
                 expression: operand,

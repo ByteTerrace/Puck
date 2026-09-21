@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Xunit;
 
 namespace Puck.State.Rules.Tests;
@@ -328,7 +329,7 @@ public sealed class ArenaTransformLawTests {
         Applies(
             context: context,
             host: host,
-            transform: new StateTransform.SortZone(
+            transform: new StateTransform.Sort(
                 By: [new SortKey(Row: "rank")],
                 Row: "deck"
             )
@@ -343,7 +344,7 @@ public sealed class ArenaTransformLawTests {
         Applies(
             context: context,
             host: host,
-            transform: new StateTransform.SortZone(
+            transform: new StateTransform.Sort(
                 By: [new SortKey(
                         Descending: true,
                         Row: "rank"
@@ -366,7 +367,7 @@ public sealed class ArenaTransformLawTests {
         Applies(
             context: context,
             host: host,
-            transform: new StateTransform.SortKeyed(Row: "scores")
+            transform: new StateTransform.Sort(Row: "scores", By: [new SortKey(Row: "scores")])
         );
         Assert.Equal(
             actual: TransformFixture.Listing(
@@ -513,6 +514,114 @@ public sealed class ArenaTransformLawTests {
         );
     }
     [Fact]
+    public void ThirtyThreeByEighteenPerNounSetsStayAsBoardRows() {
+        const int Width = 33;
+        const int Depth = 18;
+        const int Nouns = 6;
+        var rows = new List<StateRow>();
+
+        for (var noun = 0; (noun < Nouns); noun++) {
+            var cells = new List<StateCell>();
+
+            for (var cell = noun; (cell < (Width * Depth)); cell += Nouns) {
+                cells.Add(item: TransformFixture.Cell(
+                    key: cell.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                    value: 1L
+                ));
+            }
+            rows.Add(item: new StateRow(
+                Name: TransformFixture.Name(value: $"noun{noun}"),
+                Kind: CellKind.Int,
+                Domain: new StateDomain.CellsOf(
+                    Empty: 0L,
+                    Topology: "level"
+                ),
+                Cells: cells
+            ));
+        }
+        rows.Add(item: new StateRow(
+            Name: TransformFixture.Name(value: "properties"),
+            Kind: CellKind.Int,
+            Domain: new StateDomain.CellsOf(
+                Empty: 0L,
+                Topology: "level"
+            )
+        ));
+        var section = new StateSection(
+            Rows: rows,
+            Lattices: [new LatticeTopology.Grid(
+                    Name: "level",
+                    Origin: new DocumentVector3(
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
+                    ),
+                    CellSize: 1f,
+                    Width: Width,
+                    Depth: Depth
+                )]
+        );
+        var context = TransformFixture.Context(section: section);
+        var host = TransformFixture.Host(
+            context: context,
+            section: section
+        );
+
+        Applies(
+            context: context,
+            host: host,
+            transform: new StateTransform.BoardCombine(
+                Left: "noun0",
+                Operation: BoardCombineOp.Copy,
+                Row: "properties"
+            )
+        );
+        for (var noun = 1; (noun < Nouns); noun++) {
+            Applies(
+                context: context,
+                host: host,
+                transform: new StateTransform.BoardCombine(
+                    Left: "properties",
+                    Operation: BoardCombineOp.Or,
+                    Right: $"noun{noun}",
+                    Row: "properties"
+                )
+            );
+        }
+
+        var values = new long[(Width * Depth)];
+
+        Assert.True(condition: host.Arena.TryReadBoard(
+            rowOrdinal: TransformFixture.Ordinal(
+                context: context,
+                name: "properties"
+            ),
+            values: values
+        ));
+        Assert.All(
+            collection: values,
+            action: value => Assert.Equal(
+                actual: value,
+                expected: 1L
+            )
+        );
+        for (var noun = 0; (noun < Nouns); noun++) {
+            Assert.True(condition: host.Arena.TryReadBoard(
+                rowOrdinal: TransformFixture.Ordinal(
+                    context: context,
+                    name: $"noun{noun}"
+                ),
+                values: values
+            ));
+            for (var cell = 0; (cell < values.Length); cell++) {
+                Assert.Equal(
+                    expected: (((cell % Nouns) == noun) ? 1L : 0L),
+                    actual: values[cell]
+                );
+            }
+        }
+    }
+    [Fact]
     public void AWriteSetPaintsExactlyTheMaskedCellsAndSkipsABitPastTheTopology() {
         var (host, context) = Arrange();
 
@@ -544,7 +653,7 @@ public sealed class ArenaTransformLawTests {
             context: context,
             host: host,
             transform: new StateTransform.SetRay(
-                Direction: "E",
+                Direction: CellName.Parse(candidate: "E"),
                 From: "0",
                 Pattern: "ones",
                 Row: "board",
@@ -571,7 +680,7 @@ public sealed class ArenaTransformLawTests {
                 context: context,
                 host: host,
                 transform: new StateTransform.SetRay(
-                    Direction: "E",
+                    Direction: CellName.Parse(candidate: "E"),
                     From: "0",
                     Pattern: "ones",
                     Row: "left",
@@ -623,27 +732,16 @@ public sealed class ArenaTransformLawTests {
             host: host,
             transform: new StateTransform.Observe(Row: "known")
         );
+        Assert.Equal(4L, host.Arena.Read(known, context.Catalog.Keys.Intern(name: TransformFixture.Name(value: "a")))?.AsInt);
+        Assert.Equal(6L, host.Arena.Read(known, context.Catalog.Keys.Intern(name: TransformFixture.Name(value: "b")))?.AsInt);
         Assert.Equal(
-            actual: TransformFixture.BoardListing(
-                arena: host.Arena,
-                rowOrdinal: known
-            ),
-            expected: "4,0,6,0"
-        );
-        Assert.Equal(
-            actual: host.Arena.ObservationAt(
-                position: 0,
-                rowOrdinal: known
-            ),
+            actual: host.Arena.Observation(known, context.Catalog.Keys.Intern(name: TransformFixture.Name(value: "a"))),
             expected: new StateObservation(
                 Tick: 11L,
                 Visible: true
             )
         );
-        Assert.Null(@object: host.Arena.ObservationAt(
-            position: 1,
-            rowOrdinal: known
-        ));
+        Assert.Equal(new StateObservation(Tick: 11L, Visible: true), host.Arena.Observation(known, context.Catalog.Keys.Intern(name: TransformFixture.Name(value: "b"))));
     }
     [Fact]
     public void AnObserveDropsTheVisibleBitOfACellTheMaskNoLongerCovers() {
@@ -682,10 +780,7 @@ public sealed class ArenaTransformLawTests {
             transform: new StateTransform.Observe(Row: "known")
         );
         Assert.Equal(
-            actual: host.Arena.ObservationAt(
-                position: 0,
-                rowOrdinal: known
-            ),
+            actual: host.Arena.Observation(known, context.Catalog.Keys.Intern(name: TransformFixture.Name(value: "a"))),
             expected: new StateObservation(
                 Tick: 3L,
                 Visible: false
@@ -702,7 +797,7 @@ public sealed class ArenaTransformLawTests {
         Applies(
             context: context,
             host: host,
-            transform: new StateTransform.SortKeyed(Row: "scores")
+            transform: new StateTransform.Sort(Row: "scores", By: [new SortKey(Row: "scores")])
         );
         Assert.NotEqual(
             actual: arena.ComputeHash(),

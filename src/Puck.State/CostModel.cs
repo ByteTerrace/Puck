@@ -42,11 +42,16 @@ public readonly record struct MemoryClassProfile(long StartupCycles, long Additi
 }
 /// <summary>Identity and service policy for the portable semantic cost model, whose coefficients remain uncalibrated.</summary>
 public sealed class CostModel {
+    private static readonly IReadOnlyDictionary<MemoryAccessClass, MemoryClassEvidence> MemoryEvidence = ReferenceScheduleManifest.MemoryClasses.ToDictionary(
+        keySelector: entry => entry.Class
+    );
+
     /// <summary>Gets the uncalibrated portable model. No host discovery participates in its identity or prices.</summary>
     public static CostModel Default { get; } = new(
         id: "puck.cost.portable-model.v1",
         referenceProfile: CostModelProfile.Portable
     );
+
     /// <summary>Gets the digest of the evidence manifest this model's coefficients are read from.</summary>
     public string? EvidenceDigest => ReferenceScheduleManifest.Digest;
     /// <summary>Gets the model identifier.</summary>
@@ -59,15 +64,29 @@ public sealed class CostModel {
         ReferenceProfile = referenceProfile;
     }
 
-    /// <summary>Returns unresolved memory service until coefficients are substantiated. A proved empty operation costs zero.</summary>
+    /// <summary>Returns memory service from the evidence manifest when every coefficient is substantiated. A proved
+    /// empty operation costs zero; incomplete evidence remains unresolved.</summary>
     public static CostBound MemoryCycles(MemoryAccessClass accessClass, long starts, long dependentAccesses, long bytesTransferred) {
         ArgumentOutOfRangeException.ThrowIfNegative(starts);
         ArgumentOutOfRangeException.ThrowIfNegative(dependentAccesses);
         ArgumentOutOfRangeException.ThrowIfNegative(bytesTransferred);
         if (!Enum.IsDefined(value: accessClass)) { return CostBound.Unmodeled(reason: "Unknown memory access class."); }
-        return (((starts == 0) && (dependentAccesses == 0) && (bytesTransferred == 0))
-            ? CostBound.Zero
-            : CostBound.Unmodeled(reason: $"Memory service for {accessClass} has no calibrated portable coefficients.")
+        if ((starts == 0) && (dependentAccesses == 0) && (bytesTransferred == 0)) { return CostBound.Zero; }
+
+        var evidence = MemoryEvidence[accessClass];
+
+        if (!evidence.StartupCycles.IsKnown || !evidence.AdditionalLatencyCycles.IsKnown || (evidence.Bandwidth is not { } bandwidth)) {
+            return CostBound.Unmodeled(reason: $"Memory service for {accessClass} has no calibrated portable coefficients.");
+        }
+        return new MemoryClassProfile(
+            StartupCycles: evidence.StartupCycles.Cycles,
+            AdditionalLatencyCycles: evidence.AdditionalLatencyCycles.Cycles,
+            BandwidthNumerator: bandwidth.Numerator,
+            BandwidthDenominator: bandwidth.Denominator
+        ).Cycles(
+            bytesTransferred: bytesTransferred,
+            dependentAccesses: dependentAccesses,
+            starts: starts
         );
     }
 }

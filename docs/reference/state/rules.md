@@ -5,6 +5,11 @@ coins, spend three coins and award one card.” Its **gate** asks the question;
 its **effects** describe the attempted changes. The host decides whether those
 changes can be installed.
 
+Pool fields remain typed in compiled documents. A lexical `unit.hp` reference becomes
+`{"binding":"unit","field":"hp"}`; a static `units[0].hp` reference becomes
+`{"pool":"units","slot":0,"field":"hp"}`. Dotted strings are source spellings only. This preserves the binding,
+field, and static slot through validation and decompilation.
+
 Use the [small running example](../state.md#evaluate-a-small-rule) first.
 This chapter follows a rule through compilation, iteration, latching, and
 mutation admission.
@@ -44,6 +49,47 @@ Rules observe earlier accepted writes in the same pass. If rule A increments
 `coins` from 2 to 3 and rule B tests `coins >= 3`, B sees 3. This is an
 ordered evaluation, so reordering rules can change the result.
 
+## Retain and rewind completed turns
+
+A rule group may retain a bounded undo history. Declare the ordinary rows or
+pool names that belong to the turn and the number of completed turns to keep:
+
+```puck
+workflow turn undo({ rows: ["pieces", "score"], depth: 8 }) {
+    step move { score = 1 }
+    step settle { score = 2 }
+}
+
+rule undoMove {
+    when undoRequested == 1
+    mode: Edge
+    rewindTurn(group: turn)
+}
+```
+
+This fragment assumes a `pieces` pool and Int slots `score` and `undoRequested`.
+Each complete workflow or fixpoint run is one turn, even when it spans ticks.
+Ordinary firing scopes still close each tick. A pool selector includes its
+membership, generations, fields, and dependent pair pools.
+An idle fixpoint pass that records no change does not consume a retained slot.
+
+The rewind rule's gate authorizes the operation. `rewindTurn` must be its sole
+top-level effect, outside every group. It refuses an empty history, an unsettled
+turn, or a speculative search scope. Search judges cannot include this effect.
+After a successful rewind, the named group is skipped for the rest of that
+simulation tick, including any later group-evaluation sweep at the same tick.
+Undo groups cannot contain irreversible effects or host-owned writes. A turn
+that writes outside its selected rows cannot be rewound. An unrelated write
+to a retained row also blocks that history, so rewind cannot overwrite a later
+external edit.
+
+The retained ring and any unfinished turn participate in the arena hash and
+authority checkpoint. Relayout drops them. Depth is admitted against the
+journal byte ceiling before installation. A row rewind preserves the arena's
+shared key reservations: it does not reclaim names that other rows may use.
+Rule gates, edge latches, the simulation clock, and host state are not turned
+back; put gameplay progress that must rewind in the declared rows.
+
 ## Choose Level or Edge
 
 **Level** fires each time the gate is evaluated as true. **Edge** fires when
@@ -71,26 +117,41 @@ first one.
 
 ## Make several effects succeed together
 
-Two ordinary effects have separate preflight and installation steps. If spending
-coins succeeds but awarding a card is refused, the first write can remain.
-A transaction gives the host one private candidate to validate and install.
+One firing is one journal scope on the arena. Every write the firing makes
+lands when the scope commits, or none does: if spending coins succeeds and
+awarding a card is refused, the scope rewinds and the coins are back.
+
+An effect that leaves the arena cannot be rewound by the journal, so it is
+queued instead of fired, checked before the commit, and handled after it. There
+are two kinds, and the firing's all-or-nothing promise covers only the first.
+
+| Kind | Declares | What the firing promises |
+|---|---|---|
+| Transactional arm | `EffectNeeds.Irreversible \| EffectNeeds.Transactional` | The host composes every such arm of the firing, in order, against one speculative state while they are checked, decides everything that can refuse the unit before the scope commits, and installs it when the scope commits. The install cannot refuse, so the arms land with the firing's writes or not at all. |
+| Delivered arm | `EffectNeeds.Irreversible` | It is checked before the commit and fired after it, in authored order. A delivery that refuses is one counted refusal. It undoes nothing, and later deliveries still run. |
+
+The arms are checked as the sequence they are. A later arm is judged against
+what the earlier arms of the same firing would leave, so removing the same
+placement twice refuses the firing before it commits, and removing a placement
+an earlier arm creates is admitted.
 
 ```mermaid
 sequenceDiagram
     participant E as RuleEvaluator
+    participant A as StateArena
     participant H as IEffectHost
-    participant C as Private candidate
-    E->>H: BeginPreflight
-    E->>H: TryApply(spend coins, preflight)
-    H->>C: Validate and compose
-    E->>H: TryApply(award card, preflight)
-    H->>C: Read the composed state and validate
-    alt Every required effect succeeds
-        E->>H: TryCommitPreflight
-        H->>H: Install as one mutation
-    else An effect refuses
-        E->>H: EndPreflight
-        H->>C: Discard the candidate
+    E->>A: BeginScope
+    E->>A: Arena writes, in order
+    E->>H: Preflighting
+    E->>H: Fire(arm, preflight) for each queued arm, in order
+    E->>H: PrepareTransactional (the transactional arms, as one unit)
+    alt Every write, every check and the preparation succeed
+        E->>A: Commit
+        E->>H: Committed
+        E->>H: CommitTransactional (installs the prepared unit)
+        E->>H: Fire(arm) for each delivered arm, in order
+    else Anything refuses
+        E->>A: Rewind
     end
 ```
 
@@ -109,11 +170,10 @@ var buyCard = new Rule(
     ])]);
 ```
 
-The compiler admits only effect families that support transactions. A custom
-effect that sends an irreversible notification, for example, cannot promise
-rollback simply by returning success from preflight. The
-[host protocol](hosting.md#implement-the-mutation-boundary) owns installation,
-validation, journaling, and delivery.
+A custom effect that sends a notification cannot promise rollback by returning
+success from its check: it is a delivered arm, and the table above is what it
+may rely on. The [host protocol](hosting.md#implement-the-mutation-boundary)
+owns installation, validation, journaling, and delivery.
 
 A transaction is a savepoint inside the firing, not the firing's own boundary.
 A refused step rewinds only the savepoint, so the effects before the
@@ -226,7 +286,10 @@ the host must support its candidate and rollback protocol.
 
 Persist authoritative rows and edge-latch state together with any generator
 state the host owns. Scheduling caches can be rebuilt: they only avoid work
-whose inputs are proven unchanged. The host also owns validation and installation
+whose inputs are proven unchanged. A local that reads the clock or a host facet
+must be reevaluated, including when that dependency comes through another local
+or a computed lookup key. Unchanged row versions cannot prove those values stable.
+The host also owns validation and installation
 of its document; compiling rules does not supply a complete application's
 mutation, authority, or persistence pipeline.
 
@@ -261,7 +324,7 @@ synthesized row.
 
 The authored model consists of `Rule` and `RuleLocal`, `ActionPredicate`
 (`compareState`, `compareValue`, `all`, `any`, `not`), `ActionEffect`
-(`setState`, `addState`, `pushState`, `transformState`, `countdownState`,
+(`setState`, `addState`, `pushState`, `transformState`,
 `generate`, `removeStateCell`, `scheduleState`, `transaction`, `if`),
 `ActionTarget`, `ActionStateComparison`, and
 `ActionTriggerMode`—the last two shared with `Puck.Physics`' compiled
@@ -289,7 +352,7 @@ effect. These are class hierarchies so a host can extend them:
 | Family | Core facts |
 |---|---|
 | `IRuleOperand` | `StateCellOperand`, `BindingOperand`, `TableOperand`, `TickOperand`, `ReductionOperand`, `SymmetryOperand`, `BoardOperand`, `PhaseOperand`, `PatternOperand`, `HistoryOperand`. |
-| `IRuleEffect` | `WriteEffect`, `CountdownEffect`, `GenerateEffect`, `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`, `TransformStateEffect`, `PushStateEffect`, `IfEffect`. |
+| `IRuleEffect` | `WriteEffect`, `GenerateEffect`, `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`, `TransformStateEffect`, `PushStateEffect`, `IfEffect`. |
 
 Operands implement `Read(IStateReader)`. Facts also report cost and read/write
 dependencies through `Cost`, `CollectReads`, and `CollectWrites`, using
@@ -379,8 +442,7 @@ does not erase the distinctions a source's author chose:
   `NotEqual`, and an expression reading it evaluates to nothing; both fault,
   and both refusals name `isAbsent(operand)` and `operand ?? fallback`.
 - Text copies are not numeric expressions.
-- `countdownState` consumes engine-step width and handles the final partial
-  step; `scheduleState` writes an absolute simulation-tick deadline with an
+- `scheduleState` writes an absolute simulation-tick deadline with an
   upward-rounded delay.
 - `add` and `set` differ on a missing cell and on a cycling cell, which
   stores a phase but reads a transformed value.
@@ -398,14 +460,14 @@ specialized transform statements:
 rule "remember-ambush" {
     mode: Edge
     when caravanAttacked == 1
-    transform remember(into: memories, key: "ambush", from: "events[ambush]", unlessWithin: 0.9)
+    transform remember(into: memories, key: ambush, from: events[ambush], unlessWithin: 0.9)
     situation = events[ambush]
     transform mix(into: "stance[guards]", terms: [
         { from: "stance[guards]", weight: 3 }
         { from: "events[ambush]", weight: 1 }
     ])
-    transform nearest(from: memories, query: "situation", into: recalled, k: 3, threshold: 0.5)
-    transform nearest(from: lineVectors, query: "situation", into: reply, k: 1)
+    transform nearest(from: memories, query: situation, into: recalled, k: 3, threshold: 0.5)
+    transform nearest(from: lineVectors, query: situation, into: reply, k: 1)
 }
 ```
 
@@ -435,9 +497,9 @@ and local values. The host's `IStateReader` forwards that context to operands.
 ### Mutation and iteration contracts
 
 Core effects produce four mutation shapes: `UpsertCell`, `RemoveCell`,
-`Generate`, and `Apply` a transform. Top-level effects preflight and
-install individually. A transaction preflights its branch as one candidate,
-then calls the host's `TryCommitPreflight`.
+`Generate`, and `Apply` a transform. Each is written inside the firing's
+journal scope through `IEffectHost.Apply`. A transaction is a savepoint inside
+that scope.
 
 The evaluator visits rules in array order and binds values before the gate.
 Its `RuleLatch` preserves Edge/Level history per evaluation binding, including
@@ -469,15 +531,34 @@ change whose selection, ordering, and associated bookkeeping must agree.
 |---|---|
 | `transfer` | Move selected tokens between ordered zones while preserving their identities. Random selection advances its draw only when the whole transfer commits. |
 | `setRay` | Replace the longest outward run accepted by a pattern, excluding the origin. An empty accepted prefix refuses. |
+| `pushRay` | Move a live pool token and the selected tokens ahead of it one cell, allowing passable occupants to stay in place. |
 | `shuffle` | Reorder a keyed row or zone using a named stream draw; n members consume n − 1 samples. A board or a ring carries no order of its own to permute, and naming one is refused. |
-| `sortZone` | Stably order a pile by numeric attribute rows in declared precedence. |
-| `sortKeyed` | Stably order a numeric keyed row or zone by its own values, under the same row-shape rule as `shuffle`. |
+| `sort` | Stably order by the numeric rows listed in `by`, each with its own direction. A sole key naming the target orders its own values (a keyed or ordered numeric row); other keys must be distinct attributes over an ordered pile's token domain. |
 | `writeSet` | Write a value to board cells selected by an integer bitmask, for a topology of at most 64 cells. |
 | `boardCombine` | Combine membership from boards over one topology, including boards larger than a single mask. |
 | `arrange` | Reorder an ordered zone by a permutation rank. |
 | `push` | Append a history value, overwriting the oldest ring slot when full. |
 | `clearEnclosed` | Clear adjacent groups in an inclusive value range that have no empty neighboring cell. |
-| `observe` | Refresh a knowledge board from its source and visibility mask under authority control. |
+| `observe` | Refresh token-keyed knowledge from its property and position rows through a visibility board mask. |
+
+`pushRay` starts from a live instance bound by pool iteration. Its `cell`
+argument names the field holding each token's position, and `value` names the field supplying symbols to the
+patterns. `pushPattern` selects occupants that join the moving run;
+`stopPattern` blocks the move, including an occupant selected by both patterns.
+The first cell without a selected push occupant terminates the run. Passable
+occupants stay in place, so the destination can be shared. The overall `pattern`
+must accept the mover, selected push symbols, and terminator occupants in stable
+slot order; a physically empty terminator contributes the declared `empty`
+symbol. An edge, a cycle, or a rejected pattern refuses the firing atomically.
+
+A pattern operand can ask where a substring occurs as well as whether a whole
+word matches. `match(rule, row, direction, at, n)[origin]` returns the board cell
+where zero-based occurrence `n` begins; `length` in the same position returns
+its length. A keyed or ordered word omits the direction and origin. Occurrences
+are ordered by start, may overlap, and take the longest accepted non-empty prefix
+at each start. Missing `at` answers `-1`; missing `length` answers `0`. Existing
+`prefix`, blocker `cell`/`distance`, and `any` direction `mask`/`count` retain
+their meanings.
 
 `boardCombine` treats a cell as a member when its value differs from the board's
 empty value. It writes the declared result value to members and the empty value

@@ -10,6 +10,36 @@ export interface EngineDiagnostic {
   message: string;
 }
 
+/** Reference cycles are exact counts only when evidence establishes a bound. */
+export type EngineCostBound =
+  | { kind: "Known"; cycles: bigint; reason: null }
+  | { kind: "Unmodeled" | "Overflow"; cycles: null; reason: string | null };
+
+/** Authored analysis shared with the server. Heuristic work strings may themselves state an unresolved bound. */
+export interface EngineCostReport {
+  modelId: string;
+  evidenceDigest: string | null;
+  scope: string;
+  simulationRateHz: number;
+  stepAllowanceCycles: bigint;
+  recurringBound: EngineCostBound;
+  searchReservations: EngineCostBound;
+  totalBound: EngineCostBound;
+  editBurstBound: EngineCostBound;
+  admitted: boolean;
+  heuristicWorkUnitsPerTick: string;
+  contributors: { name: string; isInteraction: boolean; multiplier: bigint; setup: string; check: string; fire: string; work: string }[];
+  contributorSources: { name: string; isInteraction: boolean; jsonPointer: string; sourcePath: string | null; line: number | null; column: number | null; moduleInstancePath: string | null }[];
+  issues: string[];
+  resources: {
+    rowCount: number; topologyCount: number; populationCapacity: number; cellSlotCount: number;
+    vectorComponentBytes: bigint; laneSlotCount: number; laneRosterCount: number; drawMaskWordCount: number;
+    layoutBytes: bigint | null; retainedVisibilityBytes: bigint | null; retainedKeyBytes: bigint | null;
+    arenaFootprintBytes: bigint | null; arenaAdmissionCeilingBytes: bigint; journalAllowanceBytes: bigint;
+    measurementIssue: string | null; unmodeledTotalMemoryReason: string;
+  };
+}
+
 /** The shared `Parse`/`ParseFragment`/`Canonicalize` outcome shape. */
 export type ParseResult =
   | { ok: true; document: unknown; deferred: string[] }
@@ -93,8 +123,15 @@ export interface WorldEngine {
   ): Promise<ParseResult & { composed?: string }>;
   canonicalize(json: string): Promise<ParseResult>;
   compile(json: string): Promise<{ ok: true; handle: string } | { ok: false; errors: EngineDiagnostic[] }>;
+  /** Analyzes a structurally compilable draft without installing a session or allocating an arena. */
+  analyzeCosts(json: string): Promise<
+    | { ok: true; validated: boolean; report: EngineCostReport; validationErrors: EngineDiagnostic[]; deferred: string[] }
+    | { ok: false; validated: false; errors: EngineDiagnostic[] }
+  >;
   release(handle: string): Promise<void>;
   rows(handle: string): Promise<RowInfo[]>;
+  /** Reads cached analysis for the installed document. Rebinding invalidates that compilation's report. */
+  costs(handle: string): Promise<EngineCostReport>;
   rebind(handle: string, json: string): Promise<{ ok: boolean; error?: string }>;
   judge(handle: string, tick: bigint): Promise<{ ok: true; trace: JudgeTrace } | { ok: false; error: string }>;
   readRow(handle: string, row: string, key?: string): Promise<{ found: boolean; value: CellValue | null }>;

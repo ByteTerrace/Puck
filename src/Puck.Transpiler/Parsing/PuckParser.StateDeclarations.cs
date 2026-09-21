@@ -8,29 +8,132 @@ namespace Puck.Transpiler.Parsing;
 // `table`/`slot` state-row declarations (a schema-agnostic grammar shape; which vocabulary admits them, and where,
 // is the owning vocabulary's own answer — see Puck.World.Transpiler for `state.world`).
 public static partial class PuckParser {
-    // `table`/`slot` open a declaration only when a row name (and optional [size]) and ':' follow on the same line,
-    // so an ordinary `table: ...` or `slot: ...` property, or a bare flag of that name, still parses as it always has.
+    private static StatementNode ParseStatePoolDeclaration(ParseContext context, int startOffset, int line, int col) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
+            throw CreateException(context: context, message: "Expected a pool name after 'pool'");
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryMatchKeyword(context: context, keyword: "of")) {
+            throw CreateException(context: context, message: $"Expected 'of' and a record type after 'pool {name}'");
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var recordName)) {
+            throw CreateException(context: context, message: $"Expected a record type after 'pool {name}:'");
+        }
+
+        ExpressionNode? capacity = null;
+
+        SkipWhiteSpace(context: context);
+        if (TryMatchKeyword(context: context, keyword: "capacity")) {
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: '(', context: context)) {
+                throw CreateException(context: context, message: $"Expected '(' after pool '{name}' capacity");
+            }
+            capacity = ParseExpression(context: context);
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: ')', context: context)) {
+                throw CreateException(context: context, message: $"Expected ')' closing pool capacity for '{name}'");
+            }
+        }
+
+        ExpressionNode? initializer = null;
+
+        SkipWhiteSpace(context: context);
+        if (TryConsume(c: '=', context: context)) {
+            initializer = ParseExpression(context: context);
+        }
+
+        return new StatePoolDeclarationNode(
+            Capacity: capacity,
+            Column: col,
+            Initializer: initializer,
+            Length: (cursor.Offset - startOffset),
+            Line: line,
+            Name: name,
+            Offset: startOffset,
+            RecordName: recordName
+        );
+    }
+    private static StatementNode ParseStatePairPoolDeclaration(ParseContext context, int startOffset, int line, int col) {
+        var cursor = context.Scanner.Cursor;
+
+        string ReadName(string message) {
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
+                throw CreateException(context: context, message: message);
+            }
+            return name;
+        }
+        void ReadKeyword(string keyword, string message) {
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: keyword)) {
+                throw CreateException(context: context, message: message);
+            }
+        }
+        var name = ReadName(message: "Expected a pair-pool name after 'pairPool'");
+
+        ReadKeyword(keyword: "record", message: "Expected 'record <Record>' after a pair-pool name");
+        var record = ReadName(message: "Expected a record name after 'record'");
+
+        ReadKeyword(keyword: "left", message: "Expected 'left <pool>' after pair-pool record");
+        var leftPool = ReadName(message: "Expected a left endpoint pool after 'left'");
+
+        ReadKeyword(keyword: "right", message: "Expected 'right <pool>' after pair-pool left endpoint");
+        var rightPool = ReadName(message: "Expected a right endpoint pool after 'right'");
+
+        ReadKeyword(keyword: "maxLive", message: "Expected 'maxLive <count>' after pair-pool right endpoint");
+        SkipWhiteSpace(context: context);
+        var maxLive = ParseExpression(context: context);
+        var directed = true;
+        var allowSelf = false;
+
+        while (true) {
+            var saved = cursor.Position;
+
+            SkipWhiteSpace(context: context);
+            if (TryMatchKeyword(context: context, keyword: "directed")) {
+                directed = ReadBoolean(context: context, message: "Expected true or false after 'directed'");
+                continue;
+            }
+            if (TryMatchKeyword(context: context, keyword: "allowSelf")) {
+                allowSelf = ReadBoolean(context: context, message: "Expected true or false after 'allowSelf'");
+                continue;
+            }
+            cursor.ResetPosition(position: saved);
+            break;
+        }
+        return new StatePairPoolDeclarationNode(name, record, leftPool, rightPool, maxLive, directed, allowSelf, startOffset, (cursor.Offset - startOffset), line, col);
+    }
+    private static bool ReadBoolean(ParseContext context, string message) {
+        SkipWhiteSpace(context: context);
+        if (TryMatchKeyword(context: context, keyword: "true")) {
+            return true;
+        }
+        if (TryMatchKeyword(context: context, keyword: "false")) {
+            return false;
+        }
+        throw CreateException(context: context, message: message);
+    }
+    // `table`/`slot` open a declaration only when a row name (and optional [size]) follows on the same line, so an
+    // ordinary `table: ...` or `slot: ...` property — always spelled with the colon immediately after the name, no
+    // space and no second name in between — still parses as it always has.
     private static bool TryMatchDeclarationKeyword(ParseContext context, string keyword) {
         var cursor = context.Scanner.Cursor;
         var saved = cursor.Position;
 
-        if (TryMatchKeyword(context: context, keyword: keyword) && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
-                SkipSpacesOnLine(context: context);
+        if (
+            TryMatchKeyword(context: context, keyword: keyword) &&
+            SkipSpacesOnLine(context: context) &&
+            TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)
+        ) {
+            cursor.ResetPosition(position: saved);
 
-                var hasBracket = false;
-
-                if (!cursor.Eof && (cursor.Current == '[')) {
-                    hasBracket = TrySkipBracketedSpanOnLine(context: context);
-                    SkipSpacesOnLine(context: context);
-                }
-
-                if (hasBracket || (!cursor.Eof && ((cursor.Current == ':') || (cursor.Current == '=') || (cursor.Current == '{')))) {
-                    cursor.ResetPosition(position: saved);
-
-                    return TryMatchKeyword(context: context, keyword: keyword);
-                }
-            }
+            return TryMatchKeyword(context: context, keyword: keyword);
         }
 
         cursor.ResetPosition(position: saved);
@@ -75,6 +178,45 @@ public static partial class PuckParser {
 
         return skipped;
     }
+    // Any `: word` left after the name is the retired
+    // annotation, refused and consumed regardless of the word — the rest of the declaration still parses.
+    private static void RefuseWrittenKindAnnotation(ParseContext context, DiagnosticBag? diagnostics, string keyword, string name) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: ':', context: context)) {
+            cursor.ResetPosition(position: saved);
+
+            return;
+        }
+
+        SkipWhiteSpace(context: context);
+
+        var (kindLine, kindCol) = GetLineAndColumn(
+            buffer: context.Scanner.Buffer,
+            offset: cursor.Offset
+        );
+
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var word)) {
+            cursor.ResetPosition(position: saved);
+
+            return;
+        }
+
+        diagnostics?.ReportError(
+            code: PuckDiagnosticCodes.StateDeclarationKindAnnotated,
+            message: ((keyword == "table")
+                ? $"'table {name}' spells the retired ': {word}' annotation — table kinds are inferred from their cells and modifiers; instantiate a record with 'pool {name} of {word} capacity(...)' instead"
+                : $"'{keyword} {name}' spells its kind explicitly as ': {word}' — the kind is inferred from the row's cells, value, and modifiers; write '{keyword} {name}' and drop the annotation"),
+            span: new SourceSpan(
+                cursor.Offset,
+                1,
+                kindLine,
+                kindCol
+            )
+        );
+    }
     private static StatementNode ParseStateTableDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
 
@@ -86,15 +228,7 @@ public static partial class PuckParser {
         SkipSpacesOnLine(context: context);
         ParseFamilyBracket(context: context, keyword: "table", members: out var familyMembers, name: name, size: out var familySize);
 
-        var kind = "Int";
-
-        SkipWhiteSpace(context: context);
-        if (TryConsume(c: ':', context: context)) {
-            SkipWhiteSpace(context: context);
-            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out kind)) {
-                throw CreateException(context: context, message: $"Expected a kind (Int, Fixed, Bool, Text, or Vector) after 'table {name} :'");
-            }
-        }
+        RefuseWrittenKindAnnotation(context: context, diagnostics: diagnostics, keyword: "table", name: name);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "table", vocabulary: vocabulary);
         ExpressionNode? initializer = null;
@@ -118,7 +252,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateTableDeclarationNode(Cells: cells, Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Kind: kind, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
+        return new StateTableDeclarationNode(Cells: cells, Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
     }
     // A family's bracket is either a bare count -- [8], today's spelling -- or a member list: comma-separated index
     // ranges ([0, 2..12], so a family may have gaps) and quoted member row names (["PileA", "PileB"]).
@@ -224,15 +358,7 @@ public static partial class PuckParser {
         SkipSpacesOnLine(context: context);
         ParseFamilyBracket(context: context, keyword: "slot", members: out var familyMembers, name: name, size: out var familySize);
 
-        SkipWhiteSpace(context: context);
-        if (!TryConsume(c: ':', context: context)) {
-            throw CreateException(context: context, message: $"Expected ':' and a kind after 'slot {name}'");
-        }
-
-        SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var kind)) {
-            throw CreateException(context: context, message: $"Expected a kind (Int, Fixed, Bool, Text, or Vector) after 'slot {name} :'");
-        }
+        RefuseWrittenKindAnnotation(context: context, diagnostics: diagnostics, keyword: "slot", name: name);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "slot", vocabulary: vocabulary);
         ExpressionNode? value = null;
@@ -245,7 +371,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateSlotDeclarationNode(Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Kind: kind, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value);
+        return new StateSlotDeclarationNode(Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value);
     }
     // `pile` opens a declaration only when a row name and the bare keyword 'of' follow on the same line, mirroring
     // `TryMatchDeclarationKeyword`'s own guard — an ordinary `pile: ...` property still parses as it always has.
@@ -355,15 +481,7 @@ public static partial class PuckParser {
         SkipSpacesOnLine(context: context);
         ParseFamilyBracket(context: context, keyword: "grid", members: out var familyMembers, name: name, size: out var familySize);
 
-        SkipWhiteSpace(context: context);
-        if (!TryConsume(c: ':', context: context)) {
-            throw CreateException(context: context, message: $"Expected ':' and a kind after 'grid {name}'");
-        }
-
-        SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var kind)) {
-            throw CreateException(context: context, message: $"Expected a kind (Int or Bool) after 'grid {name} :'");
-        }
+        RefuseWrittenKindAnnotation(context: context, diagnostics: diagnostics, keyword: "grid", name: name);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "grid", vocabulary: vocabulary);
         var cells = new List<StateCellEntryNode>();
@@ -387,7 +505,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateGridDeclarationNode(Cells: cells, Column: col, FamilyMembers: familyMembers, FamilySize: familySize, HasBody: hasBody, Kind: kind, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
+        return new StateGridDeclarationNode(Cells: cells, Column: col, FamilyMembers: familyMembers, FamilySize: familySize, HasBody: hasBody, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
     }
     // Zero or more `name(args)` calls, chained: `bounds(...) advance(...)`. Each candidate is read speculatively —
     // an identifier not immediately followed by '(' belongs to whatever statement comes next (the next declaration,

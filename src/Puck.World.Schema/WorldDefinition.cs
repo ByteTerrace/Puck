@@ -25,7 +25,7 @@ namespace Puck.World;
 /// chosen, non-inert baseline for a section that has no "off" state of its own (a tuning row, a distribution). A
 /// section whose own closed vocabulary already reserves a named "none" member (<see cref="WorldStorageDefaults.None"/>)
 /// uses that member directly rather than one of the three generic names.</para></remarks>
-public sealed record WorldDefinition(
+public sealed partial record WorldDefinition(
     [property: JsonPropertyName("motion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMotionDefaults? MotionRaw = null,
     [property: JsonPropertyName("spawnPoints"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpawnPoint>? SpawnPointsRaw = null,
     [property: JsonPropertyName("render"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderDefaults? RenderRaw = null,
@@ -381,9 +381,13 @@ public sealed record WorldDefinition(
     /// <summary>Gets the placeable speaker rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldSpeaker> Speakers => (SpeakersRaw ?? []);
-    /// <summary>Gets the <c>state</c> section — ABSENT resolves to none.</summary>
+    /// <summary>Gets the document's state rows, including the generated storage of its pools. The source
+    /// declarations and pool continuation remain on <see cref="StateRaw"/>.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldStateRow> State => (StateRaw?.World ?? []);
+    public IReadOnlyList<WorldStateRow> State => GetStateRows();
+    /// <summary>Gets the explicitly authored state rows, excluding generated pool storage.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldStateRow> AuthoredState => (StateRaw?.World ?? []);
     /// <summary>Gets the declared symbolic value domains a row may name — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<StateEnum> Enums => (StateRaw?.Enums ?? []);
@@ -666,9 +670,13 @@ public sealed record WorldDefinition(
     }
     /// <summary>Returns a copy with its document-owned world-state rows replaced while preserving the body and
     /// identity declaration lanes.</summary>
-    public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows) {
+    /// <param name="rows">The authored rows, excluding generated pool storage.</param>
+    /// <param name="pools">Captured pool declarations and continuation, or <see langword="null"/> to retain them.</param>
+    /// <returns>The updated definition.</returns>
+    /// <param name="pairPools">Captured pair-pool continuation, or null to retain it.</param>
+    public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<StatePool>? pools = null, IReadOnlyList<StatePairPool>? pairPools = null) {
         var updated = this with {
-            StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows }),
+            StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows, Pools = (pools ?? StateRaw?.Pools), PairPools = (pairPools ?? StateRaw?.PairPools) }),
         };
 
         PreserveCompatibleCompilation(target: updated);
@@ -698,5 +706,6 @@ public sealed record WorldDefinition(
         public WorldFieldsSection? Fields;
         public bool FieldsCompiled;
         public StateCatalog? StateCatalog;
+        public IReadOnlyList<WorldStateRow>? StateRows;
     }
 }

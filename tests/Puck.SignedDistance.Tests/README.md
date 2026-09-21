@@ -3,7 +3,8 @@
 This xUnit v3 suite verifies the signed-distance program format, shape and
 material laws, fixed-point field evaluation, domain and culling bounds, and
 world-query plumbing. It keeps the CPU query contract independent from GPU
-rendering and shader compilation.
+rendering and shader compilation. March laws also pin terminal-sample accounting
+and the fixed-point coordinate-progress bound used for banded visibility work.
 
 `GlyphSamplingLawTests` checks the host's decoded-atlas derivative correction,
 stretched-cell mappings, metadata-only fallback, and packed-lane admission. It

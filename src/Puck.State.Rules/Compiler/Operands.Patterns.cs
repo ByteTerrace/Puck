@@ -16,7 +16,8 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     /// <param name="tokenExpression">The zone's per-token value expression, when the pattern carries one.</param>
     /// <param name="capacity">The source row's cell capacity, for pricing the walk.</param>
     /// <param name="rowFrom">The live row read, or <see langword="null"/> for a fixed row.</param>
-    public PatternOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledPattern pattern, BoardNeighbourQuery? board, int attributeOrdinal, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression, long capacity, LiveRow? rowFrom = null) : base(valueKind: CellKind.Int) {
+    /// <param name="occurrence">The zero-based occurrence selected by an at/length facet.</param>
+    public PatternOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledPattern pattern, BoardNeighbourQuery? board, int attributeOrdinal, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression, long capacity, LiveRow? rowFrom = null, int occurrence = 0) : base(valueKind: CellKind.Int) {
         ArgumentNullException.ThrowIfNull(argument: pattern);
 
         AttributeOrdinal = attributeOrdinal;
@@ -25,6 +26,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         Key = key;
         KeyFrom = keyFrom;
         MatchFacet = matchFacet;
+        Occurrence = occurrence;
         Pattern = pattern;
         RowFrom = rowFrom;
         RowOrdinal = rowOrdinal;
@@ -69,6 +71,9 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>Gets what this operand answers about its word.</summary>
     public MatchFacet MatchFacet { get; }
+    /// <summary>Gets the zero-based occurrence selected by <see cref="MatchFacet.At"/> or
+    /// <see cref="MatchFacet.Length"/>.</summary>
+    public int Occurrence { get; }
     /// <summary>Gets the compiled pattern.</summary>
     public CompiledPattern Pattern { get; }
     /// <summary>Gets the live row read, or <see langword="null"/> for a fixed row.</summary>
@@ -80,7 +85,9 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
     private long ReadBoardMatch(IStateReader reader, int rowOrdinal, BoardNeighbourQuery query) {
         var arena = reader.Arena;
-        var values = reader.BoardScratch(cells: query.Topology.CellCount);
+        using var valuesLease = reader.Scratch.Rent<long>(length: query.Topology.CellCount);
+
+        var values = valuesLease.Span;
         var word = reader.PatternWord;
         var key = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
@@ -91,7 +98,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
         if (
             key.IsValid &&
-            reader.Catalog.Keys.TryGetName(
+            reader.Arena.Keys.TryGetName(
             key: key,
             name: out var name
         )
@@ -137,6 +144,30 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
                 }
 
                 return blocker;
+            }
+            if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
+                if (!Pattern.TryFindOccurrence(
+                    length: out var matchLength,
+                    occurrence: Occurrence,
+                    start: out var matchStart,
+                    values: word[..length]
+                )) {
+                    return ((MatchFacet == MatchFacet.At) ? -1L : 0L);
+                }
+                if (MatchFacet == MatchFacet.Length) {
+                    return matchLength;
+                }
+
+                var matchCell = origin;
+
+                for (var step = 0; (step <= matchStart); step++) {
+                    matchCell = query.Topology.Neighbour(
+                        cell: matchCell,
+                        direction: query.Direction
+                    );
+                }
+
+                return matchCell;
             }
 
             return ((MatchFacet == MatchFacet.Prefix)
@@ -214,6 +245,18 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             ).Length
         );
 
+        if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
+            return (Pattern.TryFindOccurrence(
+                length: out var matchLength,
+                occurrence: Occurrence,
+                start: out var matchStart,
+                values: word[..length]
+            )
+                ? ((MatchFacet == MatchFacet.At) ? matchStart : matchLength)
+                : ((MatchFacet == MatchFacet.At) ? -1L : 0L)
+            );
+        }
+
         return ((MatchFacet == MatchFacet.Prefix)
             ? Pattern.LongestAcceptedPrefix(values: word[..length])
             : Pattern.Match(values: word[..length])
@@ -233,25 +276,24 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var arena = reader.Arena;
-        var count = arena.CellCount(rowOrdinal: rowOrdinal);
         var length = 0;
+        var cursor = start;
 
         try {
-            for (var position = start; (position < count); position++) {
-                if (!arena.TryKeyAt(
-                    key: out var key,
-                    position: position,
-                    rowOrdinal: rowOrdinal
-                )) {
-                    continue;
-                }
+            while (arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: rowOrdinal
+            )) {
+                var position = (cursor - 1);
+                var previousCursor = (position - 1);
 
                 reader.BoundTokenKey = key;
-                reader.BoundPreviousKey = (((position > 0) && arena.TryKeyAt(
+                reader.BoundPreviousKey = (((position > 0) && arena.TryNextCell(
+                    cursor: ref previousCursor,
                     key: out var previous,
-                    position: (position - 1),
                     rowOrdinal: rowOrdinal
-                ))
+                ) && (previousCursor == position))
                     ? previous
                     : default
                 );
@@ -273,8 +315,8 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
         return length;
     }
-    /// <summary>Returns the position the word starts at: 0 for an invalid key, the named token's position, or the
-    /// row's count (an empty word) when the row does not hold the token.</summary>
+    /// <summary>Returns the position the word starts at: 0 for an invalid key, the named token's physical position,
+    /// or <see cref="int.MaxValue"/> (an empty word) when the row does not hold the token.</summary>
     /// <param name="arena">The arena.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The start token's key, or the invalid default.</param>
@@ -286,22 +328,28 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             return 0;
         }
 
-        var count = arena.CellCount(rowOrdinal: rowOrdinal);
+        if (arena.TryCellSlot(
+            key: key,
+            rowOrdinal: rowOrdinal,
+            slot: out var slot
+        )) {
+            var position = (slot - arena.Layout[rowOrdinal].CellStart);
+            var cursor = position;
 
-        for (var position = 0; (position < count); position++) {
             if (
-                arena.TryKeyAt(
-                key: out var candidate,
-                position: position,
+                arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var held,
                 rowOrdinal: rowOrdinal
             ) &&
-                (candidate == key)
+                (cursor == (position + 1)) &&
+                (held == key)
             ) {
                 return position;
             }
         }
 
-        return count;
+        return int.MaxValue;
     }
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
@@ -333,21 +381,23 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => ((Board is { } board)
-        ? (board.Topology.CellCount + board.Visits)
-        : RuleWorkBudget.SaturatingMultiply(
-            left: ((RowFrom is { } live)
-            ? live.SelectionCapacity
-            : Capacity),
-            right: RuleWorkBudget.SaturatingAdd(
-                left: 1L,
-                right: RuleWorkBudget.ExpressionCost(
-                    context: context,
-                    tokens: (TokenExpression ?? [])
-                )
-            )
-        )
-    );
+    public override RuleWork Cost(IRuleCostContext context) {
+        var occurrenceSearch = (MatchFacet is MatchFacet.At or MatchFacet.Length);
+
+        if (Board is { } board) {
+            var cells = ((long)board.Topology.CellCount);
+
+            return RuleWork.Known(units: (board.Visits + (occurrenceSearch ? (cells * cells) : cells)));
+        }
+
+        var capacity = ((long)((RowFrom is { } live) ? live.SelectionCapacity : Capacity));
+        var expression = (1L + RuleWorkBudget.ExpressionCost(
+            context: context,
+            tokens: (TokenExpression ?? [])
+        ));
+
+        return ((capacity * expression) * (occurrenceSearch ? capacity : 1L));
+    }
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

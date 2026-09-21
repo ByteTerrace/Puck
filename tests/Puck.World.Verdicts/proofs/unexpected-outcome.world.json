@@ -1,5 +1,5 @@
 {
-  "basis": "../../../src/Puck.World/Assets/worlds/games/hearts.world.json",
+  "basis": "../phase-fixture.world.json",
   "grants": [
     {
       "capability": "Mutate",
@@ -27,7 +27,12 @@
         },
         {
           "$type": "setState",
-          "fromState": "$phase:heartsPassPhase",
+          "fromState": {
+            "channel": "phase",
+            "arguments": [
+              "passPhase"
+            ]
+          },
           "key": "generation",
           "state": "passPhaseStillZero"
         }
@@ -35,7 +40,12 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$phase:heartsPassPhase",
+        "state": {
+          "channel": "phase",
+          "arguments": [
+            "passPhase"
+          ]
+        },
         "value": 0
       },
       "mode": "Level",
@@ -73,7 +83,7 @@
         "kind": "Int",
         "name": "passPhaseStillZero",
         "verdict": {
-          "gate": "heartsPassPhase stands at 0 — true whatever the scheduled row did, so only the row's own outcome can fail this world",
+          "gate": "passPhase stands at 0 — true whatever the scheduled row did, so only the row's own outcome can fail this world",
           "status": "ok"
         }
       }

@@ -75,6 +75,43 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             Y: FixedQ4816.FromRawBits(value: raw),
             Z: FixedQ4816.Zero
         ));
+
+    [Fact]
+    public void ExactLineOfSightWorkIncludesTheTerminalSample() {
+        var work = BuildUnitSphere().LineOfSightWork;
+
+        Assert.Equal(expected: (work.ExactSampleBudget + 1L), actual: work.MaximumSamples);
+        Assert.Equal(expected: work.MaximumSamples, actual: work.MaximumProgramEvaluations);
+        Assert.Equal(
+            expected: (((UInt128)((ulong)work.MaximumProgramEvaluations)) * ((uint)work.ProgramInstructionCount)),
+            actual: work.MaximumInstructionVisits
+        );
+        Assert.Equal(expected: 0, actual: work.BoundSampleBudget);
+    }
+    [Fact]
+    public void RoundedNormalizedLosStepsAdvanceOneCoordinateByAtLeastHalfTheScalarStep() {
+        FixedVector3[] directions = [
+            new(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            new(X: FixedQ4816.One, Y: FixedQ4816.One, Z: FixedQ4816.One),
+            new(X: FixedQ4816.FromRawBits(value: 1L), Y: FixedQ4816.One, Z: FixedQ4816.One),
+            new(X: -FixedQ4816.One, Y: FixedQ4816.One, Z: FixedQ4816.FromRawBits(value: 32768L)),
+        ];
+        long[] steps = [1L, 2L, 3L, 65L, 66L, 67L, 101L, 65_535L, 65_536L, 65_537L];
+
+        foreach (var direction in directions) {
+            var unit = direction.Normalize();
+            var largest = Math.Max(val1: Math.Abs(value: unit.X.Value), val2: Math.Max(val1: Math.Abs(value: unit.Y.Value), val2: Math.Abs(value: unit.Z.Value)));
+
+            Assert.True(condition: (largest > 32768L));
+            foreach (var step in steps) {
+                var moved = (unit * FixedQ4816.FromRawBits(value: step));
+                var progress = Math.Max(val1: Math.Abs(value: moved.X.Value), val2: Math.Max(val1: Math.Abs(value: moved.Y.Value), val2: Math.Abs(value: moved.Z.Value)));
+
+                Assert.True(condition: (progress >= ((step + 1L) >> 1)));
+            }
+        }
+    }
+
     private static FixedPosition Local(double x, double y, double z) =>
         FixedPosition.FromLocal(local: Vector(
             x: x,

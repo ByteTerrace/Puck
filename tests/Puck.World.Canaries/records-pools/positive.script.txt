@@ -1,0 +1,9 @@
+replay.record records-pools
+world.state.cell.set request $value 1
+world.wait 1
+world.state first
+world.state second
+world.state done
+replay.stop
+replay.verify records-pools
+wire.errors

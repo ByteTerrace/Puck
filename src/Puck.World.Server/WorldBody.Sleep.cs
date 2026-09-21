@@ -2,7 +2,7 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// A non-rigid body's idle floor: once its motion program has produced no motion and it has received no intent for
-/// the authored <c>bodies.sleepAfterTicks</c> engine ticks, <see cref="WorldPopulation.AdvanceSimulated"/> stops
+/// the authored <c>bodies.sleepAfterSeconds</c>, <see cref="WorldPopulation.AdvanceSimulated"/> stops
 /// staging and advancing it outright — no motion program, no contact solve — until something wakes it. A rigid or
 /// carried body never reaches this: both already return from <see cref="Advance"/> before <see cref="Advance"/>'s
 /// own sleep bookkeeping runs, and a rigid kit's rest latch (<see cref="Resting"/>) is a distinct, older mechanism.

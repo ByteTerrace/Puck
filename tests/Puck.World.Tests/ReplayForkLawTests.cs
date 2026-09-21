@@ -13,6 +13,27 @@ namespace Puck.World.Tests;
 /// a driven tick; and the child verifies standalone.
 /// </summary>
 public sealed class ReplayForkLawTests {
+    [Fact]
+    public void TapeHeaderPinsTheRuntimeKeyLedgerHashShape() {
+        using var buffer = new MemoryStream();
+
+        WorldReplaySnapshot.Write(
+            stream: buffer,
+            recording: Snapshot(
+                forkedFrom: null,
+                ticks: 0
+            )
+        );
+
+        Assert.Equal(
+            expected: 3u,
+            actual: BitConverter.ToUInt32(
+                startIndex: sizeof(uint),
+                value: buffer.ToArray()
+            )
+        );
+    }
+
     private static readonly WorldChannelTable Channels = WorldChannelTable.Compile(channels: Fixtures.BuildDocument().Channels);
 
     private static IntentSubmission Forward(ulong tick, FixedQ4816 forward, FixedQ4816 strafe = default) => new(

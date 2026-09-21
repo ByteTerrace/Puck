@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 /// groups, interactions and tables, their edge latches, the decision, pattern, identity-fact and influence-fact
 /// runtimes, the queries, the trace and the world's own effect arms. The arena is the store every read and write
 /// addresses, and the world facts only the server can answer reach a fact as the facet its declaration names.</summary>
-public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IRuleOwner, IRuleRefusalSink, IWorldFacts {
+public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts {
     // The compiled `rules` section, adopted by Install on every recompile from the same WorldFactsCompiler path the
     // validator already ran over the candidate. Recomputed unconditionally: rules and state rows are both
     // small-capacity sections, so there is no AffectsRules classification predicate earning its keep here.
@@ -45,7 +45,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     // A distance interaction's nearest-neighbour selection, ascending by distance then index (WorldInteraction.Neighbours).
     private readonly FixedQ4816[] m_neighbourDistance = new FixedQ4816[WorldInteractionCapacity.MaxNeighbours];
     private readonly int[] m_neighbourIndex = new int[WorldInteractionCapacity.MaxNeighbours];
-
     // The engine's largest representable magnitude — the DELIBERATELY-INVERTED sentinel WorldRuleFacts.DistancePrefix's
     // own remarks explain: unlike $machine:/$region:, where zero is a correct neutral count for "nothing there",
     // distance's neutral-for-absence value must never read as "close", or a within-range gate (compareState against
@@ -62,6 +61,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     /// <inheritdoc/>
     public StateArena Arena => m_host.Arena;
+
     /// <summary>Gets the compiled rule groups.</summary>
     internal CompiledRuleGroup[] Groups => m_groups;
     /// <summary>Gets each open group's pass or step progress.</summary>
@@ -74,8 +74,16 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// <summary>Gets the edge latch keyed by rule name, deliberately outside the compiled rules so an install that
     /// recompiles them cannot clear it.</summary>
     internal RuleLatch RuleGateHeld => m_ruleGateHeld;
+
+    /// <summary>Invalidates observations captured against a replaced arena while preserving edge latch state.</summary>
+    internal void InvalidateArenaScheduling() {
+        m_ruleGateHeld.InvalidateScheduler();
+        m_interactionGateHeld.InvalidateScheduler();
+    }
+
     /// <summary>Gets the compiled <c>rules</c> section, including every member a group claims.</summary>
     internal CompiledRule[] Rules => m_rules;
+
     /// <summary>Gets the compiled <c>tables</c> section.</summary>
     private CompiledTable[] Tables => m_tables;
     /// <summary>Gets the server whose document, arena, entity table and narration every rule read and effect arm
@@ -84,7 +92,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     private readonly long[] m_localValues = new long[RuleCapacity.MaxLocalsPerRule];
     private readonly long[] m_hostPatternWord = new long[PatternCapacity.MaxWord];
-    private long[] m_boardScratch = [];
+    private readonly StateInstanceHandle[] m_instanceBindings = new StateInstanceHandle[StateCapacity.MaxInstanceBindings];
 
     private ulong m_hostEngineTick;
     private ulong m_hostTick;
@@ -94,6 +102,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     /// <inheritdoc/>
     public Span<long> Locals => m_localValues;
+    /// <inheritdoc/>
+    public Span<StateInstanceHandle> InstanceBindings => m_instanceBindings;
     /// <inheritdoc/>
     public CellKey BoundEachKey { get; set; }
     /// <inheritdoc/>
@@ -126,23 +136,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
 
-    /// <inheritdoc/>
-    public Span<long> BoardScratch(int cells) {
-        if (m_boardScratch.Length < cells) {
-            m_boardScratch = new long[Math.Max(
-                val1: cells,
-                val2: BoardMask.MaxCells
-            )];
-        }
-
-        return m_boardScratch.AsSpan(
-            length: Math.Max(
-                val1: 0,
-                val2: cells
-            ),
-            start: 0
-        );
-    }
     /// <inheritdoc/>
     public int BoundIndex(BoundKey key) => (key switch {
         BoundKey.Each => BoundEachIndex(),
@@ -370,10 +363,13 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     public CellKey PairKey(PairKeyFact key) {
         ArgumentNullException.ThrowIfNull(argument: key);
 
-        return Host.Arena.Catalog.Keys.Intern(name: CellName.Parse(candidate: ResolvePairKey(
-            a: ResolveBodyRef(bodyRef: key.BodyA),
-            b: ResolveBodyRef(bodyRef: key.BodyB)
-        )));
+        var a = ResolveBodyRef(bodyRef: key.BodyA);
+        var b = ResolveBodyRef(bodyRef: key.BodyB);
+
+        return (((a < 0) || (b < 0))
+            ? default
+            : ResolvePairKey(a: a, b: b)
+        );
     }
     /// <inheritdoc/>
     public bool TryReadHostOwnedCell(int rowOrdinal, int cell, out long value) {
@@ -434,7 +430,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     }
     // The participant index bound to $each: the iterated key spelled as a body index, or -1 when it is not one.
     private int BoundEachIndex() => (RuleReads.TryKeyIndex(
-        catalog: Host.Arena.Catalog,
+        keys: Host.Arena.Keys,
         index: out var index,
         key: BoundEachKey
     )
@@ -448,16 +444,19 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     private int ResolveBodyRef(in CompiledBodyRef bodyRef) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
         CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)bodyRef.Index)),
-        CompiledBodyRefKind.Cell => (((IntegerOf(value: Host.ReadArenaCell(
-        key: Host.Arena.Catalog.Keys.Intern(name: CellName.Parse(candidate: bodyRef.Key!)),
-        rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
-    )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
+        CompiledBodyRefKind.Cell => ((Host.Arena.Keys.TryResolve(
+            key: out var cellKey,
+            name: CellName.Parse(candidate: bodyRef.Key!)
+        ) && (IntegerOf(value: Host.ReadArenaCell(
+            key: cellKey,
+            rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
+        )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
         ? ((int)cellIndex)
         : -1),
         // 'placement:$each' names the placement whose id is the iterated key, which is what the compile-time
         // ordinal list is keyed by; a key naming no declared placement resolves no body.
         CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is not null)
-        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Catalog.Keys.TryGetName(
+        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Keys.TryGetName(
             key: BoundEachKey,
             name: out var placementName
         )

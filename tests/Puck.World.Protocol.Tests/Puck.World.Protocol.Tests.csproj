@@ -15,5 +15,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.World.Protocol\Puck.World.Protocol.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
     </ItemGroup>
 </Project>

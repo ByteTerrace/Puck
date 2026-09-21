@@ -1,9 +1,8 @@
 namespace Puck.Transpiler.Ast;
 
 /// <summary>Base class for all gate-predicate nodes parsed from a <c>when</c> clause (§1 of the sugar wave).
-/// A predicate node never classifies itself as <c>compareState</c>/<c>compareValue</c> — it carries the raw operand
-/// text the parser validated through <c>ExpressionSpelling.TryParse</c>, leaving that classification (and the
-/// verbatim <c>ExpressionProgram</c> capture) to the lowering stage.</summary>
+/// A predicate carries parsed operands; binding and classification as <c>compareState</c> or
+/// <c>compareValue</c> belong to the lowering stage.</summary>
 public abstract record PredicateNode(int Offset = 0, int Length = 0, int Line = 1, int Column = 1)
     : SyntaxNode(
     Offset,
@@ -13,18 +12,18 @@ public abstract record PredicateNode(int Offset = 0, int Length = 0, int Line = 
 );
 /// <summary>One comparison: <c>left cmp right</c>, with an optional <c>: Kind</c>/<c>as Kind</c> suffix that always
 /// forces a <c>compareValue</c> lowering regardless of how simple either operand is.</summary>
-/// <param name="LeftText">The raw left operand span, already validated through <c>ExpressionSpelling.TryParse</c>.</param>
+/// <param name="Left">The parsed left operand.</param>
 /// <param name="Comparator">The comparison token (<c>==</c>, <c>!=</c>, <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c>).</param>
-/// <param name="RightText">The raw right operand span, already validated through <c>ExpressionSpelling.TryParse</c>.</param>
+/// <param name="Right">The parsed right operand.</param>
 /// <param name="Kind">The optional forced kind annotation (<c>"Int"</c> or <c>"Fixed"</c>), or <see langword="null"/>.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 public sealed record ComparisonPredicateNode(
-    string LeftText,
+    OperandExpressionNode Left,
     string Comparator,
-    string RightText,
+    OperandExpressionNode Right,
     string? Kind,
     int Offset = 0,
     int Length = 0,

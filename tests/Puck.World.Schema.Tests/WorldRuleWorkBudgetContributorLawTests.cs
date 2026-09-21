@@ -93,7 +93,7 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
                     Value: 1m
                 )],
             Gate: gate,
-            ForEach: forEach
+            ForEach: StateChannelRef.OfNullable(spelling: forEach)
         );
     private static WorldStateRow Slot(string name) =>
         new(
@@ -191,6 +191,47 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.True(condition: (line.Multiplier < document.Population.Capacity));
     }
     [Fact]
+    public void AdmissionRefusesABoundWithNoNumberAndAdmitsOnlyAKnownOneUnderTheCeiling() {
+        var asked = 0;
+        IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Lines() {
+            asked++;
+
+            return [];
+        }
+
+        Assert.Null(@object: WorldRuleWorkBudget.Refuse(
+            contributors: Lines,
+            work: RuleWork.Known(units: RuleCapacity.MaxWorkUnitsPerTick)
+        ));
+        Assert.Equal(
+            0,
+            asked
+        );
+        Assert.Contains(
+            expectedSubstring: "exceeding the maximum",
+            actualString: WorldRuleWorkBudget.Refuse(
+                contributors: Lines,
+                work: RuleWork.Known(units: (RuleCapacity.MaxWorkUnitsPerTick + 1L))
+            )
+        );
+
+        foreach (var unbounded in new[] { RuleWork.Overflow, RuleWork.Unmodeled(reason: "operation 255"), (RuleWork.Unmodeled(reason: "operation 255") + 1L) }) {
+            var refusal = WorldRuleWorkBudget.Refuse(
+                contributors: Lines,
+                work: unbounded
+            );
+
+            Assert.Contains(
+                expectedSubstring: "no bound on their work per tick",
+                actualString: refusal
+            );
+            Assert.Contains(
+                expectedSubstring: unbounded.ToString(),
+                actualString: refusal
+            );
+        }
+    }
+    [Fact]
     public void AnOverBudgetRefusalNamesTheCostliestLines() {
         var document = Document(
             Heavy(
@@ -254,8 +295,13 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             4096L,
             lines[0].Multiplier
         );
+        // The sweep snapshots the iterated row's keys once, then checks and fires once per key.
         Assert.Equal(
-            (lines[0].Multiplier * lines[0].UnitCost),
+            RuleWork.Known(units: 4096L),
+            lines[0].Cost.Setup
+        );
+        Assert.Equal(
+            (lines[0].Cost.Setup + (lines[0].Multiplier * (lines[0].Cost.Check + lines[0].Cost.Effects))),
             lines[0].WorkUnits
         );
         Assert.Equal(
@@ -269,13 +315,13 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.Empty(collection: lines[0].Discriminators);
 
         // p0 and p1 are exclusive on phase, so all checks sum, but firing carries one of them, not both.
-        var totalChecks = lines.Sum(selector: line => line.CheckUnits);
-        var unconditionalFiring = lines.Where(predicate: line => (line.Discriminators.Count == 0)).Sum(selector: line => line.FiringUnits);
-        var exclusiveFiring = lines.Where(predicate: line => (line.Discriminators.Count > 0)).Max(selector: line => line.FiringUnits);
+        var totalChecks = lines.Sum(selector: line => line.CheckUnits.Units);
+        var unconditionalFiring = lines.Where(predicate: line => (line.Discriminators.Count == 0)).Sum(selector: line => line.FiringUnits.Units);
+        var exclusiveFiring = lines.Where(predicate: line => (line.Discriminators.Count > 0)).Max(selector: line => line.FiringUnits.Units);
 
         Assert.Equal(
             ((totalChecks + unconditionalFiring) + exclusiveFiring),
-            WorldRuleWorkBudget.Measure(definition: document).WorkUnitsPerTick
+            WorldRuleWorkBudget.Measure(definition: document).WorkUnitsPerTick.Units
         );
     }
 }

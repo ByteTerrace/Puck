@@ -21,8 +21,8 @@
     },
     {
       "id": 4,
-      "prompt": "Add a world rule that decrements a countdown row and removes a stale cell once it reaches zero. Author it and say which mutation kind it lowers to and how you would boot it.",
-      "expected_output": "Authors the rule as `.puck` source (rule/gate/effect sugar — `countdown row[key]`, `remove row[key]`) instead of hand-writing JSON, routes grammar/CLI questions to puck-dsl, and states from the mutations reference that `countdownState` and `removeStateCell` fold through `UpsertStateCell`/`RemoveStateCell` via the rule frame, not a bespoke path. Boots the source directly with `--world <file>.puck` (PuckWorldLoader compiles it in memory) rather than hand-authoring the compiled JSON, and knows the flagship puck.world.json has no .puck source of its own so a scratch/basis-merged world is needed to try this live. Does not claim world.row.set is the authoring path for a new rule.",
+      "prompt": "Add a world rule that arms a cooldown deadline and removes a stale cell once the deadline passes. Author it and say which mutation kind it lowers to and how you would boot it.",
+      "expected_output": "Authors the rule as `.puck` source (rule/gate/effect sugar — `schedule row[key] in Ns`, `remove row[key]`) instead of hand-writing JSON, routes grammar/CLI questions to puck-dsl, gates the removal on `$tick >= row` rather than a decrementing remainder, and states from the mutations reference that `scheduleState` and `removeStateCell` fold through `UpsertStateCell`/`RemoveStateCell` via the rule frame, not a bespoke path. Boots the source directly with `--world <file>.puck` (PuckWorldLoader compiles it in memory) rather than hand-authoring the compiled JSON, and knows the flagship puck.world.json has no .puck source of its own so a scratch/basis-merged world is needed to try this live. Does not claim world.row.set is the authoring path for a new rule, and does not reach for a retired `countdown` statement.",
       "files": []
     }
   ]

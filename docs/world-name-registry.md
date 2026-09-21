@@ -195,11 +195,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -245,8 +249,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `kits.rows[].actions{*}.onPress.effects[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `kits.rows[].actions{*}.onPress.effects[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `kits.rows[].actions{*}.onPress.effects[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -297,6 +299,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onPress.effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `kits.rows[].actions{*}.onPress.effects[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `kits.rows[].actions{*}.onPress.effects[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `kits.rows[].actions{*}.onPress.effects[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -335,6 +344,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -464,11 +492,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -514,8 +546,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `kits.rows[].actions{*}.onRelease.effects[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `kits.rows[].actions{*}.onRelease.effects[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -566,6 +596,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `kits.rows[].actions{*}.onRelease.effects[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `kits.rows[].actions{*}.onRelease.effects[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -604,6 +641,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -733,11 +789,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -783,8 +843,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `kits.rows[].actions{*}.onFact[].effects[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `kits.rows[].actions{*}.onFact[].effects[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -835,6 +893,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `kits.rows[].actions{*}.onFact[].effects[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `kits.rows[].actions{*}.onFact[].effects[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -873,6 +938,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1016,6 +1100,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
+| `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].name` | State | Declares |  | `StateRow.Name` |
 | `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
 | `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
@@ -1056,6 +1141,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][field].reactions[][flow].spillRow` | State | Names | Action | `WorldReaction.Flow.SpillRow` |
 | `state.lattices[][field].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.families[].members` | State | Names | Read | `StateFamily.Members` |
+| `state.records[].name` | Record | Declares |  | `StateRecord.Name` |
+| `state.pools[].name` | Pool | Declares |  | `StatePool.Name` |
+| `state.pools[].record` | Record | Names | Read | `StatePool.Record` |
+| `state.pairPools[].name` | Pool | Declares |  | `StatePairPool.Name` |
+| `state.pairPools[].record` | Record | Names | Read | `StatePairPool.Record` |
+| `state.pairPools[].leftPool` | Pool | Names | Read | `StatePairPool.LeftPool` |
+| `state.pairPools[].rightPool` | Pool | Names | Read | `StatePairPool.RightPool` |
 | `theme.color.surfaceBase` | State | Binding | Binding | `WorldThemeColor.SurfaceBase` |
 | `theme.color.surfacePanel` | State | Binding | Binding | `WorldThemeColor.SurfacePanel` |
 | `theme.color.surfaceRaised` | State | Binding | Binding | `WorldThemeColor.SurfaceRaised` |
@@ -1190,11 +1282,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `rules[].effects[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `rules[].effects[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `rules[].effects[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `rules[].effects[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `rules[].effects[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `rules[].effects[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `rules[].effects[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `rules[].effects[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `rules[].effects[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `rules[].effects[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `rules[].effects[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `rules[].effects[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `rules[].effects[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `rules[].effects[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `rules[].effects[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `rules[].effects[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `rules[].effects[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -1240,8 +1336,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `rules[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `rules[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `rules[].effects[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `rules[].effects[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `rules[].effects[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `rules[].effects[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `rules[].effects[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -1292,6 +1386,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `rules[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `rules[].effects[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `rules[].effects[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `rules[].effects[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -1330,6 +1431,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `rules[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `rules[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `rules[].effects[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `rules[].effects[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `rules[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1477,11 +1597,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `rules[].decision.options[].effects[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `rules[].decision.options[].effects[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `rules[].decision.options[].effects[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `rules[].decision.options[].effects[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `rules[].decision.options[].effects[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `rules[].decision.options[].effects[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `rules[].decision.options[].effects[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `rules[].decision.options[].effects[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `rules[].decision.options[].effects[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `rules[].decision.options[].effects[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `rules[].decision.options[].effects[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `rules[].decision.options[].effects[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -1527,8 +1651,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `rules[].decision.options[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `rules[].decision.options[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `rules[].decision.options[].effects[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `rules[].decision.options[].effects[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `rules[].decision.options[].effects[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `rules[].decision.options[].effects[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `rules[].decision.options[].effects[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -1579,6 +1701,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.options[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.options[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `rules[].decision.options[].effects[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `rules[].decision.options[].effects[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `rules[].decision.options[].effects[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.options[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.options[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -1617,6 +1746,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].decision.options[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `rules[].decision.options[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `rules[].decision.options[].effects[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `rules[].decision.options[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1787,11 +1935,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `rules[].decision.onNoChoice[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `rules[].decision.onNoChoice[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `rules[].decision.onNoChoice[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `rules[].decision.onNoChoice[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `rules[].decision.onNoChoice[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `rules[].decision.onNoChoice[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `rules[].decision.onNoChoice[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `rules[].decision.onNoChoice[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `rules[].decision.onNoChoice[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `rules[].decision.onNoChoice[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `rules[].decision.onNoChoice[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `rules[].decision.onNoChoice[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -1837,8 +1989,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `rules[].decision.onNoChoice[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `rules[].decision.onNoChoice[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `rules[].decision.onNoChoice[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `rules[].decision.onNoChoice[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `rules[].decision.onNoChoice[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `rules[].decision.onNoChoice[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `rules[].decision.onNoChoice[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -1889,6 +2039,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.onNoChoice[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.onNoChoice[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `rules[].decision.onNoChoice[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `rules[].decision.onNoChoice[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `rules[].decision.onNoChoice[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.onNoChoice[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.onNoChoice[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -1927,6 +2084,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].decision.onNoChoice[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `rules[].decision.onNoChoice[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `rules[].decision.onNoChoice[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `rules[].decision.onNoChoice[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1964,6 +2140,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].locals[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].locals[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].zones` | Zone | Names | Read | `Rule.Zones` |
+| `rules[].poolForEach.pool` | Pool | Names | Read | `RulePoolIteration.Pool` |
+| `identity.records` | Pool | Names | Read | `WorldIdentityDefinition.Records` |
+| `properties.carriers[].pool` | Pool | Names | Read | `WorldPoolBodyCarrier.Pool` |
 | `interactions.interactions[].left` | State | Names | Read | `WorldInteraction.Left` |
 | `interactions.interactions[].right` | State | Names | Read | `WorldInteraction.Right` |
 | `interactions.interactions[].effects[][setState].state` | State | Names | Action | `ActionEffect.SetState.State` |
@@ -2035,11 +2214,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][transformState].transform[setRay].row` | State | Names | Action | `StateTransform.SetRay.Row` |
 | `interactions.interactions[].effects[][transformState].transform[setRay].from` | State | Key | Read | `StateTransform.SetRay.From` |
 | `interactions.interactions[].effects[][transformState].transform[setRay].pattern` | Pattern | Names | Read | `StateTransform.SetRay.Pattern` |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].pool` | Pool | Names | Action | `StateTransform.PushRay.Pool` |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].topology` | Topology | Names | Read | `StateTransform.PushRay.Topology` |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].pattern` | Pattern | Names | Read | `StateTransform.PushRay.Pattern` |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].pushPattern` | Pattern | Names | Read | `StateTransform.PushRay.PushPattern` |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].stopPattern` | Pattern | Names | Read | `StateTransform.PushRay.StopPattern` |
 | `interactions.interactions[].effects[][transformState].transform[shuffle].row` | State | Names | Action | `StateTransform.Shuffle.Row` |
 | `interactions.interactions[].effects[][transformState].transform[shuffle].draw` | State | Names | Read | `StateTransform.Shuffle.Draw` |
-| `interactions.interactions[].effects[][transformState].transform[sortZone].row` | Zone | Names | Action | `StateTransform.SortZone.Row` |
-| `interactions.interactions[].effects[][transformState].transform[sortZone].by[].row` | State | Names | Read | `SortKey.Row` |
-| `interactions.interactions[].effects[][transformState].transform[sortKeyed].row` | State | Names | Action | `StateTransform.SortKeyed.Row` |
+| `interactions.interactions[].effects[][transformState].transform[sort].row` | State | Names | Action | `StateTransform.Sort.Row` |
+| `interactions.interactions[].effects[][transformState].transform[sort].by[].row` | State | Names | Read | `SortKey.Row` |
 | `interactions.interactions[].effects[][transformState].transform[writeSet].row` | State | Names | Action | `StateTransform.WriteSet.Row` |
 | `interactions.interactions[].effects[][transformState].transform[writeSet].set` | State | Names | Read | `StateTransform.WriteSet.Set` |
 | `interactions.interactions[].effects[][transformState].transform[writeSet].setKey` | State | Key | Read | `StateTransform.WriteSet.SetKey` |
@@ -2085,8 +2268,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `interactions.interactions[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `interactions.interactions[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
-| `interactions.interactions[].effects[][countdownState].state` | State | Names | Action | `ActionEffect.CountdownState.State` |
-| `interactions.interactions[].effects[][countdownState].key` | State | Key | Read | `ActionEffect.CountdownState.Key` |
 | `interactions.interactions[].effects[][generate].row` | State | Names | Action | `ActionEffect.Generate.Row` |
 | `interactions.interactions[].effects[][removeStateCell].state` | State | Names | Action | `ActionEffect.RemoveStateCell.State` |
 | `interactions.interactions[].effects[][removeStateCell].key` | State | Key | Read | `ActionEffect.RemoveStateCell.Key` |
@@ -2137,6 +2318,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `interactions.interactions[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
 | `interactions.interactions[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][claim].pool` | Pool | Names | Action | `ActionEffect.Claim.Pool` |
+| `interactions.interactions[].effects[][claim].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][forEachPool].pool` | Pool | Names | Read | `ActionEffect.ForEachPool.Pool` |
+| `interactions.interactions[].effects[][forEachPool].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][claimPair].pool` | Pool | Names | Action | `ActionEffect.ClaimPair.Pool` |
+| `interactions.interactions[].effects[][claimPair].effects…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][rewindTurn].group` | RuleGroup | Names | Action | `ActionEffect.RewindTurn.Group` |
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `interactions.interactions[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `interactions.interactions[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -2175,6 +2363,25 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `interactions.interactions[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
+| `interactions.interactions[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
+| `interactions.interactions[].effects[][poseCell].expression` | State | Expression | Read | `WorldEffect.PoseCell.Expression` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][poseCell].expression{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `interactions.interactions[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `interactions.interactions[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -2238,6 +2445,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].best` | State | Names | Action | `WorldSearchRow.Best` |
 | `search.jobs[].chance.row` | State | Names | Read | `WorldSearchChance.Row` |
 | `search.jobs[].scores` | State | Names | Read | `WorldSearchRow.Scores` |
+| `search.jobs[].enabled` | State | Names | Read | `WorldSearchRow.Enabled` |
+| `search.jobs[].revision` | State | Names | Read | `WorldSearchRow.Revision` |
 | `machines[].name` | Machine | Declares |  | `WorldMachine.Name` |
 | `machines[].memory[].name` | MachineBinding | Declares |  | `WorldMachineMemory.Name` |
 | `machines[].memory[].row` | State | Names | Read | `WorldMachineMemory.Row` |
@@ -2285,6 +2494,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `ruleGroups[].trigger[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `ruleGroups[].trigger[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `ruleGroups[].trigger[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `ruleGroups[].undo.rows` | Any | Names | Action | `RuleGroupUndo.Rows` |
 | `sets[].name` | CellSet | Declares |  | `CellSetRow.Name` |
 | `sets[].set[board].row` | State | Names | Read | `CellSetExpression.Board.Row` |
 | `sets[].set[zone].row` | Zone | Names | Read | `CellSetExpression.Zone.Row` |
@@ -2331,7 +2541,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.shaping[].when[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].motion.holds[].name` | `WorldHold.Name` | a hold name, local to its kit |
 | `kits.rows[].motion.holds[].spend.state` | `WorldHoldSpend.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onPress.effects[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onPress.effects[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onPress.effects[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `kits.rows[].actions{*}.onPress.effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `kits.rows[].actions{*}.onPress.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onPress.effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -2352,7 +2573,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onPress.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onRelease.effects[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onRelease.effects[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onRelease.effects[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `kits.rows[].actions{*}.onRelease.effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onRelease.effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -2373,7 +2605,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onRelease.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onFact[].effects[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onFact[].effects[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onFact[].effects[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `kits.rows[].actions{*}.onFact[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onFact[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -2480,13 +2723,32 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][graph].directions[].name` | `GraphDirection.Name` | a direction name is local to its topology |
 | `state.lattices[][graph].edges[].from` | `GraphEdge.From` | a graph cell id is local to its topology |
 | `state.lattices[][graph].edges[].to` | `GraphEdge.To` | a graph cell id is local to its topology |
+| `state.lattices[][graph].edges[].direction` | `GraphEdge.Direction` | a direction local to its own topology |
 | `state.lattices[][field].reactions[][emit].tag` | `WorldReaction.Emit.Tag` | an emission tag |
 | `state.spaces[].name` | `StateSpace.Name` | a space name declares a vector embedding space local to the document |
 | `state.enums[].name` | `StateEnum.Name` | an enum name declares a symbolic value domain local to the document |
 | `state.enums[].members` | `StateEnum.Members` | an enum member name is local to its enum |
 | `state.families[].name` | `StateFamily.Name` | a family name declares a row range local to the document |
+| `state.records[].fields[].name` | `StatePoolField.Name` | a field local to its record |
+| `state.records[].fields[].enum` | `StatePoolField.Enum` | an enum name is local to the document |
+| `state.records[].fields[].space` | `StatePoolField.Space` | a vector-space identifier, not a module declaration |
+| `state.pools[].snapshot.live[].values[].field` | `StatePoolValue.Field` | a field local to its record |
+| `state.pools[].initial[].values[].field` | `StatePoolValue.Field` | a field local to its record |
+| `state.pairPools[].snapshot.live[].values[].field` | `StatePoolValue.Field` | a field local to its record |
+| `state.pairPools[].initial[].values[].field` | `StatePoolValue.Field` | a field local to its record |
 | `markers[].id` | `WorldMarkerRow.Id` | a marker id |
+| `rules[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `rules[].effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `rules[].effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `rules[].effects[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `rules[].effects[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `rules[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `rules[].effects[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `rules[].effects[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `rules[].effects[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `rules[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `rules[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `rules[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -2508,7 +2770,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].name` | `WorldDecisionOption.Name` | an option name is local to its decision |
+| `rules[].decision.options[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `rules[].decision.options[].effects[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `rules[].decision.options[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `rules[].decision.options[].effects[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `rules[].decision.options[].effects[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `rules[].decision.options[].effects[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `rules[].decision.options[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `rules[].decision.options[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `rules[].decision.options[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.options[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.options[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -2530,7 +2803,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.options[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.interrupt[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `rules[].decision.onNoChoice[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `rules[].decision.onNoChoice[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `rules[].decision.onNoChoice[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `rules[].decision.onNoChoice[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `rules[].decision.onNoChoice[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `rules[].decision.onNoChoice[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `rules[].decision.onNoChoice[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `rules[].decision.onNoChoice[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `rules[].decision.onNoChoice[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.onNoChoice[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.onNoChoice[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -2551,6 +2835,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].locals[].name` | `RuleLocal.Name` | a local's name is local to its rule, read as $local:<name> |
+| `rules[].poolForEach.binding` | `RulePoolIteration.Binding` | a lexical instance binding |
 | `identity.name` | `WorldIdentityDefinition.Name` | an identity display name |
 | `identity.moveSpeedState` | `WorldIdentityDefinition.MoveSpeedState` | an identity-lane slot name |
 | `identity.turnSpeedState` | `WorldIdentityDefinition.TurnSpeedState` | an identity-lane slot name |
@@ -2561,8 +2846,22 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `groups.kinds[].roles[].name` | `WorldGroupRole.Name` | a group role name |
 | `groups.ownership[].subject.id` | `OwnershipSubject.Id` | an ownership subject id |
 | `properties.names` | `WorldPropertyRegistrySection.Names` | property names are the properties section's own namespace |
+| `properties.carriers[].field` | `WorldPoolBodyCarrier.Field` | a field local to its pool record |
+| `properties.carriers[].bindings[].member` | `WorldPoolBodyBinding.Member` | an enum member local to the carrier field |
+| `properties.carriers[].bindings[].placement` | `WorldPoolBodyBinding.Placement` | an inhabited placement id |
 | `interactions.interactions[].name` | `WorldInteraction.Name` | an interaction name is the interactions section's own namespace |
+| `interactions.interactions[].effects[][transformState].transform[setRay].direction` | `StateTransform.SetRay.Direction` | a direction local to the row's topology |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].cell` | `StateTransform.PushRay.Cell` | a field local to its pool record |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].value` | `StateTransform.PushRay.Value` | a field local to its pool record |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].from` | `StateTransform.PushRay.From` | a lexical instance field selected by the enclosing pool iteration |
+| `interactions.interactions[].effects[][transformState].transform[pushRay].direction` | `StateTransform.PushRay.Direction` | a direction local to its topology |
 | `interactions.interactions[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `interactions.interactions[].effects[][claim].binding` | `ActionEffect.Claim.Binding` | a lexical instance binding |
+| `interactions.interactions[].effects[][release].binding` | `ActionEffect.Release.Binding` | a lexical instance binding |
+| `interactions.interactions[].effects[][forEachPool].binding` | `ActionEffect.ForEachPool.Binding` | a lexical instance binding |
+| `interactions.interactions[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
+| `interactions.interactions[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
+| `interactions.interactions[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `interactions.interactions[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `interactions.interactions[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `interactions.interactions[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |

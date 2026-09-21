@@ -65,7 +65,7 @@ public sealed class WorldPhaseOrderLawTests {
         Phase: new(Sequence: sequence)
     );
     private static StateTransform.SetRay Ray() => new(
-        Direction: "E",
+        Direction: CellName.Parse(candidate: "E"),
         From: "0",
         Pattern: "capture",
         Row: "board",

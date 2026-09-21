@@ -25,7 +25,7 @@ public static class CartridgeOperand {
             (real >= 0) &&
             (real <= CartridgeLimits.WideMaximum)
         ) {
-            return ((decimal)real);
+            return DecimalValues.FromDouble(value: real);
         }
 
         return null;
@@ -59,7 +59,7 @@ public static class CartridgeOperand {
                         // A name bound by a `for` is not machine state either, and it shadows a constant of the same
                         // name: the loop already lowered its value, so it needs no second pass.
                         if (!scope.TryLowerBinding(
-                            state.Name,
+                            state.Name.Spelling,
                             out var bound
                         )) {
                             result.Add(item: token);
@@ -85,7 +85,7 @@ public static class CartridgeOperand {
                         ExpressionProgram? index;
 
                         try {
-                            index = CartridgeExpressions.Index(key: state.Key);
+                            index = CartridgeExpressions.Index(key: state.Key?.Spelling);
                         } catch (FormatException error) {
                             reason = $"the index of '{state.Name}' does not parse: {error.Message}";
 
@@ -110,7 +110,7 @@ public static class CartridgeOperand {
 
                         result.Add(item: Instruction.Operand(
                             key: CartridgeExpressions.Key(index: new ExpressionProgram(Instructions: inner)),
-                            name: state.Name
+                            name: state.Name.Spelling
                         ));
 
                         break;

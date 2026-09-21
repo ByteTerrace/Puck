@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -23,6 +24,7 @@ namespace Puck.State;
 /// that would read as a real one.</para>
 /// </remarks>
 [Union]
+[JsonConverter(typeof(CellValueJsonConverter))]
 public readonly struct CellValue : IEquatable<CellValue>, IUnion {
     // The discriminator is stored as (kind + 1) so that the default carrier — every field zero — is the one value
     // carrying no case, without spending a second field on the question.

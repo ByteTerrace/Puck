@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.State;
 using Puck.Transpiler.Diagnostics;
 using Xunit;
 
@@ -7,6 +8,12 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary>Emitter lowering for the `.puck` DSL sugar wave (§1-§5 of the sugar wave spec): gate classification,
 /// effect-statement lowering, local/decision/option, shape/placement row elision, and the unit-dimension table.</summary>
 public class EmitterSugarTests {
+    // A member that holds a channel reference holds a string or a call node; the reference it spells is what a law
+    // is stated against.
+    private static string? Spelling(JsonNode? node) => ((node is null)
+        ? null
+        : StateChannelRefJsonConverter.FromNode(node: node).Spelling
+    );
     // JsonValue<T>.GetValue<T> refuses cross-numeric-type reads (long vs decimal vs double), and which CLR type an
     // emitted literal carries depends on whether it was integral — so assertions read every number through this.
     private static double AsDouble(JsonNode? node) => node switch {
@@ -143,10 +150,10 @@ public class EmitterSugarTests {
     // ---- §3 local / decision / option ---------------------------------------------------------------------------
 
     [Fact]
-    public void LocalCarriesNameKindAndVerbatimExpression() {
+    public void LocalCarriesNameAndVerbatimExpressionAndLeavesItsKindToTheCompiler() {
         var rule = FirstRule(body: """
             rule "r" {
-                local lostRooks: Int = ($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81
+                local lostRooks = (board(mask, lastLegal, 4, 4) & ~board(mask, board, 4, 4)) & 0x81
                 effectRow = 1
             }
             """);
@@ -157,10 +164,7 @@ public class EmitterSugarTests {
             "lostRooks",
             local["name"]?.ToString()
         );
-        Assert.Equal(
-            "Int",
-            local["kind"]?.ToString()
-        );
+        Assert.Null(@object: local["kind"]);
         Assert.Equal(
             "$board:mask:lastLegal:4:4 & ~$board:mask:board:4:4 & 129",
             WorldExpressionJson.Text(node: local["expression"])
@@ -170,7 +174,7 @@ public class EmitterSugarTests {
     public void CallFormEffectLowersLikeAnyOtherTypeObject() {
         var rule = FirstRule(body: """
             rule "r" {
-                generate(row: "drawSite")
+                generate(row: drawSite)
             }
             """);
         var effect = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["effects"])[0]);
@@ -183,40 +187,6 @@ public class EmitterSugarTests {
             "drawSite",
             effect["row"]?.ToString()
         );
-    }
-    [Fact]
-    public void ChessAdvanceTurnTransactionMatchesTheShippedRule() {
-        var expected = LoadShippedRule(
-            relativeWorldPath: "games/chess.world.json",
-            ruleName: "tabletop-advance-turn"
-        );
-
-        var rule = FirstRule(body: """
-            rule "tabletop-advance-turn" {
-                when settleHold == 60 and verdict == 1 and move[kind] != 0
-                mode: Edge
-                local lostRooks: Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
-                local lostKings: Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
-                transaction {
-                    castleRights = castleRights | parallelBitExtract($local:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($local:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
-                    transform boardCombine(left: "board", operation: Copy, row: "lastLegal")
-                    previousInCheck[0] = inCheck[0]
-                    previousInCheck[1] = inCheck[1]
-                    enPassantTarget = (absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
-                    turn = 1 - turn
-                    promotionPending[0] = -1
-                    promotionPending[1] = -1
-                }
-            }
-            """);
-
-        var mismatch = JsonMismatch.Find(
-            actual: rule,
-            expected: expected,
-            path: "tabletop-advance-turn"
-        );
-
-        Assert.Null(@object: mismatch);
     }
     [Fact]
     public void ComparandStateRowNeverFlipsOperandOrder() {
@@ -239,7 +209,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             "$each",
-            gate["key"]?.ToString()
+            Spelling(node: gate["key"])
         );
         Assert.Equal(
             "NotEqual",
@@ -284,28 +254,16 @@ public class EmitterSugarTests {
         );
     }
     [Fact]
-    public void CountdownRemoveAndScheduleLowerToTheirOwnShapes() {
+    public void RemoveAndScheduleLowerToTheirOwnShapes() {
         var rule = FirstRule(body: """
             rule "r" {
-                countdown claimTicks
                 remove promotionPending[0]
                 schedule respawnAt in 5s
             }
             """);
         var effects = Assert.IsType<JsonArray>(@object: rule["effects"]);
 
-        var countdown = Assert.IsType<JsonObject>(@object: effects[0]);
-
-        Assert.Equal(
-            "countdownState",
-            countdown["$type"]?.ToString()
-        );
-        Assert.Equal(
-            "claimTicks",
-            countdown["state"]?.ToString()
-        );
-
-        var remove = Assert.IsType<JsonObject>(@object: effects[1]);
+        var remove = Assert.IsType<JsonObject>(@object: effects[0]);
 
         Assert.Equal(
             "removeStateCell",
@@ -316,7 +274,7 @@ public class EmitterSugarTests {
             remove["key"]?.ToString()
         );
 
-        var schedule = Assert.IsType<JsonObject>(@object: effects[2]);
+        var schedule = Assert.IsType<JsonObject>(@object: effects[1]);
 
         Assert.Equal(
             "scheduleState",
@@ -333,7 +291,7 @@ public class EmitterSugarTests {
         // PUCK026 fires without it even though Rule.Effects may be empty when a decision carries the selection.
         var rule = FirstRule(body: """
             rule "r" {
-                forEach: "hound"
+                forEach: hound
                 claimTicks = 0
                 decision {
                     periodSeconds: 1s
@@ -342,7 +300,7 @@ public class EmitterSugarTests {
                     option "follow" {
                         when hound[$right] == 1
                         score: trust * 2.0
-                        designateBody(key: $each, kind: Body, register: companion, targetKey: $right)
+                        designateBody(key: $each, kind: Body, register: "companion", targetKey: $right)
                     }
                 }
             }
@@ -486,9 +444,9 @@ public class EmitterSugarTests {
 
         var rule = FirstRule(body: """
             rule "witness-claim" {
-                when boneHolder[0] >= 0 and houndIdentity[$each] != boneHolder[0] and $los:each:cell:boneHolder:0 == 1 and $distance:each:cell:boneHolder:0 <= 9
+                when boneHolder[0] >= 0 and houndIdentity[$each] != boneHolder[0] and los(each, cell, boneHolder, 0) == 1 and distance(each, cell, boneHolder, 0) <= 9
                 mode: Edge
-                forEach: "hound"
+                forEach: hound
                 boneHolderTrust[$pair:each:cell:boneHolder:0] += (1 - boneHolderTrust[$pair:each:cell:boneHolder:0]) * 0.3
             }
             """);
@@ -533,14 +491,14 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             "$zones[solitaireFreecell[from]]",
-            gate["state"]?.ToString()
+            Spelling(node: gate["state"])
         );
         // The trailing `[solitaireFreecell[card]]` is itself bracketed (not a bare name/number/backquoted name), so
         // ExpressionSpelling reads it as a live-cell-indirection key, not a literal key text — matching
         // freecell.world.json's own `"key": "$cell:solitaireFreecell:card"` for this exact source shape.
         Assert.Equal(
             "$cell:solitaireFreecell:card",
-            gate["key"]?.ToString()
+            Spelling(node: gate["key"])
         );
     }
     [Fact]
@@ -562,11 +520,11 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             1.5,
-            position[0]!.GetValue<double>()
+            position[0].AsNumber()!.Value
         );
         Assert.Equal(
             0.005,
-            position[2]!.GetValue<double>()
+            position[2].AsNumber()!.Value
         );
     }
     [Fact]
@@ -673,7 +631,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             0.5,
-            host["opacity"]?.GetValue<double>()
+            host["opacity"].AsNumber()
         );
     }
     [Fact]
@@ -757,7 +715,7 @@ public class EmitterSugarTests {
     public void PushHasNoKeyField() {
         var rule = FirstRule(body: """
             rule "r" {
-                push boardHistory = $board:canonical:board
+                push boardHistory = board(canonical, board)
             }
             """);
         var effect = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["effects"])[0]);
@@ -772,7 +730,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             "$board:canonical:board",
-            effect["fromState"]?.ToString()
+            Spelling(node: effect["fromState"])
         );
         Assert.False(condition: effect.ContainsKey(propertyName: "key"));
     }
@@ -883,7 +841,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             "$each",
-            effect["key"]?.ToString()
+            Spelling(node: effect["key"])
         );
         Assert.Equal(
             5,
@@ -914,14 +872,14 @@ public class EmitterSugarTests {
     public void SetCellWithUnkeyedStateRhsLowersToBareFromState() {
         var rule = FirstRule(body: """
             rule "r" {
-                boardHistory = $board:canonical:board
+                boardHistory = board(canonical, board)
             }
             """);
         var effect = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["effects"])[0]);
 
         Assert.Equal(
             "$board:canonical:board",
-            effect["fromState"]?.ToString()
+            Spelling(node: effect["fromState"])
         );
         Assert.False(condition: effect.ContainsKey(propertyName: "fromKey"));
         Assert.False(condition: effect.ContainsKey(propertyName: "expression"));
@@ -1073,7 +1031,7 @@ public class EmitterSugarTests {
     public void TransformWrapsTheCallFormValue() {
         var rule = FirstRule(body: """
             rule "r" {
-                transform boardCombine(left: "board", operation: Copy, row: "lastLegal")
+                transform boardCombine(left: board, operation: Copy, row: lastLegal)
             }
             """);
         var effect = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["effects"])[0]);
@@ -1119,29 +1077,36 @@ public class EmitterSugarTests {
             }
             """);
         var effects = Assert.IsType<JsonArray>(@object: rule["effects"]);
+
         Assert.Equal(3, effects.Count);
 
-        var draw = Assert.IsType<JsonObject>(effects[0]);
+        var draw = Assert.IsType<JsonObject>(@object: effects[0]);
+
         Assert.Equal("transformState", draw["$type"]?.ToString());
-        var drawTransform = Assert.IsType<JsonObject>(draw["transform"]);
+        var drawTransform = Assert.IsType<JsonObject>(@object: draw["transform"]);
+
         Assert.Equal("transfer", drawTransform["$type"]?.ToString());
         Assert.Equal("deck", drawTransform["from"]?.ToString());
         Assert.Equal("hand", drawTransform["to"]?.ToString());
         Assert.Equal("First", drawTransform["selector"]?.ToString());
-        Assert.False(drawTransform.ContainsKey("count"));
+        Assert.False(condition: drawTransform.ContainsKey(propertyName: "count"));
 
-        var deal = Assert.IsType<JsonObject>(effects[1]);
+        var deal = Assert.IsType<JsonObject>(@object: effects[1]);
+
         Assert.Equal("transformState", deal["$type"]?.ToString());
-        var dealTransform = Assert.IsType<JsonObject>(deal["transform"]);
+        var dealTransform = Assert.IsType<JsonObject>(@object: deal["transform"]);
+
         Assert.Equal("transfer", dealTransform["$type"]?.ToString());
         Assert.Equal("deck", dealTransform["from"]?.ToString());
         Assert.Equal("hand", dealTransform["to"]?.ToString());
         Assert.Equal("First", dealTransform["selector"]?.ToString());
         Assert.Equal(5, dealTransform["count"]?.GetValue<int>());
 
-        var shuffle = Assert.IsType<JsonObject>(effects[2]);
+        var shuffle = Assert.IsType<JsonObject>(@object: effects[2]);
+
         Assert.Equal("transformState", shuffle["$type"]?.ToString());
-        var shuffleTransform = Assert.IsType<JsonObject>(shuffle["transform"]);
+        var shuffleTransform = Assert.IsType<JsonObject>(@object: shuffle["transform"]);
+
         Assert.Equal("shuffle", shuffleTransform["$type"]?.ToString());
         Assert.Equal("deck", shuffleTransform["row"]?.ToString());
         Assert.Equal("rng", shuffleTransform["draw"]?.ToString());

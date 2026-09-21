@@ -6,11 +6,11 @@ using BenchmarkDotNet.Running;
 
 namespace Puck.Cli.Bench;
 
-// The `puck bench` verb: the on-demand Puck.Maths microscope, plus the `world` lane (WorldBenchmarks), which runs
+// The `puck bench` verb: the on-demand Puck.Maths microscope, plus the `world` and `startup` lanes, which run
 // outside BenchmarkDotNet entirely.
 //
-// BenchmarkDotNet owns the whole option grammar apart from the `world` sub-verb, so it arrives as one unparsed
-// string[] the switcher reads itself: puck neither validates nor rewrites a token of it. A token equal to `world`
+// BenchmarkDotNet owns the whole option grammar apart from those sub-verbs, so it arrives as one unparsed
+// string[] the switcher reads itself: puck neither validates nor rewrites a token of it. A token equal to a sub-verb
 // anywhere on the line selects the lane, so it can never reach the switcher as an option value.
 internal static class BenchRunner {
     // MemoryDiagnoser rides on every scenario: these kernels are meant to be zero-alloc, and its byte columns are
@@ -58,8 +58,10 @@ internal static class BenchRunner {
               puck bench --filter '*Norm*'   the scenarios matching a glob
               puck bench --list flat         the scenarios the switcher sees
               puck bench world               the Puck.World.Server tick-path stopwatch lane
+              puck bench startup             fresh-process world readiness and rendered capture timing
+              puck bench state-evidence      replay the cost schedule's pinned llvm-mca instruction evidence
 
-            Every argument other than the `world` sub-verb reaches BenchmarkDotNet's switcher unchanged. Job rigor is
+            Every argument outside the `world` and `startup` sub-verbs reaches BenchmarkDotNet's switcher unchanged. Job rigor is
             chosen there and layered over the base config puck supplies:
 
               (no --job)    BenchmarkDotNet's adaptive default — the balanced everyday setting
@@ -70,7 +72,7 @@ internal static class BenchRunner {
             past a `--` separator: `puck bench -- --help`.
             """,
             name: "bench"
-        ) { benchmarkArguments, worldCommand };
+        ) { benchmarkArguments, worldCommand, StartupBenchmarks.Create(), StateEvidenceCommand.Create() };
 
         // Option-shaped tokens are the switcher's, not misspellings.
         command.TreatUnmatchedTokensAsErrors = false;

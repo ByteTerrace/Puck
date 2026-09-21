@@ -212,15 +212,6 @@ public static partial class WorldDocumentEmitter {
 
                 break;
 
-            case StateTableDeclarationNode table when IsRecordType(kind: table.Kind, scope: scope):
-                foreach (var fieldTable in ExpandRecordTable(scope: scope, table: table)) {
-                    foreach (var expanded in ExpandOne(depth: (depth + 1), scope: scope, statement: fieldTable)) {
-                        yield return expanded;
-                    }
-                }
-
-                break;
-
             case StateTableDeclarationNode table when IsFamily(members: table.FamilyMembers, size: table.FamilySize):
                 foreach (var singleTable in ExpandTableFamily(scope: scope, table: table)) {
                     yield return (singleTable, scope);

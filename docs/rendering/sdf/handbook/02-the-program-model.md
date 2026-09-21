@@ -213,10 +213,11 @@ of the program with a transform and a cull bound. Three lifecycles matter:
   of live content.)
 
 The guiding principle: **cost tracks live, on-screen content, not reserved
-capacity.** Capacities freeze at construction (program words, instance-mask
-width, dynamic slots); a frame source declares its envelope with a worst-case
-*probe* program up front, and `UploadProgram` loudly rejects anything that
-exceeds it. Below the envelope, rebuilds vary freely and cheaply.
+capacity.** A frame source declares an initial reserve with a worst-case
+*probe* program. `UploadProgram` grows program and instance buffers when a
+live edit exceeds that reserve, after waiting for in-flight frames. Dynamic
+slots remain fixed. Edits within the reserve need no buffer allocation;
+structural engine limits still apply beyond it.
 
 ## Lipschitz bounds keep marching safe
 

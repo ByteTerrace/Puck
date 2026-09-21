@@ -28,81 +28,50 @@ public static class BrowserParser {
     // WorldDefinitionFileSource.TryParseComposed runs for a file load, minus the file-load boundary's own basis/
     // imports composition (the caller already composed a fragment, or is parsing a flat standalone document).
     internal static bool TryParseAndValidate(byte[] utf8Json, ICollection<string> errors, ICollection<string> deferred, out WorldDefinition? definition, IMachineValidationCatalog? machines = null) {
-        definition = null;
-
-        string json;
-
-        try {
-            json = Encoding.UTF8.GetString(bytes: utf8Json);
-        } catch (Exception exception) when ((exception is ArgumentException or DecoderFallbackException)) {
-            errors.Add(item: $"the document is not valid UTF-8 text: {exception.Message}");
-
-            return false;
-        }
-
-        if (!WorldJsonPayload.TryParse(
-            deferDrawSites: true,
-            error: out var parseError,
-            info: WorldJsonContext.Default.WorldDefinition,
-            json: json,
-            value: out var parsed
-        )) {
-            errors.Add(item: parseError);
-
-            return false;
-        }
-
-        if (!string.Equals(
-            a: parsed.Schema,
-            b: WorldDefinition.SchemaVersion,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            errors.Add(item: $"schema '{(parsed.Schema ?? "(absent)")}' is not '{WorldDefinition.SchemaVersion}'.");
-
-            return false;
-        }
-
-        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
-
-        // The same first-fill draw step WorldDefinitionLoader.TryResolveDrawsAndRevalidate runs between parse and
-        // the state-reference resolve below: a reference into a draw site (e.g. a creation driver's cadence naming
-        // "state.strideCadence") cannot resolve until the row it names has a value, and a boot-drawn row gets one
-        // only here. BootInstanceName is a fixed seed rung — a browser preview draws the same way every time it
-        // parses the same document, rather than varying with a caller-supplied identity it has no use for.
-        if (!WorldDrawBootResolver.TryResolve(
-            definition: parsed,
-            instanceIdentity: WorldDefinitionLoader.BootInstanceName,
-            reason: out var drawReason,
-            resolved: out var drawn
-        )) {
-            errors.Add(item: drawReason);
-
-            return false;
-        }
-
-        if (!WorldStateDocumentValues.TryResolve(
-            definition: drawn,
-            reason: out var spatialReason
-        )) {
-            errors.Add(item: spatialReason);
-
-            return false;
-        }
+        if (!TryParseAndResolve(definition: out var resolved, errors: errors, utf8Json: utf8Json)) { definition = null; return false; }
 
         var ok = WorldDefinitionValidator.TryValidateLocally(
             compilation: out _,
             deferred: deferred,
-            definition: drawn,
+            definition: resolved!,
             errors: errors,
             machines: machines
         );
 
         definition = (ok
-            ? drawn
+            ? resolved
             : null
         );
 
         return ok;
+    }
+    internal static bool TryParseAndResolve(byte[] utf8Json, ICollection<string> errors, out WorldDefinition? definition) {
+        definition = null;
+        string json;
+
+        try { json = Encoding.UTF8.GetString(bytes: utf8Json); } catch (Exception exception) when ((exception is ArgumentException or DecoderFallbackException)) {
+            errors.Add(item: $"the document is not valid UTF-8 text: {exception.Message}");
+            return false;
+        }
+        if (!WorldJsonPayload.TryParse(deferDrawSites: true, error: out var parseError, info: WorldJsonContext.Default.WorldDefinition, json: json, value: out var parsed)) {
+            errors.Add(item: parseError);
+            return false;
+        }
+        if (!string.Equals(a: parsed.Schema, b: WorldDefinition.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"schema '{(parsed.Schema ?? "(absent)")}' is not '{WorldDefinition.SchemaVersion}'.");
+            return false;
+        }
+        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
+        if (!WorldDrawBootResolver.TryResolve(definition: parsed, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out var drawReason, resolved: out var drawn)) {
+            errors.Add(item: drawReason);
+            return false;
+        }
+        if (!WorldStateDocumentValues.TryResolve(definition: drawn, reason: out var spatialReason)) {
+            errors.Add(item: spatialReason);
+            return false;
+        }
+        definition = drawn;
+        return true;
     }
 
     /// <summary>Parses and re-serializes a standalone document to its canonical byte form — identically to

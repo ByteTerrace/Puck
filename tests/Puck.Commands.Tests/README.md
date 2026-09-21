@@ -26,6 +26,8 @@ Their deadlines are failure bounds, with cancellation shared by the producers.
   `CommandRegistryBoundaryTests` covers the per-entry exception boundary
   `ApplySnapshot` promises. `TextCommandSourceTests` drives the drain and its
   hold gate, `TextCommandSessionTests` the per-session read-after-write barrier.
+  `CommandSettlementTests` covers final verdict ordering, quiet mode, cancellation,
+  observer failures, input overflow, and router disposal.
   `CommandArgsTests` and `WireArgsTests` pin argument parsing and the zero-copy
   trailing-token view; `CommandEchoTests` pins the echo grammar's quoting.
 - **The router.** `InputRouterTests` covers held-command edge logic over

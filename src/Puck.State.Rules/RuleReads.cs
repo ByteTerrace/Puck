@@ -115,16 +115,13 @@ public static class RuleReads {
         var sum = 0L;
         var extremum = 0L;
         var seen = false;
-        var positions = arena.PositionCount(rowOrdinal: rowOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < positions); position++) {
-            if (!arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            )) {
-                continue;
-            }
+        while (arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
             if (
                 (filterOrdinal >= 0) &&
                 (!arena.TryReadLiveNumber(
@@ -265,6 +262,31 @@ public static class RuleReads {
         named: out _,
         reader: reader
     );
+    /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
+    /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is <see langword="null"/>.</param>
+    /// <param name="keyFrom">The live key indirection, or <see langword="null"/>.</param>
+    /// <param name="key">The resolved key, or invalid when no cell was named.</param>
+    /// <param name="reason">Why a required runtime-key admission failed, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write may proceed; otherwise the firing must refuse.</returns>
+    public static bool TryResolveKeyForWrite(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom, out CellKey key, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        if (keyFrom is not { } reference) {
+            key = literal;
+            reason = string.Empty;
+
+            return true;
+        }
+
+        return TryResolveReferenceForWrite(
+            key: out key,
+            reader: reader,
+            reason: out reason,
+            reference: in reference
+        );
+    }
     /// <summary>Resolves the interned key a compiled address names, and whether it named a cell at all.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is
@@ -334,7 +356,7 @@ public static class RuleReads {
             named = true;
 
             return IndexKey(
-                catalog: reader.Catalog,
+                keys: reader.Arena.Keys,
                 index: reader.BoundIndex(key: reference.Binding)
             );
         }
@@ -358,7 +380,7 @@ public static class RuleReads {
             return default;
         }
 
-        var catalog = reader.Catalog;
+        var keys = reader.Arena.Keys;
 
         if (reference.Kind == CellKind.Text) {
             // Text that spells no cell name addresses no cell: a rule may write any text into the pointer cell, so
@@ -384,7 +406,7 @@ public static class RuleReads {
 
             named = true;
 
-            return (catalog.Keys.TryResolve(
+            return (keys.TryResolve(
                 key: out var textKey,
                 name: name
             )
@@ -396,7 +418,7 @@ public static class RuleReads {
         named = true;
 
         return IndexKey(
-            catalog: catalog,
+            keys: keys,
             index: ReadPointer(
                 inner: inner,
                 reader: reader,
@@ -404,6 +426,26 @@ public static class RuleReads {
             )
         );
     }
+
+    private static bool TryResolveReferenceForWrite(IStateReader reader, in CompiledCellRef reference, out CellKey key, out string reason) {
+        if (reference.Custom is { } custom) {
+            return custom.TryResolveForWrite(
+                key: out key,
+                reader: reader,
+                reason: out reason
+            );
+        }
+
+        key = ResolveReference(
+            named: out _,
+            reader: reader,
+            reference: in reference
+        );
+        reason = string.Empty;
+
+        return true;
+    }
+
     /// <summary>Resolves one live indirection as an integer index — a live row's table index, a static table's key.
     /// An indirection that spells no integer names nothing.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -455,19 +497,19 @@ public static class RuleReads {
         );
 
         return TryKeyIndex(
-            catalog: reader.Catalog,
+            keys: reader.Arena.Keys,
             index: out index,
             key: key
         );
     }
     /// <summary>Returns the interned key whose name is an integer's decimal spelling, without minting one the
-    /// catalog does not already hold.</summary>
-    /// <param name="catalog">The catalog whose key table the name resolves through.</param>
+    /// arena does not already hold.</summary>
+    /// <param name="keys">The runtime key table whose names resolve through.</param>
     /// <param name="index">The integer.</param>
     /// <param name="key">The key, on success.</param>
-    /// <returns><see langword="true"/> when the catalog already interns the name.</returns>
-    public static bool TryIndexKey(StateCatalog catalog, long index, out CellKey key) {
-        ArgumentNullException.ThrowIfNull(argument: catalog);
+    /// <returns><see langword="true"/> when the arena already interns the name.</returns>
+    public static bool TryIndexKey(CellKeyTable keys, long index, out CellKey key) {
+        ArgumentNullException.ThrowIfNull(argument: keys);
 
         key = default;
 
@@ -475,20 +517,20 @@ public static class RuleReads {
             candidate: IndexKeyCache.Get(index: index),
             name: out var name,
             reason: out _
-        ) && catalog.Keys.TryResolve(
+        ) && keys.TryResolve(
             key: out key,
             name: name
         ));
     }
     /// <summary>Returns the integer an interned key's name spells.</summary>
-    /// <param name="catalog">The catalog that minted the key.</param>
+    /// <param name="keys">The runtime key table that resolves the key.</param>
     /// <param name="key">The key.</param>
     /// <param name="index">The integer, on success.</param>
     /// <returns><see langword="true"/> when the key's name is an integer.</returns>
-    public static bool TryKeyIndex(StateCatalog catalog, CellKey key, out long index) {
-        ArgumentNullException.ThrowIfNull(argument: catalog);
+    public static bool TryKeyIndex(CellKeyTable keys, CellKey key, out long index) {
+        ArgumentNullException.ThrowIfNull(argument: keys);
 
-        if (catalog.Keys.TryGetName(
+        if (keys.TryGetName(
             key: key,
             name: out var name
         )) {
@@ -510,14 +552,14 @@ public static class RuleReads {
         BoundKey.Token => reader.BoundTokenKey,
         BoundKey.Previous => reader.BoundPreviousKey,
         _ => IndexKey(
-        catalog: reader.Catalog,
+        keys: reader.Arena.Keys,
         index: reader.BoundIndex(key: binding)
     ),
     });
-    private static CellKey IndexKey(StateCatalog catalog, long index) => (TryIndexKey(
-        catalog: catalog,
+    private static CellKey IndexKey(CellKeyTable keys, long index) => (TryIndexKey(
         index: index,
-        key: out var key
+        key: out var key,
+        keys: keys
     )
         ? key
         : default

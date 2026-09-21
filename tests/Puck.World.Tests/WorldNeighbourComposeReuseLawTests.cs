@@ -1,3 +1,4 @@
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -21,6 +22,51 @@ public sealed class DocumentCompositionCollection {
 /// </summary>
 [Collection(name: DocumentCompositionCollection.Name)]
 public sealed class WorldNeighbourComposeReuseLawTests {
+    [Fact]
+    public void ObservingALocalNeighbourLoadsOnceAndReusesItsRunningAuthority() {
+        using var files = new TempWorldDirectory();
+
+        files.WriteFlatDocument(name: "basis.world.json");
+        var target = files.WriteText(name: "target.world.json", text: """{"basis":"basis.world.json"}""");
+        var source = Fixtures.BuildDocument() with {
+            References = [new WorldReference(SafeName.Parse(candidate: "target"), target)],
+            Destinations = [new WorldDestination(SafeName.Parse(candidate: "neighbour"), "target",
+                WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
+        };
+        using var boot = HostRow.Build(definition: source, name: WorldInstanceHost.BootInstanceName);
+        using var host = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: Guid.NewGuid(),
+            resolver: new WorldSessionResolver(),
+            seats: WorldEmbodiedSeats.None,
+            stateRoot: files.RootPath
+        );
+
+        host.AdmitBoot(row: boot.Instance);
+        WorldDefinitionFileSource.ForgetComposedDocuments();
+
+        Assert.True(condition: host.TryResolveObservedProjection(boot.Instance, "neighbour", out var name,
+            out var generation, out var definition, out var attach, out var reason), userMessage: reason);
+        Assert.NotNull(@object: definition);
+        Assert.NotNull(@object: attach);
+        Assert.True(condition: host.TryDescribeDocumentSharing(name: name, shared: out var shared));
+        Assert.False(condition: shared);
+        // A second load between choosing local hosting and admitting the instance would reuse the held image.
+        Assert.Equal(0L, WorldDefinitionFileSource.DocumentCompositionsShared);
+
+        File.WriteAllText(contents: "not a document", path: target);
+        Assert.True(condition: host.TryResolveObservedProjection(boot.Instance, "neighbour", out var sameName,
+            out var sameGeneration, out var sameDefinition, out _, out reason), userMessage: reason);
+        Assert.Equal(actual: sameName, expected: name);
+        Assert.Equal(actual: sameGeneration, expected: generation);
+        Assert.Same(actual: sameDefinition, expected: definition);
+
+        Assert.True(condition: host.TryStop(name: name, reason: out reason), userMessage: reason);
+        Assert.False(condition: host.TryResolveObservedProjection(boot.Instance, "neighbour", out _, out _, out _, out _, out reason));
+        Assert.Contains(actualString: reason, expectedSubstring: "not a valid");
+    }
+
     private static string IslandPath => Path.GetFullPath(path: Path.Combine(
         path1: AuthoredGameFixtures.Root,
         path2: "src/Puck.World/Assets/worlds/puck.world.json"

@@ -307,12 +307,11 @@ shape unique to rules:
 |---|---|---|---|
 | `row[key] = rhs` | `setState` | `Write` (`StateWriteKind.Set`), or `WriteText` for a `Text` row | `UpsertStateCell` (49) |
 | `row[key] += rhs` | `addState` | `Write` (`StateWriteKind.Add`) | `UpsertStateCell` (49) |
-| `countdown row[key]` | `countdownState` | `Write` (decrements by the tick's own step, floored at 0) | `UpsertStateCell` (49) |
 | `schedule row[key] in Ns` | `scheduleState` | `Write` (writes the due tick) | `UpsertStateCell` (49) |
 | `remove row[key]` | `removeStateCell` | `Remove` | `RemoveStateCell` (50) |
 | `push row = rhs` | `pushState` | `Push` | `TransformState` (75) |
 | `transform call(...)` | `transformState` | none — `IArenaTransformHost.TryTransform` | `TransformState` (75) |
-| `generate(row: "...")` | `generate` | `Generate` | `Generate` (51) |
+| `generate(row: ...)` | `generate` | `Generate` | `Generate` (51) |
 | `transaction { } [onFailure { }]` | groups the statements above atomically (`RuleEvaluator.Effects.FireSavepoint`) | — | each grouped effect folds as its own row above |
 | `if Gate { } [else if Gate { }]* [else { }]` | `if` | branches to `Then`/`Else`; each fired effect folds as its own row above | — |
 

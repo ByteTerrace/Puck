@@ -7,8 +7,9 @@ namespace Puck.Transpiler.Lowering;
 
 /// <summary>The builtins, evaluated while lowering rather than at run time: a document carries the array they
 /// produced, not the call that produced it.</summary>
-/// <remarks><para>Reserved in VALUE position only. A statement-position call of the same name is its vocabulary's own
-/// (a cartridge's <c>map(row:, column:, tile:)</c> rule step is untouched).</para>
+/// <remarks><para>Evaluated in compile-time value positions. A call constructing a declared document arm belongs
+/// to its vocabulary even when a builtin shares the name (such as a world's <c>sort</c> transform).
+/// Statement-position calls likewise belong to their vocabulary (a cartridge's <c>map</c> step is untouched).</para>
 /// <para>Two families meet here. The COLLECTION builtins below are the document language's own — a rule has no
 /// arrays to fold, so they exist in one language only. The SCALAR ones are not restated here at all: they come from
 /// <see cref="ExpressionVocabulary"/>, the table the rule language is built from, so the two cannot drift over a

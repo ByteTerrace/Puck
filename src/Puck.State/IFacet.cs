@@ -66,9 +66,20 @@ public enum EffectNeeds : byte {
     /// <summary>Firing reads the tick pair, so a row-version comparison alone cannot prove its outcome unchanged.</summary>
     ReadsTick = 1,
 
-    /// <summary>Firing cannot be rewound — a save, a HUD or placement upsert, anything that leaves the arena — so
-    /// the arm is queued during a firing's scope and fired after the scope commits.</summary>
+    /// <summary>Firing leaves the arena, so the journal cannot rewind it: a cue, a pose, a save, a document row. The
+    /// arm is queued during a firing's scope and preflighted before the scope commits. What happens after the commit
+    /// depends on <see cref="Transactional"/>. Without it the arm is delivered: it fires after the commit, in
+    /// authored order, and a delivery that fails is one counted refusal that undoes nothing and stops no later
+    /// delivery. A firing's all-or-nothing promise does not cover a delivery.</summary>
     Irreversible = 2,
+
+    /// <summary>An <see cref="Irreversible"/> arm the host commits with the firing. The host composes every such arm
+    /// of one firing, in order, against one speculative state while they are preflighted, and decides everything
+    /// that can refuse the unit before the scope commits (<see cref="IEffectHost.PrepareTransactional"/>), so a
+    /// sequence that cannot land refuses the firing while it can still rewind. It installs the prepared unit when
+    /// the scope commits (<see cref="IEffectHost.CommitTransactional"/>), which cannot refuse. These arms are inside
+    /// the all-or-nothing promise; the evaluator does not fire them again after the commit.</summary>
+    Transactional = 4,
 }
 /// <summary>What one compiled effect's kind declares about firing. Implemented by the typed effect base, and read
 /// by <see cref="RuleNeedsBuilder"/> when it folds a rule's effects into its <see cref="RuleNeeds"/>.</summary>

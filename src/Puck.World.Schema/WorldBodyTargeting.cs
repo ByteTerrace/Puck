@@ -199,8 +199,8 @@ public static class BodyTargetConeSense {
 /// <summary>Selects whether authored target decisions require the deterministic solid-field query provider.</summary>
 public static class WorldTargetSelection {
     private static bool EffectReferencesLineOfSight(ActionEffect effect) => effect switch {
-        ActionEffect.SetState set => NamesLineOfSight(name: set.FromState),
-        ActionEffect.AddState add => NamesLineOfSight(name: add.FromState),
+        ActionEffect.SetState set => NamesLineOfSight(name: set.FromState?.Spelling),
+        ActionEffect.AddState add => NamesLineOfSight(name: add.FromState?.Spelling),
         _ => false,
     };
     private static bool NamesLineOfSight(string? name) => ((name is not null) && name.StartsWith(
@@ -208,7 +208,7 @@ public static class WorldTargetSelection {
         value: WorldRuleFacts.LineOfSightPrefix
     ));
     private static bool PredicateReferencesLineOfSight(ActionPredicate? predicate) => predicate switch {
-        ActionPredicate.CompareState compare => (NamesLineOfSight(name: compare.State) || NamesLineOfSight(name: compare.ComparandState)),
+        ActionPredicate.CompareState compare => (NamesLineOfSight(name: compare.State.Spelling) || NamesLineOfSight(name: compare.ComparandState?.Spelling)),
         ActionPredicate.All all => all.Predicates.Any(predicate: PredicateReferencesLineOfSight),
         _ => false,
     };

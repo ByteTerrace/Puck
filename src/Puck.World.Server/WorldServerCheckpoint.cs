@@ -10,7 +10,9 @@ namespace Puck.World.Server;
 /// <param name="Left">The bound participant index, meaningful only when <paramref name="Key"/> is empty.</param>
 /// <param name="Right">The bound pair's right participant index, or -1.</param>
 /// <param name="Held">Whether the gate held at the last evaluation.</param>
-public readonly record struct WorldRuleLatchEntry(string Rule, string Key, int Left, int Right, bool Held);
+/// <param name="LeftGeneration">The left pool lifetime, or zero for an ordinary key.</param>
+/// <param name="RightGeneration">The right pool lifetime, or zero for an ordinary key.</param>
+public readonly record struct WorldRuleLatchEntry(string Rule, string Key, int Left, int Right, bool Held, long LeftGeneration = 0, long RightGeneration = 0);
 /// <summary>One rule group's progress on the wire.</summary>
 /// <param name="Group">The group's name.</param>
 /// <param name="Step">The pass count for a fixpoint group, or the step cursor for a staged one.</param>
@@ -18,12 +20,14 @@ public readonly record struct WorldRuleLatchEntry(string Rule, string Key, int L
 /// <param name="Breached">Whether the group stopped on its pass ceiling.</param>
 public readonly record struct WorldRuleGroupEntry(string Group, int Step, bool Running, bool Breached);
 /// <summary>This server's own checkpointed fields — journal, base/definition documents, buffered pending ops,
-/// step clock, rule-edge latches, rule-group progress, and per-binding decisions. Every other subsystem's own
-/// section lives beside this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
+/// step clock, the arena's full interned-key ledger, rule-edge latches, rule-group progress, and per-binding
+/// decisions. The ledger includes names no current cell references because they still consume the arena's bounded
+/// key namespace. Every other subsystem's own section lives beside this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
 public sealed record WorldServerCheckpoint(
     byte[] DefinitionJson,
     byte[] BaseDefinitionJson,
     string BaseOrigin,
+    IReadOnlyList<CellName> ArenaKeys,
     IReadOnlyList<(ulong Tick, ulong EngineTick, WorldMutation Mutation)> Journal,
     ulong LastCompletedTick,
     ulong LastCompletedEngineTicks,
@@ -44,5 +48,6 @@ public sealed record WorldServerCheckpoint(
     string? MusicDirectorLastTransitionToSegmentId,
     string? MusicDirectorLastEmbellishmentPatchId,
     ulong? MusicDirectorLastEmbellishmentTick,
-    IReadOnlyList<WorldDecisionCheckpoint> Decisions
+    IReadOnlyList<WorldDecisionCheckpoint> Decisions,
+    ArenaUndoSnapshot? Undo = null
 );

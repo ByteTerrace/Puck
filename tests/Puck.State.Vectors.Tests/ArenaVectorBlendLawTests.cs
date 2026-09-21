@@ -25,7 +25,8 @@ public sealed class ArenaVectorBlendLawTests {
         Assert.True(condition: VectorTransforms.TryMean(
             candidates: candidates,
             destination: destination,
-            refusal: out _
+            refusal: out _,
+            sum: new long[destination.Length]
         ));
 
         return destination;
@@ -51,6 +52,7 @@ public sealed class ArenaVectorBlendLawTests {
         Assert.True(condition: VectorTransforms.TryMix(
             destination: destination,
             refusal: out _,
+            sum: new long[destination.Length],
             vectors: vectors,
             weights: weights
         ));
@@ -178,7 +180,7 @@ public sealed class ArenaVectorBlendLawTests {
         );
     }
     [InlineData(0)]
-    [InlineData(9)]
+    [InlineData(StateCapacity.MaxMixTerms + 1)]
     [Theory]
     public void AMixOutsideTheTermCeilingRefuses(int count) {
         var arena = VectorArenaFixture.Arena(catalog: out var catalog);

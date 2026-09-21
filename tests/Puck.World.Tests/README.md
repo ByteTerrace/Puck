@@ -4,6 +4,24 @@ These tests check the document, protocol, authoritative simulation, and the
 shipped games' state programs. Rendering and complete game interaction still
 need verification by running Puck.World.
 
+`WorldCompilationAnalysisLawTests` checks that ticks retain installed cost and
+hazard analysis, while a rule-order edit replaces it even with the same state catalog.
+It also checks loader-to-server admission handoff, mismatched definition/catalog refusals, and
+embedded-document validation. `WorldAuthorityCheckpointLawTests` verifies that a
+malformed journal base is refused before replacing live state.
+
+`SearchLawTests` checks that refused search outputs are narrated both after boot
+and after replacing the arena; output rows remain unchanged by that refusal.
+
+`WorldRigidDynamicsLawTests` checks exact-touch floor spawns and grounded, rising,
+and falling facts through rest, impulse, flight, and landing. `PongContactLawTests`
+checks the shipped ball and court from both touching and elevated spawns.
+
+`SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through
+the real instance host: a body inside the deadband retains its authority, and one
+beyond it transfers within a bounded number of ticks. `AuthoredAdjacencyHysteresisLawTests`
+checks that reciprocal documents cannot disagree about that deadband.
+
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:

@@ -275,6 +275,28 @@ public interface IEffectHost : IStateReader {
     /// <returns><see langword="true"/> when the mutation moved the arena; <see langword="false"/> with no refusal
     /// when it was admitted and left the addressed cell exactly as it was.</returns>
     bool Apply(in Mutation mutation, out EffectRefusal refusal);
+    /// <summary>Observes a firing about to preflight its queued arms, in the order they will fire. The arms of one
+    /// firing are a sequence: a later one fires into what the earlier ones did, so a host that preflights each
+    /// against the state before any of them admits a sequence that cannot run and refuses one that can. A host
+    /// resets here whatever it carries from one preflight to the next.</summary>
+    void Preflighting() { }
+    /// <summary>Prepares, as one unit, the <see cref="EffectNeeds.Transactional"/> arms this firing preflighted.
+    /// Called once per firing that queued any, after every arm's preflight has passed and before the scope commits.
+    /// Everything that can refuse the unit is decided here, against the state the firing proposes; a refusal rewinds
+    /// the firing.</summary>
+    /// <param name="firing">The evaluation the arms fired under.</param>
+    /// <param name="refusal">Why the unit cannot be installed, or <see cref="EffectRefusal.None"/>.</param>
+    /// <returns><see langword="true"/> when <see cref="CommitTransactional"/> will install the unit.</returns>
+    bool PrepareTransactional(in EffectFiring firing, out EffectRefusal refusal) {
+        refusal = EffectRefusal.None;
+
+        return true;
+    }
+    /// <summary>Installs the unit <see cref="PrepareTransactional"/> prepared. Called once per committed firing that
+    /// queued a transactional arm, after <see cref="Committed"/> and before any delivered arm fires. It has no way
+    /// to refuse: a host that could not promise the install refused the preparation.</summary>
+    /// <param name="firing">The evaluation the arms fired under.</param>
+    void CommitTransactional(in EffectFiring firing) { }
     /// <summary>Observes a firing whose journal scope has just committed, so a host can install its own side of it.
     /// Called once per committed firing, before any irreversible arm fires.</summary>
     /// <param name="scope">The mark the committed scope closed with.</param>

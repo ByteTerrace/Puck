@@ -40,10 +40,17 @@ public struct Pcg32Extended : IDrawGenerator {
     // mcg_multiplier<uint32_t> and mcg_unmultiplier<uint32_t>): the "inside out" step every extension word takes.
     private const uint ExtMultiplier = 747796405U;
     private const string ExtensionIndexError = "index must be within the extension array";
-    private const string KError = "k must be a power of two in [2, 1024]";
+    private const string KError = "k must be a power of two in [2, 4096]";
     private const uint McgMultiplier = 277803737U;
     private const uint McgUnmultiplier = 2897767785U;
     private const ulong TickMask = ((1UL << AdvancePow2) - 1UL);
+
+    /// <summary>The largest extension table, in 32-bit words: sixteen kibibytes. The base state's low bits select
+    /// the word, and the table ticks on the low sixteen, so any power of two up to 2¹⁶ is sound; this is the size
+    /// this type commits to.</summary>
+    public const int MaxTableSize = 4096;
+    /// <summary>The smallest extension table, in 32-bit words.</summary>
+    public const int MinTableSize = 2;
 
     private Pcg32XshRr m_base;
 
@@ -289,17 +296,17 @@ public struct Pcg32Extended : IDrawGenerator {
     /// <summary>Creates a generator from a seed, a stream id, and an extension table size.</summary>
     /// <param name="state">The seed, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
     /// <param name="stream">The stream id, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
-    /// <param name="k">The extension table size: a power of two in <c>[2, 1024]</c>, fixed for the life of the
+    /// <param name="k">The extension table size: a power of two in <c>[2, 4096]</c>, fixed for the life of the
     /// returned instance.</param>
     /// <returns>A ready-to-draw generator, its extension table filled from the base generator's own first <c>k + 2</c>
     /// draws (pcg-cpp's self-seeding recipe): an XOR difference of two opening draws masks every table entry, so a
     /// caller who never seeds the table explicitly still gets a well-mixed one.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stream"/> exceeds
-    /// <see cref="Pcg32XshRr.MaxStream"/>, or <paramref name="k"/> is not a power of two in <c>[2, 1024]</c>.</exception>
+    /// <see cref="Pcg32XshRr.MaxStream"/>, or <paramref name="k"/> is not a power of two in <c>[2, 4096]</c>.</exception>
     public static Pcg32Extended Create(ulong state, ulong stream, int k) {
         if (
-            (k < 2) ||
-            (k > 1024) ||
+            (k < MinTableSize) ||
+            (k > MaxTableSize) ||
             ((k & (k - 1)) != 0)
         ) {
             throw new ArgumentOutOfRangeException(
@@ -332,19 +339,19 @@ public struct Pcg32Extended : IDrawGenerator {
     /// <param name="state">The seed, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
     /// <param name="stream">The stream id, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
     /// <param name="table">The extension table's own words, copied into a private array; its length is <c>k</c>, a
-    /// power of two in <c>[2, 1024]</c>.</param>
+    /// power of two in <c>[2, 4096]</c>.</param>
     /// <returns>A ready-to-draw generator whose base starts at the same state <see cref="Create(ulong, ulong, int)"/>'s
     /// base would (no draws are consumed forming the table), and whose extension table is <paramref name="table"/>
     /// verbatim rather than self-seeded from the base's own draws.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stream"/> exceeds
     /// <see cref="Pcg32XshRr.MaxStream"/>, or <paramref name="table"/>'s length is not a power of two in
-    /// <c>[2, 1024]</c>.</exception>
+    /// <c>[2, 4096]</c>.</exception>
     public static Pcg32Extended CreateWithTable(ulong state, ulong stream, ReadOnlySpan<uint> table) {
         var k = table.Length;
 
         if (
-            (k < 2) ||
-            (k > 1024) ||
+            (k < MinTableSize) ||
+            (k > MaxTableSize) ||
             ((k & (k - 1)) != 0)
         ) {
             throw new ArgumentOutOfRangeException(

@@ -249,4 +249,4 @@ public sealed record GraphDirection(string Name, string Opposite);
 /// <param name="Direction">The direction slot.</param>
 /// <param name="OneWay">Whether the reverse edge is left unfilled (a ladder, a one-way street).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GraphEdge(string From, string To, string Direction, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OneWay = false);
+public sealed record GraphEdge(string From, string To, CellName Direction, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OneWay = false);

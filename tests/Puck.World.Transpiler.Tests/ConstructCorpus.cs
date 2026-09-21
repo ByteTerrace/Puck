@@ -9,12 +9,11 @@ internal static class ConstructCorpus {
     private const string Rows = """
         state {
             world {
-                slot hp : Int = 1
-                slot flag : Int = 0
-                slot timer : Int = 3
-                slot due : Int = 0
-                table bag : Int
-                table deck : Int {
+                slot hp = 1
+                slot flag = 0
+                slot due = 0
+                table bag
+                table deck {
                     a = 1
                     b = 2
                 }
@@ -24,6 +23,8 @@ internal static class ConstructCorpus {
 
     private static string Document(string body) => $"schema: \"puck.world.definition.v1\"\n\n{body}\n";
     private static string Rule(string body) => Document(body: $"{Rows}\n\nrule \"r\" {{\n{body}\n}}");
+    private static string PoolRule(string body) => Document(body:
+        (("state {\n    record Item { value: Int }\n    pool items of Item capacity(2)\n    pairPool links record Item left items right items maxLive 2 directed false allowSelf true\n}\n\nrule \"r\" {\n" + body) + "\n}"));
     private static string Gate(string gate) => Rule(body: $"    when {gate}\n    flag = 1");
     private static string Transform(string call) => Rule(body: $"    transform {call}");
     private static string Pattern(string match) => Document(body: $"pattern p : Int {{\n    symbols {{\n        a = 1\n        b = 2\n    }}\n    match: {match}\n}}");
@@ -34,13 +35,17 @@ internal static class ConstructCorpus {
         ["effect/setState"] = Rule(body: "    hp = 1"),
         ["effect/addState"] = Rule(body: "    hp += 1"),
         ["effect/pushState"] = Rule(body: "    push hp = 1"),
-        ["effect/countdownState"] = Rule(body: "    countdown timer"),
         ["effect/removeStateCell"] = Rule(body: "    remove deck[a]"),
         ["effect/scheduleState"] = Rule(body: "    schedule due in 5s"),
-        ["effect/transformState"] = Transform(call: "observe(row: \"deck\")"),
+        ["effect/transformState"] = Transform(call: "observe(row: deck)"),
         ["effect/transaction"] = Rule(body: "    transaction {\n        hp = 1\n    }"),
         ["effect/if"] = Rule(body: "    if hp == 1 {\n        flag = 1\n    } else {\n        flag = 0\n    }"),
-        ["effect/generate"] = Rule(body: "    generate(row: \"deck\")"),
+        ["effect/generate"] = Rule(body: "    generate(row: deck)"),
+        ["effect/claim"] = PoolRule(body: "    claim items as item {\n        item.value = 1\n    }"),
+        ["effect/claimPair"] = PoolRule(body: "    claim items as left {\n        claim items as right {\n            claim pair links between left, right as link {\n                link.value = 1\n            }\n        }\n    }"),
+        ["effect/forEachPool"] = PoolRule(body: "    for each item in items {\n        item.value = 1\n    }"),
+        ["effect/release"] = PoolRule(body: "    claim items as item {\n        release item\n    }"),
+        ["effect/rewindTurn"] = Document(body: $"{Rows}\n\nworkflow turn undo({{ rows [\"hp\"] depth: 2 }}) {{\n    step move {{ hp = 2 }}\n}}\n\nrule rewind {{\n    rewindTurn(turn)\n}}"),
 
         ["predicate/compareState"] = Gate(gate: "hp == 1"),
         ["predicate/compareValue"] = Gate(gate: "hp + 1 == 2"),
@@ -48,39 +53,39 @@ internal static class ConstructCorpus {
         ["predicate/any"] = Gate(gate: "hp == 1 or flag == 0"),
         ["predicate/not"] = Gate(gate: "not hp == 1"),
 
-        ["transform/observe"] = Transform(call: "observe(row: \"deck\")"),
-        ["transform/transfer"] = Transform(call: "transfer(from: \"deck\", to: \"bag\")"),
-        ["transform/setRay"] = Transform(call: "setRay(row: \"deck\", from: \"a\", direction: \"north\", pattern: \"p\", value: 1)"),
-        ["transform/shuffle"] = Transform(call: "shuffle(row: \"deck\", draw: \"rng\")"),
-        ["transform/sortZone"] = Transform(call: "sortZone(row: \"deck\", by: [{ row: \"deck\", descending: false }])"),
-        ["transform/sortKeyed"] = Transform(call: "sortKeyed(row: \"deck\", descending: true)"),
-        ["transform/writeSet"] = Transform(call: "writeSet(row: \"deck\", set: \"s\", value: 1)"),
-        ["transform/boardCombine"] = Transform(call: "boardCombine(row: \"deck\", operation: \"Or\", left: \"deck\", right: \"bag\")"),
-        ["transform/arrange"] = Transform(call: "arrange(row: \"deck\", from: \"bag\")"),
-        ["transform/push"] = Transform(call: "push(row: \"deck\", value: 1)"),
-        ["transform/clearEnclosed"] = Transform(call: "clearEnclosed(row: \"deck\", from: \"a\", lower: 0, upper: 1)"),
-        ["transform/mix"] = Transform(call: "mix(into: \"deck\", terms: [{ from: \"bag\", weight: 1 }])"),
-        ["transform/mean"] = Transform(call: "mean(from: \"bag\", into: \"deck\")"),
-        ["transform/nearest"] = Transform(call: "nearest(from: \"bag\", query: \"deck\", into: \"hp\", k: 3)"),
-        ["transform/remember"] = Transform(call: "remember(into: \"deck\", key: \"a\", from: \"bag\", unlessWithin: \"hp\")"),
+        ["transform/observe"] = Transform(call: "observe(row: deck)"),
+        ["transform/transfer"] = Transform(call: "transfer(from: deck, to: bag)"),
+        ["transform/setRay"] = Transform(call: "setRay(row: deck, from: a, direction: north, pattern: p, value: 1)"),
+        ["transform/pushRay"] = Transform(call: "pushRay(pool: tokens, cell: cell, value: kind, from: mover.cell, topology: board, direction: east, pattern: pushable, pushPattern: push, stopPattern: stop, empty: 0)"),
+        ["transform/shuffle"] = Transform(call: "shuffle(row: deck, draw: rng)"),
+        ["transform/sort"] = Transform(call: "sort(row: deck, by: [{ row: deck, descending: false }])"),
+        ["transform/writeSet"] = Transform(call: "writeSet(row: deck, set: s, value: 1)"),
+        ["transform/boardCombine"] = Transform(call: "boardCombine(row: deck, operation: Or, left: deck, right: bag)"),
+        ["transform/arrange"] = Transform(call: "arrange(row: deck, from: bag)"),
+        ["transform/push"] = Transform(call: "push(row: deck, value: 1)"),
+        ["transform/clearEnclosed"] = Transform(call: "clearEnclosed(row: deck, from: a, lower: 0, upper: 1)"),
+        ["transform/mix"] = Transform(call: "mix(into: deck, terms: [{ from: bag, weight: 1 }])"),
+        ["transform/mean"] = Transform(call: "mean(from: bag, into: deck)"),
+        ["transform/nearest"] = Transform(call: "nearest(from: bag, query: deck, into: hp, k: 3)"),
+        ["transform/remember"] = Transform(call: "remember(into: deck, key: a, from: bag, unlessWithin: \"hp\")"),
 
         // A slot row infers its domain, so the only document that carries the discriminator is one that authors it.
-        ["domain/slot"] = Document(body: "state {\n    world {\n        row {\n            name: \"hp\"\n            kind: \"Int\"\n            domain: slot()\n        }\n    }\n}"),
-        ["domain/keys"] = Document(body: "state {\n    world {\n        table bag : Int\n    }\n}"),
-        ["domain/keysOf"] = Document(body: "state {\n    world {\n        table deck : Int {\n            a = 1\n        }\n        pile stock of deck {\n            a\n        }\n    }\n}"),
-        ["domain/cellsOf"] = Document(body: "state {\n    world {\n        grid board : Int dimensions(width: 2, depth: 2)\n    }\n}"),
-        ["domain/ring"] = Document(body: "state {\n    world {\n        row {\n            name: \"hist\"\n            kind: \"Int\"\n            domain: ring(capacity: 8)\n        }\n    }\n}"),
+        ["domain/slot"] = Document(body: "state {\n    world {\n        row {\n            name: \"hp\"\n            kind: Int\n            domain: slot()\n        }\n    }\n}"),
+        ["domain/keys"] = Document(body: "state {\n    world {\n        table bag\n    }\n}"),
+        ["domain/keysOf"] = Document(body: "state {\n    world {\n        table deck {\n            a = 1\n        }\n        pile stock of deck {\n            a\n        }\n    }\n}"),
+        ["domain/cellsOf"] = Document(body: "state {\n    world {\n        grid board dimensions(width: 2, depth: 2)\n    }\n}"),
+        ["domain/ring"] = Document(body: "state {\n    world {\n        row {\n            name: \"hist\"\n            kind: Int\n            domain: ring(capacity: 8)\n        }\n    }\n}"),
 
-        ["topology/grid"] = Document(body: "state {\n    world {\n        grid board : Int dimensions(width: 2, depth: 2)\n    }\n}"),
+        ["topology/grid"] = Document(body: "state {\n    world {\n        grid board dimensions(width: 2, depth: 2)\n    }\n}"),
         ["topology/ring"] = Topology(call: "ring(name: \"wheel\", origin: [0, 0, 0], cellSize: 1, width: 8)"),
         ["topology/hex"] = Topology(call: "hex(name: \"tiles\", origin: [0, 0, 0], cellSize: 1, radius: 2)"),
         ["topology/box"] = Topology(call: "box(name: \"stack\", origin: [0, 0, 0], cellSize: 1, width: 2, depth: 2, layers: 2, layerHeight: 1)"),
-        ["topology/graph"] = Topology(call: "graph(name: \"web\", origin: [0, 0, 0], cellSize: 1, cells: [{ id: \"n0\", centre [0, 0, 0] }, { id: \"n1\", centre [1, 0, 0] }], directions: [{ name: \"east\", opposite: \"west\" }, { name: \"west\", opposite: \"east\" }], edges: [{ from: \"n0\", to: \"n1\", direction: \"east\" }])"),
-        ["topology/tiling"] = Topology(call: "tiling(name: \"patch\", origin: [0, 0, 0], cellSize: 1, family: \"Penrose\", radius: 2)"),
+        ["topology/graph"] = Topology(call: "graph(name: \"web\", origin: [0, 0, 0], cellSize: 1, cells: [{ id: \"n0\", centre [0, 0, 0] }, { id: \"n1\", centre [1, 0, 0] }], directions: [{ name: \"east\", opposite: \"west\" }, { name: \"west\", opposite: \"east\" }], edges: [{ from: \"n0\", to: \"n1\", direction: east }])"),
+        ["topology/tiling"] = Topology(call: "tiling(name: \"patch\", origin: [0, 0, 0], cellSize: 1, family: Penrose, radius: 2)"),
 
-        ["cellSet/board"] = Document(body: "state {\n    world {\n        grid board : Int dimensions(width: 2, depth: 2)\n    }\n}\n\nset s: board(board, 0..0)"),
+        ["cellSet/board"] = Document(body: "state {\n    world {\n        grid board dimensions(width: 2, depth: 2)\n    }\n}\n\nset s: board(board, 0..0)"),
         ["cellSet/zone"] = Set(expression: "zone(deck, 1..1)"),
-        ["cellSet/family"] = Document(body: "state {\n    world {\n        slot Pile[0..1] : Int = 0\n    }\n}\n\nset s: family(Pile, 0..1)"),
+        ["cellSet/family"] = Document(body: "state {\n    world {\n        slot Pile[0..1] = 0\n    }\n}\n\nset s: family(Pile, 0..1)"),
         ["cellSet/all"] = Set(expression: "all"),
         ["cellSet/none"] = Set(expression: "none"),
         ["cellSet/any"] = Set(expression: "all | none"),

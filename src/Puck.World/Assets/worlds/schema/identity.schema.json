@@ -112,6 +112,18 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldIdentityFacts"
+    },
+    "records": {
+      "description": "Gets the immutable selection of identity-owned record pools.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "title": "CellName",
+        "type": "string"
+      }
     }
   },
   "required": [

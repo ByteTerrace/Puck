@@ -43,8 +43,11 @@ public sealed partial class InputRouter {
         private int m_count;
         private int m_head;
 
-        internal void Add(in T item) {
+        internal T? Add(in T item) {
+            T? dropped = null;
+
             if (m_count == m_capacity) {
+                dropped = m_items[m_head];
                 m_items[m_head] = default;
                 m_head = (((m_head + 1) == m_items.Length)
                     ? 0
@@ -58,6 +61,13 @@ public sealed partial class InputRouter {
 
             m_items[Offset(index: m_count)] = item;
             m_count++;
+            return dropped;
+        }
+        internal void DrainAll(List<T> items) {
+            for (var index = 0; (index < m_count); index++) {
+                items.Add(item: m_items[Offset(index: index)]);
+            }
+            Clear();
         }
         internal void Clear() {
             Array.Clear(array: m_items);
@@ -161,14 +171,29 @@ public sealed partial class InputRouter {
             : (m_clock?.NowTicks ?? 0UL)
         );
 
+        CapturedInjection? dropped;
+
         lock (m_captureGate) {
-            m_capturedInjections.Add(item: new CapturedInjection(
+            ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+            dropped = m_capturedInjections.Add(item: new CapturedInjection(
                 Sequence: m_sequence++,
                 Injection: (injection with { CaptureTick = captureTick, })
             ));
         }
+        if (dropped is { } discarded) {
+            RefuseInjection(injection: discarded.Injection, reason: "input queue capacity was exceeded");
+        }
     }
 
+    private static void RefuseInjection(CommandInjection injection, string reason) {
+        try {
+            if (injection.Text is { } line) {
+                injection.Session?.Settle(line: line, result: CommandResult.Error(output: $"[wire.reject: {reason} before this line applied]"));
+            }
+        } finally {
+            injection.Session?.Barrier.Complete();
+        }
+    }
     // The one door both capture entry points share: refuse a signal that names no control, then append it under the
     // gate, dropping the OLDEST retained signal first when the queue has reached its cap.
     private void CaptureSignal(in InputSignal signal, bool focusExemptOnly) {

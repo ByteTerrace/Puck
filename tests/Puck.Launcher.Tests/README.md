@@ -7,8 +7,11 @@ application, rollout selection, and the
 [stub's](../../src/Puck.Launcher.Stub/README.md) rollback policy.
 
 `OverlayGlyphPackTests` also checks the fixed-grid text consumer: equal-sized
-cells pack unchanged, while variable-size, fractional, and out-of-image cells
-are refused, including appended glyphs.
+cells pack unchanged, half-integer texel-center bounds include both endpoints,
+and variable-size, unsupported fractional, and out-of-image cells are refused,
+including appended glyphs. `OverlayGlyphCacheTests` covers persistence across
+fresh loaders, alternating icon repertoires, source invalidation, malformed
+cache recovery, and admission of the shipped atlas.
 
 ## Verification
 

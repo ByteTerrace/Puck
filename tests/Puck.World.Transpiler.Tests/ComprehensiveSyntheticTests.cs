@@ -126,17 +126,17 @@ public class ComprehensiveSyntheticTests {
             // Host settings block
             host {
                 authority: null
-                backend: "auto"
+                backend: auto
                 exitAfterSeconds: 0
                 fullscreen: false
                 genlock: null
                 height: 720
                 journalDepth: 2000
                 listen: null
-                presentMode: "Immediate"
-                presentation: "Windowed"
+                presentMode: Immediate
+                presentation: Windowed
                 rayQuery: true
-                surfaceFormat: "r8g8b8a8"
+                surfaceFormat: r8g8b8a8
                 targetHertz: targetFps
                 timing: false
                 width: 1280
@@ -186,7 +186,7 @@ public class ComprehensiveSyntheticTests {
                 world [
                     {
                         name: "tableState"
-                        kind: "Int"
+                        kind: Int
                         capacity: 1
                         cells [
                             {
@@ -223,20 +223,14 @@ public class ComprehensiveSyntheticTests {
         // Assert imports
         var imports = Assert.IsType<JsonArray>(@object: json["imports"]);
 
-        Assert.Equal(
-            2,
-            imports.Count
-        );
+        Assert.Single(collection: imports);
         var imp0 = Assert.IsType<JsonObject>(@object: imports[0]);
 
         Assert.Equal(
-            "extensions/rules.world.puck",
+            "modules/arcade.world.json",
             imp0["document"]?.ToString()
         );
-        Assert.Equal(
-            "rules",
-            imp0["as"]?.ToString()
-        );
+        Assert.Null(@object: imp0["as"]);
 
         // Assert exports
         var exports = Assert.IsType<JsonObject>(@object: json["exports"]);
@@ -291,7 +285,7 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Equal(
             0.25,
-            layout0["transitionSeconds"]?.GetValue<double>()
+            layout0["transitionSeconds"].AsNumber()
         );
 
         var seatRig = Assert.IsType<JsonObject>(@object: views["seatRig"]);
@@ -314,9 +308,9 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Equal(
             2.5,
-            orbitOp["distance"]?.GetValue<double>()
+            orbitOp["distance"].AsNumber()
         );
-        Assert.True(condition: (orbitOp["pitch"]?.GetValue<double>() > 0.78)); // 45 deg in rad
+        Assert.True(condition: (orbitOp["pitch"].AsNumber() > 0.78)); // 45 deg in rad
 
         // Assert addon auto-hash
         var addons = Assert.IsType<JsonArray>(@object: json["addons"]);
@@ -383,7 +377,7 @@ public class ComprehensiveSyntheticTests {
             actualString: decompiledPuck,
             expectedSubstring: "documentId: \"comprehensive-synthetic-v1\""
         );
-        Assert.Contains(
+        Assert.DoesNotContain(
             actualString: decompiledPuck,
             expectedSubstring: "import \"extensions/rules.world.puck\" as rules"
         );
@@ -517,4 +511,3 @@ public class ComprehensiveSyntheticTests {
         );
     }
 }
-

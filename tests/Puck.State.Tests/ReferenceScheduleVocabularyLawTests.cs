@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
+using Puck.Maths;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -124,8 +125,15 @@ public sealed class ReferenceScheduleVocabularyLawTests {
             var operation = Enum.Parse<ExpressionOp>(value: coefficient.Operation);
 
             foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
+                var expected = (coefficient.NumericKinds.Contains(
+                    value: kind.ToString(),
+                    comparer: StringComparer.Ordinal
+                )
+                    ? coefficient.Bound
+                    : CostBound.Unmodeled(reason: $"ExpressionOp.{operation} ({kind}) is not a registered operation of the reference schedule."));
+
                 Assert.Equal(
-                    coefficient.Bound,
+                    expected,
                     ReferenceSchedule.OperationCostBound(
                         kind: kind,
                         operation: operation

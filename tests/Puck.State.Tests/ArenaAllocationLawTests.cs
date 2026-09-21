@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -7,6 +8,93 @@ namespace Puck.State.Tests;
 /// allocating, on a slot row and on a keyed row alike, and a savepoint rewound inside an open scope hands its
 /// vector snapshots back. A text write allocates its own payload and nothing else.</summary>
 public sealed class ArenaAllocationLawTests {
+    [Fact]
+    public void WarmedPoolHandleReadsAndSnapshotCopiesAllocateNothing() {
+        var section = new StateSection(
+            Records: [new StateRecord(Name: CellName.Parse(candidate: "r"), Fields: [new StatePoolField(Name: CellName.Parse(candidate: "value"))])],
+            Pools: [new StatePool(Name: CellName.Parse(candidate: "items"), Record: CellName.Parse(candidate: "r"), Capacity: 256)]);
+        var arena = new StateArena(catalog: StateCatalog.Compile(section: section), section: section, time: ArenaTime.Origin);
+        var handles = new StateInstanceHandle[256];
+
+        for (var slot = 0; (slot < handles.Length); slot++) {
+            Assert.True(condition: arena.TryClaim(handle: out handles[slot], poolOrdinal: 0, reason: out _));
+        }
+        for (var pass = 0; (pass < 64); pass++) {
+            _ = arena.CopyPoolSnapshot(destination: handles, poolOrdinal: 0);
+            _ = arena.TryRead(handle: handles[127], fieldOrdinal: 0, value: out _);
+        }
+        var allRead = true;
+
+        var before = AllocationWindow.Least(window: () => {
+            for (var pass = 0; (pass < 512); pass++) {
+                allRead &= (handles.Length == arena.CopyPoolSnapshot(destination: handles, poolOrdinal: 0));
+                allRead &= arena.TryRead(handle: handles[127], fieldOrdinal: 0, value: out _);
+            }
+        });
+
+        var allocated = before;
+
+        Assert.True(condition: allRead);
+        Assert.Equal(actual: allocated, expected: 0L);
+    }
+    [Fact]
+    public void WarmedPoolClaimWriteReleaseAndRewindAllocateNothing() {
+        var section = new StateSection(
+            Records: [new StateRecord(Name: CellName.Parse(candidate: "r"), Fields: [new StatePoolField(Name: CellName.Parse(candidate: "value"))])],
+            Pools: [new StatePool(Name: CellName.Parse(candidate: "items"), Record: CellName.Parse(candidate: "r"), Capacity: 2)]);
+        var arena = new StateArena(catalog: StateCatalog.Compile(section: section), section: section, time: ArenaTime.Origin);
+
+        void Cycle() {
+            var mark = arena.BeginScope();
+
+            Assert.True(condition: arena.TryClaim(handle: out var handle, poolOrdinal: 0, reason: out _));
+            Assert.True(condition: arena.TryWrite(handle: handle, fieldOrdinal: 0, value: CellValue.Int(value: 5), reason: out _));
+            Assert.True(condition: arena.TryRelease(handle: handle, reason: out _));
+            arena.Rewind(mark: mark);
+        }
+
+        for (var pass = 0; (pass < 64); pass++) {
+            Cycle();
+        }
+        var before = AllocationWindow.Least(window: () => {
+            for (var pass = 0; (pass < 512); pass++) {
+                Cycle();
+            }
+        });
+
+        Assert.Equal(expected: 0L, actual: before);
+    }
+    [Fact]
+    public void WarmedPairCascadeAndRewindAllocateNothing() {
+        var record = new StateRecord(Name: CellName.Parse(candidate: "r"));
+        var section = new StateSection(
+            Records: [record],
+            Pools: [new StatePool(Name: CellName.Parse(candidate: "nodes"), Record: record.Name, Capacity: 2, Initial: [new StatePoolSeed(Slot: 0), new StatePoolSeed(Slot: 1)])],
+            PairPools: [new StatePairPool(Name: CellName.Parse(candidate: "edges"), Record: record.Name, LeftPool: CellName.Parse(candidate: "nodes"), RightPool: CellName.Parse(candidate: "nodes"), MaxLive: 2)]);
+        var arena = new StateArena(catalog: StateCatalog.Compile(section: section), section: section, time: ArenaTime.Origin);
+        var endpoints = arena.SnapshotPool(poolOrdinal: 0);
+
+        void Cycle() {
+            var mark = arena.BeginScope();
+
+            Assert.True(condition: arena.TryClaimPair(poolOrdinal: 1, leftHandle: endpoints[0], rightHandle: endpoints[1], handle: out var pair, reason: out _));
+            Assert.True(condition: arena.TryResolve(handle: pair, position: out _));
+            Assert.True(condition: arena.TryRelease(handle: endpoints[0], reason: out _));
+            Assert.False(condition: arena.TryResolve(handle: pair, position: out _));
+            arena.Rewind(mark: mark);
+        }
+
+        for (var pass = 0; (pass < 64); pass++) {
+            Cycle();
+        }
+        var before = AllocationWindow.Least(window: () => {
+            for (var pass = 0; (pass < 512); pass++) {
+                Cycle();
+            }
+        });
+
+        Assert.Equal(expected: 0L, actual: before);
+    }
     [Fact]
     public void AScalarReadAllocatesNothing() {
         var (catalog, arena) = ArenaFixture.Build();
@@ -20,19 +108,19 @@ public sealed class ArenaAllocationLawTests {
             );
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var pass = 0; (pass < 1024); pass++) {
-            Assert.True(condition: arena.TryRead(
-                key: slot,
-                rowOrdinal: ArenaFixture.Score,
-                value: out _
-            ));
-        }
+        var before = AllocationWindow.Least(window: () => {
+            for (var pass = 0; (pass < 1024); pass++) {
+                Assert.True(condition: arena.TryRead(
+                    key: slot,
+                    rowOrdinal: ArenaFixture.Score,
+                    value: out _
+                ));
+            }
+        });
 
         Assert.Equal(
             expected: 0L,
-            actual: (GC.GetAllocatedBytesForCurrentThread() - before)
+            actual: before
         );
     }
     [Fact]
@@ -111,20 +199,20 @@ public sealed class ArenaAllocationLawTests {
             );
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var pass = 0; (pass < 512); pass++) {
-            Cycle(
-                arena: arena,
-                key: key,
-                rowOrdinal: rowOrdinal,
-                value: (pass % 2)
-            );
-        }
+        var before = AllocationWindow.Least(window: () => {
+            for (var pass = 0; (pass < 512); pass++) {
+                Cycle(
+                    arena: arena,
+                    key: key,
+                    rowOrdinal: rowOrdinal,
+                    value: (pass % 2)
+                );
+            }
+        });
 
         Assert.Equal(
             expected: 0L,
-            actual: (GC.GetAllocatedBytesForCurrentThread() - before)
+            actual: before
         );
     }
     private static void Cycle(StateArena arena, CellKey key, int rowOrdinal, long value) {

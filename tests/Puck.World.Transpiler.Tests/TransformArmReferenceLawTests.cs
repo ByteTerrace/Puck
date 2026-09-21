@@ -61,7 +61,7 @@ public class TransformArmReferenceLawTests {
 
         state {
             world {
-                table deck : Int {
+                table deck {
                     a = 1
                     b = 2
                 }

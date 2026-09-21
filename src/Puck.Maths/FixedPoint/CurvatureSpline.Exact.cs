@@ -733,10 +733,10 @@ internal static class CurvatureSplineExactMath {
     // points that land exactly on a root are nudged by a fixed, tiny epsilon rather than special-cased, so the same
     // sequence of Sturm evaluations runs for a given polynomial and search interval every time.
     private static List<(Rational Lo, Rational Hi)> IsolateRoots(Rational[] polynomial, Rational lo, Rational hi) {
-        var sequence = BuildSturmSequence(polynomial: polynomial);
+        var sequence = BuildSturmSequence(polynomial: polynomial).Select(selector: IntegerCoefficients).ToArray();
         var results = new List<(Rational, Rational)>();
 
-        if (IsZeroPolynomial(coefficients: sequence[0])) { return results; }
+        if (sequence[0].Length == 0) { return results; }
 
         var boundedLo = NudgeAwayFromRoot(
             leading: sequence[0],
@@ -875,6 +875,16 @@ internal static class CurvatureSplineExactMath {
 
         return x;
     }
+    private static Rational NudgeAwayFromRoot(BigInteger[] leading, Rational x, bool negative) {
+        var step = (negative ? -RootNudge : RootNudge);
+        var guard = 0;
+
+        while (IntegerPolynomialSign(coefficients: leading, x: x) == 0) {
+            x += step;
+            if (++guard > 64) { break; }
+        }
+        return x;
+    }
     private static bool RationalIsZero(Rational value) =>
         value.Numerator.IsZero;
     // Refines an isolated bracket — known, by construction, to contain exactly one root of `polynomial` — by direct
@@ -952,15 +962,55 @@ internal static class CurvatureSplineExactMath {
     }
     private static int SignOf(Rational value) =>
         (value.Numerator.Sign * value.Denominator.Sign);
-    private static int SignVariationsAt(List<Rational[]> sequence, Rational x) {
+    // A positive common denominator and positive coefficient gcd scale the polynomial without changing any sign
+    // or root. Do this once per Sturm member instead of reducing rational intermediates at every bisection point.
+    private static BigInteger[] IntegerCoefficients(Rational[] coefficients) {
+        var degree = DegreeOf(coefficients: coefficients);
+
+        if (degree < 0) { return []; }
+        var denominator = BigInteger.One;
+
+        for (var index = 0; (index <= degree); index++) {
+            var next = BigInteger.Abs(value: coefficients[index].Denominator);
+
+            denominator = ((denominator / BigInteger.GreatestCommonDivisor(left: denominator, right: next)) * next);
+        }
+        var integers = new BigInteger[(degree + 1)];
+        var content = BigInteger.Zero;
+
+        for (var index = 0; (index <= degree); index++) {
+            integers[index] = (coefficients[index].Numerator * (denominator / coefficients[index].Denominator));
+            content = BigInteger.GreatestCommonDivisor(left: content, right: integers[index]);
+        }
+        if (content > BigInteger.One) {
+            for (var index = 0; (index <= degree); index++) { integers[index] /= content; }
+        }
+        return integers;
+    }
+    // Homogeneous Horner evaluation computes denominator^degree * polynomial(numerator / denominator).
+    // The denominator is positive, so the integer's sign is exactly the rational polynomial's sign, including zero.
+    private static int IntegerPolynomialSign(BigInteger[] coefficients, Rational x) {
+        if (coefficients.Length == 0) { return 0; }
+        var denominator = BigInteger.Abs(value: x.Denominator);
+        var numerator = (x.Numerator * x.Denominator.Sign);
+        var power = BigInteger.One;
+        var value = coefficients[^1];
+
+        for (var index = (coefficients.Length - 2); (index >= 0); index--) {
+            power *= denominator;
+            value = ((value * numerator) + (coefficients[index] * power));
+        }
+        return value.Sign;
+    }
+    private static int SignVariationsAt(BigInteger[][] sequence, Rational x) {
         var variations = 0;
         var previousSign = 0;
 
         foreach (var polynomial in sequence) {
-            var sign = SignOf(value: Evaluate(
+            var sign = IntegerPolynomialSign(
                 coefficients: polynomial,
                 x: x
-            ));
+            );
 
             if (sign == 0) { continue; }
             if (

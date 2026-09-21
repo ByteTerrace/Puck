@@ -153,9 +153,9 @@ public sealed class OverlayGlyphAtlasSet {
     /// Loads the overlay glyph pack from the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>) when
     /// possible: a warm start with the SAME <paramref name="extraCodePoints"/> reads the ~1.4-MiB-and-up finished
     /// pack instead of decoding the ~79 MiB combined PNG, whose full MTSDF decode holds upward of 150 MiB transient
-    /// to produce it. A cold start, a rebaked atlas, or a DIFFERENT appended codepoint list (a world with a
-    /// different icon repertoire) builds the pack from <see cref="MonoFont"/> once, persists it (overwriting a
-    /// cached pack keyed to a different repertoire), and keys it by the SHA-256 of the source PNG bytes, the mono
+    /// to produce it. A cold start or a rebaked atlas builds the pack from <see cref="MonoFont"/> once and persists
+    /// it. Nonempty icon repertoires use separate <c>overlay-glyphs-{hash}.pack</c> files, so alternating worlds
+    /// does not evict another repertoire. Each pack is keyed by the SHA-256 of the source PNG bytes, the mono
     /// layout JSON bytes, AND the codepoint list. Returns <see langword="null"/> exactly when
     /// <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable atlas).
     /// </summary>
@@ -217,7 +217,9 @@ public sealed class OverlayGlyphAtlasSet {
 
         var packPath = Path.Combine(
             path1: m_fontsDirectory,
-            path2: OverlayPackName
+            path2: ((extraCodePoints is { Count: > 0 })
+                ? $"overlay-glyphs-{Convert.ToHexStringLower(bytes: extraHash)}.pack"
+                : OverlayPackName)
         );
 
         if (OverlayGlyphSdfPack.TryReadPack(

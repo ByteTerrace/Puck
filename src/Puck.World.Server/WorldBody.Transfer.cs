@@ -784,6 +784,11 @@ public sealed partial class WorldBody {
     /// after a teleport instead of steering continuously toward it.</param>
     /// <param name="FieldUpTurnRemainder">The solved-field up-turn rate accumulator's signed remainder.</param>
     /// <param name="ContactUpTurnRemainder">The measured-contact-normal turn accumulator's signed remainder.</param>
+    /// <param name="AsleepSinceTick">The simulation tick at which the body fell asleep, or 0 while awake.</param>
+    /// <param name="SleepIdleTicks">The consecutive idle engine ticks accumulated toward the authored sleep floor.</param>
+    /// <param name="LastContactFieldVersion">The contact-field version observed by the body's latest advance.</param>
+    /// <param name="ContactFieldObservationCurrent">Whether that observation matched the population's field at
+    /// checkpoint capture. Versions are process-local, so this semantic edge is what a restore preserves.</param>
     /// <param name="PlanarFollowerSeeded">Whether the planar dynamics follower has consumed its first target.</param>
     /// <param name="VerticalFollowerSeeded">Whether the vertical dynamics follower has consumed its first target.</param>
     /// <param name="Tether">The body-local tether continuation state.</param>
@@ -837,6 +842,10 @@ public sealed partial class WorldBody {
         bool UpNeedsReseat,
         long FieldUpTurnRemainder,
         long ContactUpTurnRemainder,
+        ulong AsleepSinceTick,
+        ulong SleepIdleTicks,
+        ulong LastContactFieldVersion,
+        bool ContactFieldObservationCurrent,
         bool PlanarFollowerSeeded,
         bool VerticalFollowerSeeded,
         TetherResidue Tether,
@@ -898,6 +907,10 @@ public sealed partial class WorldBody {
         UpNeedsReseat: m_upNeedsReseat,
         FieldUpTurnRemainder: m_upTurnAccumulator.Remainder,
         ContactUpTurnRemainder: m_contactUpTurnAccumulator.Remainder,
+        AsleepSinceTick: m_asleepSinceTick,
+        SleepIdleTicks: m_sleepIdleTicks,
+        LastContactFieldVersion: m_lastContactFieldVersion,
+        ContactFieldObservationCurrent: true,
         PlanarFollowerSeeded: m_planarFollowerSeeded,
         VerticalFollowerSeeded: m_verticalFollowerSeeded,
         Tether: new TetherResidue(
@@ -929,8 +942,13 @@ public sealed partial class WorldBody {
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
     /// after <see cref="ApplyTransferState"/> has already set the rest of the live state, so this call's own writes
-    /// are never overwritten by an earlier restore step.</summary>
-    public void ApplyIntegrationResidue(IntegrationResidue residue) {
+    /// are never overwritten by an earlier restore step. The restored population's equivalent contact field can have
+    /// a different process-local version, so a current observation is rebased to <paramref name="contactFieldVersion"/>
+    /// while a pending version edge remains deliberately unequal.</summary>
+    /// <param name="residue">The checkpoint-only continuation state.</param>
+    /// <param name="contactFieldVersion">The reconstructed population's current contact-field version, or
+    /// <see langword="null"/> to restore the captured numeric version directly.</param>
+    public void ApplyIntegrationResidue(IntegrationResidue residue, ulong? contactFieldVersion = null) {
         m_previousPosition = residue.PreviousPosition;
         m_positionAccumulator = FixedVector3RateAccumulator.FromRemainders(
             xRemainder: residue.PositionRemainderX,
@@ -964,6 +982,15 @@ public sealed partial class WorldBody {
         m_contactUpTurnAccumulator = FixedRateAccumulator.FromRemainder(
             remainder: residue.ContactUpTurnRemainder,
             ticksPerSecond: EngineTicksPerSecond
+        );
+        m_asleepSinceTick = residue.AsleepSinceTick;
+        m_sleepIdleTicks = residue.SleepIdleTicks;
+        m_lastContactFieldVersion = ((contactFieldVersion is not { } currentVersion)
+            ? residue.LastContactFieldVersion
+            : (residue.ContactFieldObservationCurrent
+                ? currentVersion
+                : (currentVersion ^ 1UL)
+            )
         );
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;
         m_verticalFollowerSeeded = residue.VerticalFollowerSeeded;

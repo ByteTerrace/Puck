@@ -19,11 +19,10 @@ namespace Puck.State;
 /// N &gt;= 2 the gate self-closes the tick after it opens. Edge's latch — armed the instant the gate opened, before
 /// the effect that was to close it ever ran — stops the runaway re-fire <see cref="ActionTriggerMode.Level"/> would
 /// spam if the advance were ever denied. A period of exactly 1 tick never closes its own gate and wants Level.</para>
-/// <para><b>A cooldown is a relative countdown, not a <c>$tick</c> threshold.</b> A <c>nextAllowed</c> row set to
-/// <c>$tick</c>+N on use is open the instant a request arrives once background ticks have accrued. Build a cooldown as
-/// an <c>int</c> row declaring <c>min</c> zero, a <see cref="ActionTriggerMode.Level"/> rule gated <c>&gt; 0</c> consumes each
-/// tick with <see cref="ActionEffect.CountdownState"/>, and the ability gated on <c>&lt;= 0</c>; using the ability
-/// re-arms it with <c>setState valueSeconds=N</c>.</para>
+/// <para><b>A cooldown is a <c>$tick</c> deadline, not a relative countdown.</b> Build one as an <c>int</c> row
+/// holding the absolute tick the cooldown ends, armed on use with <see cref="ActionEffect.ScheduleState"/>
+/// (<c>schedule nextAllowed in Ns</c>), and the ability gated <c>$tick &gt;= nextAllowed</c>; using the ability
+/// re-arms it with another <c>schedule</c>.</para>
 /// <para><b>A copy operand reads the same same-tick state a gate does</b>, so an earlier rule's write is visible to a
 /// later rule's copy — declaration order decides it, deterministically.</para>
 /// </remarks>
@@ -54,25 +53,40 @@ namespace Puck.State;
 /// an entry — an index outside the table, or at an empty entry, reads the gate closed, so a table's gaps are the
 /// rule's own statement of which piles it is for. <c>forEach: "$zones"</c> iterates the table's own non-empty
 /// indices with <c>$each</c> bound to each.</param>
+/// <param name="PoolForEach">The declared pool and typed lexical binding to snapshot and visit once per live
+/// instance, or <see langword="null"/> for ordinary row/no iteration. It cannot appear beside <paramref name="ForEach"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record Rule(
     [property: JsonPropertyOrder(0)] CellName Name,
     [property: JsonPropertyOrder(1)] IReadOnlyList<ActionEffect> Effects,
     [property: JsonPropertyOrder(2)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonPropertyOrder(3)] ActionTriggerMode Mode = ActionTriggerMode.Level,
-    [property: JsonPropertyOrder(4)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null,
+    [property: JsonPropertyOrder(4)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ForEach = null,
     [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleLocal>? Locals = null,
-    [property: JsonPropertyOrder(7)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null
+    [property: JsonPropertyOrder(7)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null,
+    [property: JsonPropertyOrder(8)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RulePoolIteration? PoolForEach = null
 );
+/// <summary>One rule-level pool sweep. The evaluator snapshots full instance handles at the beginning of its pass,
+/// so releasing a snapshot member cannot make a later reclaim of its slot appear in that same pass.</summary>
+/// <param name="Pool">The declared pool to visit.</param>
+/// <param name="Binding">The instance name available to the rule's locals, gate, and effects.</param>
+public sealed record RulePoolIteration(StateChannelRef Pool, CellName Binding);
 /// <summary>A value computed once per evaluation of the rule that declares it, after the forEach key and before the
 /// gate, in declared order — a later local, the gate, and every effect read it as
 /// <c>$local:&lt;name&gt;</c>; an earlier local cannot. The value is never stored: it lives on the evaluation and is
 /// recomputed at the next one.</summary>
 /// <param name="Name">The local's name — the token after <see cref="RuleFacts.LocalPrefix"/>.</param>
-/// <param name="Kind">The value's cell kind, <see cref="CellKind.Int"/> or <see cref="CellKind.Fixed"/>.</param>
-/// <param name="Expression">The postfix expression, evaluated in that kind.</param>
+/// <param name="Expression">The postfix expression whose evaluated result the local holds.</param>
+/// <param name="Kind">The value's cell kind, <see cref="CellKind.Int"/> or <see cref="CellKind.Fixed"/>, or
+/// <see langword="null"/> for the kind the rule compiler infers: <see cref="CellKind.Int"/> when the expression
+/// compiles as one, otherwise <see cref="CellKind.Fixed"/>. A comparison or <c>sign</c> may consume Fixed
+/// operands yet leave an <see cref="CellKind.Int"/> result, which is the inferred binding kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record RuleLocal(CellName Name, CellKind Kind, ExpressionProgram Expression);
+public sealed record RuleLocal(
+    CellName Name,
+    ExpressionProgram Expression,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellKind? Kind = null
+);
 /// <summary>A name bound during one evaluation of a rule — the participant index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a participant-reference token <c>each</c>/<c>left</c>/<c>right</c>
 /// reads, or the cell key a <c>$token</c> reads.</summary>
@@ -181,23 +195,34 @@ public enum MatchFacet : byte {
     Cell,
     /// <summary>One board-origin ray: the step distance to <see cref="Cell"/>'s cell, or -1 on the same terms.</summary>
     Distance,
+    /// <summary>The cell where the selected non-empty occurrence begins on a board ray, or its zero-based position
+    /// in an ordinary word; -1 when that occurrence does not exist.</summary>
+    At,
+    /// <summary>The length of the selected non-empty occurrence, or 0 when that occurrence does not exist.</summary>
+    Length,
 }
-/// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
+/// <summary>Hard bounds for rule programs. Each names the storage it sizes or the recursion it bounds; what a
+/// program costs to run is the work sheet's to price, not a count's to cap.</summary>
 public static class RuleCapacity {
-    /// <summary>The most local values one rule may declare — the width of the per-evaluation scratch every evaluator
-    /// carries for them.</summary>
-    public const int MaxLocalsPerRule = 16;
-    /// <summary>The most top-level effects one rule may carry.</summary>
-    public const int MaxEffectsPerRule = 64;
-    /// <summary>The most postfix tokens in one numeric expression.</summary>
-    public const int MaxExpressionTokens = 64;
+    /// <summary>The most local values one rule may declare: every evaluator host holds one eight-byte slot per
+    /// local for the evaluation in flight, 512 bytes a host.</summary>
+    public const int MaxLocalsPerRule = 64;
+    /// <summary>The most top-level effects one rule may carry. Each is priced on the work sheet; the count bounds
+    /// the compiled rule's effect table.</summary>
+    public const int MaxEffectsPerRule = 256;
+    /// <summary>The most postfix tokens in one numeric expression. A token pushes at most one value, so this is
+    /// also the deepest an evaluation's leased value stack grows: eight bytes and one mark a token.</summary>
+    public const int MaxExpressionTokens = 256;
     /// <summary>The most shared subprograms one expression program may carry. The call graph is acyclic, so this
-    /// also bounds how deep a call chain nests at evaluation.</summary>
-    public const int MaxSubprograms = 16;
-    /// <summary>The most postfix tokens in one Boolean gate.</summary>
-    public const int MaxPredicateTokens = 256;
-    /// <summary>The most effects in one atomic transaction branch.</summary>
-    public const int MaxTransactionEffects = 64;
+    /// is how deep a call chain nests, and each level is one evaluator frame of machine stack.</summary>
+    public const int MaxSubprograms = 64;
+    /// <summary>How deep one Boolean gate's predicates nest. Flattening a gate recurses once per level, so this is
+    /// machine stack, where <see cref="MaxPredicateTokens"/> is the gate's length.</summary>
+    public const int MaxPredicateNesting = 64;
+    /// <summary>The most postfix tokens in one Boolean gate: one byte of leased stack each at evaluation.</summary>
+    public const int MaxPredicateTokens = 1024;
+    /// <summary>The most effects in one atomic transaction branch, priced like any other effect.</summary>
+    public const int MaxTransactionEffects = 256;
     /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
     /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
     /// rule sweep is one of several passes a tick pays for; reserving roughly a fifth of the tick (~6.7 ms) as its

@@ -262,7 +262,12 @@
       "mode": "Edge",
       "gate": {
         "$type": "compareState",
-        "state": "$region:jumpFallZone",
+        "state": {
+          "channel": "region",
+          "arguments": [
+            "jumpFallZone"
+          ]
+        },
         "comparison": "Greater",
         "value": 0
       },
@@ -275,7 +280,12 @@
       "mode": "Edge",
       "gate": {
         "$type": "compareState",
-        "state": "$region:jumpTrophy",
+        "state": {
+          "channel": "region",
+          "arguments": [
+            "jumpTrophy"
+          ]
+        },
         "comparison": "Greater",
         "value": 0
       },

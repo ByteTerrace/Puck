@@ -7,6 +7,117 @@ namespace Puck.State.Rules.Tests;
 /// select, so moving the selection to another zone binds that zone's answer, never the last one's.</summary>
 public sealed class BindingMemoLawTests {
     [Fact]
+    public void ABindingThatAliasesATickReadThroughACallIsNotMemoizedAcrossTicks() {
+        var tick = RulesFixture.Program(text: RuleFacts.Tick);
+        var throughCall = new ExpressionProgram(Instructions: [Instruction.Call(subprogram: 0)]) {
+            Subprograms = [new Subprogram(
+                Arity: 0,
+                Instructions: tick.Instructions,
+                Name: "now"
+            )],
+        };
+        var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(
+            rules: [new Rule(
+                Effects: [new ActionEffect.SetState(
+                    Expression: RulesFixture.Program(text: "$local:copy"),
+                    State: "score"
+                )],
+                Locals: [
+                    new RuleLocal(
+                        Expression: throughCall,
+                        Name: RulesFixture.Name(value: "now")
+                    ),
+                    new RuleLocal(
+                        Expression: RulesFixture.Program(text: "$local:now"),
+                        Name: RulesFixture.Name(value: "copy")
+                    ),
+                ],
+                Name: RulesFixture.Name(value: "clock")
+            )]
+        );
+
+        long Tick(ulong tickValue) {
+            host.Advance(
+                engineTick: tickValue,
+                tick: tickValue
+            );
+            _ = evaluator.Evaluate(
+                latch: latch,
+                rules: rules,
+                stepTicks: 1UL
+            );
+
+            return EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            );
+        }
+
+        Assert.Equal(expected: 1L, actual: Tick(tickValue: 1UL));
+        Assert.Equal(expected: 2L, actual: Tick(tickValue: 2UL));
+    }
+    [Fact]
+    public void ABindingThroughALocalKeyThatReadsTickIsNotMemoizedAcrossTicks() {
+        var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(
+            rules: [new Rule(
+                Effects: [new ActionEffect.SetState(
+                    Expression: RulesFixture.Program(text: "$local:copy"),
+                    State: "score"
+                )],
+                Locals: [
+                    new RuleLocal(
+                        Expression: RulesFixture.Program(text: RuleFacts.Tick),
+                        Name: RulesFixture.Name(value: "key")
+                    ),
+                    new RuleLocal(
+                        Expression: RulesFixture.Program(text: "hand[$local:key]"),
+                        Name: RulesFixture.Name(value: "copy")
+                    ),
+                ],
+                Name: RulesFixture.Name(value: "clock-key")
+            )]
+        );
+
+        var hand = EvaluatorFixture.Ordinal(
+            host: host,
+            row: "hand"
+        );
+
+        Assert.True(condition: host.Arena.TryMint(
+            key: out _,
+            name: RulesFixture.Name(value: "1"),
+            reason: out var oneReason,
+            rowOrdinal: hand,
+            value: CellValue.Int(value: 1L)
+        ), userMessage: oneReason);
+        Assert.True(condition: host.Arena.TryMint(
+            key: out _,
+            name: RulesFixture.Name(value: "2"),
+            reason: out var twoReason,
+            rowOrdinal: hand,
+            value: CellValue.Int(value: 2L)
+        ), userMessage: twoReason);
+        long Tick(ulong tickValue) {
+            host.Advance(
+                engineTick: tickValue,
+                tick: tickValue
+            );
+            _ = evaluator.Evaluate(
+                latch: latch,
+                rules: rules,
+                stepTicks: 1UL
+            );
+
+            return EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            );
+        }
+
+        Assert.Equal(expected: 1L, actual: Tick(tickValue: 1UL));
+        Assert.Equal(expected: 2L, actual: Tick(tickValue: 2UL));
+    }
+    [Fact]
     public void ABindingThroughALiveZoneFollowsTheSelectionToAnotherZone() {
         var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(
             rules: [new Rule(

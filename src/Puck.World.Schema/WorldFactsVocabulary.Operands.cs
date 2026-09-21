@@ -35,11 +35,11 @@ public static partial class WorldFactsVocabulary {
             $"{BoardCellOfPrefix}<row>:<bodyRef>",
         ];
 
-        private static WorldArgBodyOperand ArgBody(string name, string? key, in OperandSite site, WorldFactsCompileContext world) {
+        private static WorldArgBodyOperand ArgBody(string name, StateChannelRef? cell, in OperandSite site, WorldFactsCompileContext world) {
             var ruleName = site.RuleName;
 
             RuleCompiler.RefuseKeyOnReservedChannel(
-                key: key,
+                key: cell,
                 keyFieldLabel: site.KeyFieldLabel,
                 name: name,
                 ruleName: ruleName
@@ -140,11 +140,15 @@ public static partial class WorldFactsVocabulary {
             valueKind: valueKind
         );
 
-        public override bool TryCompile(string name, string? key, in OperandSite site, RuleCompileContext context, out IRuleOperand? fact) {
-            ArgumentNullException.ThrowIfNull(argument: name);
+        public override bool TryCompile(StateChannelRef reference, StateChannelRef? cell, in OperandSite site, RuleCompileContext context, out IRuleOperand? fact) {
+            ArgumentNullException.ThrowIfNull(argument: reference);
 
             var ruleName = site.RuleName;
             var world = ((WorldFactsCompileContext)context);
+            // Every branch below takes its arguments from the call; the spellings are what a refusal quotes.
+            var call = reference.Call;
+            var key = cell?.Spelling;
+            var name = reference.Spelling;
 
             fact = null;
             if (string.Equals(
@@ -153,7 +157,7 @@ public static partial class WorldFactsVocabulary {
                 comparisonType: StringComparison.Ordinal
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -165,7 +169,7 @@ public static partial class WorldFactsVocabulary {
                 comparisonType: StringComparison.Ordinal
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -175,7 +179,7 @@ public static partial class WorldFactsVocabulary {
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.InfluencePrefix
             )) {
-                var parts = name[WorldRuleFacts.InfluencePrefix.Length..].Split(separator: ':');
+                var parts = call!.Texts();
 
                 if (
                     (parts.Length != 2) ||
@@ -209,7 +213,7 @@ public static partial class WorldFactsVocabulary {
                     if (RuleCompiler.TryResolveDynamicKey(
                         cell: out var dynamicKey,
                         context: context,
-                        key: key,
+                        reference: cell,
                         keyFieldLabel: site.KeyFieldLabel,
                         ruleName: ruleName,
                         verb: site.Verb
@@ -241,7 +245,7 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.RegionPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -266,7 +270,7 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.MachinePrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -324,7 +328,7 @@ public static partial class WorldFactsVocabulary {
             )
             ) {
                 fact = ArgBody(
-                    key: key,
+                    cell: cell,
                     name: name,
                     site: in site,
                     world: world
@@ -340,7 +344,7 @@ public static partial class WorldFactsVocabulary {
             )
             ) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -350,9 +354,7 @@ public static partial class WorldFactsVocabulary {
                     comparisonType: StringComparison.Ordinal,
                     value: WorldRuleFacts.DistancePrefix
                 );
-                var tokens = name[(isDistance
-                    ? WorldRuleFacts.DistancePrefix.Length
-                    : WorldRuleFacts.LineOfSightPrefix.Length)..].Split(separator: ':');
+                var tokens = call!.Texts();
                 var widthA = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
                     tokens: tokens
@@ -409,7 +411,7 @@ public static partial class WorldFactsVocabulary {
                     fact = BodyFact(
                         bodyA: bodyA,
                         bodyB: bodyB,
-                        cost: 1L,
+                        cost: WorldRuleCapacity.SightTestWork,
                         describe: name,
                         read: facet => facet.Read(operand: operand),
                         rowOrdinal: -1,
@@ -422,13 +424,13 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.UprightPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
 
-                var tokens = name[WorldRuleFacts.UprightPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts();
 
                 if (tokens.Length != WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
@@ -464,13 +466,13 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.FactPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
 
-                var tokens = name[WorldRuleFacts.FactPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts();
                 var width = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
                     tokens: tokens
@@ -517,13 +519,13 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.IdentityPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
 
-                var tokens = name[WorldRuleFacts.IdentityPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts();
                 var width = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
                     tokens: tokens
@@ -564,13 +566,13 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.ParkedPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
 
-                var tokens = name[WorldRuleFacts.ParkedPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts();
 
                 if (tokens.Length != 2) {
                     throw new RuleException(
@@ -603,7 +605,7 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.ChannelPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -666,7 +668,7 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.LinkPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
@@ -706,13 +708,13 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.NavigationPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
 
-                var tokens = name[WorldRuleFacts.NavigationPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts();
                 var width = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
                     tokens: tokens
@@ -755,13 +757,13 @@ public static partial class WorldFactsVocabulary {
                 value: WorldRuleFacts.NearestPrefix
             )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: key,
+                    key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
 
-                var tokens = name[WorldRuleFacts.NearestPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts();
                 var width = WorldFactsCompileContext.BodyRefTokenWidth(
                     start: 0,
                     tokens: tokens
@@ -815,7 +817,7 @@ public static partial class WorldFactsVocabulary {
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.ClockPrefix
             )) {
-                var tokens = name.Split(separator: ':');
+                var tokens = call!.Tokens();
 
                 if (
                     (tokens.Length != 3) ||
@@ -858,7 +860,7 @@ public static partial class WorldFactsVocabulary {
                     );
                 }
 
-                var tokens = name[BoardCellOfPrefix.Length..].Split(separator: ':');
+                var tokens = call!.Texts(start: 1);
                 var row = world.FindRow(name: tokens[0]);
 
                 if (

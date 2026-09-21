@@ -33,11 +33,11 @@ public sealed class BrowserSlotLaneSizingTests {
 
     [Fact]
     public void ADocumentPastTheDefaultLaneWidthBootsAndItsWidthReachesTheStateHash() {
-        var wide = new BrowserSession(definition: Document(capacity: 128));
+        var wide = new BrowserSession(definition: Document(capacity: (ArenaCapacity.DefaultParticipants * 2)));
 
         // Booting at all is the first half: a document authoring more bodies than the library's default lane width
         // must lay out, not refuse.
-        Assert.True(condition: (Document(capacity: 128).Population.Capacity > ArenaCapacity.DefaultParticipants));
+        Assert.True(condition: (Document(capacity: (ArenaCapacity.DefaultParticipants * 2)).Population.Capacity > ArenaCapacity.DefaultParticipants));
         Assert.Equal(
             expected: "1",
             actual: wide.ReadRow(

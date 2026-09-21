@@ -37,11 +37,8 @@
         "title": "ActionTriggerMode"
       },
       "forEach": {
+        "$ref": "./common.schema.json#/$defs/StateChannelRefNonNullable",
         "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
-        "type": [
-          "string",
-          "null"
-        ],
         "default": null
       },
       "decision": {
@@ -67,7 +64,7 @@
                   "type": "string"
                 },
                 "score": {
-                  "$ref": "./common.schema.json#/$defs/ExpressionProgram",
+                  "$ref": "./common.schema.json#/$defs/ExpressionProgramNonNullable2",
                   "description": "A numeric expression in the decision\u0027s score kind. Arithmetic failure makes this option ineligible for that reconsideration."
                 },
                 "effects": {
@@ -212,18 +209,26 @@
               "title": "CellName",
               "type": "string"
             },
-            "kind": {
-              "$ref": "./common.schema.json#/$defs/CellKind",
-              "description": "The value\u0027s cell kind, Int or Fixed."
-            },
             "expression": {
-              "$ref": "./common.schema.json#/$defs/ExpressionProgram",
-              "description": "The postfix expression, evaluated in that kind."
+              "$ref": "./common.schema.json#/$defs/ExpressionProgramNonNullable2",
+              "description": "The postfix expression whose evaluated result the local holds."
+            },
+            "kind": {
+              "description": "The value\u0027s cell kind, Int or Fixed, or null for the kind the rule compiler infers: Int when the expression compiles as one, otherwise Fixed. A comparison or sign may consume Fixed operands yet leave an Int result, which is the inferred binding kind.",
+              "enum": [
+                "Int",
+                "Fixed",
+                "Bool",
+                "Text",
+                "Vector",
+                null
+              ],
+              "default": null,
+              "title": "CellKind"
             }
           },
           "required": [
             "name",
-            "kind",
             "expression"
           ],
           "additionalProperties": false,
@@ -244,6 +249,31 @@
           ]
         },
         "default": null
+      },
+      "poolForEach": {
+        "description": "The declared pool and typed lexical binding to snapshot and visit once per live instance, or null for ordinary row/no iteration. It cannot appear beside ForEach.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "pool": {
+            "$ref": "./common.schema.json#/$defs/StateChannelRefNonNullable",
+            "description": "The declared pool to visit."
+          },
+          "binding": {
+            "description": "The instance name available to the rule\u0027s locals, gate, and effects.",
+            "title": "CellName",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pool",
+          "binding"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "RulePoolIteration"
       }
     },
     "required": [

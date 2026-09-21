@@ -20,6 +20,9 @@ namespace Puck.World;
 /// <param name="Spaces">The declared vector embedding spaces, or <see langword="null"/> for none.</param>
 /// <param name="Enums">The declared symbolic value domains a row may name, or <see langword="null"/> for none.</param>
 /// <param name="Families">The declared row families, or <see langword="null"/> for none.</param>
+/// <param name="Records">The immutable record shapes used by pools.</param>
+/// <param name="Pools">The bounded instance pools and their initial or captured state.</param>
+/// <param name="PairPools">The bounded pools of endpoint pairs and their complete continuation.</param>
 public sealed record WorldStateSection(
     IReadOnlyList<WorldStateRow>? World = null,
     IReadOnlyList<ActionStateSlot>? Body = null,
@@ -27,7 +30,10 @@ public sealed record WorldStateSection(
     IReadOnlyList<LatticeTopology>? Lattices = null,
     IReadOnlyList<StateSpace>? Spaces = null,
     IReadOnlyList<StateEnum>? Enums = null,
-    IReadOnlyList<StateFamily>? Families = null
+    IReadOnlyList<StateFamily>? Families = null,
+    IReadOnlyList<StateRecord>? Records = null,
+    IReadOnlyList<StatePool>? Pools = null,
+    IReadOnlyList<StatePairPool>? PairPools = null
 ) : IStateSection {
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -50,6 +56,15 @@ public sealed record WorldStateSection(
     /// <inheritdoc cref="Families"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<StateFamily>? Families { get => field; init => field = Freeze(items: value); } = Freeze(items: Families);
+    /// <inheritdoc cref="Records"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateRecord>? Records { get => field; init => field = Freeze(items: value); } = Freeze(items: Records);
+    /// <inheritdoc cref="Pools"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StatePool>? Pools { get => field; init => field = Freeze(items: value); } = Freeze(items: Pools);
+    /// <summary>Gets the bounded pools of endpoint pairs.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = Freeze(items: value); } = Freeze(items: PairPools);
 
     IReadOnlyList<StateEnum>? IStateSection.Enums => Enums;
     IReadOnlyList<StateFamily>? IStateSection.Families => Families;
@@ -151,6 +166,8 @@ public sealed record WorldStateSection(
 /// <param name="HostOwned">See <see cref="StateRow.HostOwned"/>.</param>
 /// <param name="Verdict">The test-verdict trait (see <see cref="WorldVerdictTrait"/>) — this row is a test
 /// expectation's answer; <see langword="null"/> for every other row.</param>
+/// <param name="Witness">The verdict row whose gate this row records (see <see cref="WorldVerdict"/>): the row holds
+/// the values that gate saw of rows of this row's own kind; <see langword="null"/> for every other row.</param>
 [method: JsonConstructor]
 public sealed record WorldStateRow(
     CellName Name,
@@ -177,7 +194,8 @@ public sealed record WorldStateRow(
     string? Space = null,
     CellName? Enum = null,
     bool HostOwned = false,
-    WorldVerdictTrait? Verdict = null
+    WorldVerdictTrait? Verdict = null,
+    CellName? Witness = null
 ) : StateRow(
     Name,
     Kind,
@@ -210,7 +228,8 @@ public sealed record WorldStateRow(
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>
     /// <param name="field">The physical-field trait, or <see langword="null"/>.</param>
     /// <param name="verdict">The test-verdict trait, or <see langword="null"/>.</param>
-    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null) : this(
+    /// <param name="witness">The verdict row this row is a witness of, or <see langword="null"/>.</param>
+    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null, CellName? witness = null) : this(
         Name: row.Name,
         Kind: row.Kind,
         Min: row.Min,
@@ -238,10 +257,16 @@ public sealed record WorldStateRow(
         Space: row.Space,
         Enum: row.Enum,
         HostOwned: row.HostOwned,
-        Verdict: verdict
+        Verdict: verdict,
+        Witness: witness
     ) {
         this.Generated = row.Generated;
     }
+
+    /// <summary>Gets a value indicating whether only a rule's own effect may write this row: it is a verdict, or a
+    /// witness of one.</summary>
+    [JsonIgnore]
+    public bool IsRuleWritten => ((Verdict is not null) || (Witness is not null));
 
     /// <inheritdoc/>
     /// <remarks>A verdict row mints <see cref="WorldVerdict.FiredTickKey"/> beside the slot key: the effect door

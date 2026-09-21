@@ -17,6 +17,9 @@ namespace Puck.World;
 /// <param name="Definition">The boot world definition (read once, at composition).</param>
 /// <param name="SourcePath">The file the current document origin resolves to.</param>
 public sealed record WorldDefinitionSource(WorldDefinition Definition, string SourcePath) {
+    /// <summary>Gets the boot operation's validation result. A changed definition must clear or replace it;
+    /// post-build composition must complete its environment checks before the host starts.</summary>
+    public WorldDefinitionAdmission? Admission { get; init; }
     /// <summary>The file the current document origin resolves to; see the class remarks for why this is settable and
     /// who the one writer is.</summary>
     public string SourcePath { get; set; } = SourcePath;
@@ -30,7 +33,7 @@ public sealed record WorldDefinitionSource(WorldDefinition Definition, string So
 /// <remarks>Every resolved path is an assertion: absent, unreadable, or invalid, it fails the boot with a named reason
 /// and a non-zero exit. A typo or missing shipped asset must never quietly run some other world. Boot prints exactly
 /// one <c>[world] definition:</c> line naming the successfully loaded file.</remarks>
-public static class WorldDefinitionLoader {
+public static partial class WorldDefinitionLoader {
     /// <summary>The reserved name of the world the composition root's instance host boots with — the canonical
     /// spelling <c>Puck.World</c>'s <c>WorldInstanceHost.BootInstanceName</c> derives from, since this project
     /// cannot see that composition-root type.</summary>
@@ -73,13 +76,26 @@ public static class WorldDefinitionLoader {
         reason = string.Empty;
         return true;
     }
-    // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
-    // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
-    // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
-    // SAME resolver (or null) the caller supplied proves a boot document's own adjacencies here too; a second pass in
-    // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
-    // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
-    private static bool TryResolveDrawsAndRevalidate(WorldDefinition definition, string sourceName, string instanceIdentity, IWorldNeighbourResolver? neighbours, out WorldDefinition? resolved, out string reason, IMachineValidationCatalog? catalog = null) {
+    // Boot values settle before full admission. The preflight reuses the validators for inputs a draw can
+    // consume or replace; only the final document earns a receipt and compiles its rules.
+    private static bool TryPrepareAndAdmit(WorldDefinition definition, string sourceName, string instanceIdentity,
+        IWorldNeighbourResolver? neighbours, out WorldDefinitionAdmission? resolved, out string reason, IMachineValidationCatalog? catalog = null) {
+        resolved = null;
+        if (!TryPrepareBootValues(definition: definition, instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return false; }
+        if (!WorldDefinitionValidator.TryAdmit(admission: out resolved, definition: prepared!, machines: catalog, neighbours: neighbours, reason: out var refusal)) {
+            reason = $"{sourceName} document validation refused: {refusal}";
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TryPrepareBootValues(WorldDefinition definition, string sourceName, string instanceIdentity,
+        out WorldDefinition? resolved, out string reason) {
+        resolved = null;
+        if (!WorldDefinitionValidator.TryValidateBootInputs(definition: definition, reason: out var inputReason)) {
+            reason = $"{sourceName} document validation refused: {inputReason}";
+            return false;
+        }
         if (!WorldDrawBootResolver.TryResolve(
             definition: definition,
             instanceIdentity: instanceIdentity,
@@ -100,18 +116,6 @@ public static class WorldDefinitionLoader {
         )) {
             resolved = null;
             reason = $"{sourceName} could not resolve a state reference after its draws resolved: {referenceReason}";
-
-            return false;
-        }
-
-        if (!WorldDefinitionValidator.TryValidate(
-            definition: drawn,
-            machines: catalog,
-            neighbours: neighbours,
-            reason: out var resolvedReason
-        )) {
-            resolved = null;
-            reason = $"{sourceName} produced an invalid document after its draws resolved: {resolvedReason}";
 
             return false;
         }
@@ -151,9 +155,10 @@ public static class WorldDefinitionLoader {
             sourceName: sourceName
         )
         ) { return (null, reason); }
+        if (!TryPrepareBootValues(definition: parsed!, instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return (null, reason); }
         var neighbours = new ResolvedNeighbours();
 
-        foreach (var reference in (parsed!.References ?? [])) {
+        foreach (var reference in (prepared!.References ?? [])) {
             cancellationToken.ThrowIfCancellationRequested();
             if (reference is null) { continue; } // Full validation below names malformed reference rows.
             var key = reference.NeighbourKey;
@@ -172,24 +177,14 @@ public static class WorldDefinitionLoader {
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        if (!WorldDefinitionValidator.TryValidate(
-            definition: parsed,
+        if (!WorldDefinitionValidator.TryAdmit(
+            admission: out var admission,
+            definition: prepared,
             machines: catalog,
             neighbours: neighbours,
             reason: out reason
         )) { return (null, $"{sourceName} document validation refused: {reason}"); }
-        return (TryResolveDrawsAndRevalidate(
-            catalog: catalog,
-            definition: parsed,
-            instanceIdentity: instanceIdentity,
-            neighbours: neighbours,
-            reason: out reason,
-            resolved: out var definition,
-            sourceName: sourceName
-        )
-            ? (definition, string.Empty)
-            : (null, reason)
-        );
+        return (admission.Definition, string.Empty);
     }
     /// <summary>Loads and validates a world document from already-read, already-composed UTF-8 JSON bytes — the
     /// bytes-level twin of <see cref="TryLoadFile"/>, for a document that arrived from somewhere other than a local
@@ -206,36 +201,10 @@ public static class WorldDefinitionLoader {
     /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
     /// <returns><see langword="true"/> when the bytes loaded and validated.</returns>
     public static bool TryLoad(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
-        definition = null;
-
-        if (!TryDecode(
-            json: out var json,
-            reason: out reason,
-            sourceName: sourceName,
-            utf8: utf8
-        )) { return false; }
-
-        if (!WorldDefinitionFileSource.TryParseComposed(
-            catalog: catalog,
-            definition: out var parsed,
-            json: json,
-            neighbours: neighbours,
-            reason: out reason,
-            sourceName: sourceName,
-            validateAdjacencyClaims: true
-        )) {
-            return false;
-        }
-
-        return TryResolveDrawsAndRevalidate(
-            catalog: catalog,
-            definition: parsed!,
-            instanceIdentity: instanceIdentity,
-            neighbours: neighbours,
-            reason: out reason,
-            resolved: out definition,
-            sourceName: sourceName
-        );
+        var accepted = TryLoadForAdmission(admission: out var admission, catalog: catalog, catalogFingerprint: catalogFingerprint, instanceIdentity: instanceIdentity,
+            neighbours: neighbours, reason: out reason, sourceName: sourceName, utf8: utf8);
+        definition = admission?.Definition;
+        return accepted;
     }
     /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
     /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
@@ -263,29 +232,10 @@ public static class WorldDefinitionLoader {
     /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
     public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
-        if (!WorldDefinitionFileSource.TryLoad(
-            contentHash: out _,
-            definition: out var loaded,
-            neighbours: neighbours,
-            path: path,
-            reason: out reason,
-            catalogFingerprint: catalogFingerprint,
-            catalog: catalog
-        )) {
-            definition = null;
-
-            return false;
-        }
-
-        return TryResolveDrawsAndRevalidate(
-            catalog: catalog,
-            definition: loaded!,
-            instanceIdentity: instanceIdentity,
-            neighbours: neighbours,
-            reason: out reason,
-            resolved: out definition,
-            sourceName: path
-        );
+        var accepted = TryLoadFileForAdmission(admission: out var admission, catalog: catalog, catalogFingerprint: catalogFingerprint,
+            instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reason: out reason);
+        definition = admission?.Definition;
+        return accepted;
     }
     /// <summary>Resolves the active world definition from an explicit file or the shipped default file. Failure to
     /// load either file refuses the boot.</summary>
@@ -331,9 +281,9 @@ public static class WorldDefinitionLoader {
             catalogFingerprint: catalogFingerprint
         );
 
-        if (TryLoadFile(
+        if (TryLoadFileForAdmission(
             path: path,
-            definition: out var loaded,
+            admission: out var loaded,
             reason: out var reason,
             neighbours: neighbours,
             catalogFingerprint: catalogFingerprint,
@@ -344,9 +294,9 @@ public static class WorldDefinitionLoader {
                 : "shipped default")})");
 
             source = new WorldDefinitionSource(
-                Definition: loaded!,
+                Definition: loaded!.Definition,
                 SourcePath: path
-            );
+            ) { Admission = loaded };
             failure = string.Empty;
 
             return true;

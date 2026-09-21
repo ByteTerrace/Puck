@@ -95,6 +95,27 @@ public sealed class ValidateComposedWorldTests : IDisposable {
         Assert.False(condition: diagnostics.HasErrors);
     }
     [Fact]
+    public void MultiWorldDiagnosticsComposeEachBasisBeforeValidation() {
+        File.WriteAllText(Path.Combine(path1: m_directory, path2: "basis.json"), BasisJson);
+        const string Source = """
+                module room() {
+                    basis: "basis.json"
+                    placements { rows [ { id: "rock" position [0, 0, 0] yawDegrees: 0 } ] }
+                }
+                world first = room()
+                world second = room()
+                """;
+        var sourcePath = Path.Combine(path1: m_directory, path2: "composition.puck");
+        var compiled = WorldCompiler.Compile(Source, sourcePath: sourcePath, allowMultiple: true, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(condition: compiled.Success, userMessage: string.Join(separator: "\n", values: compiled.Diagnostics));
+        var diagnostics = WorldSourceDiagnostics.Diagnose(source: Source, sourcePath: sourcePath, cancellationToken: TestContext.Current.CancellationToken);
+
+        // As for an ordinary root, basis rows supply required placement fields before deserialization.
+        Assert.DoesNotContain(collection: diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.SchemaRejected));
+        Assert.DoesNotContain(collection: diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.CompositionRefused));
+    }
+    [Fact]
     public void ValidateWorld_OnUncomposedRootWithBasis_FailsWithMissingRequiredProperties() {
         var root = JsonNode.Parse(RootJson)!.AsObject();
         var diagnostics = new DiagnosticBag();

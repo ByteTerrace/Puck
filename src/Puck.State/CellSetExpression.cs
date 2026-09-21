@@ -4,7 +4,7 @@ namespace Puck.State;
 
 /// <summary>The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over
 /// the positions of a family, a board, or a zone. Every expression lowers to one
-/// <see cref="ClosedBitset256"/>.</summary>
+/// <see cref="CellSet"/> whose width is the carrier's own.</summary>
 /// <remarks>A source names a carrier and an inclusive value range, and its set holds every position of that carrier
 /// whose value falls in the range. The three sources address different things — a family addresses its member rows,
 /// a board its topology cells, a zone its pile positions — but all three answer with a set over
@@ -54,20 +54,51 @@ public abstract record CellSetExpression {
     public sealed record Complement(CellSetExpression Item) : CellSetExpression;
 }
 /// <summary>Lowers a <see cref="CellSetExpression"/> against a <see cref="StateArena"/> to one
-/// <see cref="ClosedBitset256"/>.</summary>
+/// <see cref="CellSet"/>.</summary>
 public static class CellSetLowering {
-    /// <summary>The widest carrier a cell set addresses — one bit per position of a
-    /// <see cref="ClosedBitset256"/>.</summary>
-    public const int MaxElements = 256;
+    /// <summary>The widest admitted carrier, matching the state row and topology cell ceiling.</summary>
+    public const int MaxElements = TopologyCompilation.MaxCells;
 
-    private static ClosedBitset256 Complement(ClosedBitset256 set, int elements) {
-        var full = Full(elements: elements);
+    private static CellSet Combine(CellSet left, CellSet right, bool union) {
+        var length = left.Length;
+        var wordCount = CellSet.WordCount(length: length);
+        ulong[]? tail = null;
 
-        return new ClosedBitset256(
-            Word0: full.Word0 & ~set.Word0,
-            Word1: full.Word1 & ~set.Word1,
-            Word2: full.Word2 & ~set.Word2,
-            Word3: full.Word3 & ~set.Word3
+        if (wordCount > 4) {
+            tail = new ulong[(wordCount - 4)];
+            for (var word = 4; (word < wordCount); word++) {
+                tail[(word - 4)] = (union
+                    ? left.Word(index: word) | right.Word(index: word)
+                    : left.Word(index: word) & right.Word(index: word)
+                );
+            }
+        }
+        return new(
+            length,
+            (union ? left.Word(index: 0) | right.Word(index: 0) : left.Word(index: 0) & right.Word(index: 0)),
+            (union ? left.Word(index: 1) | right.Word(index: 1) : left.Word(index: 1) & right.Word(index: 1)),
+            (union ? left.Word(index: 2) | right.Word(index: 2) : left.Word(index: 2) & right.Word(index: 2)),
+            (union ? left.Word(index: 3) | right.Word(index: 3) : left.Word(index: 3) & right.Word(index: 3)),
+            tail
+        );
+    }
+    private static CellSet Complement(CellSet set, int elements) {
+        var wordCount = CellSet.WordCount(length: elements);
+        ulong[]? tail = null;
+
+        if (wordCount > 4) {
+            tail = new ulong[(wordCount - 4)];
+            for (var word = 4; (word < wordCount); word++) {
+                tail[(word - 4)] = FullWord(elements: elements, word: word) & ~set.Word(index: word);
+            }
+        }
+        return new(
+            elements,
+            FullWord(elements: elements, word: 0) & ~set.Word(index: 0),
+            FullWord(elements: elements, word: 1) & ~set.Word(index: 1),
+            FullWord(elements: elements, word: 2) & ~set.Word(index: 2),
+            FullWord(elements: elements, word: 3) & ~set.Word(index: 3),
+            tail
         );
     }
     private static ulong FullWord(int elements, int word) {
@@ -82,24 +113,37 @@ public static class CellSetLowering {
             : ((1UL << admitted) - 1UL)
         );
     }
-    private static ClosedBitset256 Full(int elements) => new(
-        Word0: FullWord(
-            elements: elements,
-            word: 0
-        ),
-        Word1: FullWord(
-            elements: elements,
-            word: 1
-        ),
-        Word2: FullWord(
-            elements: elements,
-            word: 2
-        ),
-        Word3: FullWord(
-            elements: elements,
-            word: 3
-        )
-    );
+    private static CellSet Full(int elements) {
+        var wordCount = CellSet.WordCount(length: elements);
+        ulong[]? tail = null;
+
+        if (wordCount > 4) {
+            tail = new ulong[(wordCount - 4)];
+            for (var word = 4; (word < wordCount); word++) {
+                tail[(word - 4)] = FullWord(elements: elements, word: word);
+            }
+        }
+        return new(
+            elements,
+            FullWord(elements: elements, word: 0),
+            FullWord(elements: elements, word: 1),
+            FullWord(elements: elements, word: 2),
+            FullWord(elements: elements, word: 3),
+            tail
+        );
+    }
+    private static void SetBit(int position, ref ulong word0, ref ulong word1, ref ulong word2, ref ulong word3, ulong[]? tail) {
+        var word = (position / 64);
+        var bit = (1UL << (position % 64));
+
+        switch (word) {
+            case 0: word0 |= bit; break;
+            case 1: word1 |= bit; break;
+            case 2: word2 |= bit; break;
+            case 3: word3 |= bit; break;
+            default: tail![(word - 4)] |= bit; break;
+        }
+    }
     private static bool TryResolveRow(StateArena arena, CellName name, out int rowOrdinal, out string reason) {
         if (!arena.Catalog.TryResolve(
             handle: out var handle,
@@ -129,7 +173,7 @@ public static class CellSetLowering {
         reason = string.Empty;
 
         foreach (var rowOrdinal in family.Ordinals()) {
-            var layout = arena.Layout[rowOrdinal];
+            ref readonly var layout = ref arena.Layout[rowOrdinal];
 
             if (layout.Shape == RowShape.Slot) {
                 slots++;
@@ -183,7 +227,7 @@ public static class CellSetLowering {
                         return false;
                     }
 
-                    var layout = arena.Layout[rowOrdinal];
+                    ref readonly var layout = ref arena.Layout[rowOrdinal];
 
                     if (layout.Shape != RowShape.Lattice) {
                         reason = $"cell set reads board '{board.Row.Value}', which is not a lattice row";
@@ -240,7 +284,7 @@ public static class CellSetLowering {
                         return false;
                     }
 
-                    var layout = arena.Layout[rowOrdinal];
+                    ref readonly var layout = ref arena.Layout[rowOrdinal];
 
                     if (layout.Shape is not (RowShape.Ordered or RowShape.Keyed)) {
                         reason = $"cell set reads zone '{zone.Row.Value}', which is neither an ordered nor a keyed row";
@@ -261,19 +305,22 @@ public static class CellSetLowering {
                 }
         }
 
-        if (((uint)elements) > MaxElements) {
-            reason = $"cell set addresses {elements} positions, past the {MaxElements} a cell set holds";
-            elements = -1;
-
-            return false;
-        }
-
         reason = string.Empty;
 
         return true;
     }
-    private static bool TryLowerSource(StateArena arena, CellSetExpression expression, int elements, out ClosedBitset256 set, out string reason) {
+    private static bool TryLowerSource(StateArena arena, CellSetExpression expression, int elements, out CellSet set, out string reason) {
         set = default;
+        var wordCount = CellSet.WordCount(length: elements);
+        var word0 = 0UL;
+        var word1 = 0UL;
+        var word2 = 0UL;
+        var word3 = 0UL;
+        var tail = ((wordCount > 4)
+            ? new ulong[(wordCount - 4)]
+            : null
+        );
+
         switch (expression) {
             case CellSetExpression.Board board: {
                     _ = TryResolveRow(
@@ -293,7 +340,7 @@ public static class CellSetLowering {
                             (value >= board.Low) &&
                             (value <= board.High)
                         ) {
-                            set = set.Add(index: cell);
+                            SetBit(position: cell, tail: tail, word0: ref word0, word1: ref word1, word2: ref word2, word3: ref word3);
                         }
                     }
 
@@ -312,14 +359,12 @@ public static class CellSetLowering {
                         reason: out reason
                     ) is not null) {
                         // A token stands in the set when SOME member row holds it with a value inside the band.
-                        for (var position = 0; (position < elements); position++) {
-                            if (!arena.TryKeyAt(
-                                key: out var token,
-                                position: position,
-                                rowOrdinal: domainOrdinal
-                            )) {
-                                continue;
-                            }
+                        var cursor = 0;
+
+                        while (arena.TryNextCell(cursor: ref cursor, key: out var token, rowOrdinal: domainOrdinal)) {
+                            var position = (cursor - 1);
+
+                            if (position >= elements) { break; }
 
                             foreach (var rowOrdinal in range.Ordinals()) {
                                 if (
@@ -331,7 +376,7 @@ public static class CellSetLowering {
                                     (held >= family.Low) &&
                                     (held <= family.High)
                                 ) {
-                                    set = set.Add(index: position);
+                                    SetBit(position: position, tail: tail, word0: ref word0, word1: ref word1, word2: ref word2, word3: ref word3);
 
                                     break;
                                 }
@@ -356,7 +401,7 @@ public static class CellSetLowering {
                             (raw >= family.Low) &&
                             (raw <= family.High)
                         ) {
-                            set = set.Add(index: member);
+                            SetBit(position: member, tail: tail, word0: ref word0, word1: ref word1, word2: ref word2, word3: ref word3);
                         }
 
                         member++;
@@ -372,22 +417,18 @@ public static class CellSetLowering {
                         arena: arena
                     );
 
-                    var count = Math.Min(
-                        val1: arena.CellCount(rowOrdinal: rowOrdinal),
-                        val2: elements
-                    );
+                    var cursor = 0;
 
-                    for (var position = 0; (position < count); position++) {
+                    while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+                        var position = (cursor - 1);
+
+                        if (position >= elements) { break; }
                         if (
-                            arena.TryReadRawAt(
-                            position: position,
-                            raw: out var raw,
-                            rowOrdinal: rowOrdinal
-                        ) &&
+                            arena.TryReadRaw(key: key, raw: out var raw, rowOrdinal: rowOrdinal) &&
                             (raw >= zone.Low) &&
                             (raw <= zone.High)
                         ) {
-                            set = set.Add(index: position);
+                            SetBit(position: position, tail: tail, word0: ref word0, word1: ref word1, word2: ref word2, word3: ref word3);
                         }
                     }
 
@@ -395,14 +436,22 @@ public static class CellSetLowering {
                 }
             case CellSetExpression.Everything: {
                     set = Full(elements: elements);
-
-                    break;
+                    reason = string.Empty;
+                    return true;
                 }
             default: {
                     break;
                 }
         }
 
+        set = new(
+            length: elements,
+            tail: tail,
+            word0: word0,
+            word1: word1,
+            word2: word2,
+            word3: word3
+        );
         reason = string.Empty;
 
         return true;
@@ -446,7 +495,7 @@ public static class CellSetLowering {
     /// <returns><see langword="true"/> when the expression lowered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> or <paramref name="expression"/> is
     /// <see langword="null"/>.</exception>
-    public static bool TryLower(StateArena arena, CellSetExpression expression, out ClosedBitset256 set, out string reason) {
+    public static bool TryLower(StateArena arena, CellSetExpression expression, out CellSet set, out string reason) {
         set = default;
 
         return (TryElementCount(
@@ -465,7 +514,7 @@ public static class CellSetLowering {
     /// <summary>Lowers an expression to the set of positions it holds, over a declared width.</summary>
     /// <param name="arena">The arena the sources read.</param>
     /// <param name="expression">The expression.</param>
-    /// <param name="elements">The carrier's element count, 0 through <see cref="MaxElements"/>.</param>
+    /// <param name="elements">The carrier's element count.</param>
     /// <param name="set">The lowered set, on success.</param>
     /// <param name="reason">Why the expression was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the expression lowered.</returns>
@@ -473,7 +522,7 @@ public static class CellSetLowering {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="elements"/> is outside the carrier's
     /// bounds.</exception>
-    public static bool TryLower(StateArena arena, CellSetExpression expression, int elements, out ClosedBitset256 set, out string reason) {
+    public static bool TryLower(StateArena arena, CellSetExpression expression, int elements, out CellSet set, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: expression);
         ArgumentOutOfRangeException.ThrowIfNegative(value: elements);
@@ -481,11 +530,12 @@ public static class CellSetLowering {
             other: MaxElements,
             value: elements
         );
-
-        set = default;
+        set = CellSet.Empty(length: elements);
 
         switch (expression) {
             case CellSetExpression.Any any: {
+                    var first = true;
+
                     foreach (var item in any.Items) {
                         if (!TryLower(
                             arena: arena,
@@ -497,12 +547,16 @@ public static class CellSetLowering {
                             return false;
                         }
 
-                        set = new ClosedBitset256(
-                            Word0: set.Word0 | member.Word0,
-                            Word1: set.Word1 | member.Word1,
-                            Word2: set.Word2 | member.Word2,
-                            Word3: set.Word3 | member.Word3
-                        );
+                        if (first) {
+                            set = member;
+                            first = false;
+                        } else {
+                            set = Combine(
+                                left: set,
+                                right: member,
+                                union: true
+                            );
+                        }
                     }
 
                     reason = string.Empty;
@@ -510,7 +564,8 @@ public static class CellSetLowering {
                     return true;
                 }
             case CellSetExpression.Both both: {
-                    set = Full(elements: elements);
+                    var first = true;
+
                     foreach (var item in both.Items) {
                         if (!TryLower(
                             arena: arena,
@@ -519,18 +574,23 @@ public static class CellSetLowering {
                             reason: out reason,
                             set: out var member
                         )) {
-                            set = default;
+                            set = CellSet.Empty(length: elements);
 
                             return false;
                         }
 
-                        set = new ClosedBitset256(
-                            Word0: set.Word0 & member.Word0,
-                            Word1: set.Word1 & member.Word1,
-                            Word2: set.Word2 & member.Word2,
-                            Word3: set.Word3 & member.Word3
-                        );
+                        if (first) {
+                            set = member;
+                            first = false;
+                        } else {
+                            set = Combine(
+                                left: set,
+                                right: member,
+                                union: false
+                            );
+                        }
                     }
+                    if (first) { set = Full(elements: elements); }
 
                     reason = string.Empty;
 

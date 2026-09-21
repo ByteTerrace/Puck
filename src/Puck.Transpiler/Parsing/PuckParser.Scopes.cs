@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 
@@ -27,6 +28,10 @@ public static partial class PuckParser {
         return false;
     }
     private static RuleScopeNode ParseRuleScopeBlock(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        using var locals = ExpressionSpelling.WithLocals(locals: DeclaredLocals(
+            buffer: context.Scanner.Buffer,
+            offset: context.Scanner.Cursor.Offset
+        ));
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);

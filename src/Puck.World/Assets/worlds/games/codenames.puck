@@ -101,10 +101,10 @@ sql {
 // Codenames number says, and it is public while the shortlist itself is not.
 rule "codenames-number-red" {
   when codenamesTable[numberPending] == 1 and codenamesTurn == 1
-  local n: Int = $reduce:count:codenamesHint:where:codenamesRedLive
-  mode: "Level"
-  codenamesClueNumber = $local:n
-  codenamesTable[guessesLeft] = $local:n + 1
+  local n = count(codenamesHint, where: codenamesRedLive)
+  mode: Level
+  codenamesClueNumber = n
+  codenamesTable[guessesLeft] = n + 1
   codenamesTable[clueNo] += 1
   codenamesStage = 2
   codenamesTable[numberPending] = 0
@@ -112,10 +112,10 @@ rule "codenames-number-red" {
 
 rule "codenames-number-blue" {
   when codenamesTable[numberPending] == 1 and codenamesTurn == 2
-  local n: Int = $reduce:count:codenamesHint:where:codenamesBlueLive
-  mode: "Level"
-  codenamesClueNumber = $local:n
-  codenamesTable[guessesLeft] = $local:n + 1
+  local n = count(codenamesHint, where: codenamesBlueLive)
+  mode: Level
+  codenamesClueNumber = n
+  codenamesTable[guessesLeft] = n + 1
   codenamesTable[clueNo] += 1
   codenamesStage = 2
   codenamesTable[numberPending] = 0
@@ -128,10 +128,10 @@ rule "codenames-number-blue" {
 // clue this game already carries.
 rule "codenames-pick" {
   when codenamesTable[pickPending] == 1
-  mode: "Level"
-  transform nearest(from: codenamesLexiconVectors, query: "codenamesClue", into: codenamesClueWord, k: 1)
-  transform nearest(from: codenamesWordVectors, query: "codenamesClue", into: codenamesHint, k: 3, where: codenamesBoardLive)
-  transform remember(into: codenamesClueLog, key: "$cell:codenamesTable:clueNo", from: "codenamesClue", unlessWithin: 0.9)
+  mode: Level
+  transform nearest(from: codenamesLexiconVectors, query: codenamesClue, into: codenamesClueWord, k: 1)
+  transform nearest(from: codenamesWordVectors, query: codenamesClue, into: codenamesHint, k: 3, where: codenamesBoardLive)
+  transform remember(into: codenamesClueLog, key: codenamesTable[clueNo], from: codenamesClue, unlessWithin: 0.9)
   codenamesTable[pickPending] = 0
   codenamesTable[numberPending] = 1
 }
@@ -142,14 +142,14 @@ rule "codenames-pick" {
 // is for.
 rule "codenames-mix" {
   when codenamesTable[mixPending] == 1
-  mode: "Level"
-  transform mix(into: "codenamesClue", terms: [
+  mode: Level
+  transform mix(into: codenamesClue, terms: [
     {
-      from: "codenamesAim[own]"
+      from: codenamesAim[own]
       weight: 3
     }
     {
-      from: "codenamesAim[avoid]"
+      from: codenamesAim[avoid]
       weight: -1
     }
   ]
@@ -160,18 +160,18 @@ rule "codenames-mix" {
 
 rule "codenames-aim-red" {
   when codenamesTable[aimPending] == 1 and codenamesTurn == 1
-  mode: "Level"
-  transform mean(from: codenamesWordVectors, into: "codenamesAim[own]", where: codenamesRedLive)
-  transform mean(from: codenamesWordVectors, into: "codenamesAim[avoid]", where: codenamesRedAvoid)
+  mode: Level
+  transform mean(from: codenamesWordVectors, into: codenamesAim[own], where: codenamesRedLive)
+  transform mean(from: codenamesWordVectors, into: codenamesAim[avoid], where: codenamesRedAvoid)
   codenamesTable[aimPending] = 0
   codenamesTable[mixPending] = 1
 }
 
 rule "codenames-aim-blue" {
   when codenamesTable[aimPending] == 1 and codenamesTurn == 2
-  mode: "Level"
-  transform mean(from: codenamesWordVectors, into: "codenamesAim[own]", where: codenamesBlueLive)
-  transform mean(from: codenamesWordVectors, into: "codenamesAim[avoid]", where: codenamesBlueAvoid)
+  mode: Level
+  transform mean(from: codenamesWordVectors, into: codenamesAim[own], where: codenamesBlueLive)
+  transform mean(from: codenamesWordVectors, into: codenamesAim[avoid], where: codenamesBlueAvoid)
   codenamesTable[aimPending] = 0
   codenamesTable[mixPending] = 1
 }
@@ -182,8 +182,8 @@ rule "codenames-aim-blue" {
 // source, so each branch of the classification writes literals.
 rule "codenames-live-refresh" {
   when codenamesTable[livePending] == 1
-  mode: "Level"
-  forEach: "codenamesKey"
+  mode: Level
+  forEach: codenamesKey
   if codenamesBoardLive[$each] == 1 and codenamesKey[$each] == 1 {
     codenamesRedLive[$each] = 1
     codenamesBlueLive[$each] = 0
@@ -211,7 +211,7 @@ rule "codenames-live-refresh" {
 // refresh itself runs after every reveal.
 rule "codenames-live-done" {
   when codenamesTable[livePending] == 1
-  mode: "Level"
+  mode: Level
   codenamesTable[livePending] = 0
   codenamesTable[aimPending] = codenamesStage == 1 ? 1 : 0
 }
@@ -221,17 +221,17 @@ rule "codenames-live-done" {
 // assassin hands the game to the other team, and a team out of agents wins.
 rule "codenames-settle" {
   when codenamesTable[settlePending] == 1
-  local agent: Int = codenamesTable[revealAgent]
-  local mine: Int = $local:agent == codenamesTurn ? 1 : 0
-  local winner: Int = $local:agent == 4 ? (codenamesTurn == 1 ? 2 : 1) : (codenamesRedLeft == 0 ? 1 : (codenamesBlueLeft == 0 ? 2 : 0))
-  local more: Int = ($local:mine == 1) & (codenamesTable[guessesLeft] > 0)
-  mode: "Level"
+  local agent = codenamesTable[revealAgent]
+  local mine = agent == codenamesTurn ? 1 : 0
+  local winner = agent == 4 ? (codenamesTurn == 1 ? 2 : 1) : (codenamesRedLeft == 0 ? 1 : (codenamesBlueLeft == 0 ? 2 : 0))
+  local more = (mine == 1) & (codenamesTable[guessesLeft] > 0)
+  mode: Level
   transaction {
-    codenamesWinner = $local:winner
-    codenamesStage = $local:winner != 0 ? 3 : ($local:more == 1 ? 2 : 1)
-    codenamesTurn = ($local:winner == 0) & ($local:more == 0) ? (codenamesTurn == 1 ? 2 : 1) : codenamesTurn
-    codenamesTable[guessesLeft] = $local:more == 1 ? codenamesTable[guessesLeft] : 0
-    codenamesTable[livePending] = $local:winner == 0 ? 1 : 0
+    codenamesWinner = winner
+    codenamesStage = winner != 0 ? 3 : (more == 1 ? 2 : 1)
+    codenamesTurn = (winner == 0) & (more == 0) ? (codenamesTurn == 1 ? 2 : 1) : codenamesTurn
+    codenamesTable[guessesLeft] = more == 1 ? codenamesTable[guessesLeft] : 0
+    codenamesTable[livePending] = winner == 0 ? 1 : 0
     codenamesTable[settlePending] = 0
   }
 }
@@ -240,7 +240,7 @@ rule "codenames-settle" {
 // board write needs are the only ones any rule in this document spells.
 rule "codenames-reveal" {
   when codenamesTable[revealPending] == 1
-  mode: "Level"
+  mode: Level
   codenamesBoardShown[codenamesTable[revealWord]] = codenamesTable[revealAgent]
   codenamesBoardLive[codenamesTable[revealWord]] = 0
   codenamesTable[revealPending] = 0
@@ -250,9 +250,9 @@ rule "codenames-reveal" {
 // An accepted guess: the operative of the team on turn, a cell in range that is
 // still on the table, and a guess still owed on the current clue.
 rule "codenames-guess" {
-  when codenamesStage == 2 and codenamesAct[ready] == 1 and $local:legal == 1
-  local legal: Int = codenamesAct[wordOk] & codenamesAct[seatOk] & codenamesAct[isLive] & (codenamesTable[guessesLeft] > 0 ? 1 : 0)
-  mode: "Level"
+  when codenamesStage == 2 and codenamesAct[ready] == 1 and legal == 1
+  local legal = codenamesAct[wordOk] & codenamesAct[seatOk] & codenamesAct[isLive] & (codenamesTable[guessesLeft] > 0 ? 1 : 0)
+  mode: Level
   transaction {
     codenamesTable[revealWord] = codenamesAct[safeWord]
     codenamesTable[revealAgent] = codenamesAct[agent]
@@ -273,7 +273,7 @@ rule "codenames-guess" {
 // clue lands, and a guess after the game is over all land here.
 rule "codenames-refuse" {
   when codenamesAct[ready] == 1
-  mode: "Level"
+  mode: Level
   codenamesAct[applied] = codenamesAct[request]
   codenamesAct[result] = -1
   codenamesAct[ready] = 0
@@ -284,27 +284,27 @@ rule "codenames-refuse" {
 // judges it, so the judging rules spell no computed cell key at all.
 rule "codenames-resolve" {
   when codenamesAct[request] != codenamesAct[applied] and codenamesAct[ready] == 0 and codenamesTable[revealPending] == 0 and codenamesTable[settlePending] == 0
-  local wordOk: Int = (codenamesAct[word] >= 0) & (codenamesAct[word] <= 24)
-  local safeWord: Int = $local:wordOk == 1 ? codenamesAct[word] : 0
-  local operative: Int = codenamesTurn == 1 ? 2 : 4
-  mode: "Level"
-  codenamesAct[wordOk] = $local:wordOk
-  codenamesAct[safeWord] = $local:safeWord
-  codenamesAct[seatOk] = codenamesAct[seat] == $local:operative
+  local wordOk = (codenamesAct[word] >= 0) & (codenamesAct[word] <= 24)
+  local safeWord = wordOk == 1 ? codenamesAct[word] : 0
+  local operative = codenamesTurn == 1 ? 2 : 4
+  mode: Level
+  codenamesAct[wordOk] = wordOk
+  codenamesAct[safeWord] = safeWord
+  codenamesAct[seatOk] = codenamesAct[seat] == operative
   // An expression may not carry a Bool cell into an Int one, so the reveal
   // state reaches the judgement through a branch rather than a conjunction.
-  if codenamesBoardLive[($local:safeWord)] == 1 {
-    codenamesAct[isLive] = $local:wordOk
+  if codenamesBoardLive[(safeWord)] == 1 {
+    codenamesAct[isLive] = wordOk
   } else {
     codenamesAct[isLive] = 0
   }
-  codenamesAct[agent] = codenamesKey[($local:safeWord)]
+  codenamesAct[agent] = codenamesKey[(safeWord)]
   codenamesAct[ready] = 1
 }
 
 rule "codenames-begin" {
   when codenamesStage == 0
-  mode: "Level"
+  mode: Level
   codenamesStage = 1
   codenamesTable[livePending] = 1
 }
@@ -322,7 +322,7 @@ state {
     // The twenty-five board words, keyed by grid ordinal. `embeds` mints
     // `codenamesWordVectors` beside this row, one vector per key, locked in
     // codenames.embeddings.json by `puck embed`.
-    table codenamesWords: Text capacity(25) embeds(codenamesWordVectors) {
+    table codenamesWords capacity(25) embeds(codenamesWordVectors) {
       "0" = "africa"
       "1" = "agent"
       "2" = "alps"
@@ -353,7 +353,7 @@ state {
     // The clue vocabulary: twelve words that are NOT on the board, which is what
     // makes a clue a clue. `nearest` writes the winning key into a Text slot and
     // this row reads the word back.
-    table codenamesLexicon: Text capacity(12) embeds(codenamesLexiconVectors) {
+    table codenamesLexicon capacity(12) embeds(codenamesLexiconVectors) {
       cold = "cold"
       heat = "heat"
       water = "water"
@@ -442,16 +442,16 @@ state {
 
     // The spymaster's two poles: the mean of the team's live agents and the mean
     // of everything it must steer away from.
-    table codenamesAim: Vector capacity(2)
+    table codenamesAim capacity(2) space(codenamesSpace)
 
     // The live clue, aimed at `own` and away from `avoid`.
-    slot codenamesClue: Vector = "codenames"
+    slot codenamesClue = "codenames" space(codenamesSpace)
 
     // Every clue this game has carried, newest evicting oldest.
-    table codenamesClueLog: Vector capacity(4) evicts
+    table codenamesClueLog capacity(4) evicts space(codenamesSpace)
 
     // The clue word `nearest` chose, as a key of `codenamesLexicon`.
-    slot codenamesClueWord: Text = ""
+    slot codenamesClueWord = ""
 
     // The spymaster's private shortlist: the three cells still on the table
     // closest to the clue, keyed by grid ordinal, valued by their dot product.
@@ -470,7 +470,7 @@ state {
 
     // The one door a player acts through: name a seat and a cell, then bump the
     // request counter. `result` answers 1 accepted or -1 refused.
-    table codenamesAct: Int capacity(16) {
+    table codenamesAct capacity(16) {
       agent = 0
       applied = 0
       isLive = 0
@@ -484,7 +484,7 @@ state {
       wordOk = 0
     }
 
-    table codenamesTable: Int capacity(24) {
+    table codenamesTable capacity(24) {
       accepted = 0
       aimPending = 0
       clueNo = 0

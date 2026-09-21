@@ -31,7 +31,7 @@ public sealed partial class WorldBody {
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
     /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
     /// ignored for a locomotion kit.</param>
-    /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterTicks</c> idle floor this body sleeps under
+    /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterSeconds</c> idle floor, in engine ticks, this body sleeps under
     /// once cleared with no motion and no incoming intent; 0 (the default) never sleeps — see
     /// <see cref="UpdateSleepEligibility"/>.</param>
     /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>,

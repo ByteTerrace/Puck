@@ -45,7 +45,7 @@ let lakeCells = [42, 43, 46, 47, 52, 53, 56, 57]
 
 patterns [
   {
-    kind: "Int"
+    kind: Int
     name: "strategoEmptyRun"
     pattern: star(item: symbol(name: "vacant"))
     symbols [
@@ -61,20 +61,20 @@ patterns [
 // Each side declares its setup finished by holding its own seat's `attack`
 // control. Until both have, every move request is refused.
 rule "stratego-red-ready" {
-  when strategoPhase == 0 and $channel:1:attack >= 1
-  mode: "Edge"
+  when strategoPhase == 0 and channel(1, attack) >= 1
+  mode: Edge
   strategoReady[red] = 1
 }
 
 rule "stratego-blue-ready" {
-  when strategoPhase == 0 and $channel:2:attack >= 1
-  mode: "Edge"
+  when strategoPhase == 0 and channel(2, attack) >= 1
+  mode: Edge
   strategoReady[blue] = 1
 }
 
 rule "stratego-begin" {
   when strategoPhase == 0 and strategoReady[red] == 1 and strategoReady[blue] == 1
-  mode: "Edge"
+  mode: Edge
   strategoPhase = 1
 }
 
@@ -82,30 +82,34 @@ rule "stratego-begin" {
 // writes, so the legality of a move is stated once rather than per outcome.
 rule "stratego-judge" {
   when strategoRequest != strategoApplied and strategoPhase == 1 and strategoWinner == 0
-  mode: "Edge"
-  local mover: Int = strategoOwner[strategoFrom[$value]]
-  local rank: Int = strategoTurn == 1 ? strategoRedRank[strategoFrom[$value]] : strategoBlueRank[strategoFrom[$value]]
-  local target: Int = strategoOwner[strategoTo[$value]]
-  local dRow: Int = strategoTo / 10 - strategoFrom / 10
-  local dCol: Int = strategoTo % 10 - strategoFrom % 10
-  local dist: Int = absolute($local:dRow) + absolute($local:dCol)
-  local line: Int = (($local:dRow == 0) + ($local:dCol == 0)) == 1
-  local blocker: Int = $local:dRow < 0 ? $match:strategoEmptyRun:strategoOwner:N:distance[strategoFrom[$value]] : ($local:dRow > 0 ? $match:strategoEmptyRun:strategoOwner:S:distance[strategoFrom[$value]] : ($local:dCol > 0 ? $match:strategoEmptyRun:strategoOwner:E:distance[strategoFrom[$value]] : $match:strategoEmptyRun:strategoOwner:W:distance[strategoFrom[$value]]))
-  local reach: Int = $local:rank == 9 ? ($local:target == 0 ? (($local:blocker < 0) | ($local:blocker > $local:dist)) : ($local:dist == 1)) : ($local:dist == 1)
-  strategoMoveRank = $local:rank
-  strategoTargetOwner = $local:target
+  mode: Edge
+  local mover = strategoOwner[strategoFrom[$value]]
+  local rank = strategoTurn == 1 ? strategoRedRank[strategoFrom[$value]] : strategoBlueRank[strategoFrom[$value]]
+  local target = strategoOwner[strategoTo[$value]]
+  local dRow = strategoTo / 10 - strategoFrom / 10
+  local dCol = strategoTo % 10 - strategoFrom % 10
+  local dist = absolute(dRow) + absolute(dCol)
+  local line = ((dRow == 0) + (dCol == 0)) == 1
+  local blocker = dRow < 0 ? match(strategoEmptyRun, strategoOwner, N, distance)[strategoFrom[$value]] : (dRow > 0 ? match(strategoEmptyRun, strategoOwner, S, distance)[strategoFrom[$value]] : (dCol > 0 ? match(strategoEmptyRun, strategoOwner, E, distance)[strategoFrom[$value]] : match(strategoEmptyRun, strategoOwner, W, distance)[strategoFrom[$value]]))
+  local reach = rank == 9 ? (target == 0 ? ((blocker < 0) | (blocker > dist)) : (dist == 1)) : (dist == 1)
+  strategoMoveRank = rank
+  strategoTargetOwner = target
   strategoDefRank = strategoTurn == 1 ? strategoBlueRank[strategoTo[$value]] : strategoRedRank[strategoTo[$value]]
-  strategoLegal = ($local:mover == strategoTurn) & ($local:rank >= 1) & ($local:rank <= 10) & ($local:target != strategoTurn) & ($local:target != 3) & ($local:line == 1) & $local:reach
+  strategoLegal = (mover == strategoTurn) & (rank >= 1) & (rank <= 10) & (target != strategoTurn) & (target != 3) & (line == 1) & reach
 }
 
 rule "stratego-red-move" {
   when strategoRequest != strategoApplied and strategoPhase == 1 and strategoWinner == 0 and strategoLegal == 1 and strategoTurn == 1 and strategoTargetOwner == 0
-  mode: "Edge"
-  local rank: Int = strategoRedRank[strategoFrom[$value]]
+  mode: Edge
+  local rank = strategoRedRank[strategoFrom[$value]]
+  local token = strategoRedToken[strategoFrom[$value]]
   strategoOwner[strategoTo[$value]] = 1
   strategoOwner[strategoFrom[$value]] = 0
-  strategoRedRank[strategoTo[$value]] = $local:rank
+  strategoRedRank[strategoTo[$value]] = rank
   remove strategoRedRank[strategoFrom[$value]]
+  strategoRedToken[strategoTo[$value]] = token
+  remove strategoRedToken[strategoFrom[$value]]
+  strategoPosition[token] = strategoTo
   strategoTurn = 2
   strategoMoves += 1
   strategoResult = 1
@@ -114,12 +118,16 @@ rule "stratego-red-move" {
 
 rule "stratego-blue-move" {
   when strategoRequest != strategoApplied and strategoPhase == 1 and strategoWinner == 0 and strategoLegal == 1 and strategoTurn == 2 and strategoTargetOwner == 0
-  mode: "Edge"
-  local rank: Int = strategoBlueRank[strategoFrom[$value]]
+  mode: Edge
+  local rank = strategoBlueRank[strategoFrom[$value]]
+  local token = strategoBlueToken[strategoFrom[$value]]
   strategoOwner[strategoTo[$value]] = 2
   strategoOwner[strategoFrom[$value]] = 0
-  strategoBlueRank[strategoTo[$value]] = $local:rank
+  strategoBlueRank[strategoTo[$value]] = rank
   remove strategoBlueRank[strategoFrom[$value]]
+  strategoBlueToken[strategoTo[$value]] = token
+  remove strategoBlueToken[strategoFrom[$value]]
+  strategoPosition[token] = strategoTo
   strategoTurn = 1
   strategoMoves += 1
   strategoResult = 1
@@ -133,32 +141,45 @@ rule "stratego-blue-move" {
 // overwrite the memory with whatever stands on the square afterwards.
 rule "stratego-red-strike" {
   when strategoRequest != strategoApplied and strategoPhase == 1 and strategoWinner == 0 and strategoLegal == 1 and strategoTurn == 1 and strategoTargetOwner == 2
-  mode: "Edge"
-  local rank: Int = strategoRedRank[strategoFrom[$value]]
-  local def: Int = strategoBlueRank[strategoTo[$value]]
-  local outcome: Int = $local:def == 12 ? 1 : ($local:def == 11 ? ($local:rank == 8 ? 1 : -1) : ($local:def == 10 ? 1 : ($local:rank == 10 ? ($local:def == 1 ? 1 : -1) : ($local:rank < $local:def ? 1 : ($local:rank > $local:def ? -1 : 0)))))
+  mode: Edge
+  local rank = strategoRedRank[strategoFrom[$value]]
+  local def = strategoBlueRank[strategoTo[$value]]
+  local token = strategoRedToken[strategoFrom[$value]]
+  local defToken = strategoBlueToken[strategoTo[$value]]
+  local outcome = def == 12 ? 1 : (def == 11 ? (rank == 8 ? 1 : -1) : (def == 10 ? 1 : (rank == 10 ? (def == 1 ? 1 : -1) : (rank < def ? 1 : (rank > def ? -1 : 0)))))
   strategoRedSeen[strategoTo[$value]] = 1
   strategoBlueSeen[strategoFrom[$value]] = 1
-  transform observe(row: "strategoRedKnows")
-  transform observe(row: "strategoBlueKnows")
+  transform observe(row: strategoRedKnows)
+  transform observe(row: strategoBlueKnows)
   strategoRedSeen[strategoTo[$value]] = 0
   strategoBlueSeen[strategoFrom[$value]] = 0
-  if $local:outcome == 1 {
+  if outcome == 1 {
     remove strategoBlueRank[strategoTo[$value]]
     remove strategoRedRank[strategoFrom[$value]]
-    strategoRedRank[strategoTo[$value]] = $local:rank
+    strategoRedRank[strategoTo[$value]] = rank
     strategoOwner[strategoTo[$value]] = 1
     strategoOwner[strategoFrom[$value]] = 0
-  } else if $local:outcome == -1 {
+    remove strategoBlueToken[strategoTo[$value]]
+    remove strategoPosition[defToken]
+    strategoRedToken[strategoTo[$value]] = token
+    remove strategoRedToken[strategoFrom[$value]]
+    strategoPosition[token] = strategoTo
+  } else if outcome == -1 {
     remove strategoRedRank[strategoFrom[$value]]
     strategoOwner[strategoFrom[$value]] = 0
+    remove strategoRedToken[strategoFrom[$value]]
+    remove strategoPosition[token]
   } else {
     remove strategoRedRank[strategoFrom[$value]]
     remove strategoBlueRank[strategoTo[$value]]
     strategoOwner[strategoFrom[$value]] = 0
     strategoOwner[strategoTo[$value]] = 0
+    remove strategoRedToken[strategoFrom[$value]]
+    remove strategoBlueToken[strategoTo[$value]]
+    remove strategoPosition[token]
+    remove strategoPosition[defToken]
   }
-  if $local:def == 12 {
+  if def == 12 {
     strategoWinner = 1
     strategoPhase = 2
     strategoReveal[red] = "seat2"
@@ -172,32 +193,45 @@ rule "stratego-red-strike" {
 
 rule "stratego-blue-strike" {
   when strategoRequest != strategoApplied and strategoPhase == 1 and strategoWinner == 0 and strategoLegal == 1 and strategoTurn == 2 and strategoTargetOwner == 1
-  mode: "Edge"
-  local rank: Int = strategoBlueRank[strategoFrom[$value]]
-  local def: Int = strategoRedRank[strategoTo[$value]]
-  local outcome: Int = $local:def == 12 ? 1 : ($local:def == 11 ? ($local:rank == 8 ? 1 : -1) : ($local:def == 10 ? 1 : ($local:rank == 10 ? ($local:def == 1 ? 1 : -1) : ($local:rank < $local:def ? 1 : ($local:rank > $local:def ? -1 : 0)))))
+  mode: Edge
+  local rank = strategoBlueRank[strategoFrom[$value]]
+  local def = strategoRedRank[strategoTo[$value]]
+  local token = strategoBlueToken[strategoFrom[$value]]
+  local defToken = strategoRedToken[strategoTo[$value]]
+  local outcome = def == 12 ? 1 : (def == 11 ? (rank == 8 ? 1 : -1) : (def == 10 ? 1 : (rank == 10 ? (def == 1 ? 1 : -1) : (rank < def ? 1 : (rank > def ? -1 : 0)))))
   strategoBlueSeen[strategoTo[$value]] = 1
   strategoRedSeen[strategoFrom[$value]] = 1
-  transform observe(row: "strategoBlueKnows")
-  transform observe(row: "strategoRedKnows")
+  transform observe(row: strategoBlueKnows)
+  transform observe(row: strategoRedKnows)
   strategoBlueSeen[strategoTo[$value]] = 0
   strategoRedSeen[strategoFrom[$value]] = 0
-  if $local:outcome == 1 {
+  if outcome == 1 {
     remove strategoRedRank[strategoTo[$value]]
     remove strategoBlueRank[strategoFrom[$value]]
-    strategoBlueRank[strategoTo[$value]] = $local:rank
+    strategoBlueRank[strategoTo[$value]] = rank
     strategoOwner[strategoTo[$value]] = 2
     strategoOwner[strategoFrom[$value]] = 0
-  } else if $local:outcome == -1 {
+    remove strategoRedToken[strategoTo[$value]]
+    remove strategoPosition[defToken]
+    strategoBlueToken[strategoTo[$value]] = token
+    remove strategoBlueToken[strategoFrom[$value]]
+    strategoPosition[token] = strategoTo
+  } else if outcome == -1 {
     remove strategoBlueRank[strategoFrom[$value]]
     strategoOwner[strategoFrom[$value]] = 0
+    remove strategoBlueToken[strategoFrom[$value]]
+    remove strategoPosition[token]
   } else {
     remove strategoBlueRank[strategoFrom[$value]]
     remove strategoRedRank[strategoTo[$value]]
     strategoOwner[strategoFrom[$value]] = 0
     strategoOwner[strategoTo[$value]] = 0
+    remove strategoBlueToken[strategoFrom[$value]]
+    remove strategoRedToken[strategoTo[$value]]
+    remove strategoPosition[token]
+    remove strategoPosition[defToken]
   }
-  if $local:def == 12 {
+  if def == 12 {
     strategoWinner = 2
     strategoPhase = 2
     strategoReveal[red] = "seat2"
@@ -213,14 +247,14 @@ rule "stratego-blue-strike" {
 // turn: the mover requests again.
 rule "stratego-refuse" {
   when strategoRequest != strategoApplied and strategoPhase == 1 and strategoWinner == 0 and strategoLegal == 0
-  mode: "Edge"
+  mode: Edge
   strategoResult = -1
   strategoApplied = strategoRequest
 }
 
 rule "stratego-refuse-closed" {
   when strategoRequest != strategoApplied and (strategoPhase != 1 or strategoWinner != 0)
-  mode: "Edge"
+  mode: Edge
   strategoResult = -1
   strategoApplied = strategoRequest
 }
@@ -249,7 +283,7 @@ state {
       }
       )
       )
-      domain: cellsOf(topology: "strategoField")
+      domain: cellsOf(topology: strategoField)
       kind: "Int"
       name: "strategoOwner"
       phaseOf: "strategoTurnGuard"
@@ -271,7 +305,7 @@ state {
         value: redSetup[i]
       }
       )
-      domain: cellsOf(topology: "strategoField")
+      domain: cellsOf(topology: strategoField)
       kind: "Int"
       name: "strategoRedRank"
       visibility {
@@ -282,13 +316,78 @@ state {
       }
     }
 
+    // Stable piece identities back remembered ranks. The live rank boards above
+    // remain the cell-keyed combat surface; these rows preserve identity as a
+    // piece moves or leaves the board.
+    row {
+      capacity: 80
+      cells: map(range(1, 80), token => {
+        key: $"{token}",
+        value: token
+      }
+      )
+      kind: "Int"
+      name: "strategoPieces"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      capacity: 80
+      cells: concat(
+        map(range(1, 40), token => { key: $"{token}", value: redSetup[(token - 1) % 40] }),
+        map(range(41, 40), token => { key: $"{token}", value: blueSetup[(token - 41) % 40] })
+      )
+      domain: keysOf(row: strategoPieces)
+      kind: "Int"
+      name: "strategoPieceRank"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      capacity: 80
+      cells: concat(
+        map(range(1, 40), token => { key: $"{token}", value: token - 1 }),
+        map(range(41, 40), token => { key: $"{token}", value: token + 19 })
+      )
+      domain: keysOf(row: strategoPieces)
+      kind: "Int"
+      name: "strategoPosition"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      cells: map(range(0, 40), cell => { key: $"{cell}", value: cell + 1 })
+      domain: cellsOf(topology: strategoField)
+      kind: "Int"
+      name: "strategoRedToken"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      cells: map(range(60, 40), cell => { key: $"{cell}", value: cell - 19 })
+      domain: cellsOf(topology: strategoField)
+      kind: "Int"
+      name: "strategoBlueToken"
+      visibility {
+        readers []
+      }
+    }
+
     row {
       cells: map(range(0, 40), i => {
         key: $"{60 + i}",
         value: blueSetup[i]
       }
       )
-      domain: cellsOf(topology: "strategoField")
+      domain: cellsOf(topology: strategoField)
       kind: "Int"
       name: "strategoBlueRank"
       visibility {
@@ -302,24 +401,26 @@ state {
     // The observation masks: one square is raised for the duration of one
     // strike and lowered again in the same rule.
     row {
-      domain: cellsOf(topology: "strategoField")
+      domain: cellsOf(topology: strategoField)
       kind: "Bool"
       name: "strategoRedSeen"
     }
 
     row {
-      domain: cellsOf(topology: "strategoField")
+      domain: cellsOf(topology: strategoField)
       kind: "Bool"
       name: "strategoBlueSeen"
     }
 
-    // What each side remembers of the other's ranks, square by square.
+    // What each side remembers of the other's ranks, keyed by stable piece.
     row {
-      domain: cellsOf(topology: "strategoField")
+      capacity: 80
+      domain: keysOf(row: strategoPieces)
       kind: "Int"
       knowledge {
         mask: "strategoRedSeen"
-        source: "strategoBlueRank"
+        positions: "strategoPosition"
+        source: "strategoPieceRank"
       }
       name: "strategoRedKnows"
       visibility {
@@ -330,11 +431,13 @@ state {
     }
 
     row {
-      domain: cellsOf(topology: "strategoField")
+      capacity: 80
+      domain: keysOf(row: strategoPieces)
       kind: "Int"
       knowledge {
         mask: "strategoBlueSeen"
-        source: "strategoRedRank"
+        positions: "strategoPosition"
+        source: "strategoPieceRank"
       }
       name: "strategoBlueKnows"
       visibility {
@@ -352,35 +455,35 @@ state {
       name: "strategoReveal"
     }
 
-    table strategoReady: Int {
+    table strategoReady {
       red = 0
       blue = 0
     }
 
-    slot strategoPhase: Int = 0 bounds(minimum: 0, maximum: 2)
+    slot strategoPhase = 0 bounds(0..2)
 
-    slot strategoTurn: Int = 1 bounds(minimum: 1, maximum: 2)
+    slot strategoTurn = 1 bounds(1..2)
 
-    slot strategoFrom: Int = 0 bounds(minimum: 0, maximum: 99)
+    slot strategoFrom = 0 bounds(0..99)
 
-    slot strategoTo: Int = 0 bounds(minimum: 0, maximum: 99)
+    slot strategoTo = 0 bounds(0..99)
 
-    slot strategoRequest: Int = 0 bounds(minimum: 0)
+    slot strategoRequest = 0 bounds(0..)
 
-    slot strategoApplied: Int = 0 bounds(minimum: 0)
+    slot strategoApplied = 0 bounds(0..)
 
-    slot strategoResult: Int = 0 bounds(minimum: -1, maximum: 1)
+    slot strategoResult = 0 bounds(-1..1)
 
-    slot strategoLegal: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot strategoLegal = 0 bounds(0..1)
 
-    slot strategoMoveRank: Int = 0 bounds(minimum: 0, maximum: 12)
+    slot strategoMoveRank = 0 bounds(0..12)
 
-    slot strategoDefRank: Int = 0 bounds(minimum: 0, maximum: 12)
+    slot strategoDefRank = 0 bounds(0..12)
 
-    slot strategoTargetOwner: Int = 0 bounds(minimum: 0, maximum: 3)
+    slot strategoTargetOwner = 0 bounds(0..3)
 
-    slot strategoMoves: Int = 0 bounds(minimum: 0)
+    slot strategoMoves = 0 bounds(0..)
 
-    slot strategoWinner: Int = 0 bounds(minimum: 0, maximum: 2)
+    slot strategoWinner = 0 bounds(0..2)
   }
 }

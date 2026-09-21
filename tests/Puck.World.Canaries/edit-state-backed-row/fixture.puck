@@ -1,0 +1,72 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+
+cameras [
+  {
+    name: "front"
+    renderHeight: 900
+    renderWidth: 720
+    rig {
+      name: "front"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 4.8]))
+        lookAt(subject: worldPoint(point: [0, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.5419)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+placements {
+  placement "card" {
+    prototype: "card"
+    position [0, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "card" {
+    document {
+      name: "card"
+      palette [
+        {
+          color: "#F2ECDD"
+          roughness: 0.55
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Prism "body" {
+        material: 0
+        position [0, 0, 0]
+        profile {
+          cornerRadius: 0.09
+          kind: "RoundedRectangle"
+        }
+        scale [0.88, 1.24, 0.02]
+        taper: 1
+      }
+    }
+  }
+}
+
+state {
+  world {
+    row {
+      name: "spot"
+      kind: "Text"
+      cells [
+        {
+          key: "$value"
+          value: "[2, 0, 0]"
+        }
+      ]
+    }
+  }
+}

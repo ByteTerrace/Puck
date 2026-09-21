@@ -244,15 +244,19 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         );
     }
     /// <summary>Resolves an effect's body key: a dynamic key indirection, or a literal index inside capacity.</summary>
-    /// <param name="key">The authored key.</param>
+    /// <param name="reference">The authored key: a body index, or a reserved channel as a call.</param>
     /// <param name="verb">The authored verb, for refusal text.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <returns>The literal index (or <c>-1</c>), the interned key, and the live indirection.</returns>
-    public (int Index, CellKey Key, CompiledCellRef? KeyFrom) ResolveBodyAddress(string key, string verb, string ruleName) {
+    public (int Index, CellKey Key, CompiledCellRef? KeyFrom) ResolveBodyAddress(StateChannelRef reference, string verb, string ruleName) {
+        ArgumentNullException.ThrowIfNull(argument: reference);
+
+        var key = reference.Spelling;
+
         if (RuleCompiler.TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: this,
-            key: key,
+            reference: reference,
             keyFieldLabel: "key",
             ruleName: ruleName,
             verb: verb
@@ -602,6 +606,11 @@ public static partial class WorldFactsVocabulary {
                 effectType: typeof(WorldEffect.Save)
             ),
             new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolvePoseCell((WorldEffect.PoseCell)effect, ruleName, context),
+                discriminator: "poseCell",
+                effectType: typeof(WorldEffect.PoseCell)
+            ),
+            new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolvePose(
                     context: context,
                     effect: ((WorldEffect.Pose)effect),
@@ -686,20 +695,18 @@ public static partial class WorldFactsVocabulary {
         );
     }
     private sealed class WorldFactsPairKeyFamily : KeyFamily {
-        public override bool TryCompile(string key, string ruleName, string verb, string keyFieldLabel, RuleCompileContext context, out CompiledCellRef cell) {
-            ArgumentNullException.ThrowIfNull(argument: key);
+        public override bool TryCompile(StateChannelRef reference, string ruleName, string verb, string keyFieldLabel, RuleCompileContext context, out CompiledCellRef cell) {
+            ArgumentNullException.ThrowIfNull(argument: reference);
 
-            if (!key.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: WorldRuleFacts.PairKeyPrefix
-            )) {
+            if (reference.Call is not { Channel: "pair" } pair) {
                 cell = default;
 
                 return false;
             }
 
+            var key = reference.Spelling;
             var world = ((WorldFactsCompileContext)context);
-            var tokens = key[WorldRuleFacts.PairKeyPrefix.Length..].Split(separator: ':');
+            var tokens = pair.Texts();
             var widthA = WorldFactsCompileContext.BodyRefTokenWidth(
                 start: 0,
                 tokens: tokens

@@ -1,0 +1,189 @@
+{
+  "id": "records-pools",
+  "title": "Pool claim, release, reclaim, and replay",
+  "binding": "A request opens one rule that claims a capacity-one record, writes and copies 17, releases it, reclaims the same slot, and copies its reset default 7. Both lifetimes are released and the rule marks completion. The recording must replay exactly, including the dead-slot generation continuation. The alternate input leaves the gate closed and all three witness rows zero.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 3,
+  "timeoutSeconds": 30,
+  "fixtures": [],
+  "positive": {
+    "expect": [
+      {
+        "name": "first",
+        "present": true,
+        "match": "contains",
+        "text": "'first' kind=Int value=17",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "second",
+        "present": true,
+        "match": "contains",
+        "text": "'second' kind=Int value=7",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "done",
+        "present": true,
+        "match": "contains",
+        "text": "'done' kind=Int value=1",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "replay-match",
+        "present": true,
+        "match": "contains",
+        "text": "[replay.verify: 'records-pools' | MATCH",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "replay.stop",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "replay.verify",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "wire.errors",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "tests/Puck.World.Canaries/records-pools/fixture.world.json"
+  },
+  "discriminating": {
+    "expect": [
+      {
+        "name": "first",
+        "present": true,
+        "match": "contains",
+        "text": "'first' kind=Int value=0",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "second",
+        "present": true,
+        "match": "contains",
+        "text": "'second' kind=Int value=0",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "done",
+        "present": true,
+        "match": "contains",
+        "text": "'done' kind=Int value=0",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "wire.errors",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "tests/Puck.World.Canaries/records-pools/fixture.world.json"
+  }
+}

@@ -38,6 +38,72 @@ Lifted two-dimensional profiles use `SdfLift.Revolve` or `SdfLift.Extrude`.
 Regular polygons, stars, trapezoids, rounded rectangles, ellipses, glyphs, and
 sampled regions are current ISA shapes; they are not builder-only macros.
 
+## Curved path profiles
+
+A Prism with `profile.kind: "Path"` extrudes a two-dimensional outline with
+independent depth. Use it for lettering, organic silhouettes, emblems, and
+curved bands. It supports line segments, quadratic and cubic Beziers, circular
+arcs, and multiple contours. Filled contours close automatically and use
+even/odd fill, so a nested contour cuts a hole regardless of winding.
+The compiled boundaries may nest, but cannot cross, overlap, or touch each other.
+
+Set `profile.cornerRadius` to zero and put the outline in `profile.path`:
+
+```json
+{
+  "kind": "Path",
+  "cornerRadius": 0,
+  "path": {
+    "tolerance": 0.001,
+    "stroke": { "radiusStart": 0.08, "radiusEnd": 0.025, "smooth": true, "from": 0.2, "to": 0.95 },
+    "contours": [{
+      "start": [-0.3, 0],
+      "segments": [{ "control": [0, -0.6], "end": [0.3, -0.15] }]
+    }]
+  }
+}
+```
+
+Each segment has an `end`. A line has no other controls; a quadratic has
+`control`; a cubic also has `control2`. An arc has `arcCenter` and optional
+`clockwise` (false by default). Arc endpoints must be equally distant from
+the center; equal endpoints describe a full circle. All controls use normalized
+profile coordinates in [-1, 1]. The completed outline, including its stroke,
+must fit that square. Shape scale stretches the finished outline in X/Y;
+`scale.z` is extrusion half-depth.
+
+Omit `stroke` to fill. A stroke is the union of round disks along its curve,
+with positive endpoint radii. Its width changes linearly, or with smoothstep
+when `smooth` is true, over `[from,to]` within [0,1]. Each authored segment
+occupies an equal portion of this parameter interval; this is not arc-length
+parameterization. Stroked contours remain open unless `closed` is true.
+
+Filled paths can also carry `shear`: `target` is X (0) or Y (1); the other
+coordinate is clamped to `[from,to]`, then the target receives
+`offset + linear*d + quadratic*d*d + cubic*d*d*d`. This bends an outline,
+including circular arcs, without a runtime field warp. The compiler includes
+the deformation in its error bound. Shear and stroke cannot be combined.
+
+Curves are flattened during composition, never during ray marching. `tolerance`
+is the maximum local geometric approximation error, between 0.00001 and 0.1,
+apart from floating-point rounding. World-space error grows by at most the
+larger X/Y scale and the placement scale. At most 128 edges are emitted; a
+tighter tolerance that exceeds that budget is refused. Tiny edges below
+0.000001 profile units are also refused to protect projection denominators.
+The renderer evaluates the resulting polygon or rounded segments directly;
+there is no surface-expanding safety margin. Each edge uses two packed uint4
+table entries, and live-authoring capacity probes reserve that maximum without
+constructing dummy paths.
+
+Path profiles currently support extrusion only. Rounding, chamfer, panel and
+trims are refused; use the outline itself for corner shaping. They are
+presentation geometry: deterministic field-contact requests refuse them by
+name. Author a separate supported contact shape when needed.
+
+The [path fixture](../../../../tests/Puck.Parity/paths.world.json) exercises
+arcs, a concave sheared outline, a hole, cubic curves, and smooth width changes.
+It has its own [cross-backend contract](../../../../tests/Puck.Parity/paths.contract.json).
+
 ## Degenerate profile admission
 
 A shape whose exact core divides by a quantity derived from its own dimensions

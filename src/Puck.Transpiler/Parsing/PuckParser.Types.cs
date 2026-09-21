@@ -142,6 +142,15 @@ public static partial class PuckParser {
                 throw CreateException(context: context, message: $"Expected type name after '{fieldName}:'");
             }
 
+            var modifiers = ParseStateModifiers(context: context, keyword: "record", vocabulary: null);
+            ExpressionNode? defaultValue = null;
+
+            SkipWhiteSpace(context: context);
+            if (TryConsume(c: '=', context: context)) {
+                defaultValue = ParseExpression(context: context);
+                modifiers.AddRange(collection: ParseStateModifiers(context: context, keyword: "record", vocabulary: null));
+            }
+
             if (!seen.Add(item: fieldName)) {
                 diagnostics?.ReportError(
                     code: PuckDiagnosticCodes.DuplicateTypeMember,
@@ -154,9 +163,11 @@ public static partial class PuckParser {
                 Column: fCol,
                 Length: (cursor.Offset - fStart),
                 Line: fLine,
+                Modifiers: modifiers,
                 Name: fieldName,
                 Offset: fStart,
-                TypeName: typeName
+                TypeName: typeName,
+                Default: defaultValue
             ));
 
             ConsumeSeparator(context: context);
@@ -193,8 +204,9 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         var exprStart = cursor.Offset;
-        var expr = ParseExpression(context: context);
-        var rawExpr = context.Scanner.Buffer.Substring(exprStart, (cursor.Offset - exprStart)).Trim();
+        var rawExpr = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+        var (exprLine, exprColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: exprStart);
+        var expr = ValidatedOperand(rawExpr, new SourceSpan(exprStart, (cursor.Offset - exprStart), exprLine, exprColumn), diagnostics);
         var len = (cursor.Offset - startOffset);
 
         return new DerivedStateNode(
@@ -203,8 +215,7 @@ public static partial class PuckParser {
             Length: len,
             Line: line,
             Name: name,
-            Offset: startOffset,
-            RawExpression: rawExpr
+            Offset: startOffset
         );
     }
 }

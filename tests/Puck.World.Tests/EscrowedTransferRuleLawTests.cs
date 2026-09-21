@@ -27,12 +27,12 @@ public sealed class EscrowedTransferRuleLawTests {
     private static ActionEffect.AddState Add(string state, decimal value, string? key = null) => new(
         State: state,
         Value: value,
-        Key: key
+        Key: StateChannelRef.OfNullable(spelling: key)
     );
     private static ActionEffect.AddState AddFrom(string state, string fromState, string? key = null) => new(
         State: state,
         FromState: fromState,
-        Key: key
+        Key: StateChannelRef.OfNullable(spelling: key)
     );
     private static ActionEffect.AddState AddNegated(string state, string key, string fromState) => new(
         State: state,
@@ -501,17 +501,17 @@ public sealed class EscrowedTransferRuleLawTests {
     }
     private static ActionPredicate.CompareState Cmp(string state, ActionStateComparison comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null, string? key = null) =>
         new(
-            ComparandKey: comparandKey,
-            ComparandState: comparandState,
+            ComparandKey: StateChannelRef.OfNullable(spelling: comparandKey),
+            ComparandState: StateChannelRef.OfNullable(spelling: comparandState),
             Comparison: comparison,
-            Key: key,
+            Key: StateChannelRef.OfNullable(spelling: key),
             State: state,
             Value: value
         );
     private static ActionEffect.SetState Copy(string state, string fromState, string? key = null) => new(
         State: state,
         FromState: fromState,
-        Key: key
+        Key: StateChannelRef.OfNullable(spelling: key)
     );
     private static ExpressionProgram Fee(int bps, string? fromState = null, long? fromValue = null) => new(Instructions: [
         AmountToken(
@@ -574,7 +574,7 @@ public sealed class EscrowedTransferRuleLawTests {
     private static ActionEffect.SetState Set(string state, decimal value, string? key = null) => new(
         State: state,
         Value: value,
-        Key: key
+        Key: StateChannelRef.OfNullable(spelling: key)
     );
     private static WorldStateRow Slot(string name, long initial, bool nonNegative = false) => new(
         Name: CellName.Parse(candidate: name),

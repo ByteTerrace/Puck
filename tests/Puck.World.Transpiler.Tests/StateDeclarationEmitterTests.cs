@@ -34,12 +34,82 @@ public class StateDeclarationEmitterTests {
 
     // ---- byte-identical declaration forms -------------------------------------------------------------------
 
+    // Every value decides the row's kind together, so a fraction in a later cell widens a row whose first cell is
+    // whole, and a name bound by `let` reads as the value it is bound to.
+    [InlineData("table speeds {\n            walk = 1\n            run = 2.5\n        }", "Fixed")]
+    [InlineData("table counts {\n            walk = 1\n            run = 2\n        }", "Int")]
+    [InlineData("slot pace = basePace", "Fixed")]
+    [InlineData("slot lives = baseLives", "Int")]
+    [InlineData("slot open = true", "Bool")]
+    [InlineData("slot label = \"ready\"", "Text")]
+    [Theory]
+    public void ADeclarationReadsItsKindFromEveryValueItSpells(string declaration, string kind) {
+        var (json, diagnostics) = Lower(body: $$"""
+            let basePace = 1.5
+            let baseLives = 3
+
+            state {
+                world {
+                    {{declaration}}
+                }
+            }
+            """);
+
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: diagnostics.FormatReport("")
+        );
+        Assert.Equal(
+            actual: WorldRow(index: 0, json: json)["kind"]?.ToString(),
+            expected: kind
+        );
+    }
+    [Fact]
+    public void AnArithmeticInitializerAndFractionalBoundWidenAnOtherwiseWholeRow() {
+        var (json, diagnostics) = Lower(body: """
+            state {
+                world {
+                    slot total = 1 + 0.5 bounds(0.5..)
+                }
+            }
+            """);
+
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: diagnostics.FormatReport("")
+        );
+        Assert.Equal(
+            actual: WorldRow(index: 0, json: json)["kind"]?.ToString(),
+            expected: "Fixed"
+        );
+    }
+    [Fact]
+    public void ATextLetBindingWideningAValueIsRetained() {
+        var (json, diagnostics) = Lower(body: """
+            let label = "ready"
+
+            state {
+                world {
+                    slot status = label
+                }
+            }
+            """);
+
+        Assert.False(
+            condition: diagnostics.HasErrors,
+            userMessage: diagnostics.FormatReport("")
+        );
+        Assert.Equal(
+            actual: WorldRow(index: 0, json: json)["kind"]?.ToString(),
+            expected: "Text"
+        );
+    }
     [Fact]
     public void TableDeclarationCompilesByteIdenticallyToAnExplicitRow() {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    table vitals : Int capacity(3) bounds(minimum: 0, maximum: 100, overflow: Saturate) {
+                    table vitals capacity(3) bounds(0..100, overflow: Saturate) {
                         health = 100
                         mana = 50 advance(perSecond: 5)
                     }
@@ -51,7 +121,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """
             {
                 "name": "vitals",
@@ -75,7 +145,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    slot gold : Int = 10 bounds(minimum: 0)
+                    slot gold = 10 bounds(0..)
                 }
             }
             """);
@@ -84,7 +154,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """{ "name": "gold", "kind": "Int", "value": 10, "min": 0 }"""
         );
     }
@@ -93,7 +163,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    slot uninitialized : Int
+                    slot uninitialized
                 }
             }
             """);
@@ -102,7 +172,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """{ "name": "uninitialized", "kind": "Int" }"""
         );
     }
@@ -111,7 +181,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    table x : Int { }
+                    table x { }
                 }
             }
             """);
@@ -120,7 +190,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """{ "name": "x", "kind": "Int", "domain": { "$type": "keys" } }"""
         );
     }
@@ -129,7 +199,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    table flags : Int {
+                    table flags {
                         a = 1 behavior(none)
                         b = 2
                     }
@@ -141,7 +211,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """
             {
                 "name": "flags",
@@ -161,7 +231,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    row { name: "custom" kind: "Text" value: "hello" }
+                    row { name: "custom" kind: Text value: "hello" }
                 }
             }
             """);
@@ -170,7 +240,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """{ "name": "custom", "kind": "Text", "value": "hello" }"""
         );
     }
@@ -179,7 +249,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    table cardNames : Int capacity(3) {
+                    table cardNames capacity(3) {
                         king = 0
                         queen = 1
                         jack = 2
@@ -197,7 +267,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 1),
+            actual: WorldRow(index: 1, json: json),
             expectedJson: """
             {
                 "name": "deck",
@@ -218,7 +288,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    grid board : Int dimensions(width: 2, depth: 2) wrap(Both) cellSize(2) origin(1, 0, 1) band(0.5) empty(-1) {
+                    grid board dimensions(width: 2, depth: 2) wrap(Both) cellSize(2) origin(1, 0, 1) band(0.5) empty(-1) {
                         "0" = 4
                         "3" = 5
                     }
@@ -230,7 +300,7 @@ public class StateDeclarationEmitterTests {
             userMessage: diagnostics.FormatReport("")
         );
         AssertRowEquals(
-            actual: WorldRow(json: json, index: 0),
+            actual: WorldRow(index: 0, json: json),
             expectedJson: """
             {
                 "name": "board",
@@ -268,7 +338,7 @@ public class StateDeclarationEmitterTests {
         var (json, diagnostics) = Lower(body: """
             state {
                 world {
-                    grid board : Int { }
+                    grid board { }
                 }
             }
             """);
@@ -278,142 +348,141 @@ public class StateDeclarationEmitterTests {
             filter: d => (d.Code == "PUCK053")
         );
     }
-
     // ---- refusal matrix (PUCK049-PUCK066), each with its source span -----------------------------------------
 
     public static TheoryData<string, string, string> RefusalCases() {
         var data = new TheoryData<string, string, string>();
 
         data.Add(
-            """
+            p1: """
             state {
-                slot x : Int
+                slot x
             }
             """,
-            "PUCK049",
-            "slot x : Int"
+            p2: "PUCK049",
+            p3: "slot x"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world [
-                    { name: "x" kind: "Int" }
+                    { name: "x" kind: Int }
                 ]
                 world {
-                    slot y : Int
+                    slot y
                 }
             }
             """,
-            "PUCK050",
-            "world {"
+            p2: "PUCK050",
+            p3: "world {"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot x : Int
-                    slot x : Int
+                    slot x
+                    slot x
                 }
             }
             """,
-            "PUCK051",
-            "slot x : Int"
+            p2: "PUCK051",
+            p3: "slot x"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
                     slot $x : Int
                 }
             }
             """,
-            "PUCK052",
-            "$x"
+            p2: "PUCK052",
+            p3: "$x"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot x : Int = "oops"
+                    slot x = 5 bounds("oops"..)
                 }
             }
             """,
-            "PUCK053",
-            "\"oops\""
+            p2: "PUCK053",
+            p3: "\"oops\""
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    table x : Int capacity(1) {
+                    table x capacity(1) {
                         a = 1
                         b = 2
                     }
                 }
             }
             """,
-            "PUCK054",
-            "capacity(1)"
+            p2: "PUCK054",
+            p3: "capacity(1)"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot x : Int capacity(2)
+                    slot x capacity(2)
                 }
             }
             """,
-            "PUCK055",
-            "capacity(2)"
+            p2: "PUCK055",
+            p3: "capacity(2)"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    table x : Int {
+                    table x {
                         a = 1 advance(perSecond: 1) behavior(none)
                     }
                 }
             }
             """,
-            "PUCK056",
-            "behavior(none)"
+            p2: "PUCK056",
+            p3: "behavior(none)"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot x : Int unknownMod(1)
+                    slot x unknownMod(1)
                 }
             }
             """,
-            "PUCK057",
-            "unknownMod(1)"
+            p2: "PUCK057",
+            p3: "unknownMod(1)"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot x : Fixed advance(perSecond: 1e-19)
+                    slot x advance(perSecond: 1e-19)
                 }
             }
             """,
-            "PUCK058",
-            "1e-19"
+            p2: "PUCK058",
+            p3: "1e-19"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot x : Fixed advance(perSecond: 1e-30)
+                    slot x advance(perSecond: 1e-30)
                 }
             }
             """,
-            "PUCK058",
-            "1e-30"
+            p2: "PUCK058",
+            p3: "1e-30"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
                     pile deck of missingRow {
@@ -422,28 +491,28 @@ public class StateDeclarationEmitterTests {
                 }
             }
             """,
-            "PUCK059",
-            "missingRow"
+            p2: "PUCK059",
+            p3: "missingRow"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    slot notAPile : Int = 1
+                    slot notAPile = 1
                     pile deck of notAPile {
                         king
                     }
                 }
             }
             """,
-            "PUCK060",
-            "pile deck of notAPile"
+            p2: "PUCK060",
+            p3: "pile deck of notAPile"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    table cardNames : Int capacity(2) {
+                    table cardNames capacity(2) {
                         king = 0
                         queen = 1
                     }
@@ -454,14 +523,14 @@ public class StateDeclarationEmitterTests {
                 }
             }
             """,
-            "PUCK061",
-            "king"
+            p2: "PUCK061",
+            p3: "king"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    table cardNames : Int capacity(2) {
+                    table cardNames capacity(2) {
                         king = 0
                         queen = 1
                     }
@@ -472,69 +541,70 @@ public class StateDeclarationEmitterTests {
                 }
             }
             """,
-            "PUCK062",
-            "capacity(5)"
+            p2: "PUCK062",
+            p3: "capacity(5)"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    grid board : Text dimensions(width: 2, depth: 2)
+                    grid board dimensions(width: 2, depth: 2) {
+                        "0" = 1.5
+                    }
                 }
             }
             """,
-            "PUCK063",
-            "grid board : Text"
+            p2: "PUCK063",
+            p3: "grid board"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    grid board : Int dimensions(width: 2, depth: 2) {
+                    grid board dimensions(width: 2, depth: 2) {
                         "9" = 1
                     }
                 }
             }
             """,
-            "PUCK064",
-            "\"9\" = 1"
+            p2: "PUCK064",
+            p3: "\"9\" = 1"
         );
         data.Add(
-            """
+            p1: """
             state {
                 world {
-                    table tokensRow : Int capacity(1) {
+                    table tokensRow capacity(1) {
                         a = 0
                     }
-                    table codesRow : Int capacity(1) {
+                    table codesRow capacity(1) {
                         a = 1
                     }
-                    grid board : Int dimensions(width: 1, depth: 1) inverse(tokens: tokensRow, codes: codesRow) {
+                    grid board dimensions(width: 1, depth: 1) inverse(tokens: tokensRow, codes: codesRow) {
                         "0" = 1
                     }
                 }
             }
             """,
-            "PUCK065",
-            "inverse(tokens: tokensRow, codes: codesRow)"
+            p2: "PUCK065",
+            p3: "inverse(tokens: tokensRow, codes: codesRow)"
         );
         data.Add(
-            """
+            p1: """
             state {
                 lattices [
                     { "$type": "grid", "name": "board", origin [0, 0, 0], "cellSize": 1, "width": 1, "depth": 1 }
                 ]
                 world {
-                    grid board : Int dimensions(width: 1, depth: 1)
+                    grid board dimensions(width: 1, depth: 1)
                 }
             }
             """,
-            "PUCK066",
-            "grid board : Int dimensions(width: 1, depth: 1)"
+            p2: "PUCK066",
+            p3: "grid board dimensions(width: 1, depth: 1)"
         );
         return data;
     }
-
     [MemberData(nameof(RefusalCases))]
     [Theory]
     public void RefusalFiresWithItsCodeAndSourceSpan(string body, string code, string needle) {

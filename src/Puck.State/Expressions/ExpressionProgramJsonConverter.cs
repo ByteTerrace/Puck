@@ -37,8 +37,8 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
                 result["subprogram"] = fold.Subprogram;
                 break;
             case InstructionPayload.State state:
-                result["name"] = state.Name;
-                if (state.Key is { } key) { result["key"] = key; }
+                result["name"] = StateChannelRefJsonConverter.ToNode(value: state.Name);
+                if (state.Key is { } key) { result["key"] = StateChannelRefJsonConverter.ToNode(value: key); }
                 break;
             case InstructionPayload.Vector vector:
                 result["left"] = VectorNode(operand: vector.Left);
@@ -118,11 +118,11 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
                 )
             ),
                 PayloadShape.State => new InstructionPayload.State(
-                Key: (obj["key"]?.GetValue<string>()),
-                Name: Text(
-                    node: obj["name"],
-                    member: "name"
-                )
+                Key: ((obj["key"] is { } key)
+                    ? StateChannelRefJsonConverter.FromNode(node: key)
+                    : null
+                ),
+                Name: StateChannelRefJsonConverter.FromNode(node: (obj["name"] ?? throw Missing(member: "name")))
             ),
                 PayloadShape.Vector => new InstructionPayload.Vector(
                 Left: ReadVector(node: obj["left"]),
@@ -152,44 +152,48 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
     };
 
     // 'index' is an int for Argument and a direction name for Board, so a member's type is answered per shape.
-    private static JsonObject MemberSchema(PayloadShape shape, string member) => ((shape, member) switch {
+    private static JsonNode MemberSchema(PayloadShape shape, string member, Func<Type, JsonNode> exportType) => ((shape, member) switch {
         (PayloadShape.Argument, "index") => new JsonObject { ["type"] = "integer" },
+        (PayloadShape.State, "name" or "key") => exportType(arg: typeof(StateChannelRef)),
         (_, "subprogram") => new JsonObject { ["type"] = "integer" },
         (_, "value") => new JsonObject { ["type"] = "number" },
-        (_, "left" or "right") => VectorOperandSchema(),
+        (_, "left" or "right") => VectorOperandSchema(exportType: exportType),
         _ => new JsonObject { ["type"] = "string" },
     });
     private static string[] RequiredMembers(PayloadShape shape) => ((shape == PayloadShape.State)
         ? ["name"]
         : PayloadMembers(shape: shape)
     );
-    private static JsonObject VectorOperandSchema() => new() {
+    private static JsonObject VectorOperandSchema(Func<Type, JsonNode> exportType) => new() {
         ["type"] = "object",
         ["title"] = "ExpressionVectorOperand",
         ["required"] = new JsonArray("$type"),
         ["anyOf"] = new JsonArray(
             VectorOperandArm(
                 kind: "cell",
+                member: _ => exportType(arg: typeof(StateChannelRef)),
                 members: ["name", "key"],
                 required: ["name"]
             ),
             VectorOperandArm(
                 kind: "literal",
+                member: static _ => new JsonObject { ["type"] = "string" },
                 members: ["value"],
                 required: ["value"]
             ),
             VectorOperandArm(
                 kind: "embed",
+                member: static _ => new JsonObject { ["type"] = "string" },
                 members: ["text", "space"],
                 required: ["text"]
             )
         ),
     };
-    private static JsonObject VectorOperandArm(string kind, string[] members, string[] required) {
+    private static JsonObject VectorOperandArm(string kind, string[] members, string[] required, Func<string, JsonNode> member) {
         var properties = new JsonObject { ["$type"] = new JsonObject { ["const"] = kind } };
 
-        foreach (var member in members) {
-            properties[member] = new JsonObject { ["type"] = "string" };
+        foreach (var name in members) {
+            properties[name] = member(arg: name);
         }
 
         return new JsonObject {
@@ -201,7 +205,7 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
     // One arm per payload shape, its 'op' the operations that take that shape. An arm names every member the reader
     // admits and refuses the rest, so a mis-cased 'Name' or a foreign 'row' fails the schema the same way it fails
     // the converter.
-    private static JsonObject InstructionSchema() {
+    private static JsonObject InstructionSchema(Func<Type, JsonNode> exportType) {
         var arms = new List<JsonNode?>();
 
         foreach (var shape in Enum.GetValues<PayloadShape>()) {
@@ -218,6 +222,7 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
 
             foreach (var member in PayloadMembers(shape: shape)) {
                 properties[member] = MemberSchema(
+                    exportType: exportType,
                     member: member,
                     shape: shape
                 );
@@ -275,11 +280,11 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
 
         return (operandKind switch {
             "cell" => new VectorOperand.Cell(
-            Key: (obj["key"]?.GetValue<string>()),
-            Name: Text(
-                node: obj["name"],
-                member: "name"
-            )
+            Key: ((obj["key"] is { } key)
+                ? StateChannelRefJsonConverter.FromNode(node: key)
+                : null
+            ),
+            Name: StateChannelRefJsonConverter.FromNode(node: (obj["name"] ?? throw Missing(member: "name")))
         ),
             "literal" => new VectorOperand.Literal(Value: Text(
             node: obj["value"],
@@ -319,10 +324,13 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
     private static JsonException Missing(string member) => new(message: $"an expression instruction carries '{member}'");
     private static JsonObject VectorNode(VectorOperand operand) => (operand switch {
         VectorOperand.Cell cell => Keyed(
-        key: cell.Key,
+        key: ((cell.Key is { } key)
+            ? StateChannelRefJsonConverter.ToNode(value: key)
+            : null
+        ),
         kind: "cell",
         member: "name",
-        value: cell.Name
+        value: StateChannelRefJsonConverter.ToNode(value: cell.Name)
     ),
         VectorOperand.Literal literal => Keyed(
         key: null,
@@ -333,7 +341,7 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
         VectorOperand.Embed embed => Space(embed: embed),
         _ => throw new JsonException(message: "a vector operand is a cell, a literal, or an embed"),
     });
-    private static JsonObject Keyed(string kind, string member, string value, string? key) {
+    private static JsonObject Keyed(string kind, string member, JsonNode value, JsonNode? key) {
         var result = new JsonObject {
             ["$type"] = kind,
             [member] = value,
@@ -415,7 +423,7 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
             ["properties"] = new JsonObject {
                 ["instructions"] = new JsonObject {
                     ["type"] = "array",
-                    ["items"] = InstructionSchema(),
+                    ["items"] = InstructionSchema(exportType: exportType),
                 },
                 ["subprograms"] = new JsonObject {
                     ["type"] = "array",
@@ -427,7 +435,7 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
                             ["arity"] = new JsonObject { ["type"] = "integer" },
                             ["instructions"] = new JsonObject {
                                 ["type"] = "array",
-                                ["items"] = InstructionSchema(),
+                                ["items"] = InstructionSchema(exportType: exportType),
                             },
                         },
                         ["additionalProperties"] = false,

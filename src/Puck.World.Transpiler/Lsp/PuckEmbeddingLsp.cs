@@ -123,7 +123,6 @@ internal static class PuckEmbeddingLsp {
             label: "remember"
         );
     }
-
     /// <summary>Creates a document symbol for a <c>spaces { ... }</c> block.</summary>
     /// <param name="spaces">The spaces block AST node.</param>
     /// <returns>A document symbol JSON object representing the spaces block and its defined spaces.</returns>
@@ -142,9 +141,10 @@ internal static class PuckEmbeddingLsp {
         };
 
         var children = new JsonArray();
+
         foreach (var stmt in spaces.Statements) {
             if (stmt is BlockNode spaceBlock) {
-                var spaceName = (spaceBlock.Name ?? spaceBlock.Target ?? spaceBlock.Identifier);
+                var spaceName = (spaceBlock.Name ?? (spaceBlock.Target ?? spaceBlock.Identifier));
                 var childSymbol = new JsonObject {
                     ["name"] = $"space {spaceName}",
                     ["kind"] = 5,
@@ -159,6 +159,7 @@ internal static class PuckEmbeddingLsp {
                 };
 
                 var propChildren = new JsonArray();
+
                 foreach (var s in spaceBlock.Statements) {
                     if (s is PropertyNode prop) {
                         propChildren.Add(item: new JsonObject {
@@ -187,7 +188,6 @@ internal static class PuckEmbeddingLsp {
         symbol["children"] = children;
         return symbol;
     }
-
     /// <summary>Gets a hover card for an embedding keyword or an embedded text under the cursor.</summary>
     /// <param name="offset">The character offset of the cursor in source text.</param>
     /// <param name="text">The complete document source text.</param>
@@ -196,73 +196,73 @@ internal static class PuckEmbeddingLsp {
     /// <returns>A markdown-formatted hover card string, or null if position does not match.</returns>
     internal static string? GetEmbeddingHoverCard(int offset, string text, string? word, string? sourcePath) {
         // 1. Check if hovering on an embedded text literal
-        var embeddedCard = TryGetEmbeddedTextHoverCard(offset: offset, text: text, sourcePath: sourcePath);
+        var embeddedCard = TryGetEmbeddedTextHoverCard(offset: offset, sourcePath: sourcePath, text: text);
+
         if (embeddedCard is not null) {
             return embeddedCard;
         }
 
         // 2. Check if hovering on an embedding keyword or transform
-        if (!string.IsNullOrEmpty(word)) {
+        if (!string.IsNullOrEmpty(value: word)) {
             return GetKeywordHoverCard(word: word);
         }
 
         return null;
     }
-
     /// <summary>Gets a hover card for embedding and vector keywords.</summary>
     /// <param name="word">The identifier or keyword to describe.</param>
     /// <returns>A markdown documentation card, or null.</returns>
     internal static string? GetKeywordHoverCard(string word) {
         return word switch {
             "Vector" => Card(
-                title: "`Vector` Cell Kind",
-                declaration: "table memories : Vector = ...\nslot query : Vector = ...",
-                description: "A vector state row whose cells hold normalized `sbyte` embedding vectors within a declared space."
+                declaration: "table memories space(lore) = ...\nslot query space(lore) = ...",
+                description: "A vector state row whose cells hold normalized `sbyte` embedding vectors within a declared space; a `space(...)` modifier is what infers the Vector kind.",
+                title: "`Vector` Cell Kind"
             ),
             "embed" => Card(
-                title: "`embed` Function",
                 declaration: "embed(\"text\", [space: \"lore\"])",
-                description: "Embeds a text literal into a vector using the specified or default space. Resolved and locked at bake time via `puck embed`."
+                description: "Embeds a text literal into a vector using the specified or default space. Resolved and locked at bake time via `puck embed`.",
+                title: "`embed` Function"
             ),
             "vector" => Card(
-                title: "`vector` Literal",
                 declaration: "vector(\"base64url\")",
-                description: "A raw vector literal encoded as unpadded URL-safe base64 `sbyte` components."
+                description: "A raw vector literal encoded as unpadded URL-safe base64 `sbyte` components.",
+                title: "`vector` Literal"
             ),
             "dot" => Card(
-                title: "`dot` Function",
                 declaration: "dot(vectorA, vectorB)",
-                description: "Computes the exact integer dot product of two vectors in the same space."
+                description: "Computes the exact integer dot product of two vectors in the same space.",
+                title: "`dot` Function"
             ),
             "similarity" => Card(
-                title: "`similarity` Function",
                 declaration: "similarity(vectorA, vectorB)",
-                description: "Computes the cosine similarity of two normalized vectors in the same space as a `Fixed` decimal value."
+                description: "Computes the cosine similarity of two normalized vectors in the same space as a `Fixed` decimal value.",
+                title: "`similarity` Function"
             ),
             "identical" => Card(
-                title: "`identical` Predicate Function",
                 declaration: "identical(vectorA, vectorB)",
-                description: "Evaluates to `true` if two vectors have identical components, `false` otherwise."
+                description: "Evaluates to `true` if two vectors have identical components, `false` otherwise.",
+                title: "`identical` Predicate Function"
             ),
             "mix" => Card(
-                title: "`mix` Transform",
                 declaration: "transform mix(into: \"current\", terms: [\n    { from: \"stance[$each]\", weight: 3 }\n    { from: embed(\"calm\"), weight: -1 }\n])",
-                description: "Writes the normalized weighted sum of 1 to 8 vector terms into a destination vector cell."
+                description: "Writes the normalized weighted sum of 1 to 8 vector terms into a destination vector cell.",
+                title: "`mix` Transform"
             ),
             "mean" => Card(
-                title: "`mean` Transform",
                 declaration: "transform mean(from: memories, into: \"self\", where: important)",
-                description: "Writes the normalized mean vector of candidate cells in a table into a destination vector cell."
+                description: "Writes the normalized mean vector of candidate cells in a table into a destination vector cell.",
+                title: "`mean` Transform"
             ),
             "nearest" => Card(
-                title: "`nearest` Transform",
                 declaration: "transform nearest(from: memories, query: \"situation\", into: recalled, k: 3)",
-                description: "Finds the `k` nearest cells in a vector table to a query vector, scoring by dot/similarity or writing the best key into a Text slot."
+                description: "Finds the `k` nearest cells in a vector table to a query vector, scoring by dot/similarity or writing the best key into a Text slot.",
+                title: "`nearest` Transform"
             ),
             "remember" => Card(
-                title: "`remember` Transform",
                 declaration: "transform remember(from: memories, query: \"situation\", threshold: 0.8)",
-                description: "Inserts or reinforces a vector memory in an evicting vector table."
+                description: "Inserts or reinforces a vector memory in an evicting vector table.",
+                title: "`remember` Transform"
             ),
             _ => null,
         };
@@ -275,36 +275,40 @@ internal static class PuckEmbeddingLsp {
             vocabulary: WorldDocumentVocabulary.Instance
         );
         var doc = parseResult.Value;
+
         if (doc is null) {
             return null;
         }
 
         var path = new List<SyntaxNode>();
+
         FindPath(node: doc, offset: offset, path: path);
 
         string? embeddedText = null;
         string? explicitSpace = null;
 
-        for (var i = (path.Count - 1); i >= 0; i--) {
+        for (var i = (path.Count - 1); (i >= 0); i--) {
             var node = path[i];
-            if (node is RhsOperandNode rhsOp && TryExtractEmbedFromText(text: rhsOp.Text, embeddedText: out embeddedText, explicitSpace: out explicitSpace)) {
+
+            if ((node is RhsOperandNode rhsOp) && TryExtractEmbedFromText(text: rhsOp.Expression.Text, embeddedText: out embeddedText, explicitSpace: out explicitSpace)) {
                 break;
             }
 
             if (node is ComparisonPredicateNode compPred) {
-                if (TryExtractEmbedFromText(text: compPred.LeftText, embeddedText: out embeddedText, explicitSpace: out explicitSpace) ||
-                    TryExtractEmbedFromText(text: compPred.RightText, embeddedText: out embeddedText, explicitSpace: out explicitSpace)) {
+                if (TryExtractEmbedFromText(text: compPred.Left.Text, embeddedText: out embeddedText, explicitSpace: out explicitSpace) ||
+                    TryExtractEmbedFromText(text: compPred.Right.Text, embeddedText: out embeddedText, explicitSpace: out explicitSpace)) {
                     break;
                 }
             }
 
-            if (node is CallExpressionNode call && string.Equals(call.Name, "embed", StringComparison.OrdinalIgnoreCase)) {
-                if (call.Arguments.Count > 0 && call.Arguments[0].Value is LiteralExpressionNode { Value: string strText }) {
+            if ((node is CallExpressionNode call) && string.Equals(a: call.Name, b: "embed", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                if ((call.Arguments.Count > 0) && (call.Arguments[0].Value is LiteralExpressionNode { Value: string strText })) {
                     embeddedText = strText;
                 }
                 if (call.Arguments.Count > 1) {
-                    var spArg = call.Arguments.FirstOrDefault(a => string.Equals(a.Name, "space", StringComparison.OrdinalIgnoreCase))
-                                ?? call.Arguments[1];
+                    var spArg = (call.Arguments.FirstOrDefault(predicate: a => string.Equals(a: a.Name, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase))
+                                ?? call.Arguments[1]);
+
                     if (spArg.Value is LiteralExpressionNode { Value: string spStr }) {
                         explicitSpace = spStr;
                     } else if (spArg.Value is IdentifierExpressionNode spIdent) {
@@ -318,10 +322,15 @@ internal static class PuckEmbeddingLsp {
                 if (cell.Value is LiteralExpressionNode { Value: string cellStr }) {
                     // Check if enclosing table is Vector or has embeds
                     var table = path.OfType<StateTableDeclarationNode>().FirstOrDefault();
+
                     if (table is not null) {
-                        if (string.Equals(table.Kind, "Vector", StringComparison.OrdinalIgnoreCase)) {
+                        var spaceMod = table.Modifiers.FirstOrDefault(predicate: m => string.Equals(a: m.Name, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase));
+
+                        // A `space(...)` modifier is the Vector signal a kind annotation no longer carries — see
+                        // WorldDocumentEmitter's kind inference.
+                        if (spaceMod is not null) {
                             embeddedText = cellStr;
-                            explicitSpace = table.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "space", StringComparison.OrdinalIgnoreCase))?.Arguments.FirstOrDefault()?.Value switch {
+                            explicitSpace = spaceMod.Arguments.FirstOrDefault()?.Value switch {
                                 LiteralExpressionNode { Value: string s } => s,
                                 IdentifierExpressionNode ident => ident.Name,
                                 _ => null,
@@ -329,10 +338,11 @@ internal static class PuckEmbeddingLsp {
                             break;
                         }
 
-                        var embedsMod = table.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "embeds", StringComparison.OrdinalIgnoreCase));
+                        var embedsMod = table.Modifiers.FirstOrDefault(predicate: m => string.Equals(a: m.Name, b: "embeds", comparisonType: StringComparison.OrdinalIgnoreCase));
+
                         if (embedsMod is not null) {
                             embeddedText = cellStr;
-                            explicitSpace = embedsMod.Arguments.FirstOrDefault(a => string.Equals(a.Name, "space", StringComparison.OrdinalIgnoreCase))?.Value switch {
+                            explicitSpace = embedsMod.Arguments.FirstOrDefault(predicate: a => string.Equals(a: a.Name, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase))?.Value switch {
                                 LiteralExpressionNode { Value: string s } => s,
                                 IdentifierExpressionNode ident => ident.Name,
                                 _ => null,
@@ -350,14 +360,17 @@ internal static class PuckEmbeddingLsp {
 
         // Resolve space name
         var resolvedSpace = explicitSpace;
-        if (string.IsNullOrEmpty(resolvedSpace)) {
+
+        if (string.IsNullOrEmpty(value: resolvedSpace)) {
             // Find default space from document
-            var spacesBlock = doc.Statements.OfType<BlockNode>().FirstOrDefault(b => string.Equals(b.Identifier, "state", StringComparison.OrdinalIgnoreCase))
-                ?.Statements.OfType<BlockNode>().FirstOrDefault(b => string.Equals(b.Identifier, "spaces", StringComparison.OrdinalIgnoreCase));
+            var spacesBlock = doc.Statements.OfType<BlockNode>().FirstOrDefault(predicate: b => string.Equals(a: b.Identifier, b: "state", comparisonType: StringComparison.OrdinalIgnoreCase))
+                ?.Statements.OfType<BlockNode>().FirstOrDefault(predicate: b => string.Equals(a: b.Identifier, b: "spaces", comparisonType: StringComparison.OrdinalIgnoreCase));
+
             if (spacesBlock is not null) {
-                var spaceDecls = spacesBlock.Statements.OfType<BlockNode>().Where(b => string.Equals(b.Identifier, "space", StringComparison.OrdinalIgnoreCase)).ToList();
+                var spaceDecls = spacesBlock.Statements.OfType<BlockNode>().Where(predicate: b => string.Equals(a: b.Identifier, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase)).ToList();
+
                 if (spaceDecls.Count == 1) {
-                    resolvedSpace = (spaceDecls[0].Name ?? spaceDecls[0].Target ?? spaceDecls[0].Identifier);
+                    resolvedSpace = (spaceDecls[0].Name ?? (spaceDecls[0].Target ?? spaceDecls[0].Identifier));
                 }
             }
         }
@@ -367,77 +380,82 @@ internal static class PuckEmbeddingLsp {
         // Load embedding lock
         var lockFile = EmbeddingLock.TryLoad(rootSourcePath: sourcePath);
         var sb = new StringBuilder();
-        sb.AppendLine($"**Embedded Text** (`{resolvedSpace}`)\n");
-        sb.AppendLine($"\"{embeddedText}\"\n");
+
+        sb.AppendLine(handler: $"**Embedded Text** (`{resolvedSpace}`)\n");
+        sb.AppendLine(handler: $"\"{embeddedText}\"\n");
 
         if (lockFile is null) {
-            sb.AppendLine("- **Lock status:** Not locked (no lock file found; run `puck embed`)");
-            sb.AppendLine($"- **Space:** `{resolvedSpace}`");
+            sb.AppendLine(value: "- **Lock status:** Not locked (no lock file found; run `puck embed`)");
+            sb.AppendLine(handler: $"- **Space:** `{resolvedSpace}`");
             return sb.ToString().TrimEnd();
         }
 
-        if (!lockFile.Spaces.TryGetValue(resolvedSpace, out var space)) {
+        if (!lockFile.Spaces.TryGetValue(key: resolvedSpace, value: out var space)) {
             if (lockFile.Spaces.Count == 1) {
                 space = lockFile.Spaces.Values.First();
                 resolvedSpace = lockFile.Spaces.Keys.First();
             } else {
-                sb.AppendLine($"- **Lock status:** Not locked (space '{resolvedSpace}' not found in lock; run `puck embed`)");
+                sb.AppendLine(handler: $"- **Lock status:** Not locked (space '{resolvedSpace}' not found in lock; run `puck embed`)");
                 return sb.ToString().TrimEnd();
             }
         }
 
         var textHash = EmbeddingLock.ComputeTextHash(text: embeddedText);
-        if (!space.Entries.TryGetValue(textHash, out var currentEntry)) {
-            sb.AppendLine("- **Lock status:** Not locked (run `puck embed`)");
-            sb.AppendLine($"- **Space:** `{resolvedSpace}` (`{space.Model}`, rev: `{space.Revision}`, dims: {space.Dimensions})");
+
+        if (!space.Entries.TryGetValue(key: textHash, value: out var currentEntry)) {
+            sb.AppendLine(value: "- **Lock status:** Not locked (run `puck embed`)");
+            sb.AppendLine(handler: $"- **Space:** `{resolvedSpace}` (`{space.Model}`, rev: `{space.Revision}`, dims: {space.Dimensions})");
             return sb.ToString().TrimEnd();
         }
 
-        sb.AppendLine("- **Lock status:** Locked");
-        sb.AppendLine($"- **Model:** `{space.Model}` (rev: `{space.Revision}`, dims: {space.Dimensions})");
-        sb.AppendLine($"- **Vector:** `{currentEntry.Vector}`\n");
+        sb.AppendLine(value: "- **Lock status:** Locked");
+        sb.AppendLine(handler: $"- **Model:** `{space.Model}` (rev: `{space.Revision}`, dims: {space.Dimensions})");
+        sb.AppendLine(handler: $"- **Vector:** `{currentEntry.Vector}`\n");
 
         // Find three nearest locked texts
         if (StateVector.TryParseBase64Url(currentEntry.Vector, space.Dimensions, out var currentVector, out _)) {
             var nearestList = new List<(string Text, long Score)>();
+
             foreach (var other in space.Entries.Values) {
-                if (string.Equals(other.Text, embeddedText, StringComparison.Ordinal)) {
+                if (string.Equals(a: other.Text, b: embeddedText, comparisonType: StringComparison.Ordinal)) {
                     continue;
                 }
 
                 if (StateVector.TryParseBase64Url(other.Vector, space.Dimensions, out var otherVector, out _)) {
                     var dot = SignedByteVectorFunctions.Dot(left: currentVector.Components, right: otherVector.Components);
-                    nearestList.Add((other.Text, dot));
+
+                    nearestList.Add(item: (other.Text, dot));
                 }
             }
 
             if (nearestList.Count > 0) {
-                nearestList.Sort((a, b) => {
-                    var cmp = b.Score.CompareTo(a.Score);
-                    return cmp != 0 ? cmp : string.Compare(a.Text, b.Text, StringComparison.Ordinal);
+                nearestList.Sort(comparison: (a, b) => {
+                    var cmp = b.Score.CompareTo(value: a.Score);
+
+                    return ((cmp != 0) ? cmp : string.Compare(comparisonType: StringComparison.Ordinal, strA: a.Text, strB: b.Text));
                 });
 
-                sb.AppendLine("**Nearest locked texts:**");
-                var count = Math.Min(3, nearestList.Count);
-                for (var i = 0; i < count; i++) {
+                sb.AppendLine(value: "**Nearest locked texts:**");
+                var count = Math.Min(val1: 3, val2: nearestList.Count);
+
+                for (var i = 0; (i < count); i++) {
                     var (nText, nScore) = nearestList[i];
-                    sb.AppendLine($"{i + 1}. \"{nText}\" (score: {nScore})");
+                    sb.AppendLine(handler: $"{(i + 1)}. \"{nText}\" (score: {nScore})");
                 }
             }
         }
 
         return sb.ToString().TrimEnd();
     }
-
     private static bool TryExtractEmbedFromText(string text, out string? embeddedText, out string? explicitSpace) {
         embeddedText = null;
         explicitSpace = null;
-        if (ExpressionSpelling.TryParseVector(text: text, token: out var vecOp, error: out _) && vecOp is VectorOperand.Embed emb) {
+        if (ExpressionSpelling.TryParseVector(error: out _, text: text, token: out var vecOp) && (vecOp is VectorOperand.Embed emb)) {
             embeddedText = emb.Text;
             explicitSpace = emb.Space;
             return true;
         }
-        if (ExpressionSpelling.TryParse(text: text, program: out var parsed, error: out _)) {
+        if (ExpressionSpelling.TryParse(error: out _, program: out var parsed, text: text)) {
             foreach (var tok in parsed.Instructions) {
                 if (tok.Payload is InstructionPayload.Vector vc) {
                     if (vc.Left is VectorOperand.Embed leftEmb) {
@@ -455,10 +473,10 @@ internal static class PuckEmbeddingLsp {
         }
         return false;
     }
-
     private static string Card(string title, string declaration, string? description = null) {
         var fence = "```";
-        while (declaration.Contains(value: fence, comparisonType: StringComparison.Ordinal)) {
+
+        while (declaration.Contains(comparisonType: StringComparison.Ordinal, value: fence)) {
             fence += "`";
         }
 
@@ -466,10 +484,8 @@ internal static class PuckEmbeddingLsp {
             ? ""
             : $"\n\n{description}"));
     }
-
     private static bool Contains(SyntaxNode node, int offset) =>
         ((offset >= node.Offset) && (offset < (node.Offset + node.Length)));
-
     private static IEnumerable<SyntaxNode> Children(SyntaxNode node) => node switch {
         DocumentNode document => document.Statements,
         BlockNode block => block.Statements,
@@ -511,10 +527,13 @@ internal static class PuckEmbeddingLsp {
         UnaryExpressionNode unary => [unary.Operand],
         IndexExpressionNode index => [index.Target, index.Index],
         MemberAccessExpressionNode member => [member.Target],
-        RangeExpressionNode range => [range.Start, range.End],
+        RangeExpressionNode range => [.. OptionalRangeChildren(range: range)],
         _ => []
     };
-
+    private static IEnumerable<SyntaxNode> OptionalRangeChildren(RangeExpressionNode range) {
+        if (range.Start is { } start) { yield return start; }
+        if (range.End is { } end) { yield return end; }
+    }
     private static bool FindPath(SyntaxNode node, int offset, List<SyntaxNode> path) {
         if (!Contains(node: node, offset: offset)) {
             return false;

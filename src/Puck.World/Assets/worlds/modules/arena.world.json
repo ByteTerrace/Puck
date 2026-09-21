@@ -52,10 +52,12 @@
         "coOccurrence": "Region",
         "effects": [
           {
-            "$type": "setState",
-            "key": "$left",
-            "state": "burning",
-            "valueSeconds": 3.0
+            "$type": "scheduleState",
+            "delaySeconds": 3,
+            "key": {
+              "channel": "left"
+            },
+            "state": "burning"
           }
         ],
         "left": "flammable",
@@ -69,9 +71,19 @@
         "effects": [
           {
             "$type": "setState",
-            "key": "$left",
+            "key": {
+              "channel": "left"
+            },
             "state": "frozen",
-            "valueSeconds": 3.0
+            "value": 1
+          },
+          {
+            "$type": "scheduleState",
+            "delaySeconds": 3,
+            "key": {
+              "channel": "left"
+            },
+            "state": "frozenUntil"
           }
         ],
         "left": "freezable",
@@ -610,7 +622,14 @@
       "effects": [
         {
           "$type": "setState",
-          "fromState": "$nearest:body:0:enemy",
+          "fromState": {
+            "channel": "nearest",
+            "arguments": [
+              "body",
+              0,
+              "enemy"
+            ]
+          },
           "key": "0",
           "state": "targeted"
         }
@@ -629,7 +648,14 @@
       "effects": [
         {
           "$type": "setState",
-          "fromState": "$nearest:body:0:enemy",
+          "fromState": {
+            "channel": "nearest",
+            "arguments": [
+              "body",
+              0,
+              "enemy"
+            ]
+          },
           "key": "0",
           "state": "targeted"
         }
@@ -637,7 +663,13 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$channel:1:target",
+        "state": {
+          "channel": "channel",
+          "arguments": [
+            1,
+            "target"
+          ]
+        },
         "value": 1
       },
       "mode": "Edge",
@@ -741,26 +773,14 @@
     {
       "effects": [
         {
-          "$type": "countdownState",
-          "key": "0",
-          "state": "attackCooldown"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Greater",
-        "key": "0",
-        "state": "attackCooldown",
-        "value": 0
-      },
-      "mode": "Level",
-      "name": "attack-cooldown"
-    },
-    {
-      "effects": [
-        {
           "$type": "setState",
-          "fromKey": "$cell:targeted:0",
+          "fromKey": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "fromState": "targeted",
           "key": "0",
           "state": "targetOfTarget"
@@ -799,7 +819,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$cell:targeted:0",
+          "fromKey": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "fromState": "bodyName",
           "key": "0",
           "state": "targetName"
@@ -838,7 +864,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$cell:targetOfTarget:0",
+          "fromKey": {
+            "channel": "cell",
+            "arguments": [
+              "targetOfTarget",
+              0
+            ]
+          },
           "fromState": "bodyName",
           "key": "0",
           "state": "targetOfTargetName"
@@ -885,7 +917,13 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$channel:1:element",
+        "state": {
+          "channel": "channel",
+          "arguments": [
+            1,
+            "element"
+          ]
+        },
         "value": 1
       },
       "mode": "Edge",
@@ -914,7 +952,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$cell:elementIndex:0",
+          "fromKey": {
+            "channel": "cell",
+            "arguments": [
+              "elementIndex",
+              0
+            ]
+          },
           "fromState": "elementName",
           "key": "0",
           "state": "elementLabel"
@@ -927,27 +971,45 @@
       "effects": [
         {
           "$type": "addState",
-          "key": "$cell:targeted:0",
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "state": "hp",
           "value": -25
         },
         {
-          "$type": "setState",
-          "key": "$cell:targeted:0",
-          "state": "hitRecently",
-          "valueSeconds": 4.0
+          "$type": "scheduleState",
+          "delaySeconds": 4,
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
+          "state": "hitRecently"
         },
         {
           "$type": "setState",
-          "key": "$cell:targeted:0",
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "state": "targeted",
           "value": 0
         },
         {
-          "$type": "setState",
+          "$type": "scheduleState",
+          "delaySeconds": 1,
           "key": "0",
-          "state": "attackCooldown",
-          "valueSeconds": 1.0
+          "state": "attackCooldown"
         }
       ],
       "gate": {
@@ -956,7 +1018,13 @@
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "state": "$channel:1:attack",
+            "state": {
+              "channel": "channel",
+              "arguments": [
+                1,
+                "attack"
+              ]
+            },
             "value": 1
           },
           {
@@ -969,15 +1037,26 @@
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "state": "$distance:body:0:cell:targeted:0",
+            "state": {
+              "channel": "distance",
+              "arguments": [
+                "body",
+                0,
+                "cell",
+                "targeted",
+                0
+              ]
+            },
             "value": 2.5
           },
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "0",
-            "state": "attackCooldown",
-            "value": 0
+            "comparandKey": "0",
+            "comparandState": "attackCooldown",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
@@ -995,27 +1074,45 @@
       "effects": [
         {
           "$type": "addState",
-          "key": "$cell:targeted:0",
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "state": "hp",
           "value": -25
         },
         {
-          "$type": "setState",
-          "key": "$cell:targeted:0",
-          "state": "hitRecently",
-          "valueSeconds": 4.0
+          "$type": "scheduleState",
+          "delaySeconds": 4,
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
+          "state": "hitRecently"
         },
         {
           "$type": "setState",
-          "key": "$cell:targeted:0",
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "state": "targeted",
           "value": 0
         },
         {
-          "$type": "setState",
+          "$type": "scheduleState",
+          "delaySeconds": 1,
           "key": "0",
-          "state": "attackCooldown",
-          "valueSeconds": 1.0
+          "state": "attackCooldown"
         }
       ],
       "gate": {
@@ -1038,15 +1135,26 @@
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "state": "$distance:body:0:cell:targeted:0",
+            "state": {
+              "channel": "distance",
+              "arguments": [
+                "body",
+                0,
+                "cell",
+                "targeted",
+                0
+              ]
+            },
             "value": 2.5
           },
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "0",
-            "state": "attackCooldown",
-            "value": 0
+            "comparandKey": "0",
+            "comparandState": "attackCooldown",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
@@ -1063,10 +1171,16 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "key": "$cell:targeted:0",
-          "state": "burning",
-          "valueSeconds": 4.0
+          "$type": "scheduleState",
+          "delaySeconds": 4,
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
+          "state": "burning"
         }
       ],
       "gate": {
@@ -1075,7 +1189,13 @@
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "state": "$channel:1:attack",
+            "state": {
+              "channel": "channel",
+              "arguments": [
+                1,
+                "attack"
+              ]
+            },
             "value": 1
           },
           {
@@ -1095,7 +1215,16 @@
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "state": "$distance:body:0:cell:targeted:0",
+            "state": {
+              "channel": "distance",
+              "arguments": [
+                "body",
+                0,
+                "cell",
+                "targeted",
+                0
+              ]
+            },
             "value": 2.5
           },
           {
@@ -1114,9 +1243,27 @@
       "effects": [
         {
           "$type": "setState",
-          "key": "$cell:targeted:0",
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
           "state": "frozen",
-          "valueSeconds": 4.0
+          "value": 1
+        },
+        {
+          "$type": "scheduleState",
+          "delaySeconds": 4,
+          "key": {
+            "channel": "cell",
+            "arguments": [
+              "targeted",
+              0
+            ]
+          },
+          "state": "frozenUntil"
         }
       ],
       "gate": {
@@ -1125,7 +1272,13 @@
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "state": "$channel:1:attack",
+            "state": {
+              "channel": "channel",
+              "arguments": [
+                1,
+                "attack"
+              ]
+            },
             "value": 1
           },
           {
@@ -1145,7 +1298,16 @@
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "state": "$distance:body:0:cell:targeted:0",
+            "state": {
+              "channel": "distance",
+              "arguments": [
+                "body",
+                0,
+                "cell",
+                "targeted",
+                0
+              ]
+            },
             "value": 2.5
           },
           {
@@ -1164,18 +1326,17 @@
       "effects": [
         {
           "$type": "addState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "hp",
           "value": -3
         },
         {
-          "$type": "countdownState",
-          "key": "$each",
-          "state": "burning"
-        },
-        {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "hot",
           "value": 1
         }
@@ -1186,15 +1347,21 @@
         "predicates": [
           {
             "$type": "compareState",
-            "comparison": "Greater",
-            "key": "$each",
-            "state": "burning",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "burning",
+            "comparison": "Less",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
             "comparison": "NotEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "dead",
             "value": 1
           }
@@ -1207,7 +1374,9 @@
       "effects": [
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "hot",
           "value": 0
         }
@@ -1218,15 +1387,21 @@
         "predicates": [
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "$each",
-            "state": "burning",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "burning",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "hot",
             "value": 1
           }
@@ -1238,13 +1413,10 @@
     {
       "effects": [
         {
-          "$type": "countdownState",
-          "key": "$each",
-          "state": "frozen"
-        },
-        {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "cold",
           "value": 1
         }
@@ -1253,7 +1425,9 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Greater",
-        "key": "$each",
+        "key": {
+          "channel": "each"
+        },
         "state": "frozen",
         "value": 0
       },
@@ -1264,27 +1438,43 @@
       "effects": [
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
+          "state": "frozen",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": {
+            "channel": "each"
+          },
           "state": "cold",
           "value": 0
         }
       ],
-      "forEach": "frozen",
+      "forEach": "frozenUntil",
       "gate": {
         "$type": "all",
         "predicates": [
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "$each",
-            "state": "frozen",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "frozenUntil",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "key": "$each",
-            "state": "cold",
+            "key": {
+              "channel": "each"
+            },
+            "state": "frozen",
             "value": 1
           }
         ]
@@ -1296,7 +1486,9 @@
       "effects": [
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "burning",
           "value": 0
         }
@@ -1308,16 +1500,22 @@
           {
             "$type": "compareState",
             "comparison": "Greater",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "frozen",
             "value": 0
           },
           {
             "$type": "compareState",
-            "comparison": "Greater",
-            "key": "$each",
-            "state": "burning",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "burning",
+            "comparison": "Less",
+            "state": {
+              "channel": "tick"
+            }
           }
         ]
       },
@@ -1327,27 +1525,10 @@
     {
       "effects": [
         {
-          "$type": "countdownState",
-          "key": "$each",
-          "state": "hitRecently"
-        }
-      ],
-      "forEach": "hitRecently",
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Greater",
-        "key": "$each",
-        "state": "hitRecently",
-        "value": 0
-      },
-      "mode": "Level",
-      "name": "hit-memory"
-    },
-    {
-      "effects": [
-        {
           "$type": "addState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "hp",
           "value": 5
         }
@@ -1358,22 +1539,32 @@
         "predicates": [
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "$each",
-            "state": "hitRecently",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "hitRecently",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "burning",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "key": "$each",
-            "state": "burning",
-            "value": 0
-          },
-          {
-            "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "hp",
             "value": 995
           }
@@ -1386,34 +1577,44 @@
       "effects": [
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "dead",
           "value": 1
         },
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "burning",
           "value": 0
         },
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "frozen",
           "value": 0
         },
         {
-          "$type": "setState",
-          "key": "$each",
-          "state": "respawnIn",
-          "valueSeconds": 3.0
+          "$type": "scheduleState",
+          "delaySeconds": 3,
+          "key": {
+            "channel": "each"
+          },
+          "state": "respawnIn"
         }
       ],
       "forEach": "mortal",
       "gate": {
         "$type": "compareState",
         "comparison": "LessOrEqual",
-        "key": "$each",
+        "key": {
+          "channel": "each"
+        },
         "state": "hp",
         "value": 0
       },
@@ -1423,33 +1624,18 @@
     {
       "effects": [
         {
-          "$type": "countdownState",
-          "key": "$each",
-          "state": "respawnIn"
-        }
-      ],
-      "forEach": "respawnIn",
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Greater",
-        "key": "$each",
-        "state": "respawnIn",
-        "value": 0
-      },
-      "mode": "Level",
-      "name": "respawn-countdown"
-    },
-    {
-      "effects": [
-        {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "hp",
           "value": 300
         },
         {
           "$type": "setState",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "dead",
           "value": 0
         }
@@ -1461,16 +1647,22 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "dead",
             "value": 1
           },
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "$each",
-            "state": "respawnIn",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "respawnIn",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           }
         ]
       },
@@ -1481,9 +1673,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
+          "fromKey": {
+            "channel": "each"
+          },
           "fromState": "deadLook",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "lookOf"
         }
       ],
@@ -1491,7 +1687,9 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "key": "$each",
+        "key": {
+          "channel": "each"
+        },
         "state": "dead",
         "value": 1
       },
@@ -1502,9 +1700,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
+          "fromKey": {
+            "channel": "each"
+          },
           "fromState": "iceLook",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "lookOf"
         }
       ],
@@ -1515,14 +1717,18 @@
           {
             "$type": "compareState",
             "comparison": "Greater",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "frozen",
             "value": 0
           },
           {
             "$type": "compareState",
             "comparison": "NotEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "dead",
             "value": 1
           }
@@ -1535,9 +1741,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
+          "fromKey": {
+            "channel": "each"
+          },
           "fromState": "fireLook",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "lookOf"
         }
       ],
@@ -1547,22 +1757,30 @@
         "predicates": [
           {
             "$type": "compareState",
-            "comparison": "Greater",
-            "key": "$each",
-            "state": "burning",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "burning",
+            "comparison": "Less",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "frozen",
             "value": 0
           },
           {
             "$type": "compareState",
             "comparison": "NotEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "dead",
             "value": 1
           }
@@ -1575,9 +1793,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
+          "fromKey": {
+            "channel": "each"
+          },
           "fromState": "normalLook",
-          "key": "$each",
+          "key": {
+            "channel": "each"
+          },
           "state": "lookOf"
         }
       ],
@@ -1587,22 +1809,30 @@
         "predicates": [
           {
             "$type": "compareState",
-            "comparison": "LessOrEqual",
-            "key": "$each",
-            "state": "burning",
-            "value": 0
+            "comparandKey": {
+              "channel": "each"
+            },
+            "comparandState": "burning",
+            "comparison": "GreaterOrEqual",
+            "state": {
+              "channel": "tick"
+            }
           },
           {
             "$type": "compareState",
             "comparison": "LessOrEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "frozen",
             "value": 0
           },
           {
             "$type": "compareState",
             "comparison": "NotEqual",
-            "key": "$each",
+            "key": {
+              "channel": "each"
+            },
             "state": "dead",
             "value": 1
           }
@@ -1726,8 +1956,6 @@
           }
         ],
         "kind": "Int",
-        "max": 50400,
-        "min": 0,
         "name": "attackCooldown"
       },
       {
@@ -1867,8 +2095,6 @@
           }
         ],
         "kind": "Int",
-        "max": 201600,
-        "min": 0,
         "name": "burning"
       },
       {
@@ -1885,9 +2111,24 @@
         ],
         "gatesDrive": true,
         "kind": "Int",
-        "max": 201600,
+        "max": 1,
         "min": 0,
         "name": "frozen"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "frozenUntil"
       },
       {
         "capacity": 8,
@@ -1917,8 +2158,6 @@
           }
         ],
         "kind": "Int",
-        "max": 201600,
-        "min": 0,
         "name": "hitRecently"
       },
       {
@@ -1954,8 +2193,6 @@
           }
         ],
         "kind": "Int",
-        "max": 151200,
-        "min": 0,
         "name": "respawnIn"
       },
       {

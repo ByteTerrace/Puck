@@ -141,7 +141,7 @@ public static partial class WorldDefinitionValidator {
 
         var errors = new List<string>();
 
-        if (!IsFinite(value: placement.Position)) {
+        if ((placement.Position is null) || !IsFinite(value: placement.Position)) {
             errors.Add(item: "placement.position must contain finite coordinates.");
         }
         RequireFinite(

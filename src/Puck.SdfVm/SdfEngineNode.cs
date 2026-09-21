@@ -145,8 +145,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         child.Dispose();
     }
 
-    /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
-    public int ProgramWordCapacity => m_programWordCapacity;
+    /// <summary>Gets the current program-word capacity, or the initial reserve before engine initialization.</summary>
+    public int ProgramWordCapacity => m_engine?.ProgramWordCapacity ?? m_programWordCapacity;
 
     private readonly int m_programWordCapacity;
     private readonly bool m_rayQueryEnabled;

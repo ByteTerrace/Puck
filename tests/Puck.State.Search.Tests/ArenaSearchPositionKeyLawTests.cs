@@ -48,7 +48,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
             Verdict: "verdict",
             Off: -1L,
             Nodes: 64,
-            JudgeCost: 1L,
+            Work: SearchWork.NodeBounded(judge: 1L),
             Depth: depth,
             Best: "best",
             Shapes: [new SearchShapePlan(
@@ -154,7 +154,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
             position: position
         );
 
-        foreach (var value in (long[])[1L, 2L, 3L]) {
+        foreach (var value in ((long[])[1L, 2L, 3L])) {
             Assert.True(condition: position.Arena.TryPush(
                 reason: out _,
                 rowOrdinal: log,
@@ -196,6 +196,90 @@ public sealed class ArenaSearchPositionKeyLawTests {
             actual: KeyAt(search: untimed, tick: 9UL),
             expected: KeyAt(search: untimed, tick: 1UL)
         );
+    }
+    // A direct clock operand has no document row for KeyRows to name. It must still invalidate a landed job and
+    // its transposition identity, while an ordinary job remains reusable across ticks.
+    [Fact]
+    public void AClockReadingJudgeRestartsAndChangesItsPositionKeyOnTheNextTick() {
+        var position = new Position(rows: Board(
+            cells: 4,
+            tokens: 2
+        ));
+        var search = SearchFixture.Build(
+            judge: RuleJudge(
+                position: position,
+                rules: [new Rule(
+                    Name: Name(value: "accept-at-one"),
+                    Gate: new ActionPredicate.CompareState(
+                        Comparison: ActionStateComparison.Equal,
+                        State: RuleFacts.Tick,
+                        Value: 1m
+                    ),
+                    Effects: [
+                        new ActionEffect.SetState(
+                            State: "verdict",
+                            Value: 1m
+                        ),
+                        new ActionEffect.SetState(
+                            Expression: ExpressionProgram.Parse(text: "turn + 1"),
+                            State: "turn"
+                        ),
+                    ]
+                )]
+            ),
+            plan: Plan(depth: 1),
+            position: position
+        );
+
+        IReadOnlyList<ArenaSearchWrite> Land(ulong tick) {
+            IReadOnlyList<ArenaSearchWrite>? landed = null;
+
+            for (var step = 0; ((step < 4_096) && (landed is null)); step++) {
+                _ = search.Step(
+                    apply: writes => {
+                        landed = [.. writes];
+
+                        return true;
+                    },
+                    engineTick: tick,
+                    tick: tick
+                );
+            }
+
+            Assert.NotNull(@object: landed);
+
+            return landed!;
+        }
+        long Accepted(IReadOnlyList<ArenaSearchWrite> writes) => writes.OfType<ArenaSearchWrite.Cell>()
+            .Where(predicate: write => (write.RowOrdinal == position.Ordinal(name: "counts")))
+            .Sum(selector: static write => write.Value);
+
+        var first = Land(tick: 1UL);
+        var firstKey = search.PositionKey(index: 0);
+        var second = Land(tick: 2UL);
+
+        Assert.True(condition: (Accepted(writes: first) > 0L));
+        Assert.Equal(
+            expected: 0L,
+            actual: Accepted(writes: second)
+        );
+        Assert.NotEqual(
+            expected: firstKey,
+            actual: search.PositionKey(index: 0)
+        );
+    }
+    [Fact]
+    public void ARuleJudgesScoreClockReadAlsoMarksItsSearchTimeSensitive() {
+        var position = new Position(rows: Board(
+            cells: 4,
+            tokens: 2
+        ));
+
+        Assert.True(condition: RuleJudge(
+            position: position,
+            rules: [SearchFixture.AcceptEveryCandidate()],
+            score: RuleFacts.Tick
+        ).ReadsTick);
     }
     [Fact]
     public void ARowOnlyTheJudgeReadsIsInsideThePlansReach() {
@@ -254,6 +338,214 @@ public sealed class ArenaSearchPositionKeyLawTests {
         Assert.Equal(
             expected: settled,
             actual: search.PositionKey(index: 0)
+        );
+    }
+    // A checkpoint names its candidate scopes by positions, then rebuilds its token keys from those positions on
+    // restore. Its carried table entries must therefore remain meaningful when two otherwise equal arenas assigned
+    // their member names different intern ordinals.
+    [Fact]
+    public void ACheckpointRestoresAcrossEquivalentMemberNamesWithDifferentInternOrdinals() {
+        var source = new Position(rows: Board(
+            cells: 4,
+            tokens: 2
+        ));
+        var target = new Position(
+            rows: Board(
+                cells: 4,
+                tokens: 2
+            ),
+            reverseInternOrder: true
+        );
+
+        ArenaSearch Make(Position position) => SearchFixture.Build(
+            judge: RuleJudge(
+                position: position,
+                rules: [SearchFixture.AcceptEveryCandidate()],
+                score: "piece[t0] - piece[t1]"
+            ),
+            plan: (Plan(
+                depth: 3,
+                scored: true
+            ) with { Nodes = 1 }),
+            position: position
+        );
+
+        Assert.NotEqual(
+            expected: source.Key(name: "t0").Ordinal,
+            actual: target.Key(name: "t0").Ordinal
+        );
+        Assert.Equal(
+            expected: source.Arena.ComputeHash(),
+            actual: target.Arena.ComputeHash()
+        );
+
+        var sourceSearch = Make(position: source);
+        var targetSearch = Make(position: target);
+
+        _ = sourceSearch.Step(
+            apply: static _ => true,
+            engineTick: 0UL,
+            tick: 1UL
+        );
+        var checkpoint = sourceSearch.Capture();
+
+        Assert.True(condition: checkpoint.Jobs[0].Running);
+        Assert.True(
+            condition: targetSearch.TryRestore(
+                checkpoint: checkpoint,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        Assert.Equal(
+            expected: SearchFixture.RunArena(
+                catalog: source.Catalog,
+                search: sourceSearch
+            ),
+            actual: SearchFixture.RunArena(
+                catalog: target.Catalog,
+                search: targetSearch
+            )
+        );
+    }
+    [Fact]
+    public void ARetainedOrphanMemberChangesTheSearchPositionKey() {
+        var position = new Position(rows: Board(
+            cells: 4,
+            tokens: 2
+        ));
+        var search = SearchFixture.Build(
+            judge: RuleJudge(
+                position: position,
+                rules: [SearchFixture.AcceptEveryCandidate()]
+            ),
+            plan: Plan(),
+            position: position
+        );
+        var before = search.PositionKey(index: 0);
+
+        Assert.True(condition: position.Arena.TryMint(
+            key: out var orphan,
+            name: Name(value: "orphan"),
+            reason: out var reason,
+            rowOrdinal: position.Ordinal(name: "piece"),
+            value: CellValue.Int(value: 0L)
+        ), userMessage: reason);
+        Assert.True(condition: position.Arena.TryRemove(
+            key: orphan,
+            reason: out reason,
+            rowOrdinal: position.Ordinal(name: "piece")
+        ), userMessage: reason);
+
+        Assert.NotEqual(
+            expected: before,
+            actual: search.PositionKey(index: 0)
+        );
+    }
+    // A two-cell relocate cycle reaches the same position at move plies one and three. Its judge accepts through
+    // ply three but closes at ply four: the pass-three value of the first visit is therefore not the value of the
+    // pass-four visit. Clearing the table after every suspended step supplies the independent, uncached answer.
+    [Fact]
+    public void ATranspositionDoesNotReuseAValueFromAnotherSearchPly() {
+        long Run(bool clearTable) {
+            var position = new Position(rows: Board(
+                cells: 2,
+                tokens: 1
+            ));
+            var slot = position.SlotKey;
+            var turn = position.Ordinal(name: "turn");
+            var verdict = position.Ordinal(name: "verdict");
+            var judge = new DelegateJudge(
+                arena: position.Arena,
+                judge: (in ArenaSearchView view) => {
+                    var arena = view.Arena;
+
+                    Assert.True(condition: arena.TryWrite(
+                        key: slot,
+                        operand: 0L,
+                        reason: out var resetReason,
+                        rowOrdinal: verdict,
+                        write: StateWriteKind.Set
+                    ), userMessage: resetReason);
+
+                    if (view.Ply <= 3) {
+                        Assert.True(condition: arena.TryRead(
+                            key: slot,
+                            rowOrdinal: turn,
+                            value: out var current
+                        ));
+                        Assert.True(condition: arena.TryWrite(
+                            key: slot,
+                            operand: (1L - current.AsInt),
+                            reason: out var turnReason,
+                            rowOrdinal: turn,
+                            write: StateWriteKind.Set
+                        ), userMessage: turnReason);
+                        Assert.True(condition: arena.TryWrite(
+                            key: slot,
+                            operand: 1L,
+                            reason: out var acceptReason,
+                            rowOrdinal: verdict,
+                            write: StateWriteKind.Set
+                        ), userMessage: acceptReason);
+                    }
+
+                    return true;
+                },
+                score: static (in ArenaSearchView view) => view.Ply
+            );
+            var search = SearchFixture.Build(
+                judge: judge,
+                plan: (Plan(
+                    depth: 4,
+                    scored: true
+                ) with {
+                    CellCount = 2,
+                    Nodes = 1,
+                }),
+                position: position
+            );
+            IReadOnlyList<ArenaSearchWrite>? landed = null;
+
+            for (var step = 0; ((step < 4_096) && (landed is null)); step++) {
+                _ = search.Step(
+                    apply: writes => {
+                        landed = writes;
+
+                        return true;
+                    },
+                    engineTick: 0UL,
+                    tick: 1UL
+                );
+
+                if (clearTable && !search.Status(index: 0).Done) {
+                    var checkpoint = search.Capture();
+                    var job = Assert.Single(collection: checkpoint.Jobs);
+
+                    Assert.True(condition: search.TryRestore(
+                        checkpoint: new ArenaSearchCheckpoint(Jobs: [job with {
+                            TtKey = new ulong[job.TtKey.Length],
+                            TtMeta = new long[job.TtMeta.Length],
+                            TtValue = new long[job.TtValue.Length],
+                        }]),
+                        reason: out var restoreReason
+                    ), userMessage: restoreReason);
+                }
+            }
+
+            Assert.NotNull(@object: landed);
+
+            var score = Assert.Single(collection: landed!.OfType<ArenaSearchWrite.Cell>(),
+                predicate: write => ((write.RowOrdinal == position.Ordinal(name: "best")) && (write.Key == position.Key(name: "score")))
+            );
+
+            return score.Value;
+        }
+
+        Assert.Equal(
+            expected: Run(clearTable: true),
+            actual: Run(clearTable: false)
         );
     }
     // The draw stream is authored, so a row outside the job's reach cannot move it.

@@ -12,22 +12,21 @@ public static class WorldArenaTransforms {
     /// <returns>The addressed row names.</returns>
     public static IEnumerable<string> Subjects(StateTransform transform) => transform switch {
         StateTransform.Transfer transfer => ((transfer.Draw is null)
-        ? [transfer.From, transfer.To]
-        : [transfer.From, transfer.To, transfer.Draw]),
-        StateTransform.SetRay ray => [ray.Row],
-        StateTransform.Observe observe => [observe.Row],
-        StateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
-        StateTransform.SortZone sortZone => [sortZone.Row, .. sortZone.By.Select(selector: key => key.Row)],
-        StateTransform.SortKeyed sortKeyed => [sortKeyed.Row],
-        StateTransform.WriteSet writeSet => [writeSet.Row],
-        StateTransform.BoardCombine combine => [combine.Row],
-        StateTransform.Arrange arrange => [arrange.Row],
-        StateTransform.Push push => [push.Row],
-        StateTransform.ClearEnclosed enclosed => [enclosed.Row],
+        ? [transfer.From.Spelling, transfer.To.Spelling]
+        : [transfer.From.Spelling, transfer.To.Spelling, transfer.Draw.Spelling]),
+        StateTransform.SetRay ray => [ray.Row.Spelling],
+        StateTransform.Observe observe => [observe.Row.Spelling],
+        StateTransform.Shuffle shuffle => [shuffle.Row.Spelling, shuffle.Draw.Spelling],
+        StateTransform.Sort sort => [sort.Row.Spelling, .. sort.By.Select(selector: key => key.Row.Spelling)],
+        StateTransform.WriteSet writeSet => [writeSet.Row.Spelling],
+        StateTransform.BoardCombine combine => [combine.Row.Spelling],
+        StateTransform.Arrange arrange => [arrange.Row.Spelling],
+        StateTransform.Push push => [push.Row.Spelling],
+        StateTransform.ClearEnclosed enclosed => [enclosed.Row.Spelling],
         StateTransform.Mix mix => SpellingSubject(spelling: mix.Into),
         StateTransform.Mean mean => SpellingSubject(spelling: mean.Into),
-        StateTransform.Nearest nearest => SpellingSubject(spelling: nearest.Into),
-        StateTransform.Remember remember => SpellingSubject(spelling: remember.Into),
+        StateTransform.Nearest nearest => SpellingSubject(spelling: nearest.Into.Spelling),
+        StateTransform.Remember remember => SpellingSubject(spelling: remember.Into.Spelling),
         _ => [],
     };
     /// <summary>Composes one operation without changing the supplied definition.</summary>
@@ -62,12 +61,12 @@ public static class WorldArenaTransforms {
         }
         if (
             (actor != WorldPrincipal.World) &&
-            Subjects(transform: transform).Select(selector: name => WorldDefinitionRows.FindStateRow(
+            (Subjects(transform: transform).Select(selector: name => WorldDefinitionRows.FindStateRow(
             rows: definition.State,
             name: name
-        )).FirstOrDefault(predicate: static subject => (subject?.Verdict is not null)) is { } verdictRow
+        )).FirstOrDefault(predicate: static subject => (subject?.IsRuleWritten ?? false)) is { } verdictRow)
         ) {
-            reason = WorldVerdict.RefuseWrite(row: verdictRow.Name);
+            reason = WorldVerdict.RefuseWrite(row: verdictRow);
 
             return false;
         }
@@ -190,7 +189,7 @@ public static class WorldArenaTransforms {
                 rows[index] = ((WorldStateRow)exported[index]);
             }
 
-            candidate = definition.WithWorldState(rows: rows);
+            candidate = definition.WithWorldState(rows: rows, pools: ((definition.StateRaw?.Pools is { Count: > 0 }) ? arena.ToPools() : null), pairPools: ((definition.StateRaw?.PairPools is { Count: > 0 }) ? arena.ToPairPools() : null));
             reason = string.Empty;
 
             return true;

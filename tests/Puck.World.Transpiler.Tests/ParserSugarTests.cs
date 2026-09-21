@@ -45,6 +45,30 @@ public class ParserSugarTests {
         Assert.IsType<RhsOperandNode>(@object: add.Rhs);
     }
     [Fact]
+    public void AColonChannelInCodeReportsPuck106AndOneInsideAStringLiteralDoesNot() {
+        var (_, refused) = ParseWithDiagnostics(body: """
+            rule "r" {
+                when $physics:quiescent == 1
+                hp += 1
+            }
+            """);
+        Assert.Contains(
+            collection: refused,
+            filter: d => (d.Code == "PUCK106")
+        );
+
+        var (_, admitted) = ParseWithDiagnostics(body: """
+            rule "r" {
+                when similarity(mood, embed("$physics:quiescent")) > 0
+                hp += 1
+            }
+            """);
+        Assert.DoesNotContain(
+            collection: admitted,
+            filter: d => (d.Code == "PUCK106")
+        );
+    }
+    [Fact]
     public void AddCellWithTextRhsReportsPuck009() {
         var (doc, diagnostics) = ParseWithDiagnostics(body: """
             rule "r" {
@@ -70,7 +94,7 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "solitaireFreecell[to]",
-            cmp.RightText
+            cmp.Right.Text
         );
         Assert.Equal(
             "Int",
@@ -105,7 +129,7 @@ public class ParserSugarTests {
     public void BareComparisonGate() {
         var doc = ParseClean(body: """
             rule "tabletop-settle-hold-reset" {
-                when $physics:quiescent != 1
+                when physics(quiescent) != 1
                 flag = 1
             }
             """);
@@ -114,8 +138,8 @@ public class ParserSugarTests {
         var cmp = Assert.IsType<ComparisonPredicateNode>(@object: when.Predicate);
 
         Assert.Equal(
-            "$physics:quiescent",
-            cmp.LeftText
+            "physics(quiescent)",
+            cmp.Left.Text
         );
         Assert.Equal(
             "!=",
@@ -123,7 +147,7 @@ public class ParserSugarTests {
         );
         Assert.Equal(
             "1",
-            cmp.RightText
+            cmp.Right.Text
         );
         Assert.Null(@object: cmp.Kind);
     }
@@ -158,24 +182,24 @@ public class ParserSugarTests {
     // §3 — rule / decision / option / local
 
     [Fact]
-    public void LocalRequiresExplicitKindAndReportsPuck006WhenMissing() {
+    public void LocalWithExplicitKindReportsPuck108() {
         var (doc, diagnostics) = ParseWithDiagnostics(body: """
             rule "r" {
-                local dx = 5
+                local dx : Int = 5
                 flag = dx
             }
             """);
         Assert.NotNull(@object: doc);
         Assert.Contains(
             collection: diagnostics,
-            filter: d => (d.Code == "PUCK006")
+            filter: d => (d.Code == "PUCK108")
         );
     }
     [Fact]
-    public void LocalWithExplicitKindCapturesExpressionVerbatim() {
+    public void LocalCapturesExpressionVerbatim() {
         var doc = ParseClean(body: """
             rule "r" {
-                local dx : Int = hp - 1
+                local dx = hp - 1
                 flag = dx
             }
             """);
@@ -186,12 +210,8 @@ public class ParserSugarTests {
             local.Name
         );
         Assert.Equal(
-            "Int",
-            local.Kind
-        );
-        Assert.Equal(
             "hp - 1",
-            local.ExpressionText
+            local.Expression.Text
         );
     }
     [Fact]
@@ -256,7 +276,7 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "solitaireFreecell[to]",
-            cmp.RightText
+            cmp.Right.Text
         );
         Assert.Equal(
             "Int",
@@ -276,11 +296,11 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "solitaireFreecell[request]",
-            cmp.LeftText
+            cmp.Left.Text
         );
         Assert.Equal(
             "solitaireFreecell[applied]",
-            cmp.RightText
+            cmp.Right.Text
         );
         Assert.Null(@object: cmp.Kind);
     }
@@ -306,7 +326,7 @@ public class ParserSugarTests {
     public void DecisionWithOptionInterruptAndOnNoChoice() {
         var doc = ParseClean(body: """
             rule "choose-companion" {
-                forEach: "hound"
+                forEach: hound
                 decision {
                     periodSeconds: 1s
                     commitmentSeconds: 3s
@@ -349,7 +369,7 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "trust * 2",
-            score.Text
+            score.Expression.Text
         );
 
         var onNoChoice = decision.Statements.OfType<OnNoChoiceBlockNode>().Single();
@@ -390,11 +410,11 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "boneHolderClaimMark[$each]",
-            cmp.LeftText
+            cmp.Left.Text
         );
         Assert.Equal(
             "boneHolder[0] << 32 | claimSeq",
-            cmp.RightText
+            cmp.Right.Text
         );
         Assert.Equal(
             "Int",
@@ -461,7 +481,7 @@ public class ParserSugarTests {
     public void NotWrappingComparisonInsideAll() {
         var doc = ParseClean(body: """
             rule "tabletop-derive-cell-tilted" {
-                when settleHold == 60 and not $upright:placement:$each >= 0.5
+                when settleHold == 60 and not upright(placement, $each) >= 0.5
                 flag = 1
             }
             """);
@@ -477,14 +497,14 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "settleHold",
-            left.LeftText
+            left.Left.Text
         );
         var not = Assert.IsType<NotPredicateNode>(@object: and.Operands[1]);
         var negated = Assert.IsType<ComparisonPredicateNode>(@object: not.Operand);
 
         Assert.Equal(
-            "$upright:placement:$each",
-            negated.LeftText
+            "upright(placement, $each)",
+            negated.Left.Text
         );
         Assert.Equal(
             ">=",
@@ -534,11 +554,10 @@ public class ParserSugarTests {
         Assert.IsType<ComparisonPredicateNode>(@object: or.Operands[1]);
     }
     [Fact]
-    public void PushCountdownRemoveSchedule() {
+    public void PushRemoveSchedule() {
         var doc = ParseClean(body: """
             rule "r" {
                 push queue = 5
-                countdown timer
                 remove buffer[slot]
                 schedule respawnAt in 2s
             }
@@ -552,15 +571,7 @@ public class ParserSugarTests {
         );
         Assert.IsType<RhsOperandNode>(@object: push.Rhs);
 
-        var countdown = Assert.IsType<CountdownStatementNode>(@object: rule.Statements[1]);
-
-        Assert.Equal(
-            "timer",
-            countdown.Target.Name
-        );
-        Assert.Null(@object: countdown.Target.Key);
-
-        var remove = Assert.IsType<RemoveCellStatementNode>(@object: rule.Statements[2]);
+        var remove = Assert.IsType<RemoveCellStatementNode>(@object: rule.Statements[1]);
 
         Assert.Equal(
             "buffer",
@@ -571,7 +582,7 @@ public class ParserSugarTests {
             remove.Target.Key
         );
 
-        var schedule = Assert.IsType<ScheduleStatementNode>(@object: rule.Statements[3]);
+        var schedule = Assert.IsType<ScheduleStatementNode>(@object: rule.Statements[2]);
 
         Assert.Equal(
             "respawnAt",
@@ -580,6 +591,19 @@ public class ParserSugarTests {
         Assert.Equal(
             2m,
             schedule.DelaySeconds
+        );
+    }
+    [Fact]
+    public void CountdownReportsPuck107NamingSchedule() {
+        var (doc, diagnostics) = ParseWithDiagnostics(body: """
+            rule "r" {
+                countdown timer
+            }
+            """);
+        Assert.NotNull(@object: doc);
+        Assert.Contains(
+            collection: diagnostics,
+            filter: d => (d.Code == "PUCK109")
         );
     }
     [Fact]
@@ -635,7 +659,7 @@ public class ParserSugarTests {
     public void SetCellWithOperandRhs() {
         var doc = ParseClean(body: """
             rule "r" {
-                pieceCell[$each] = $board:cellOf:board:placement:$each
+                pieceCell[$each] = board(cellOf, board, placement, $each)
             }
             """);
         var rule = FirstRule(doc: doc);
@@ -652,8 +676,8 @@ public class ParserSugarTests {
         var rhs = Assert.IsType<RhsOperandNode>(@object: set.Rhs);
 
         Assert.Equal(
-            "$board:cellOf:board:placement:$each",
-            rhs.Text
+            "board(cellOf, board, placement, $each)",
+            rhs.Expression.Text
         );
     }
     [Fact]
@@ -738,7 +762,7 @@ public class ParserSugarTests {
     public void TransformWrapsCallExpression() {
         var doc = ParseClean(body: """
             rule "r" {
-                transform boardCombine(row: "board", operation: Shift)
+                transform boardCombine(row: board, operation: Shift)
             }
             """);
         var transform = Assert.IsType<TransformStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
@@ -774,11 +798,11 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "hp - 1",
-            cmp.LeftText
+            cmp.Left.Text
         );
         Assert.Equal(
             "-1",
-            cmp.RightText
+            cmp.Right.Text
         );
     }
     [Fact]
@@ -856,18 +880,22 @@ public class ParserSugarTests {
             }
             """);
         var rule = FirstRule(doc: doc);
+
         Assert.Equal(3, rule.Statements.Count);
 
-        var draw = Assert.IsType<DrawStatementNode>(rule.Statements[0]);
+        var draw = Assert.IsType<DrawStatementNode>(@object: rule.Statements[0]);
+
         Assert.Equal("deck", draw.From);
         Assert.Equal("hand", draw.To);
 
-        var deal = Assert.IsType<DealStatementNode>(rule.Statements[1]);
+        var deal = Assert.IsType<DealStatementNode>(@object: rule.Statements[1]);
+
         Assert.Equal(5, deal.Count);
         Assert.Equal("deck", deal.From);
         Assert.Equal("hand", deal.To);
 
-        var shuffle = Assert.IsType<ShuffleStatementNode>(rule.Statements[2]);
+        var shuffle = Assert.IsType<ShuffleStatementNode>(@object: rule.Statements[2]);
+
         Assert.Equal("deck", shuffle.Row);
         Assert.Equal("rng", shuffle.Draw);
     }

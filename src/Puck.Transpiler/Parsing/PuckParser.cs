@@ -1,5 +1,6 @@
 using Parlot;
 using Parlot.Fluent;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
@@ -119,7 +120,7 @@ public static partial class PuckParser {
             diagnostics.ReportError(code: error.Code, message: error.Message, span: new SourceSpan(error.Offset, 1, error.Line, error.Column));
             return new CompilationResult<DocumentNode>(Diagnostics: diagnostics, Value: null);
         }
-        var context = CreateContext(source: source);
+        var context = CreateContext(diagnostics: diagnostics, source: source, vocabulary: vocabulary);
         var schema = defaultSchema;
         string? basis = null;
         var basisSpan = SourceSpan.None;
@@ -278,8 +279,65 @@ public static partial class PuckParser {
         SkipWhiteSpace(context: context);
         var cursor = context.Scanner.Cursor;
         var startOffset = cursor.Offset;
+        var startPosition = cursor.Position;
 
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+
+        if (TryMatchKeyword(context: context, keyword: "world")) {
+            SkipWhiteSpace(context: context);
+            if (cursor.Current is ':' or '[' or '{') {
+                cursor.ResetPosition(position: startPosition);
+            } else {
+                var name = ParseExpression(context: context);
+
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '=', context: context)) {
+                    throw CreateException(context: context, message: "Expected '=' after world name");
+                }
+                if (ParseExpression(context: context) is not CallExpressionNode module) {
+                    throw CreateException(context: context, message: "Expected module invocation after '='");
+                }
+                return new WorldDeclarationNode(name, module, startOffset, (cursor.Offset - startOffset), line, col);
+            }
+        }
+
+        string? linkKind = null;
+
+        if (TryMatchKeyword(context: context, keyword: "border")) {
+            SkipWhiteSpace(context: context);
+            if (cursor.Current is ':' or '[' or '{') {
+                cursor.ResetPosition(position: startPosition);
+            } else {
+                linkKind = "border";
+            }
+        } else if (TryMatchKeyword(context: context, keyword: "door")) {
+            SkipWhiteSpace(context: context);
+            if (cursor.Current is ':' or '[' or '{') {
+                cursor.ResetPosition(position: startPosition);
+            } else {
+                linkKind = "door";
+            }
+        }
+        if (linkKind is not null) {
+            var left = ParseExpression(context: context);
+
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: ',', context: context)) {
+                throw CreateException(context: context, message: $"Expected ',' between {linkKind} endpoints");
+            }
+            var right = ParseExpression(context: context);
+
+            SkipWhiteSpace(context: context);
+            if (linkKind == "door") {
+                if (cursor.Current == '{') {
+                    throw CreateException(context: context, message: "A door takes no property block");
+                }
+                return new WorldLinkNode(linkKind, left, right, [], startOffset, (cursor.Offset - startOffset), line, col);
+            }
+            var body = ParseBlock(context, identifier: linkKind, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+
+            return new WorldLinkNode(linkKind, left, right, body.Statements, startOffset, (cursor.Offset - startOffset), line, col) { Trivia = body.Trivia };
+        }
 
         if (TryMatchKeyword(context: context, keyword: "let")) {
             SkipWhiteSpace(context: context);
@@ -300,6 +358,41 @@ public static partial class PuckParser {
 
         if (TryMatchKeyword(context: context, keyword: "for")) {
             return ParseForStatement(col: col, context: context, diagnostics: diagnostics, line: line, schema: schema, startOffset: startOffset, vocabulary: vocabulary);
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "use")) {
+            SkipWhiteSpace(context: context);
+            var callStart = cursor.Offset;
+
+            var (callLine, callColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: callStart);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var moduleName)) {
+                throw CreateException(context: context, message: "Expected module name after 'use'");
+            }
+            while (true) {
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '.', context: context)) { break; }
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
+                    throw CreateException(context: context, message: "Expected module name after '.'");
+                }
+                moduleName += $".{member}";
+            }
+            string? alias = null;
+
+            SkipWhiteSpace(context: context);
+            if (TryMatchKeyword(context: context, keyword: "as")) {
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out alias)) {
+                    throw CreateException(context: context, message: "Expected alias identifier after 'as'");
+                }
+            }
+            SkipWhiteSpace(context: context);
+            var invocation = ParseCallExpression(col: callColumn, context: context, functionName: moduleName, line: callLine, startOffset: callStart);
+
+            return new ExpressionStatementNode(invocation, startOffset, (cursor.Offset - startOffset), line, col) {
+                IsUse = true,
+                UseAlias = alias,
+            };
         }
 
         if (TryMatchKeyword(context: context, keyword: "import")) {
@@ -330,16 +423,65 @@ public static partial class PuckParser {
             }
 
             var names = new List<string>();
+            var facetExplicit = (facet is "read" or "reads" or "action" or "actions" or "binding" or "bindings");
+
+            if (!facetExplicit) {
+                var exportName = facet;
+
+                while (true) {
+                    SkipWhiteSpace(context: context);
+                    if (!TryConsume(c: '.', context: context)) { break; }
+                    SkipWhiteSpace(context: context);
+                    if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
+                        throw CreateException(context: context, message: "Expected export name after '.'");
+                    }
+                    exportName += $".{member}";
+                }
+                names.Add(item: exportName);
+                facet = "read";
+                SkipWhiteSpace(context: context);
+                while (TryConsume(c: ',', context: context)) {
+                    SkipWhiteSpace(context: context);
+                    if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var nextName)) {
+                        throw CreateException(context: context, message: "Expected export name after ','");
+                    }
+                    while (true) {
+                        SkipWhiteSpace(context: context);
+                        if (!TryConsume(c: '.', context: context)) { break; }
+                        SkipWhiteSpace(context: context);
+                        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
+                            throw CreateException(context: context, message: "Expected export name after '.'");
+                        }
+                        nextName += $".{member}";
+                    }
+                    names.Add(item: nextName);
+                    SkipWhiteSpace(context: context);
+                }
+            }
 
             // A facet with zero names ends its line right after the facet word (an empty exported array
             // round-trips this way), so names crossing a newline must be told apart from the next statement: a
             // continuation line is one indented deeper than the `export` keyword's own column. Without that test a
             // bare `export action` swallows the following statement's leading token as an export name.
-            if (!AtEndOfLogicalStatement(buffer: context.Scanner.Buffer, offset: context.Scanner.Cursor.Offset)
-                || ContinuesOnDeeperIndentedLine(context.Scanner.Buffer, context.Scanner.Cursor.Offset, col)) {
+            if (facetExplicit && (!AtEndOfLogicalStatement(buffer: context.Scanner.Buffer, offset: context.Scanner.Cursor.Offset)
+                || ContinuesOnDeeperIndentedLine(context.Scanner.Buffer, context.Scanner.Cursor.Offset, col))) {
                 while (true) {
                     SkipWhiteSpace(context: context);
                     if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var exportName)) {
+                        while (true) {
+                            var beforeDot = context.Scanner.Cursor.Position;
+
+                            SkipWhiteSpace(context: context);
+                            if (!TryConsume(c: '.', context: context)) {
+                                context.Scanner.Cursor.ResetPosition(position: beforeDot);
+                                break;
+                            }
+                            SkipWhiteSpace(context: context);
+                            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
+                                throw CreateException(context: context, message: "Expected export name after '.'");
+                            }
+                            exportName += $".{member}";
+                        }
                         names.Add(item: exportName);
                     } else if (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var exportStr)) {
                         names.Add(item: exportStr);
@@ -356,10 +498,12 @@ public static partial class PuckParser {
 
             var len = (context.Scanner.Cursor.Offset - startOffset);
 
-            return new ExportNode(Column: col, Facet: facet, Length: len, Line: line, Names: names, Offset: startOffset);
+            return new ExportNode(Column: col, Facet: facet, Length: len, Line: line, Names: names, Offset: startOffset) { FacetExplicit = facetExplicit };
         }
 
-        if (TryMatchKeyword(context: context, keyword: "template")) {
+        var isModule = TryMatchKeyword(context: context, keyword: "module");
+
+        if (isModule || TryMatchKeyword(context: context, keyword: "template")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var templateName)) {
                 throw CreateException(context: context, message: "Expected identifier after 'template'");
@@ -381,16 +525,53 @@ public static partial class PuckParser {
                     throw CreateException(context: context, message: "Expected parameter name in template definition");
                 }
 
+                string? kind = null;
+                var requiredExports = new List<string>();
                 ExpressionNode? defaultVal = null;
 
                 SkipWhiteSpace(context: context);
+                if (isModule && TryConsume(c: ':', context: context)) {
+                    SkipWhiteSpace(context: context);
+                    if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out kind)) {
+                        throw CreateException(context: context, message: $"Expected parameter kind after '{paramName}:'");
+                    }
+                    SkipWhiteSpace(context: context);
+                    if (string.Equals(a: kind, b: "Module", comparisonType: StringComparison.Ordinal) && TryMatchKeyword(context: context, keyword: "exporting")) {
+                        while (true) {
+                            SkipWhiteSpace(context: context);
+                            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var required)) {
+                                throw CreateException(context: context, message: "Expected export name after 'exporting'");
+                            }
+                            requiredExports.Add(item: required);
+                            SkipWhiteSpace(context: context);
+                            var beforeComma = cursor.Position;
+
+                            if (!TryConsume(c: ',', context: context)) { break; }
+                            SkipWhiteSpace(context: context);
+                            var afterComma = cursor.Position;
+
+                            if (cursor.Current == ')') {
+                                cursor.ResetPosition(position: beforeComma);
+                                break;
+                            }
+                            if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
+                                SkipWhiteSpace(context: context);
+                                if (cursor.Current == ':') {
+                                    cursor.ResetPosition(position: beforeComma);
+                                    break;
+                                }
+                            }
+                            cursor.ResetPosition(position: afterComma);
+                        }
+                    }
+                }
                 if (TryConsume(c: '=', context: context)) {
                     defaultVal = ParseExpression(context: context);
                 }
 
                 var pLen = (cursor.Offset - paramStart);
 
-                parameters.Add(item: new TemplateParameterNode(Column: pCol, DefaultValue: defaultVal, Length: pLen, Line: pLine, Name: paramName, Offset: paramStart));
+                parameters.Add(item: new TemplateParameterNode(Column: pCol, DefaultValue: defaultVal, Length: pLen, Line: pLine, Name: paramName, Offset: paramStart) { Kind = kind, RequiredExports = requiredExports });
 
                 SkipWhiteSpace(context: context);
                 if (TryConsume(c: ',', context: context)) {
@@ -412,7 +593,7 @@ public static partial class PuckParser {
             var body = ParseBlock(context, identifier: templateName, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
             var len = (cursor.Offset - startOffset);
 
-            return new TemplateNode(Body: body, Column: col, Length: len, Line: line, Name: templateName, Offset: startOffset, Parameters: parameters);
+            return new TemplateNode(Body: body, Column: col, Length: len, Line: line, Name: templateName, Offset: startOffset, Parameters: parameters) { IsModule = isModule };
         }
 
         if (TryMatchRuleScopeKeyword(context: context)) {
@@ -433,6 +614,13 @@ public static partial class PuckParser {
 
         if (TryMatchRecordKeyword(context: context)) {
             return ParseRecordDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
+        }
+
+        if (TryMatchDeclarationKeyword(context: context, keyword: "pool")) {
+            return ParseStatePoolDeclaration(col: col, context: context, line: line, startOffset: startOffset);
+        }
+        if (TryMatchDeclarationKeyword(context: context, keyword: "pairPool")) {
+            return ParseStatePairPoolDeclaration(col: col, context: context, line: line, startOffset: startOffset);
         }
 
         if (TryMatchSetKeyword(context: context)) {
@@ -554,7 +742,7 @@ public static partial class PuckParser {
             SkipWhiteSpace(context: context);
             RefuseColonBeforeContainer(col: col, context: context, diagnostics: diagnostics, identifier: firstId, line: line, separator: separator, startOffset: startOffset);
 
-            var valExpr = ParseExpression(context: context);
+            var valExpr = ParseMemberValue(context: context);
             var len = (cursor.Offset - startOffset);
 
             return new PropertyNode(Column: col, Length: len, Line: line, Name: firstId, Offset: startOffset, Value: valExpr);
@@ -1036,13 +1224,35 @@ public static partial class PuckParser {
     private static readonly string[] ComparisonOperators = ["==", "!=", "<=", ">=", "<", ">"];
 
     private static ExpressionNode ParseRangeExpression(ParseContext context) {
+        SkipWhiteSpace(context: context);
+        var cursor = context.Scanner.Cursor;
+
+        if ((cursor.Current == '.') && (cursor.PeekNext() == '.')) {
+            var startOffset = cursor.Offset;
+
+            var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+
+            cursor.Advance(count: 2);
+            SkipWhiteSpace(context: context);
+            var right = ((cursor.Current is ')' or ',')
+                ? null
+                : ParseAdditiveExpression(context: context)
+            );
+
+            return new RangeExpressionNode(Start: null, End: right, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
+        }
+
         var left = ParseAdditiveExpression(context: context);
 
         SkipWhiteSpace(context: context);
 
         if ((context.Scanner.Cursor.Current == '.') && (context.Scanner.Cursor.PeekNext() == '.')) {
             context.Scanner.Cursor.Advance(count: 2);
-            var right = ParseAdditiveExpression(context: context);
+            SkipWhiteSpace(context: context);
+            var right = ((context.Scanner.Cursor.Current is ')' or ',')
+                ? null
+                : ParseAdditiveExpression(context: context)
+            );
             var len = (context.Scanner.Cursor.Offset - left.Offset);
 
             return new RangeExpressionNode(Start: left, End: right, Offset: left.Offset, Length: len, Line: left.Line, Column: left.Column);
@@ -1170,11 +1380,33 @@ public static partial class PuckParser {
                 expr = ParseCallExpression(context, identExpr.Name, identExpr.Offset, identExpr.Line, identExpr.Column);
                 continue;
             }
+            if ((cur == '(') && (expr is MemberAccessExpressionNode memberCall) && TryQualifiedName(expression: memberCall, name: out var qualifiedName)) {
+                expr = ParseCallExpression(context, qualifiedName, memberCall.Offset, memberCall.Line, memberCall.Column);
+                continue;
+            }
 
             break;
         }
 
         return expr;
+    }
+    private static bool TryQualifiedName(MemberAccessExpressionNode expression, out string name) {
+        var members = new Stack<string>();
+        ExpressionNode current = expression;
+
+        while (current is MemberAccessExpressionNode member) {
+            members.Push(item: member.Member);
+            current = member.Target;
+        }
+        if (current is not IdentifierExpressionNode identifier) {
+            name = string.Empty;
+            return false;
+        }
+        name = identifier.Name;
+        while (members.TryPop(result: out var member)) {
+            name += $".{member}";
+        }
+        return true;
     }
     private static ExpressionNode ParsePrimaryExpression(ParseContext context) {
         SkipWhiteSpace(context: context);
@@ -1187,6 +1419,14 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Unexpected end of file while expecting expression");
         }
 
+        if (TryMatchKeyword(context: context, keyword: "asset")) {
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var path)) {
+                throw CreateException(context: context, message: "Expected a quoted path after 'asset'");
+            }
+            return new AssetExpressionNode(path, startOffset, (cursor.Offset - startOffset), line, col);
+        }
+
         // Parentheses: ( expr )
         if (cursor.Current == '(') {
             cursor.Advance();
@@ -1196,7 +1436,7 @@ public static partial class PuckParser {
             if (!TryConsume(c: ')', context: context)) {
                 throw CreateException(context: context, message: "Expected ')' closing parenthesized expression");
             }
-            return inner;
+            return inner with { Parenthesized = true };
         }
 
         // Array: [ ... ]
@@ -1465,7 +1705,7 @@ public static partial class PuckParser {
                     };
                 }
 
-                var valExpr = ParseExpression(context: context);
+                var valExpr = ParseMemberValue(context: context);
 
                 properties.Add(item: new PropertyNode(Name: propKey, Value: valExpr, Offset: propStart, Length: (cursor.Offset - propStart), Line: pLine, Column: pCol));
             } else if (cursor.Current == '{') {
@@ -1520,7 +1760,7 @@ public static partial class PuckParser {
                 }
             }
 
-            var val = ParseExpression(context: context);
+            var val = ParseArgumentValue(argumentName: argName, callName: functionName, context: context, positionalIndex: arguments.Count);
 
             arguments.Add(item: new ArgumentNode(Name: argName, Value: val, Offset: argStart, Length: (cursor.Offset - argStart), Line: aLine, Column: aCol));
 
@@ -1586,11 +1826,149 @@ public static partial class PuckParser {
 
         WhiteSpace.Parse(context: context, result: ref result);
     }
-    private static ParseContext CreateContext(string source) {
-        return new ParseContext(new Scanner(buffer: source)) {
+    private static ParseContext CreateContext(string source, IDocumentVocabulary? vocabulary = null, DiagnosticBag? diagnostics = null) {
+        return new PuckParseContext(diagnostics: diagnostics, scanner: new Scanner(buffer: source), vocabulary: vocabulary) {
             WhiteSpaceParser = WhiteSpace,
         };
     }
+
+    // The vocabulary and the bag ride the context so the expression grammar, which threads neither, can ask how a
+    // call's argument is written.
+    private sealed class PuckParseContext(Scanner scanner, IDocumentVocabulary? vocabulary, DiagnosticBag? diagnostics) : ParseContext(scanner) {
+        public DiagnosticBag? Diagnostics { get; } = diagnostics;
+        public IDocumentVocabulary? Vocabulary { get; } = vocabulary;
+    }
+
+    // An argument the vocabulary owns (a name, a cell key, a value expression) carries its parsed operand tree
+    // and the author's spelling. A string literal and a container still parse as themselves, so lowering can refuse the
+    // literal by name and a list of names stays a list.
+    private static ExpressionNode ParseArgumentValue(ParseContext context, string callName, string? argumentName, int positionalIndex) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        if (
+            (context is PuckParseContext { Vocabulary: { } vocabulary } owned) &&
+            ((argumentName ?? vocabulary.NameCallArgument(callName: callName, positionalIndex: positionalIndex)) is { } resolved) &&
+            (vocabulary.ClassifyArgument(argumentName: resolved, callName: callName) is var form and (DocumentValueForm.Name or DocumentValueForm.Key or DocumentValueForm.Expression)) &&
+            !IsWholeStringOrContainer(buffer: context.Scanner.Buffer, offset: cursor.Offset)
+        ) {
+            var start = cursor.Offset;
+
+            var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: start);
+            var text = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+
+            if (text.Length == 0) {
+                throw CreateException(context: context, message: $"Expected a value for '{resolved}' in call to '{callName}'");
+            }
+
+            // An absent member is `null` in every form; it names nothing.
+            if (string.Equals(a: text, b: "null", comparisonType: StringComparison.Ordinal)) {
+                return new IdentifierExpressionNode(Column: column, Length: (cursor.Offset - start), Line: line, Name: text, Offset: start);
+            }
+
+            var span = new SourceSpan(start, (cursor.Offset - start), line, column);
+
+            var operand = CreateOperand(column: column, form: form, length: span.Length, line: line, offset: start, text: text);
+            if (form == DocumentValueForm.Expression) {
+                ValidateOperand(operand, owned.Diagnostics);
+            } else {
+                var respelled = ExpressionSpelling.ToSourceDialect(text: text);
+
+                if (!string.Equals(a: respelled, b: text, comparisonType: StringComparison.Ordinal)) {
+                    owned.Diagnostics?.ReportError(
+                        code: PuckDiagnosticCodes.OperandColonChannel,
+                        message: $"'{text}' spells a reserved channel with colons; write '{respelled}'",
+                        span: span
+                    );
+                }
+            }
+
+            return operand;
+        }
+
+        return ParseMemberValue(context: context);
+    }
+    // A member's value is read by the compile-time grammar where that grammar reads all of it. What it refuses or
+    // leaves unfinished is an operand of the vocabulary's own grammar when that grammar reads it, and is held as
+    // written for lowering to classify; anything else is the compile-time grammar's own error.
+    private static ExpressionNode ParseMemberValue(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+
+        var position = cursor.Position;
+
+        if (IsWholeStringOrContainer(buffer: context.Scanner.Buffer, offset: position.Offset)) {
+            return ParseExpression(context: context);
+        }
+
+        PuckParseException? refusal = null;
+        ExpressionNode? parsed = null;
+
+        try {
+            parsed = ParseExpression(context: context);
+
+            // The compile-time grammar reads ahead for an operator, so it may already stand past a line break: it
+            // read the whole member when a line ended behind it or a terminator stands in front of it.
+            if (BrokeLine(buffer: context.Scanner.Buffer, offset: cursor.Offset) || EndsMemberValue(buffer: context.Scanner.Buffer, offset: cursor.Offset)) {
+                return parsed;
+            }
+        } catch (PuckParseException error) {
+            refusal = error;
+        }
+
+        var failed = cursor.Position;
+
+        cursor.ResetPosition(position: position);
+
+        var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: position.Offset);
+        var held = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+
+        var operand = CreateOperand(column: column, form: DocumentValueForm.Unclassified, length: (cursor.Offset - position.Offset), line: line, offset: position.Offset, text: held);
+        if ((held.Length > 0) && (operand.Syntax is not null)) {
+            return operand;
+        }
+        if (refusal is not null) {
+            throw refusal;
+        }
+
+        cursor.ResetPosition(position: failed);
+
+        return parsed!;
+    }
+    private static bool BrokeLine(string buffer, int offset) {
+        for (var index = (offset - 1); ((index >= 0) && char.IsWhiteSpace(c: buffer[index])); index--) {
+            if (buffer[index] is '\n' or '\r') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static bool EndsMemberValue(string buffer, int offset) {
+        while ((offset < buffer.Length) && (buffer[offset] is ' ' or '\t')) {
+            offset++;
+        }
+
+        return (
+            (offset >= buffer.Length) ||
+            (buffer[offset] is ',' or '}' or ')' or ']' or ';' or '\n' or '\r') ||
+            ((buffer[offset] == '/') && ((offset + 1) < buffer.Length) && (buffer[(offset + 1)] is '/' or '*'))
+        );
+    }
+    // A string literal is the member's whole value only when the value ends where the string closes: an
+    // interpolated string with more behind it is an atom that opens an operand.
+    private static bool IsWholeStringOrContainer(string buffer, int offset) => (
+        (offset < buffer.Length) &&
+        (
+            (buffer[offset] is '"' or '[' or '{') ||
+            (
+                (buffer[offset] == '$') && ((offset + 1) < buffer.Length) && (buffer[(offset + 1)] == '"') &&
+                (StringLiteralEnd(buffer: buffer, offset: offset) is var end) &&
+                ((end < 0) || EndsMemberValue(buffer: buffer, offset: end))
+            )
+        )
+    );
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, int[]> LineStartsCache = new();
 

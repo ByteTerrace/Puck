@@ -43,8 +43,8 @@ public static class RuleFacts {
     /// <summary>The prefix; <c>$match:&lt;pattern&gt;:&lt;row&gt;[:&lt;direction&gt;]</c> runs a <c>patterns</c> row
     /// over a word: a board ray from the operand key's origin (exclusive) in the direction (or every direction under
     /// <c>any</c>), an ordered zone's attribute values in pile order, a history ring in push order, or a keyed row's
-    /// own cells. Reads acceptance 1 or 0, or under a facet the longest accepted prefix or the accepting
-    /// directions.</summary>
+    /// own cells. Reads acceptance 1 or 0, or under a facet the longest accepted prefix, accepting directions, or
+    /// the start/length of a selected non-empty occurrence.</summary>
     public const string MatchPrefix = "$match:";
     /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a keyed (or slot) row
     /// declares — <c>max</c>/<c>min</c>/<c>sum</c> read the row's own <c>CellKind</c>, <c>count</c> is always
@@ -82,43 +82,10 @@ public static class RuleFacts {
     /// <summary>Compares the server's own completed-tick counter — <c>compareState("$tick", greaterOrEqual, 600)</c>
     /// is "at 2.5 seconds", with no clock read anywhere.</summary>
     public const string Tick = "$tick";
+    /// <summary>The hypothetical search ply; zero during live rule evaluation.</summary>
+    public const string SearchPly = "$search:ply";
     /// <summary>The dynamic key prefix; <c>$zone:&lt;row&gt;:first|last</c> returns the endpoint member's
     /// original string key from an ordered zone in the active store. An empty zone resolves to the empty key,
     /// which reads absent and cannot address a write. The zone may be a live <c>$zones[&lt;index&gt;]</c>.</summary>
     public const string ZoneKeyPrefix = "$zone:";
-
-    /// <summary>Splits a reserved channel on its colons, keeping a bracketed live-zone index
-    /// (<see cref="LiveZonePrefix"/>) whole — <c>$match:run:$zones[game[from]]:prefix</c> is four tokens, however
-    /// many colons the index carries.</summary>
-    /// <param name="name">The channel spelling.</param>
-    public static string[] SplitChannel(string name) {
-        ArgumentNullException.ThrowIfNull(argument: name);
-
-        if (!name.Contains(value: '[')) {
-            return name.Split(separator: ':');
-        }
-
-        var parts = new List<string>();
-        var depth = 0;
-        var start = 0;
-
-        for (var index = 0; (index < name.Length); index++) {
-            switch (name[index]) {
-                case '[':
-                    depth++;
-                    break;
-                case ']':
-                    depth--;
-                    break;
-                case ':' when (depth == 0):
-                    parts.Add(item: name[start..index]);
-                    start = (index + 1);
-                    break;
-            }
-        }
-
-        parts.Add(item: name[start..]);
-
-        return [.. parts];
-    }
 }

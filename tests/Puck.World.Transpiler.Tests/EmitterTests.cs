@@ -104,17 +104,17 @@ public class EmitterTests {
 
             host {
                 authority: null
-                backend: "auto"
+                backend: auto
                 exitAfterSeconds: 0
                 fullscreen: false
                 genlock: null
                 height: 900
                 journalDepth: 2000
                 listen: null
-                presentMode: "Immediate"
-                presentation: "Windowed"
+                presentMode: Immediate
+                presentation: Windowed
                 rayQuery: true
-                surfaceFormat: "r8g8b8a8"
+                surfaceFormat: r8g8b8a8
                 targetHertz: 60
                 timing: false
                 width: 1280
@@ -176,7 +176,7 @@ public class EmitterTests {
         );
         Assert.Equal(
             0.25,
-            layout0["transitionSeconds"]?.GetValue<double>()
+            layout0["transitionSeconds"].AsNumber()
         );
 
         var seatRig = Assert.IsType<JsonObject>(@object: views["seatRig"]);
@@ -204,7 +204,7 @@ public class EmitterTests {
         );
         Assert.Equal(
             0.01,
-            op0["distance"]?.GetValue<double>()
+            op0["distance"].AsNumber()
         );
 
         var op1 = Assert.IsType<JsonObject>(@object: ops[1]);
@@ -215,7 +215,7 @@ public class EmitterTests {
         );
         Assert.Equal(
             0.001,
-            op1["fieldOfViewRadians"]?.GetValue<double>()
+            op1["fieldOfViewRadians"].AsNumber()
         );
     }
     [Fact]
@@ -253,7 +253,7 @@ public class EmitterTests {
 
         Assert.Equal(
             0.25,
-            host["tickIntervalSeconds"]?.GetValue<double>()
+            host["tickIntervalSeconds"].AsNumber()
         );
 
         var physics = Assert.IsType<JsonObject>(@object: host["physics"]);
@@ -265,7 +265,7 @@ public class EmitterTests {
         );
         Assert.Equal(
             -9.81,
-            grav[1]?.GetValue<double>()
+            grav[1].AsNumber()
         );
 
         var views = Assert.IsType<JsonObject>(@object: lowered["views"]);
@@ -275,6 +275,6 @@ public class EmitterTests {
             "pilot",
             seatRig["name"]?.ToString()
         );
-        Assert.True(condition: (seatRig["pitchRadians"]?.GetValue<double>() > 0.78));
+        Assert.True(condition: (seatRig["pitchRadians"].AsNumber() > 0.78));
     }
 }

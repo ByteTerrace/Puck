@@ -67,6 +67,32 @@
         "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
         "description": "The gate that arms the group, or null for always.",
         "default": null
+      },
+      "undo": {
+        "description": "The retained turn rows and depth, or null when the group has no undo history.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "title": "CellName",
+              "type": "string"
+            }
+          },
+          "depth": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "depth"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "RuleGroupUndo"
       }
     },
     "required": [

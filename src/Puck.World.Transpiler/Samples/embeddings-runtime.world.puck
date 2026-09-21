@@ -7,26 +7,26 @@ state {
     }
   }
   world {
-    table said: Text capacity(32) evicts
-    table saidVectors: Vector capacity(32) evicts
-    table saidStatus: Int capacity(32) evicts
-    table intents: Text embeds(intentVectors) {
+    table said capacity(32) evicts
+    table saidVectors capacity(32) evicts
+    table saidStatus capacity(32) evicts
+    table intents embeds(intentVectors) {
       directions = "Where is the road north?"
       rumours = "Have you heard anything strange lately?"
       threat = "Hand over your coin or else"
     }
-    table answers: Text {
+    table answers {
       directions = "Follow the river until the old mill."
       rumours = "Lights in the marsh, three nights running."
       threat = "Guards!"
     }
-    slot heard: Text = ""
+    slot heard = ""
   }
 }
 
 rule "understand" {
-  forEach: "saidStatus"
+  forEach: saidStatus
   mode: Edge
   when saidStatus[$each] == 3
-  transform nearest(from: intentVectors, query: "saidVectors[$each]", into: heard, k: 1, threshold: 0.6)
+  transform nearest(from: intentVectors, query: saidVectors[$each], into: heard, k: 1, threshold: 0.6)
 }

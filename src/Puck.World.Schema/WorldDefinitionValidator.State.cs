@@ -389,6 +389,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
+        var errorsBeforeSite = errors.Count;
         ValidateDrawSite(
             draw: draw,
             generators: generators,
@@ -399,6 +400,8 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.draw",
             errors: errors
         );
+
+        if (errors.Count != errorsBeforeSite) { return; }
 
         if (GeneratorEngine.TryResolveSource(
             draw: draw,
@@ -419,6 +422,8 @@ public static partial class WorldDefinitionValidator {
     /// source shape would otherwise be read as units already drawn, silently skipping outcomes or declaring a set
     /// drawn out early. Stated once, for a draw site and for a lattice row's draw fill alike.</summary>
     internal static void ValidateDrawnMasks(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks, string path, List<string> errors) {
+        // Source validators report missing outcomes and alternatives. Tolerate them while collecting mask
+        // diagnostics too, so an invalid declaration is refused rather than throwing during this secondary check.
         if (masks is not { Count: > 0 }) {
             return;
         }
@@ -440,7 +445,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             var units = ((generator.Source == GeneratorSource.WeightedNumeric)
-                ? CountEntries(counts: (generator.Weighted ?? []).Select(selector: static outcome => outcome.Multiplicity))
+                ? CountEntries(counts: (generator.Weighted ?? []).Select(selector: static outcome => outcome?.Multiplicity))
                 : (GeneratorEngine.TryResolveOrbit(
                     generator: generator,
                     nodes: out var orbitNodes,
@@ -470,7 +475,7 @@ public static partial class WorldDefinitionValidator {
 
         for (var index = 0; (index < masks.Count); index++) {
             RefuseMaskPastEntries(
-                entries: CountEntries(counts: (contexts[index]?.Alternatives ?? []).Select(selector: static alternative => alternative.Multiplicity)),
+                entries: CountEntries(counts: (contexts[index]?.Alternatives ?? []).Select(selector: static alternative => alternative?.Multiplicity)),
                 errors: errors,
                 mask: masks[index],
                 path: $"{path}[{index}]"
@@ -1197,7 +1202,10 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, IReadOnlyDictionary<string, StateSpace> spaces, IReadOnlyDictionary<string, StateEnum> enums, List<string> errors) {
+        // The map every other section resolves a row name through holds authored rows alone: a generated storage
+        // row is validated and counted here, and no authored name reaches it.
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (rows is null) {
             errors.Add(item: "state is required.");
@@ -1221,11 +1229,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!byName.TryAdd(
-                key: row.Name,
-                value: row
-            )) {
+            if (!names.Add(item: row.Name)) {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
+            } else if (!row.Generated) {
+                byName.Add(
+                    key: row.Name,
+                    value: row
+                );
             }
 
             ValidateStateRow(
@@ -1310,9 +1320,9 @@ public static partial class WorldDefinitionValidator {
 
         // The reserved prefix is ENGINE-MINTED ONLY, and the rule lives HERE — in the validator every ingress
         // passes (boot, live mutation, undo replay), never in one door a hand-authored file walks around.
-        // Nothing mints a state ROW, so the prefix is refused outright on a row name; that is also what keeps a
-        // reserved rule channel ($tick/$population/$region:) from ever being shadowed by a real row.
-        if (row.Name.Value.StartsWith(
+        // Pool expansion mints protected rows with this prefix. Their mark has no wire representation, and
+        // authored rows are checked before expansion, so an authored row cannot impersonate generated storage.
+        if (!row.Generated && row.Name.Value.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: WorldStateRow.ReservedNamePrefix
         )) {

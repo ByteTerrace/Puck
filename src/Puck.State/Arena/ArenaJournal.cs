@@ -22,6 +22,9 @@ public readonly record struct ArenaJournalEntry(ArenaColumn Column, int Index, l
 /// reuse one region instead of walking the buffer forward.</para>
 /// </remarks>
 public sealed class ArenaJournal {
+    /// <summary>The bytes one entry occupies: a column, an index, a number and a reference, padded to the word.</summary>
+    public const int EntryBytes = 24;
+
     private sbyte[] m_components = [];
     private int[] m_componentMarks = new int[8];
     private int[] m_entryMarks = new int[8];
@@ -31,8 +34,16 @@ public sealed class ArenaJournal {
     private ArenaJournalEntry[] m_entries = new ArenaJournalEntry[64];
 
     private int m_length;
+    private long m_referenceBytes;
     private int m_scopes;
 
+    /// <summary>Gets the bytes of record the open scopes hold: every entry, every snapshotted component, and what
+    /// every overwritten reference it retains keeps alive.</summary>
+    public long Bytes => (((((long)m_length) * EntryBytes) + m_componentLength) + m_referenceBytes);
+    /// <summary>Gets a value indicating whether the record has passed <see cref="ArenaCapacity.MaxJournalBytes"/>.
+    /// It is a reading of the record as it stands, so a rewound savepoint that brings the record back under the
+    /// ceiling clears it.</summary>
+    public bool OverCeiling => (Bytes > ArenaCapacity.MaxJournalBytes);
     /// <summary>Gets how many components of the snapshot buffer the open scopes hold.</summary>
     public int ComponentLength => m_componentLength;
     /// <summary>Gets how many entries the journal currently holds.</summary>
@@ -113,12 +124,35 @@ public sealed class ArenaJournal {
     /// <param name="column">The column written.</param>
     /// <param name="index">The position within that column.</param>
     /// <param name="previous">The reference it held.</param>
-    public void RecordReference(ArenaColumn column, int index, object? previous) => Append(entry: new ArenaJournalEntry(
-        Column: column,
-        Index: index,
-        Number: 0L,
-        Reference: previous
-    ));
+    public void RecordReference(ArenaColumn column, int index, object? previous) {
+        m_referenceBytes += RetainedBytes(reference: previous);
+        Append(entry: new ArenaJournalEntry(
+            Column: column,
+            Index: index,
+            Number: 0L,
+            Reference: previous
+        ));
+    }
+
+    // What an overwritten reference keeps alive for as long as the record holds it: nothing else refers to a
+    // replaced text or provenance, so its payload is the record's. An object is counted at a header and its fields,
+    // a string at a header and two bytes a UTF-16 code unit.
+    private static long RetainedBytes(object? reference) {
+        const long ObjectBytes = 32L;
+
+        static long StringBytes(string text) => (ObjectBytes + (2L * text.Length));
+
+        switch (reference) {
+            case null:
+                return 0L;
+            case string text:
+                return StringBytes(text: text);
+            case StateVisibility visibility:
+                return StateVisibilityStorage.RetainedBytes(value: visibility);
+            default:
+                return ObjectBytes;
+        }
+    }
     /// <summary>Records one overwritten vector cell by copying its components into the journal's own buffer.</summary>
     /// <param name="index">The cell slot written.</param>
     /// <param name="previous">The components it held.</param>
@@ -169,6 +203,14 @@ public sealed class ArenaJournal {
     // Shortens the record, clearing the discarded entries so a closed scope keeps no reference to the text,
     // visibility, observation, or provenance it once recorded; the buffer itself stays for reuse.
     private void Discard(int from) {
+        if (from == 0) {
+            m_referenceBytes = 0L;
+        } else {
+            for (var index = from; (index < m_length); index++) {
+                m_referenceBytes -= RetainedBytes(reference: m_entries[index].Reference);
+            }
+        }
+
         Array.Clear(
             array: m_entries,
             index: from,

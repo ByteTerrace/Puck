@@ -108,12 +108,9 @@ with — optionally adding rows a sibling district would have supplied
 | backgammon | `games/backgammon.world.json` | document | 630 | yes |
 | billiards | `games/billiards.world.json` | fixture `minimal-billiards-host.world.json` | 510 | yes |
 | bowling | `games/bowling.world.json` | spliced | 600 | no |
-| chess | `games/chess.world.json` | fixture `minimal-chess-host.world.json` | 600 | yes |
-| chinese-checkers | `games/chinese-checkers.world.json` | document | 600 | yes |
 | codenames | `games/codenames.world.json` | fixture `minimal-codenames-host.world.json` | 162 | yes |
 | dominoes | `games/dominoes.world.json` | spliced | 600 | no |
 | freecell | `games/freecell.world.json` | spliced | 610 | yes |
-| hearts | `games/hearts.world.json` | document | 288 | yes |
 | hexlines | `games/hexlines.world.json` | fixture `minimal-hexlines-host.world.json` | 600 | yes |
 | klondike | `games/klondike.world.json` | spliced | 680 | yes |
 | mancala | `games/mancala.world.json` | spliced | 590 | yes |
@@ -170,19 +167,18 @@ authors zero uniform gravity, so every body stands where it was spawned or posed
 and the pickup radius measures the arena's authored layout rather than a fall.
 Its sequence joins both seats, enters the second into the live match through the
 `arenaEnter` submission, plays a 2–1 match with two same-tick exchanges, two
-deaths a side's respawn countdown covers, two shots the rules refuse outright,
+deaths a side's respawn deadline covers, two shots the rules refuse outright,
 and one medkit carried into the plaza by a `pose` step and taken.
 
 `snake` needs a host for its input rather than its geometry: its four turn rules
 read seat 1's `strafe`/`forward` channels, so its minimal host supplies the seat
 kit, the `walk` program and those two bipolar channels. Its sequence joins the
 seat, presses a reversal the game refuses, then plays two full runs — four meals,
-two deaths on the snake's own body, and the respawn countdown between them — with
+two deaths on the snake's own body, and the respawn deadline between them — with
 one turn driven through the console submission door instead of a press. It stops
-partway through the second countdown and off the beat, so the export pins
-`snakeRespawn`'s partial value — and with it `countdownState`'s per-step decrement
-width — beside two `snakeTempo` cells resolving to 5 and 10 from a stored phase of
-zero, which is what the two `cycle` powers compute.
+before the second deadline passes and off the beat, so the export pins
+`snakeRespawn`'s armed deadline tick beside two `snakeTempo` cells resolving to 5
+and 10 from a stored phase of zero, which is what the two `cycle` powers compute.
 
 `pong` needs a host for its input and its population: its serve rule reads seat
 1's `attack` channel, and its five bodies — the ball, two paddles and two serve

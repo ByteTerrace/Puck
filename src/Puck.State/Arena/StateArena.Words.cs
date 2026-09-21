@@ -8,8 +8,8 @@ public sealed partial class StateArena {
     /// <param name="start">The position the word starts at; a ring ignores it.</param>
     /// <returns>The word and the read that produced it.</returns>
     /// <remarks>A ring's word is its live slots from the oldest push to the newest, so a push at the tail extends
-    /// the word only while the ring has not wrapped. Every other shape reads a cell the row does not hold as the
-    /// row's declared empty value, so the word's length is the row's own member count.</remarks>
+    /// the word only while the ring has not wrapped. Pool words visit live identity slots in ascending order and
+    /// skip holes. A lattice retains empty positions as the row's declared empty value.</remarks>
     public ArenaWord ReadWord(int rowOrdinal, Span<long> word, int start = 0) => ReadWord(
         attributeOrdinal: rowOrdinal,
         rowOrdinal: rowOrdinal,
@@ -82,41 +82,26 @@ public sealed partial class StateArena {
             );
         }
 
-        var count = ((layout.Shape == RowShape.Lattice)
-            ? layout.CellCapacity
-            : ((int)m_memberCounts[rowOrdinal])
-        );
+        if (rowOrdinal != attributeOrdinal) {
+            var cursor = first;
 
-        for (var position = first; (position < count); position++) {
-            if (rowOrdinal == attributeOrdinal) {
+            while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+                word[length++] = (TryReadRaw(key: key, raw: out var raw, rowOrdinal: attributeOrdinal) ? raw : 0L);
+            }
+        } else {
+            // A lattice word includes its declared empty cells. Pool words contain held identities only.
+            var count = (((layout.Shape == RowShape.Lattice) || m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))
+                ? layout.CellCapacity : (int)m_memberCounts[rowOrdinal]);
+
+            for (var position = first; (position < count); position++) {
                 var slot = (layout.CellStart + position);
+                var present = Bit(index: slot, words: m_presence);
 
-                word[length++] = (Bit(
-                    index: slot,
-                    words: m_presence
-                )
-                    ? m_numbers[slot]
-                    : layout.Empty
-                );
-
-                continue;
+                if (!present && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+                    continue;
+                }
+                word[length++] = (present ? m_numbers[slot] : layout.Empty);
             }
-            if (!TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            )) {
-                continue;
-            }
-
-            word[length++] = (TryReadRaw(
-                key: key,
-                raw: out var raw,
-                rowOrdinal: attributeOrdinal
-            )
-                ? raw
-                : 0L
-            );
         }
 
         return new ArenaWord(
@@ -156,7 +141,9 @@ public sealed partial class StateArena {
     /// <param name="position">The position within the row.</param>
     /// <param name="raw">The stored number, or zero when the position holds no cell.</param>
     /// <returns><see langword="true"/> when the position holds a numeric cell.</returns>
+    /// <exception cref="InvalidOperationException">The row belongs to a pool; use a handle or held-cell cursor.</exception>
     public bool TryReadRawAt(int rowOrdinal, int position, out long raw) {
+        RequirePositionalRow(rowOrdinal: rowOrdinal);
         if (
             TryRowLayout(
             layout: out var layout,

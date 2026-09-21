@@ -3,8 +3,8 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>CONTRACT UNDER TEST: re-declaring the row set moves the store to the new ordinals in place rather than
-/// replacing it, so every value a surviving row held rides across and anything holding the store keeps holding it.
+/// <summary>CONTRACT UNDER TEST: re-declaring the row set installs a prepared replacement arena at the new ordinals,
+/// preserving every surviving row's value.
 /// </summary>
 public sealed class ArenaRelayoutLawTests {
     private static WorldDefinition Document() => (Fixtures.BuildDocument() with {
@@ -21,7 +21,7 @@ public sealed class ArenaRelayoutLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
 
     [Fact]
-    public void ANewlyDeclaredRowRelayoutsTheStoreInPlaceAndCarriesEveryOtherRowsValue() {
+    public void ANewlyDeclaredRowInstallsThePreparedStoreAndCarriesEveryOtherRowsValue() {
         using var fixture = Fixtures.FreshServer(definition: Document());
         var before = fixture.Server.Arena;
 
@@ -40,7 +40,7 @@ public sealed class ArenaRelayoutLawTests {
 
         var arena = fixture.Server.Arena;
 
-        Assert.Same(
+        Assert.NotSame(
             actual: arena,
             expected: before
         );

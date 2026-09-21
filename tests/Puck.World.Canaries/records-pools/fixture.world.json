@@ -1,0 +1,208 @@
+{
+  "bodies": {
+    "capacity": 1,
+    "localSeats": 0,
+    "networkPlayers": 1
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "still",
+      "operations": [
+        "CommitPose"
+      ],
+      "version": "puck.body.program.v1"
+    }
+  ],
+  "channels": [],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
+  "documentId": "records-pools-canary",
+  "kits": {
+    "rows": [
+      {
+        "bodyMotionProgram": "still",
+        "motion": {
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 20
+              },
+              "gravity": {
+                "fall": 23,
+                "rise": 14
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1
+          },
+          "turn": {
+            "rate": 1
+          }
+        },
+        "name": "defaultKit"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "cycle",
+      "effects": [
+        {
+          "$type": "claim",
+          "pool": "actors",
+          "binding": "x",
+          "effects": [
+            {
+              "$type": "setState",
+              "value": 17,
+              "state": { "binding": "x", "field": "score" }
+            },
+            {
+              "$type": "setState",
+              "fromState": { "binding": "x", "field": "score" },
+              "state": "first"
+            },
+            {
+              "$type": "release",
+              "binding": "x"
+            }
+          ]
+        },
+        {
+          "$type": "claim",
+          "pool": "actors",
+          "binding": "y",
+          "effects": [
+            {
+              "$type": "setState",
+              "fromState": { "binding": "y", "field": "score" },
+              "state": "second"
+            },
+            {
+              "$type": "release",
+              "binding": "y"
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "value": 1,
+          "state": "done"
+        }
+      ],
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "value": 1,
+        "comparison": "Equal",
+        "state": "request"
+      }
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 60
+  },
+  "state": {
+    "world": [
+      {
+        "kind": "Int",
+        "name": "request",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "first",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "second",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "done",
+        "value": 0
+      }
+    ],
+    "records": [
+      {
+        "fields": [
+          {
+            "kind": "Int",
+            "name": "score",
+            "default": {
+              "value": 7,
+              "kind": "Int"
+            }
+          }
+        ],
+        "name": "Actor"
+      }
+    ],
+    "pools": [
+      {
+        "record": "Actor",
+        "name": "actors",
+        "capacity": 1
+      }
+    ]
+  },
+  "views": {
+    "layouts": [],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "table-view",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 16,
+          "pitch": 0.6,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ],
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            0,
+            0
+          ],
+          "worldAxes": true
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.96
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    }
+  }
+}

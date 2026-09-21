@@ -9,7 +9,6 @@ namespace Puck.World.Transpiler.Tests;
 /// genuine byte-identical emission against independently authored native Puck definitions,
 /// and strict refusal diagnostics PUCK070-PUCK076 with exact source spans.</summary>
 public class StateSqlDeclarationEmitterTests {
-
     private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
         var compilation = WorldCompiler.Compile(
@@ -21,16 +20,15 @@ public class StateSqlDeclarationEmitterTests {
 
         return (compilation.Json, compilation.Diagnostics);
     }
-
     private static void AssertCompilesByteIdentical(string sqlBody, string nativeBody) {
-        var (sqlJson, sqlDiag) = Lower(sqlBody);
-        var (nativeJson, nativeDiag) = Lower(nativeBody);
+        var (sqlJson, sqlDiag) = Lower(body: sqlBody);
+        var (nativeJson, nativeDiag) = Lower(body: nativeBody);
 
-        Assert.False(sqlDiag.HasErrors, sqlDiag.FormatReport("SQL compilation errors"));
-        Assert.False(nativeDiag.HasErrors, nativeDiag.FormatReport("Native compilation errors"));
+        Assert.False(condition: sqlDiag.HasErrors, userMessage: sqlDiag.FormatReport("SQL compilation errors"));
+        Assert.False(condition: nativeDiag.HasErrors, userMessage: nativeDiag.FormatReport("Native compilation errors"));
 
         WorldSemanticValidator.ValidateWorld(sqlJson, sourceMap: null, diagnostics: sqlDiag);
-        Assert.False(sqlDiag.HasErrors, sqlDiag.FormatReport("SQL semantic validation errors"));
+        Assert.False(condition: sqlDiag.HasErrors, userMessage: sqlDiag.FormatReport("SQL semantic validation errors"));
 
         var mismatch = JsonMismatch.Find(
             actual: sqlJson,
@@ -38,7 +36,7 @@ public class StateSqlDeclarationEmitterTests {
             path: "$"
         );
 
-        Assert.Null(mismatch);
+        Assert.Null(@object: mismatch);
     }
 
     // ---- Byte-identical state declarations -----------------------------------------------------------------
@@ -46,6 +44,32 @@ public class StateSqlDeclarationEmitterTests {
     [Fact]
     public void MultiColumnTableWithInsertCompilesByteIdentically() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        table fightersHp capacity(32) bounds(0..100, overflow: Saturate) {
+                            hero = 80
+                            goblin = 30
+                        }
+                        table fightersMana capacity(32) advance(perSecond: 5) {
+                            hero = 0
+                            goblin = 0
+                        }
+                        table fightersSpeed capacity(32) {
+                            hero = 1.5
+                            goblin = 1.5
+                        }
+                        table fightersAlive capacity(32) {
+                            hero = true
+                            goblin = true
+                        }
+                        table fightersTitle capacity(32) {
+                            hero = "Hero"
+                            goblin = "Goblin"
+                        }
+                    }
+                }
+                """,
             sqlBody: """
                 sql {
                     CREATE TABLE fighters (
@@ -61,101 +85,84 @@ public class StateSqlDeclarationEmitterTests {
                         ('hero',   80, 'Hero'),
                         ('goblin', 30, 'Goblin');
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        table fightersHp : Int capacity(32) bounds(minimum: 0, maximum: 100, overflow: Saturate) {
-                            hero = 80
-                            goblin = 30
-                        }
-                        table fightersMana : Int capacity(32) advance(perSecond: 5) {
-                            hero = 0
-                            goblin = 0
-                        }
-                        table fightersSpeed : Fixed capacity(32) {
-                            hero = 1.5
-                            goblin = 1.5
-                        }
-                        table fightersAlive : Bool capacity(32) {
-                            hero = true
-                            goblin = true
-                        }
-                        table fightersTitle : Text capacity(32) {
-                            hero = "Hero"
-                            goblin = "Goblin"
-                        }
-                    }
-                }
                 """
         );
     }
-
     [Fact]
     public void SlotDeclarationCompilesByteIdentically() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        slot gold = 10 bounds(0..)
+                        slot uninitialized
+                    }
+                }
+                """,
             sqlBody: """
                 sql {
                     DECLARE gold INT DEFAULT 10 CHECK (gold >= 0);
                     DECLARE uninitialized INT;
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        slot gold : Int = 10 bounds(minimum: 0)
-                        slot uninitialized : Int
-                    }
-                }
                 """
         );
     }
-
     [Fact]
     public void KeyOnlyTableCompilesToBoolRow() {
         AssertCompilesByteIdentical(
-            sqlBody: """
-                sql {
-                    CREATE TABLE tags (id TEXT PRIMARY KEY);
-                    INSERT INTO tags (id) VALUES ('a'), ('b');
-                }
-                """,
             nativeBody: """
                 state {
                     world {
-                        table tags : Bool {
+                        table tags {
                             a = true
                             b = true
                         }
                     }
                 }
+                """,
+            sqlBody: """
+                sql {
+                    CREATE TABLE tags (id TEXT PRIMARY KEY);
+                    INSERT INTO tags (id) VALUES ('a'), ('b');
+                }
                 """
         );
     }
-
     [Fact]
     public void OrderedTableWithReferencesCompilesByteIdentically() {
         AssertCompilesByteIdentical(
-            sqlBody: """
-                sql {
-                    CREATE TABLE cardNames (id TEXT PRIMARY KEY);
-                    CREATE TABLE deck (id TEXT PRIMARY KEY REFERENCES cardNames) ORDERED CAPACITY 52;
-                }
-                """,
             nativeBody: """
                 state {
                     world {
-                        table cardNames : Bool {}
+                        table cardNames {
+                            ace = true
+                            king = true
+                        }
                         pile deck of cardNames capacity(52) {}
                     }
+                }
+                """,
+            sqlBody: """
+                sql {
+                    CREATE TABLE cardNames (id TEXT PRIMARY KEY);
+                    INSERT INTO cardNames (id) VALUES ('ace'), ('king');
+                    CREATE TABLE deck (id TEXT PRIMARY KEY REFERENCES cardNames) ORDERED CAPACITY 52;
                 }
                 """
         );
     }
-
     [Fact]
     public void ColumnRowAliasCompilesToExplicitRowName() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        table vitals_health {
+                            hero = 100
+                        }
+                    }
+                }
+                """,
             sqlBody: """
                 sql {
                     CREATE TABLE vitals (
@@ -164,58 +171,41 @@ public class StateSqlDeclarationEmitterTests {
                     );
                     INSERT INTO vitals (id) VALUES ('hero');
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        table vitals_health : Int {
-                            hero = 100
-                        }
-                    }
-                }
                 """
         );
     }
-
     [Fact]
     public void SqlBlockMergesWithNativeStateWorldDeclarationsInDocumentOrder() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        slot nativeGold = 50
+                        slot sqlSilver = 25
+                    }
+                }
+                """,
             sqlBody: """
                 state {
                     world {
-                        slot nativeGold : Int = 50
+                        slot nativeGold = 50
                     }
                 }
                 sql {
                     DECLARE sqlSilver INT DEFAULT 25;
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        slot nativeGold : Int = 50
-                        slot sqlSilver : Int = 25
-                    }
-                }
                 """
         );
     }
-
     [Fact]
     public void PolicyDeclarationCompilesToVisibility() {
         AssertCompilesByteIdentical(
-            sqlBody: """
-                sql {
-                    CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT DEFAULT 100);
-                    CREATE POLICY p ON fighters FOR SELECT TO console;
-                }
-                """,
             nativeBody: """
                 state {
                     world {
                         row {
                             name: "fightersHp"
-                            kind: "Int"
+                            kind: Int
                             domain {
                                 $type: "keys"
                             }
@@ -225,13 +215,18 @@ public class StateSqlDeclarationEmitterTests {
                         }
                     }
                 }
+                """,
+            sqlBody: """
+                sql {
+                    CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT DEFAULT 100);
+                    CREATE POLICY p ON fighters FOR SELECT TO console;
+                }
                 """
         );
     }
-
     [Fact]
     public void ExplicitNullOmitsCellFromRow() {
-        var (json, diag) = Lower("""
+        var (json, diag) = Lower(body: """
             sql {
                 CREATE TABLE t (
                     id TEXT PRIMARY KEY,
@@ -242,45 +237,57 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diag.HasErrors, diag.FormatReport(""));
-        var world = (JsonArray)json["state"]!["world"]!;
-        var hpRow = (JsonObject)world[0]!;
-        var noteRow = (JsonObject)world[1]!;
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var world = ((JsonArray)json["state"]!["world"]!);
+        var hpRow = ((JsonObject)world[0]!);
+        var noteRow = ((JsonObject)world[1]!);
 
         Assert.Equal("tHp", hpRow["name"]?.ToString());
-        Assert.Single((JsonArray)hpRow["cells"]!);
+        Assert.Single(collection: ((JsonArray)hpRow["cells"]!));
 
         Assert.Equal("tNote", noteRow["name"]?.ToString());
-        Assert.Null(noteRow["cells"]); // Omitted entirely!
+        Assert.Null(@object: noteRow["cells"]); // Omitted entirely!
     }
-
     [Fact]
     public void BooleanColumnAcceptsOneAndZero() {
         AssertCompilesByteIdentical(
-            sqlBody: """
-                sql {
-                    CREATE TABLE flags (id TEXT PRIMARY KEY, active BOOL);
-                    INSERT INTO flags (id, active) VALUES ('a', 1), ('b', 0);
-                }
-                """,
             nativeBody: """
                 state {
                     world {
-                        table flagsActive : Bool {
+                        table flagsActive {
                             a = true
                             b = false
                         }
                     }
                 }
+                """,
+            sqlBody: """
+                sql {
+                    CREATE TABLE flags (id TEXT PRIMARY KEY, active BOOL);
+                    INSERT INTO flags (id, active) VALUES ('a', 1), ('b', 0);
+                }
                 """
         );
     }
-
     // ---- Byte-identical rules ------------------------------------------------------------------------------
 
     [Fact]
     public void SingleKeyUpdateCompilesToSetAndAddState() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        table fightersHp {}
+                    }
+                }
+                rule "heal" {
+                    mode: Level
+                    transaction {
+                        fightersHp[hero] = 100
+                        fightersHp[hero] += 10
+                    }
+                }
+                """,
             sqlBody: """
                 sql {
                     CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT DEFAULT 100);
@@ -291,27 +298,12 @@ public class StateSqlDeclarationEmitterTests {
                         UPDATE fighters SET hp = hp + 10 WHERE id = 'hero';
                     END;
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        table fightersHp : Int {}
-                    }
-                }
-                rule "heal" {
-                    mode: "Level"
-                    transaction {
-                        fightersHp[hero] = 100
-                        fightersHp[hero] += 10
-                    }
-                }
                 """
         );
     }
-
     [Fact]
     public void SingleKeyUpdateReadingAnotherColumnCarriesKey() {
-        var (json, diag) = Lower("""
+        var (json, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT, mana INT);
 
@@ -320,19 +312,31 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diag.HasErrors, diag.FormatReport(""));
-        var rule = (JsonObject)((JsonArray)json["rules"]!)[0]!;
-        var effect = (JsonObject)((JsonArray)rule["effects"]!)[0]!;
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var rule = ((JsonObject)((JsonArray)json["rules"]!)[0]!);
+        var effect = ((JsonObject)((JsonArray)rule["effects"]!)[0]!);
 
         Assert.Equal("setState", effect["$type"]?.ToString());
         Assert.Equal("fightersHp", effect["state"]?.ToString());
         Assert.Equal("hero", effect["key"]?.ToString());
         Assert.Equal("fightersMana[hero]", WorldExpressionJson.Text(node: effect["expression"]));
     }
-
     [Fact]
     public void SetBasedUpdateCompilesToForEachRule() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        table fightersHp {}
+                    }
+                }
+                rule "poison" {
+                    mode: Level
+                    forEach: fightersHp
+                    when fightersHp[$each] > 10
+                    fightersHp[$each] += -5
+                }
+                """,
             sqlBody: """
                 sql {
                     CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT DEFAULT 100);
@@ -340,26 +344,25 @@ public class StateSqlDeclarationEmitterTests {
                     CREATE RULE poison EVERY TICK AS
                         UPDATE fighters SET hp = hp - 5 WHERE hp > 10;
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        table fightersHp : Int {}
-                    }
-                }
-                rule "poison" {
-                    mode: "Level"
-                    forEach: "fightersHp"
-                    when fightersHp[$each] > 10
-                    fightersHp[$each] += -5
-                }
                 """
         );
     }
-
     [Fact]
     public void SetBasedDeleteCompilesToForEachRule() {
         AssertCompilesByteIdentical(
+            nativeBody: """
+                state {
+                    world {
+                        table fightersHp {}
+                    }
+                }
+                rule "clearDead" {
+                    mode: Level
+                    forEach: fightersHp
+                    when fightersHp[$each] <= 0
+                    remove fightersHp[$each]
+                }
+                """,
             sqlBody: """
                 sql {
                     CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT DEFAULT 100);
@@ -367,26 +370,12 @@ public class StateSqlDeclarationEmitterTests {
                     CREATE RULE clearDead EVERY TICK AS
                         DELETE FROM fighters WHERE hp <= 0;
                 }
-                """,
-            nativeBody: """
-                state {
-                    world {
-                        table fightersHp : Int {}
-                    }
-                }
-                rule "clearDead" {
-                    mode: "Level"
-                    forEach: "fightersHp"
-                    when fightersHp[$each] <= 0
-                    remove fightersHp[$each]
-                }
                 """
         );
     }
-
     [Fact]
     public void MultiStatementRuleWithSetBasedUpdateIsRefused() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT);
                 DECLARE gold INT DEFAULT 10;
@@ -399,13 +388,12 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.SqlUnsupportedClause);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.SqlUnsupportedClause));
     }
-
     [Fact]
     public void BinarySubtractionWithoutSpacesParsesCorrectly() {
-        var (json, diag) = Lower("""
+        var (json, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT);
 
@@ -417,19 +405,18 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diag.HasErrors, diag.FormatReport(""));
-        var rule = (JsonObject)((JsonArray)json["rules"]!)[0]!;
-        var txn = (JsonObject)((JsonArray)rule["effects"]!)[0]!;
-        var effects = (JsonArray)txn["effects"]!;
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var rule = ((JsonObject)((JsonArray)json["rules"]!)[0]!);
+        var txn = ((JsonObject)((JsonArray)rule["effects"]!)[0]!);
+        var effects = ((JsonArray)txn["effects"]!);
 
         Assert.Equal("addState", effects[0]?["$type"]?.ToString());
-        Assert.Equal(-5L, (long)effects[0]!["value"]!);
+        Assert.Equal(-5L, ((long)effects[0]!["value"]!));
         Assert.Equal("10 - 5", WorldExpressionJson.Text(node: effects[1]?["expression"]));
     }
-
     [Fact]
     public void SetIntColumnWithNonIntegerLiteralReportsPUCK053() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT);
 
@@ -438,13 +425,12 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.StateDeclarationInvalidDefault);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.StateDeclarationInvalidDefault));
     }
-
     [Fact]
     public void SetColumnWithNullReportsPUCK076() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT);
 
@@ -453,13 +439,12 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.SqlSyntaxError);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.SqlSyntaxError));
     }
-
     [Fact]
     public void SetBoolColumnCompilesToNumericOneOrZero() {
-        var (json, diag) = Lower("""
+        var (json, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, alive BOOL);
 
@@ -468,16 +453,16 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diag.HasErrors, diag.FormatReport(""));
-        var rule = (JsonObject)((JsonArray)json["rules"]!)[0]!;
-        var effect = (JsonObject)((JsonArray)rule["effects"]!)[0]!;
-        Assert.Equal("setState", effect["$type"]?.ToString());
-        Assert.Equal(1L, (long)effect["value"]!);
-    }
+        Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
+        var rule = ((JsonObject)((JsonArray)json["rules"]!)[0]!);
+        var effect = ((JsonObject)((JsonArray)rule["effects"]!)[0]!);
 
+        Assert.Equal("setState", effect["$type"]?.ToString());
+        Assert.Equal(1L, ((long)effect["value"]!));
+    }
     [Fact]
     public void UnknownColumnInWhereClauseReportsPUCK059() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT NOT NULL);
 
@@ -486,13 +471,12 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.StateDeclarationUnknownReference);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.StateDeclarationUnknownReference));
     }
-
     [Fact]
     public void ComparingPrimaryKeyWithInequalityReportsPUCK059() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT NOT NULL);
 
@@ -501,26 +485,24 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.StateDeclarationUnknownReference);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.StateDeclarationUnknownReference));
     }
-
     [Fact]
     public void InsertExceedingCapacityReportsPUCK054() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT) CAPACITY 1;
                 INSERT INTO fighters (id, hp) VALUES ('hero', 100), ('goblin', 50);
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.StateDeclarationCapacityTooSmall);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.StateDeclarationCapacityTooSmall));
     }
-
     [Fact]
     public void PerKeyRuleOnAllNullableTableReportsPUCK073() {
-        var (_, diag) = Lower("""
+        var (_, diag) = Lower(body: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT);
 
@@ -529,10 +511,9 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.True(diag.HasErrors);
-        Assert.Contains(diag, d => d.Code == PuckDiagnosticCodes.SqlUnsupportedClause);
+        Assert.True(condition: diag.HasErrors);
+        Assert.Contains(collection: diag, filter: d => (d.Code == PuckDiagnosticCodes.SqlUnsupportedClause));
     }
-
     // ---- Refusal diagnostics PUCK070 - PUCK076 -------------------------------------------------------------
 
     public static TheoryData<string, string, string> RefusalCases() {
@@ -540,67 +521,67 @@ public class StateSqlDeclarationEmitterTests {
 
         // PUCK070: SqlUnsupportedType (REAL / FLOAT / DOUBLE -> name FIXED)
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, val FLOAT);
             }
             """,
-            "PUCK070",
-            "FLOAT"
+            p2: "PUCK070",
+            p3: "FLOAT"
         );
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, val DOUBLE);
             }
             """,
-            "PUCK070",
-            "DOUBLE"
+            p2: "PUCK070",
+            p3: "DOUBLE"
         );
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, val REAL);
             }
             """,
-            "PUCK070",
-            "REAL"
+            p2: "PUCK070",
+            p3: "REAL"
         );
 
         // PUCK071: SqlCompositePrimaryKey (composite PRIMARY KEY (a, b))
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (a TEXT, b TEXT, PRIMARY KEY (a, b));
             }
             """,
-            "PUCK071",
-            "PRIMARY KEY (a, b)"
+            p2: "PUCK071",
+            p3: "PRIMARY KEY (a, b)"
         );
 
         // PUCK072: SqlInvalidCheckShape (non-between, non-comparison check)
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, hp INT CHECK (hp = 5));
             }
             """,
-            "PUCK072",
-            "hp = 5"
+            p2: "PUCK072",
+            p3: "hp = 5"
         );
 
         // PUCK073: SqlUnsupportedClause (GROUP BY, LIMIT, aggregations, IS NULL, etc.)
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, hp INT CHECK (hp IS NOT NULL));
             }
             """,
-            "PUCK073",
-            "hp IS NOT NULL"
+            p2: "PUCK073",
+            p3: "hp IS NOT NULL"
         );
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, hp INT);
 
@@ -608,11 +589,11 @@ public class StateSqlDeclarationEmitterTests {
                     UPDATE t SET hp = 10 GROUP BY id;
             }
             """,
-            "PUCK073",
-            "GROUP BY"
+            p2: "PUCK073",
+            p3: "GROUP BY"
         );
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id TEXT PRIMARY KEY, hp INT);
 
@@ -620,13 +601,13 @@ public class StateSqlDeclarationEmitterTests {
                     UPDATE t SET hp = 10 LIMIT 5;
             }
             """,
-            "PUCK073",
-            "LIMIT"
+            p2: "PUCK073",
+            p3: "LIMIT"
         );
 
         // PUCK074: SqlSelfReferentialSetUpdate
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT NOT NULL);
 
@@ -634,13 +615,13 @@ public class StateSqlDeclarationEmitterTests {
                     UPDATE fighters SET hp = (SELECT hp FROM fighters WHERE id = 'hero') WHERE hp < 50;
             }
             """,
-            "PUCK074",
-            "(SELECT hp FROM fighters WHERE id = 'hero')"
+            p2: "PUCK074",
+            p3: "(SELECT hp FROM fighters WHERE id = 'hero')"
         );
 
         // PUCK075: SqlMissingRequiredColumn (INSERT missing NOT NULL column with no default)
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (
                     id TEXT PRIMARY KEY,
@@ -649,24 +630,23 @@ public class StateSqlDeclarationEmitterTests {
                 INSERT INTO t (id) VALUES ('hero');
             }
             """,
-            "PUCK075",
-            "req INT NOT NULL"
+            p2: "PUCK075",
+            p3: "req INT NOT NULL"
         );
 
         // PUCK076: SqlSyntaxError
         data.Add(
-            """
+            p1: """
             sql {
                 CREATE TABLE t (id);
             }
             """,
-            "PUCK076",
-            ")"
+            p2: "PUCK076",
+            p3: ")"
         );
 
         return data;
     }
-
     [MemberData(nameof(RefusalCases))]
     [Theory]
     public void RefusalFiresWithItsCodeAndSourceSpan(string body, string code, string needle) {
@@ -700,10 +680,9 @@ public class StateSqlDeclarationEmitterTests {
             match.Span.Line
         );
     }
-
     [Fact]
     public void SlotWrite_DecimalToIntegerSlot_RefusedWithInvalidDefault() {
-        var (_, diagnostics) = Lower("""
+        var (_, diagnostics) = Lower(body: """
             sql {
                 DECLARE counter INT;
                 CREATE RULE r ON ENTER AS UPDATE counter SET value = 1.5;
@@ -711,51 +690,52 @@ public class StateSqlDeclarationEmitterTests {
             """);
 
         Assert.True(
-            condition: diagnostics.Any(d => d.Code == PuckDiagnosticCodes.StateDeclarationInvalidDefault),
+            condition: diagnostics.Any(predicate: d => (d.Code == PuckDiagnosticCodes.StateDeclarationInvalidDefault)),
             userMessage: $"Expected PUCK053 for 1.5 into INT slot, got: {diagnostics.FormatReport("")}"
         );
     }
-
     [Fact]
     public void SlotWrite_TextSlot_ProducesTextProperty() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 DECLARE greeting TEXT;
                 CREATE RULE r ON ENTER AS UPDATE greeting SET value = 'hello';
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var rules = json["rules"] as JsonArray;
-        Assert.NotNull(rules);
-        var eff = rules[0]?["effects"]?[0] as JsonObject;
-        Assert.NotNull(eff);
-        Assert.Equal("hello", eff["text"]?.ToString());
-        Assert.Null(eff["expression"]);
-    }
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rules = (json["rules"] as JsonArray);
 
+        Assert.NotNull(@object: rules);
+        var eff = (rules[0]?["effects"]?[0] as JsonObject);
+
+        Assert.NotNull(@object: eff);
+        Assert.Equal("hello", eff["text"]?.ToString());
+        Assert.Null(@object: eff["expression"]);
+    }
     [Fact]
     public void SlotWrite_IntSlot_ProducesValueProperty() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 DECLARE counter INT;
                 CREATE RULE r ON ENTER AS UPDATE counter SET value = 42;
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var rules = json["rules"] as JsonArray;
-        Assert.NotNull(rules);
-        var eff = rules[0]?["effects"]?[0] as JsonObject;
-        Assert.NotNull(eff);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rules = (json["rules"] as JsonArray);
+
+        Assert.NotNull(@object: rules);
+        var eff = (rules[0]?["effects"]?[0] as JsonObject);
+
+        Assert.NotNull(@object: eff);
         Assert.Equal(42L, eff["value"]?.GetValue<long>());
     }
-
     // ---- Vector SQL dialect lowering (Part 1 Item 5) --------------------------------------------------------
 
     [Fact]
     public void VectorTable_WithCapacityAndEvicts_LowersExpectedRow() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 CREATE TABLE memories (
                     key TEXT PRIMARY KEY,
@@ -764,20 +744,21 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var world = json["state"]?["world"] as JsonArray;
-        Assert.NotNull(world);
-        var row = world.FirstOrDefault(r => r?["name"]?.ToString() == "memoriesEmbedding") as JsonObject;
-        Assert.NotNull(row);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var world = (json["state"]?["world"] as JsonArray);
+
+        Assert.NotNull(@object: world);
+        var row = (world.FirstOrDefault(predicate: r => (r?["name"]?.ToString() == "memoriesEmbedding")) as JsonObject);
+
+        Assert.NotNull(@object: row);
         Assert.Equal("Vector", row["kind"]?.ToString());
         Assert.Equal("lore", row["space"]?.ToString());
         Assert.Equal(128, row["capacity"]?.GetValue<int>());
-        Assert.True(row["evicts"]?.GetValue<bool>());
+        Assert.True(condition: row["evicts"]?.GetValue<bool>());
     }
-
     [Fact]
     public void VectorTable_WithInsertVectorLiteral_LowersCells() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 CREATE TABLE memories (
                     key TEXT PRIMARY KEY,
@@ -789,38 +770,41 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var world = json["state"]?["world"] as JsonArray;
-        Assert.NotNull(world);
-        var row = world.FirstOrDefault(r => r?["name"]?.ToString() == "memoriesEmbedding") as JsonObject;
-        Assert.NotNull(row);
-        var cells = row["cells"] as JsonArray;
-        Assert.NotNull(cells);
-        Assert.Single(cells);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var world = (json["state"]?["world"] as JsonArray);
+
+        Assert.NotNull(@object: world);
+        var row = (world.FirstOrDefault(predicate: r => (r?["name"]?.ToString() == "memoriesEmbedding")) as JsonObject);
+
+        Assert.NotNull(@object: row);
+        var cells = (row["cells"] as JsonArray);
+
+        Assert.NotNull(@object: cells);
+        Assert.Single(collection: cells);
         Assert.Equal("ambush", cells[0]?["key"]?.ToString());
         Assert.Equal("AAAA", cells[0]?["value"]?.ToString());
     }
-
     [Fact]
     public void VectorSlot_LowersExpectedRow() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 DECLARE playerEmbedding VECTOR(lore);
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var world = json["state"]?["world"] as JsonArray;
-        Assert.NotNull(world);
-        var row = world.FirstOrDefault(r => r?["name"]?.ToString() == "playerEmbedding") as JsonObject;
-        Assert.NotNull(row);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var world = (json["state"]?["world"] as JsonArray);
+
+        Assert.NotNull(@object: world);
+        var row = (world.FirstOrDefault(predicate: r => (r?["name"]?.ToString() == "playerEmbedding")) as JsonObject);
+
+        Assert.NotNull(@object: row);
         Assert.Equal("Vector", row["kind"]?.ToString());
         Assert.Equal("lore", row["space"]?.ToString());
     }
-
     [Fact]
     public void VectorTable_DefaultSpaceInferredWhenSingleSpaceDeclared() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             state {
                 spaces [
                     { name: "lore" model: "text-embedding-3-small" revision: "1" dimensions: 256 }
@@ -834,17 +818,18 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var world = json["state"]?["world"] as JsonArray;
-        Assert.NotNull(world);
-        var row = world.FirstOrDefault(r => r?["name"]?.ToString() == "memoriesEmbedding") as JsonObject;
-        Assert.NotNull(row);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var world = (json["state"]?["world"] as JsonArray);
+
+        Assert.NotNull(@object: world);
+        var row = (world.FirstOrDefault(predicate: r => (r?["name"]?.ToString() == "memoriesEmbedding")) as JsonObject);
+
+        Assert.NotNull(@object: row);
         Assert.Equal("lore", row["space"]?.ToString());
     }
-
     [Fact]
     public void VectorComparison_InWhereClause_LowersRule() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 DECLARE playerEmbedding VECTOR(lore);
                 DECLARE enemyEmbedding VECTOR(lore);
@@ -854,27 +839,30 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var rules = json["rules"] as JsonArray;
-        Assert.NotNull(rules);
-        var rule = rules[0] as JsonObject;
-        Assert.NotNull(rule);
-        var gate = rule["gate"] as JsonObject;
-        Assert.NotNull(gate);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rules = (json["rules"] as JsonArray);
+
+        Assert.NotNull(@object: rules);
+        var rule = (rules[0] as JsonObject);
+
+        Assert.NotNull(@object: rule);
+        var gate = (rule["gate"] as JsonObject);
+
+        Assert.NotNull(@object: gate);
         Assert.Equal("compareValue", gate["$type"]?.ToString());
         Assert.Equal("similarity(playerEmbedding, enemyEmbedding)", WorldExpressionJson.Text(node: gate["left"]));
         Assert.Equal("Greater", gate["comparison"]?.ToString());
         Assert.Equal("0.6", WorldExpressionJson.Text(node: gate["right"]));
         Assert.Equal("Fixed", gate["kind"]?.ToString());
-        var eff = rule["effects"]?[0] as JsonObject;
-        Assert.NotNull(eff);
+        var eff = (rule["effects"]?[0] as JsonObject);
+
+        Assert.NotNull(@object: eff);
         Assert.Equal("setState", eff["$type"]?.ToString());
         Assert.Equal("alert", eff["state"]?.ToString());
     }
-
     [Fact]
     public void VectorUpdate_Assignment_LowersEffect() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 DECLARE targetEmbedding VECTOR(lore);
                 DECLARE sourceEmbedding VECTOR(lore);
@@ -883,21 +871,23 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var rules = json["rules"] as JsonArray;
-        Assert.NotNull(rules);
-        var rule = rules[0] as JsonObject;
-        Assert.NotNull(rule);
-        var eff = rule["effects"]?[0] as JsonObject;
-        Assert.NotNull(eff);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rules = (json["rules"] as JsonArray);
+
+        Assert.NotNull(@object: rules);
+        var rule = (rules[0] as JsonObject);
+
+        Assert.NotNull(@object: rule);
+        var eff = (rule["effects"]?[0] as JsonObject);
+
+        Assert.NotNull(@object: eff);
         Assert.Equal("setState", eff["$type"]?.ToString());
         Assert.Equal("targetEmbedding", eff["state"]?.ToString());
         Assert.Equal("sourceEmbedding", WorldExpressionJson.Text(node: eff["expression"]));
     }
-
     [Fact]
     public void InsertSelect_NearestTransform_LowersExpectedRule() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 CREATE TABLE memories (
                     key TEXT PRIMARY KEY,
@@ -917,26 +907,29 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var rules = json["rules"] as JsonArray;
-        Assert.NotNull(rules);
-        var rule = rules[0] as JsonObject;
-        Assert.NotNull(rule);
-        var eff = rule["effects"]?[0] as JsonObject;
-        Assert.NotNull(eff);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rules = (json["rules"] as JsonArray);
+
+        Assert.NotNull(@object: rules);
+        var rule = (rules[0] as JsonObject);
+
+        Assert.NotNull(@object: rule);
+        var eff = (rule["effects"]?[0] as JsonObject);
+
+        Assert.NotNull(@object: eff);
         Assert.Equal("transformState", eff["$type"]?.ToString());
-        var transform = eff["transform"] as JsonObject;
-        Assert.NotNull(transform);
+        var transform = (eff["transform"] as JsonObject);
+
+        Assert.NotNull(@object: transform);
         Assert.Equal("nearest", transform["$type"]?.ToString());
         Assert.Equal("memoriesEmbedding", transform["from"]?.ToString());
         Assert.Equal("recalledScore", transform["into"]?.ToString());
         Assert.Equal("queryEmbedding", transform["query"]?.ToString());
         Assert.Equal(3, transform["k"]?.GetValue<int>());
     }
-
     [Fact]
     public void InsertSelect_NearestTransform_WithWhereAndExcludeAndFarthest() {
-        var (json, diagnostics) = Lower("""
+        var (json, diagnostics) = Lower(body: """
             sql {
                 CREATE TABLE memories (
                     key TEXT PRIMARY KEY,
@@ -957,25 +950,28 @@ public class StateSqlDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
-        var rules = json["rules"] as JsonArray;
-        Assert.NotNull(rules);
-        var rule = rules[0] as JsonObject;
-        Assert.NotNull(rule);
-        var eff = rule["effects"]?[0] as JsonObject;
-        Assert.NotNull(eff);
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        var rules = (json["rules"] as JsonArray);
+
+        Assert.NotNull(@object: rules);
+        var rule = (rules[0] as JsonObject);
+
+        Assert.NotNull(@object: rule);
+        var eff = (rule["effects"]?[0] as JsonObject);
+
+        Assert.NotNull(@object: eff);
         Assert.Equal("transformState", eff["$type"]?.ToString());
-        var transform = eff["transform"] as JsonObject;
-        Assert.NotNull(transform);
+        var transform = (eff["transform"] as JsonObject);
+
+        Assert.NotNull(@object: transform);
         Assert.Equal("nearest", transform["$type"]?.ToString());
         Assert.Equal("0.5", transform["threshold"]?.ToString());
-        Assert.True(transform["farthest"]?.GetValue<bool>());
+        Assert.True(condition: transform["farthest"]?.GetValue<bool>());
         Assert.Equal("ignored", transform["exclude"]?.ToString());
     }
-
     [Fact]
     public void EvictsWithoutCapacity_RefusedWithDiagnostic() {
-        var (_, diagnostics) = Lower("""
+        var (_, diagnostics) = Lower(body: """
             sql {
                 CREATE TABLE memories (
                     key TEXT PRIMARY KEY,
@@ -985,14 +981,13 @@ public class StateSqlDeclarationEmitterTests {
             """);
 
         Assert.True(
-            condition: diagnostics.Any(d => d.Code == PuckDiagnosticCodes.SqlSyntaxError),
+            condition: diagnostics.Any(predicate: d => (d.Code == PuckDiagnosticCodes.SqlSyntaxError)),
             userMessage: $"Expected PUCK070 for EVICTS without CAPACITY, got: {diagnostics.FormatReport("")}"
         );
     }
-
     [Fact]
     public void InsertSelect_AtTopLevel_RefusedWithDiagnostic() {
-        var (_, diagnostics) = Lower("""
+        var (_, diagnostics) = Lower(body: """
             sql {
                 CREATE TABLE memories (
                     key TEXT PRIMARY KEY,
@@ -1012,7 +1007,7 @@ public class StateSqlDeclarationEmitterTests {
             """);
 
         Assert.True(
-            condition: diagnostics.Any(d => d.Code == PuckDiagnosticCodes.SqlUnsupportedClause),
+            condition: diagnostics.Any(predicate: d => (d.Code == PuckDiagnosticCodes.SqlUnsupportedClause)),
             userMessage: $"Expected PUCK073 for top-level INSERT SELECT, got: {diagnostics.FormatReport("")}"
         );
     }

@@ -15,6 +15,7 @@ public class StateDeclarationParserTests {
     }
     private static DocumentNode ParseClean(string body) {
         var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
+
         var (doc, diagnostics) = PuckParser.ParseDocumentWithDiagnostics(source);
 
         Assert.NotNull(@object: doc);
@@ -30,7 +31,7 @@ public class StateDeclarationParserTests {
         var doc = ParseClean(body: """
             state {
                 world {
-                    table vitals : Int bounds(minimum: 0, maximum: 100) {
+                    table vitals bounds(0..100) {
                         health = 100
                         mana = 50 advance(perSecond: 5)
                     }
@@ -43,10 +44,6 @@ public class StateDeclarationParserTests {
         Assert.Equal(
             "vitals",
             table.Name
-        );
-        Assert.Equal(
-            "Int",
-            table.Kind
         );
         Assert.Single(collection: table.Modifiers);
         Assert.Equal(
@@ -77,7 +74,7 @@ public class StateDeclarationParserTests {
         var doc = ParseClean(body: """
             state {
                 world {
-                    slot gold : Int = 10 bounds(minimum: 0)
+                    slot gold = 10 bounds(0..)
                 }
             }
             """);
@@ -88,10 +85,6 @@ public class StateDeclarationParserTests {
             "gold",
             slot.Name
         );
-        Assert.Equal(
-            "Int",
-            slot.Kind
-        );
         Assert.NotNull(@object: slot.Value);
         Assert.Single(collection: slot.Modifiers);
     }
@@ -100,7 +93,7 @@ public class StateDeclarationParserTests {
         var doc = ParseClean(body: """
             state {
                 world {
-                    slot uninitialized : Int
+                    slot uninitialized
                 }
             }
             """);
@@ -115,7 +108,7 @@ public class StateDeclarationParserTests {
         var doc = ParseClean(body: """
             state {
                 world {
-                    row { name: "deckCards" kind: "Int" capacity: 4 }
+                    row { name: "deckCards" kind: Int capacity: 4 }
                     pile deck of deckCards capacity(4) {
                         king
                         queen
@@ -158,7 +151,7 @@ public class StateDeclarationParserTests {
         var doc = ParseClean(body: """
             state {
                 world {
-                    grid board : Int dimensions(width: 8, depth: 8) wrap(Both) {
+                    grid board dimensions(width: 8, depth: 8) wrap(Both) {
                         "0" = 4
                     }
                 }
@@ -170,10 +163,6 @@ public class StateDeclarationParserTests {
         Assert.Equal(
             "board",
             grid.Name
-        );
-        Assert.Equal(
-            "Int",
-            grid.Kind
         );
         Assert.Equal(
             2,
@@ -191,7 +180,7 @@ public class StateDeclarationParserTests {
         var doc = ParseClean(body: """
             state {
                 world {
-                    grid board : Int dimensions(width: 8, depth: 8)
+                    grid board dimensions(width: 8, depth: 8)
                 }
             }
             """);
@@ -200,6 +189,34 @@ public class StateDeclarationParserTests {
 
         Assert.False(condition: grid.HasBody);
         Assert.Empty(collection: grid.Cells);
+    }
+    [Fact]
+    public void TableSlotAndGridReportPuck107WhenTheyStillSpellAnExplicitKindOrRecord() {
+        var source = """
+            schema: "puck.world.definition.v1"
+
+            state {
+                record Card { rank: Int }
+                world {
+                    table vitals : Int { health = 100 }
+                    table cards : Card { first = 1 }
+                    slot gold : Int = 10
+                    grid board : Int dimensions(width: 8, depth: 8)
+                }
+            }
+            """;
+
+        var (doc, diagnostics) = PuckParser.ParseDocumentWithDiagnostics(source);
+
+        Assert.NotNull(@object: doc);
+        Assert.Equal(
+            4,
+            diagnostics.Where(predicate: d => (d.Code == "PUCK107")).Count()
+        );
+        Assert.Contains(
+            collection: diagnostics,
+            filter: diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "pool cards of Card capacity(...)")
+        );
     }
     [Fact]
     public void TableAndSlotColonPropertiesInAnOrdinaryBlockStillParseAsProperties() {
@@ -229,7 +246,7 @@ public class StateDeclarationParserTests {
                 world {
                     row {
                         name: "x"
-                        kind: "Int"
+                        kind: Int
                         table: "note"
                         slot: "another note"
                     }

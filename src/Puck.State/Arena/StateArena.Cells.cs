@@ -16,11 +16,6 @@ public sealed partial class StateArena {
             case RowShape.Keyed:
             case RowShape.Ordered:
                 return ((int)m_memberCounts[rowOrdinal]);
-            case RowShape.Ring:
-                return ((int)Math.Min(
-                    val1: m_historyCursors[rowOrdinal],
-                    val2: layout.CellCapacity
-                ));
             case RowShape.Slot:
                 return (Bit(
                     index: layout.CellStart,
@@ -31,14 +26,14 @@ public sealed partial class StateArena {
                 );
             default: {
                     var present = 0;
+                    var end = (layout.CellStart + layout.CellCapacity);
 
-                    for (var slot = layout.CellStart; (slot < (layout.CellStart + layout.CellCapacity)); slot++) {
-                        if (Bit(
-                            index: slot,
-                            words: m_presence
-                        )) {
-                            present++;
-                        }
+                    for (var start = layout.CellStart; (start < end);) {
+                        var bits = Math.Min(val1: (64 - (start & 63)), val2: (end - start));
+                        var mask = ((bits == 64) ? ulong.MaxValue : ((1UL << bits) - 1UL));
+
+                        present += System.Numerics.BitOperations.PopCount(value: (m_presence[(start >> 6)] >> (start & 63)) & mask);
+                        start += bits;
                     }
 
                     return present;
@@ -47,7 +42,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Reads one cell, or the carrier holding no case when the row holds no such cell.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <returns>The cell's value, or <see langword="null"/> when the cell is absent, the row is host-owned, or the
     /// address does not resolve.</returns>
     public CellValue? Read(int rowOrdinal, CellKey key) => (TryRead(
@@ -60,7 +55,7 @@ public sealed partial class StateArena {
     );
     /// <summary>Attempts to read one cell.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="value">The cell's value on success; otherwise the carrier holding no case.</param>
     /// <returns><see langword="true"/> when the row holds the cell.</returns>
     public bool TryRead(int rowOrdinal, CellKey key, out CellValue value) {
@@ -88,12 +83,14 @@ public sealed partial class StateArena {
         return false;
     }
     /// <summary>Attempts to read the cell at one position of a row — a pile position on an ordered row, a cell
-    /// ordinal on a lattice, a ring slot, or a declaration position on a keyed row.</summary>
+    /// ordinal on a lattice, a ring slot, or a declaration position on an ordinary keyed row.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="position">The position within the row.</param>
     /// <param name="value">The cell's value on success; otherwise the carrier holding no case.</param>
     /// <returns><see langword="true"/> when the position holds a cell.</returns>
+    /// <exception cref="InvalidOperationException">The row belongs to a pool; use a handle or held-cell cursor.</exception>
     public bool TryReadAt(int rowOrdinal, int position, out CellValue value) {
+        RequirePositionalRow(rowOrdinal: rowOrdinal);
         if (
             TryRowLayout(
             layout: out var layout,
@@ -117,29 +114,74 @@ public sealed partial class StateArena {
 
         return false;
     }
-    /// <summary>Returns how many positions a row addresses by index — one for a slot row, the live member count for
-    /// a keyed or ordered row, the live history length for a ring, and every cell of the topology for a lattice,
-    /// whose held cells need not be contiguous.</summary>
+    /// <summary>Visits the next held cell in ascending storage-slot order, skipping absent cells.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <returns>The position count; zero for a host-owned row.</returns>
-    public int PositionCount(int rowOrdinal) => (TryRowLayout(
-        layout: out var layout,
-        rowOrdinal: rowOrdinal
-    )
-        ? (layout.Shape switch {
-            RowShape.Lattice => layout.CellCapacity,
-            RowShape.Slot => 1,
-            _ => CellCount(rowOrdinal: rowOrdinal),
-        })
-        : 0
-    );
+    /// <param name="cursor">Start at zero. On success, advances past the returned cell; on exhaustion, stays at the scan extent.</param>
+    /// <param name="key">The held cell's key, or the invalid default on exhaustion or an invalid row.</param>
+    /// <returns><see langword="true"/> when another held cell exists.</returns>
+    /// <remarks>Visits every stored row shape without allocating or minting names. Ring traversal uses physical
+    /// slot order; <see cref="ReadWord(int, Span{long}, int)"/> supplies chronological history instead.
+    /// Structural edits and relayout invalidate an active cursor; snapshot keys before changing membership.</remarks>
+    public bool TryNextCell(int rowOrdinal, ref int cursor, out CellKey key) {
+        key = default;
+        if ((((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) || !m_layout[rowOrdinal].IsStored) {
+            cursor = 0;
+            return false;
+        }
+        ref readonly var layout = ref m_layout[rowOrdinal];
+        var extent = (((layout.Shape is RowShape.Keyed or RowShape.Ordered) && !m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))
+            ? (int)m_memberCounts[rowOrdinal] : layout.CellCapacity);
+        var position = Math.Max(val1: 0, val2: cursor);
+        var end = (layout.CellStart + extent);
+
+        while (position < extent) {
+            var slot = (layout.CellStart + position);
+            var wordIndex = (slot >> 6);
+            var word = m_presence[wordIndex] & (ulong.MaxValue << (slot & 63));
+
+            while ((word == 0UL) && (((wordIndex + 1) * 64) < end)) {
+                word = m_presence[++wordIndex];
+            }
+            if (word == 0UL) {
+                break;
+            }
+            slot = ((wordIndex * 64) + System.Numerics.BitOperations.TrailingZeroCount(value: word));
+            if (slot >= end) {
+                break;
+            }
+            position = (slot - layout.CellStart);
+            if (layout.Shape == RowShape.Lattice) {
+                _ = m_keys.TryResolve(name: layout.Topology!.NameOf(cell: position), key: out key);
+            } else if (layout.Shape == RowShape.Ring) {
+                key = m_catalog.RingKey(position: position);
+            } else if (m_memberKeys[slot] >= 0) {
+                key = m_keys.KeyAt(ordinal: m_memberKeys[slot]);
+            }
+            position++;
+            if (key.IsValid) {
+                cursor = position;
+                return true;
+            }
+        }
+        cursor = extent;
+        return false;
+    }
+
+    private void RequirePositionalRow(int rowOrdinal) {
+        if (m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            throw new InvalidOperationException(message: "Pool rows have identities, not member positions; use a pool handle or TryNextCell.");
+        }
+    }
+
     /// <summary>Attempts to read the key at one position of a row — a member position on a slot, keyed, or ordered
     /// row, or a topology cell ordinal on a lattice.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="position">The position within the row.</param>
     /// <param name="key">The key on success; otherwise the invalid default.</param>
     /// <returns><see langword="true"/> when the position carries a key.</returns>
+    /// <exception cref="InvalidOperationException">The row belongs to a pool; use a handle or held-cell cursor.</exception>
     public bool TryKeyAt(int rowOrdinal, int position, out CellKey key) {
+        RequirePositionalRow(rowOrdinal: rowOrdinal);
         if (TryRowLayout(
             layout: out var layout,
             rowOrdinal: rowOrdinal
@@ -150,12 +192,9 @@ public sealed partial class StateArena {
                 ? 1
                 : m_memberCounts[rowOrdinal]
             ))) &&
-                (m_memberKeys[(layout.CellStart + position)] is >= 0 and var ordinal) &&
-                m_catalog.Keys.TryResolve(
-                key: out key,
-                name: m_catalog.Keys.Names[ordinal]
-            )
+                (m_memberKeys[(layout.CellStart + position)] is >= 0 and var ordinal)
             ) {
+                key = m_keys.KeyAt(ordinal: ordinal);
                 return true;
             }
             // A lattice cell's key is its topology's own key for that cell ordinal, and a cell the row does not hold
@@ -172,7 +211,7 @@ public sealed partial class StateArena {
                 name: out var cell,
                 reason: out _
             ) &&
-                m_catalog.Keys.TryResolve(
+                m_keys.TryResolve(
                 key: out key,
                 name: cell
             )
@@ -188,20 +227,25 @@ public sealed partial class StateArena {
     /// <summary>Attempts to resolve a cell key to its cell slot — the offset every interned key of a stored row
     /// has.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="slot">The cell slot on success; otherwise <c>-1</c>.</param>
     /// <returns><see langword="true"/> when the key addresses a slot of the row.</returns>
     public bool TryCellSlot(int rowOrdinal, CellKey key, out int slot) {
         slot = -1;
 
+        if (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) {
+            return false;
+        }
+
+        // Read in place: a row's layout is wide, and this is the path every cell read and write takes.
+        ref readonly var layout = ref m_layout[rowOrdinal];
+
         if (
-            !TryRowLayout(
-            layout: out var layout,
-            rowOrdinal: rowOrdinal
-        ) ||
-            !m_catalog.Keys.TryGetName(
+            !layout.IsStored ||
+            !m_keys.TryGetAddress(
             key: key,
-            name: out var name
+            name: out var name,
+            ordinal: out var ordinal
         )
         ) {
             return false;
@@ -210,9 +254,17 @@ public sealed partial class StateArena {
         var resolved = m_slotOfKey[rowOrdinal];
 
         if (resolved.TryGetValue(
-            key: key.Ordinal,
+            key: ordinal,
             value: out slot
         )) {
+            return true;
+        }
+
+        if (m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            if (!m_catalog.TryGetPoolSlot(keyOrdinal: ordinal, slot: out var poolSlot) || (((uint)poolSlot) >= ((uint)layout.CellCapacity))) {
+                return false;
+            }
+            slot = (layout.CellStart + poolSlot);
             return true;
         }
 
@@ -243,19 +295,25 @@ public sealed partial class StateArena {
         }
 
         slot = (layout.CellStart + position);
-        resolved[key.Ordinal] = slot;
+        if (ordinal >= 0) {
+            resolved[ordinal] = slot;
+        }
 
         return true;
     }
     /// <summary>Attempts a numeric write against a row's declared envelope, overflow policy, and symbolic
     /// domain.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="operand">The replacement for a set, or the addend for an add.</param>
     /// <param name="write">Set or add.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write was admitted and stored.</returns>
     public bool TryWrite(int rowOrdinal, CellKey key, long operand, StateWriteKind write, out string reason) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
         if (!TryWritableSlot(
             key: key,
             reason: out reason,
@@ -265,7 +323,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Kind is (CellKind.Text or CellKind.Vector)) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is a {layout.Kind} row, which takes no numeric write";
@@ -299,7 +357,7 @@ public sealed partial class StateArena {
             symbols: symbols,
             write: write
         )) {
-            reason = $"row '{row.Name.Value}' cell '{m_catalog.Keys[key].Value}' {reason}";
+            reason = $"row '{row.Name.Value}' cell '{m_keys[key].Value}' {reason}";
 
             return false;
         }
@@ -307,7 +365,7 @@ public sealed partial class StateArena {
             (layout.Kind == CellKind.Bool) &&
             (next is not (0L or 1L))
         ) {
-            reason = $"row '{row.Name.Value}' cell '{m_catalog.Keys[key].Value}' would leave the row's envelope";
+            reason = $"row '{row.Name.Value}' cell '{m_keys[key].Value}' would leave the row's envelope";
 
             return false;
         }
@@ -325,11 +383,15 @@ public sealed partial class StateArena {
     }
     /// <summary>Attempts to set one cell to a carried value, whatever its kind.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="value">The value to store; its case must be the row's declared kind.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write was admitted and stored.</returns>
     public bool TryWrite(int rowOrdinal, CellKey key, CellValue value, out string reason) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
         if (
             !value.HasValue ||
             !TryRowLayout(
@@ -393,7 +455,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Attempts to set one text cell.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="text">The text to store.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write was admitted and stored.</returns>
@@ -413,7 +475,7 @@ public sealed partial class StateArena {
             return false;
         }
         if ((text?.Length ?? 0) > StateCapacity.MaxTextValueLength) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' cell '{m_catalog.Keys[key].Value}' would store {text!.Length} characters, past the {StateCapacity.MaxTextValueLength}-character limit";
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' cell '{m_keys[key].Value}' would store {text!.Length} characters, past the {StateCapacity.MaxTextValueLength}-character limit";
 
             return false;
         }
@@ -459,7 +521,12 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
+
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
 
         if (layout.HostOwned) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is host-owned; its facet serves it and no rule writes it";
@@ -486,7 +553,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal,
             slot: out slot
         )) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_catalog.Keys.TryGetName(
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_keys.TryGetName(
                 key: key,
                 name: out var missing
             )
@@ -497,7 +564,7 @@ public sealed partial class StateArena {
             return false;
         }
         if (
-            m_catalog.Keys.TryGetName(
+            m_keys.TryGetName(
             key: key,
             name: out var name
         ) &&

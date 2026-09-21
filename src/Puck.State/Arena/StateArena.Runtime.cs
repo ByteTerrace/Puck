@@ -28,7 +28,7 @@ public sealed partial class StateArena {
             return default;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (
             (layout.MaskWordStart < 0) ||
@@ -142,6 +142,10 @@ public sealed partial class StateArena {
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the clock was stored.</returns>
     public bool TryWriteClock(int rowOrdinal, CellKey key, long epochTick, long epochEngineTick, long y0, long v0, long substepTicks, out string reason) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
         if (!TryPresentSlot(
             key: key,
             rowOrdinal: rowOrdinal,
@@ -319,6 +323,9 @@ public sealed partial class StateArena {
     /// <remarks>A lattice row's cells are addressed by topology cell ordinal without interning a key per cell,
     /// which is what a whole-board sweep needs.</remarks>
     public bool TryWriteObservationAt(int rowOrdinal, int position, StateObservation? observation) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            return false;
+        }
         if (!TryPresentSlotAt(
             position: position,
             rowOrdinal: rowOrdinal,
@@ -378,24 +385,51 @@ public sealed partial class StateArena {
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>
     /// <param name="provenance">The issuer id, or <see langword="null"/> for a locally minted value.</param>
-    /// <returns><see langword="true"/> when the cell address resolves.</returns>
-    public bool TryWriteProvenance(int rowOrdinal, CellKey key, string? provenance) => TryWriteCellReference(
-        column: ArenaColumn.Provenance,
-        key: key,
-        rowOrdinal: rowOrdinal,
-        value: provenance
+    /// <returns><see langword="true"/> when the cell address resolves and the id is no longer than
+    /// <see cref="StateCapacity.MaxProvenanceLength"/>, the length the arena's byte measure counts a provenance
+    /// at.</returns>
+    public bool TryWriteProvenance(int rowOrdinal, CellKey key, string? provenance) => (
+        ((provenance?.Length ?? 0) <= StateCapacity.MaxProvenanceLength) &&
+        TryWriteCellReference(
+            column: ArenaColumn.Provenance,
+            key: key,
+            rowOrdinal: rowOrdinal,
+            value: provenance
+        )
     );
     /// <summary>Writes one cell's own audience restriction.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>
     /// <param name="visibility">The restriction to store.</param>
-    /// <returns><see langword="true"/> when the cell address resolves.</returns>
-    public bool TryWriteVisibility(int rowOrdinal, CellKey key, StateVisibility? visibility) => TryWriteCellReference(
-        column: ArenaColumn.Visibility,
-        key: key,
-        rowOrdinal: rowOrdinal,
-        value: visibility
-    );
+    /// <returns><see langword="true"/> when the cell address resolves, the restriction fits the visibility limits,
+    /// and its retained payload fits the arena byte ceiling.</returns>
+    /// <remarks>The arena copies an arbitrary reader list into its immutable, tightly sized representation. Passing
+    /// back a visibility read from the arena reuses that representation.</remarks>
+    public bool TryWriteVisibility(int rowOrdinal, CellKey key, StateVisibility? visibility) {
+        if (((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
+            key: key,
+            rowOrdinal: rowOrdinal,
+            slot: out var slot
+        ) ||
+            !StateVisibilityStorage.TryNormalize(
+            bytes: out var bytes,
+            normalized: out var normalized,
+            reason: out _,
+            value: visibility
+        ) ||
+            ((((((m_layout.Bytes + m_declarationVisibilityBytes) + m_visibilityBytes) + m_keys.Bytes) - StateVisibilityStorage.RetainedBytes(value: m_visibilities?[slot])) + bytes) > ArenaCapacity.MaxBytes)
+        ) {
+            return false;
+        }
+
+        WriteReference(
+            column: ArenaColumn.Visibility,
+            index: slot,
+            value: normalized
+        );
+
+        return true;
+    }
 
     // A cell's runtime state rides its value: export, import, and relayout carry a cell only while it holds one, so
     // a cell that is addressable but holds nothing takes no runtime state that those would then drop.
@@ -428,7 +462,7 @@ public sealed partial class StateArena {
         );
     }
     private bool TryWriteCellNumber(int rowOrdinal, CellKey key, ArenaColumn column, long value) {
-        if (!TryPresentSlot(
+        if (((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
             key: key,
             rowOrdinal: rowOrdinal,
             slot: out var slot
@@ -445,7 +479,7 @@ public sealed partial class StateArena {
         return true;
     }
     private bool TryWriteCellReference(int rowOrdinal, CellKey key, ArenaColumn column, object? value) {
-        if (!TryPresentSlot(
+        if (((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
             key: key,
             rowOrdinal: rowOrdinal,
             slot: out var slot

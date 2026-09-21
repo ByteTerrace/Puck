@@ -217,12 +217,12 @@ host {
     // "x : y" into "x: y" is a different, unreadable binding.
     [Fact]
     public void TestFormatterPreservesTernaryColonSpacing() {
-        var input = "rule \"r\" {\n    local ownBefore: Int = turn == 0 ? a : b\n    score = 1\n}\n";
+        var input = "rule \"r\" {\n    local ownBefore = turn == 0 ? a : b\n    score = 1\n}\n";
         var formatted = PuckFormat.Format(input);
 
         Assert.Contains(
             actualString: formatted,
-            expectedSubstring: "local ownBefore: Int = turn == 0 ? a : b"
+            expectedSubstring: "local ownBefore = turn == 0 ? a : b"
         );
     }
 }

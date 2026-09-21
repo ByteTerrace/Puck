@@ -4,7 +4,12 @@ namespace Puck.World;
 /// directly into installation while the definition and its collection contents remain unchanged; this is a receipt
 /// for that operation, not a cache to transfer across document edits.</summary>
 public sealed class WorldRuleCompilation {
-    internal WorldRuleCompilation(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRuleGroup[] groups, Puck.State.Rules.CompiledRule[] interactions, CompiledTable[] tables) {
+    private readonly Lazy<(WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)> m_work;
+    private readonly Lazy<WorldCostReport> m_costReport;
+    private readonly Lazy<IReadOnlyList<Puck.State.Rules.RuleHazard>> m_hazards;
+
+    internal WorldRuleCompilation(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRuleGroup[] groups, Puck.State.Rules.CompiledRule[] interactions, CompiledTable[] tables, WorldFactsCompileContext? context = null,
+        (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null) {
         Definition = definition;
         Rules = rules;
         Groups = groups;
@@ -14,10 +19,26 @@ public sealed class WorldRuleCompilation {
         );
         Interactions = interactions;
         Tables = tables;
+        m_work = new(valueFactory: () => (work ?? WorldRuleWorkBudget.Analyze(Definition, Rules, Interactions, context)));
+        m_costReport = new(valueFactory: () => WorldCostReport.Generate(compilation: this));
+        m_hazards = new(valueFactory: () => Puck.State.Rules.RuleHazards.Analyze(
+            catalog: Definition.StateCatalog,
+            rules: Rules
+        ));
     }
 
     /// <summary>Gets the exact definition compiled.</summary>
     public WorldDefinition Definition { get; }
+    /// <summary>Gets the report shared by consumers of this exact compilation. Analysis is performed once, on
+    /// demand, and does not compile the rule programs again.</summary>
+    public WorldCostReport CostReport => m_costReport.Value;
+    /// <summary>Gets the rule hazards for this exact compilation. Analysis is performed once on demand and
+    /// shares the installed programs with cost and work-budget queries.</summary>
+    public IReadOnlyList<Puck.State.Rules.RuleHazard> Hazards => m_hazards.Value;
+    /// <summary>Gets the heuristic admission sheet, computed once from the compiled programs.</summary>
+    public WorldRuleWorkBudget WorkBudget => m_work.Value.Budget;
+    /// <summary>Gets the same sheet's contributor lines in descending cost order.</summary>
+    public IReadOnlyList<Puck.State.Rules.RuleWorkContributor> WorkContributors => m_work.Value.Contributors;
     /// <summary>Gets the compiled rule groups in document order; each member is an index into
     /// <see cref="Rules"/>.</summary>
     public Puck.State.Rules.CompiledRuleGroup[] Groups { get; }
@@ -55,7 +76,9 @@ public sealed class WorldRuleCompilation {
     /// This compiles programs; document admission remains the validator's responsibility.</summary>
     /// <param name="definition">The definition to compile.</param>
     public static WorldRuleCompilation Compile(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
         var context = WorldFactsCompiler.Context(definition: definition);
+
         var (rules, groups) = WorldFactsCompiler.CompileDocument(
             context: context,
             definition: definition
@@ -72,7 +95,8 @@ public sealed class WorldRuleCompilation {
             CompileTables(
                 context: context,
                 definition: definition
-            )
+            ),
+            context
         );
     }
 }

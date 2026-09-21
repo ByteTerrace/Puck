@@ -84,7 +84,7 @@ command" without saying which.
 
 | Verb | Real flags | Does |
 |---|---|---|
-| `puck compile <path>` | `-o/--output`, `-w/--watch`, `--strict`, `--validate`, `--bundle` | Parses, resolves/bundles imports, lowers via the vocabulary the parsed `schema:` names, optionally validates the engine schema, writes `<source>.cartridge.json`/`.world.json` by default. `--validate` self-installs the machine catalog first — no separate registration step. `--watch` recompiles on `*.puck` changes (250 ms debounce). |
+| `puck compile <path>` | `-o/--output`, `-w/--watch`, `--strict`, `--validate`, `--bundle`, `--update-assets` | Parses, resolves/bundles imports, lowers via the vocabulary the parsed `schema:` names, optionally validates the engine schema, writes `<source>.cartridge.json`/`.world.json` by default. A world source with `world` declarations emits one `<name>.world.json` per declaration and reads `--output` as their destination directory. `--update-assets` explicitly refreshes the root source's sibling asset lock after successful semantic validation; it cannot combine with `--watch`. `--validate` self-installs the machine catalog first — no separate registration step. `--watch` recompiles on `*.puck` changes (250 ms debounce). |
 | `puck decompile <path>` | `-o/--output`, `--overwrite` | Reads `schema` from the JSON, routes to the matching decompiler. **One-way**: `let`/`template`/`for` never reproduced; output opens with a one-time-import header comment. |
 | `puck lint <path-or-dir>` | `-s/--strict` | Recurses `*.puck` for a directory. Runs cartridge diagnosis first, then `PuckLinter.Lint` (syntax), lowers, then (root documents only) semantic validation and reference-resolution lint. Self-installs the machine catalog like `compile --validate`. |
 | `puck fmt <path-or-dir>` | `-c/--check` | Recurses `*.puck`. Parses and prints the tree. Reader and printer share one escape grammar (`PuckStrings`), so the printer writes only what the reader reads back and what a document compiles to cannot move. What is the author's and survives: every comment, wherever the grammar admits one; a blank-line run's length; the line breaks inside an array, object or argument list; a `,` at a line end; a numeric literal's base; a raw fence; and a name's bare-or-quoted spelling. The one comment that moves is one written inside a construct's header, between its first word and its `{`: a `//` there prints above the statement, because in place it would swallow the brace, and a `/* */` written after the header's name prints right after the first word. A source it cannot parse is refused by name and left alone — exit 2, in directory mode as well; `--check` exits 1 for a file that merely needs formatting. |
@@ -95,6 +95,14 @@ command" without saying which.
 
 Without `--output`, `compile` writes `<source>.cartridge.json` for a cartridge
 document and `<source>.world.json` otherwise, selected by the parsed `schema:`.
+A world source containing `world name = module(arguments)` declarations instead
+writes `<name>.world.json` for each declaration. Its `--output` is a directory,
+not a filename. `asset "path"` references use one `<stem>.assets.json` lock
+beside the root source; ordinary compilation verifies its full SHA-256 pins,
+while `--update-assets` is the only compile mode that replaces them. An
+asset-bearing output currently has to stay in the source directory so its
+relative paths keep their meaning. Each destination and the lock is replaced
+atomically on its own, but publication of the whole set is not transactional.
 
 ## Grammar, in brief
 
@@ -109,7 +117,10 @@ field is dimensioned is the vocabulary's own table (unit on an uncovered field
 is **PUCK024**, an inadmissible unit is **PUCK025**). A comparison yields `1`
 or `0`, never a JSON boolean. Strings come in four forms: plain `"..."`
 (never interpolates), interpolated `$"...{expr}..."`, raw `"""..."""` (no
-escapes), and raw+interpolated `$"""..."""`.
+escapes), and raw+interpolated `$"""..."""`. An interpolated string computes
+one name, key, number or text, never an expression: inside a bare expression
+it is an atom (`pieceCell[$"piece{i}"]`), and an expression written as one is
+**PUCK112**, which names the bare spelling. Sugar lines and block members bind parsed operand trees; do not add identifier substitution or enum/family regex passes. Use `RewriteOperandSyntax` for source rewrites and preserve literal-key versus expression positions.
 
 A world's own behaviour is written beside it, as `test "name" { given { } when { }
 expect { } }` at the document's root: `given` writes boot cells, `when` lays
@@ -151,7 +162,7 @@ there and PUCK037 still fires for them. Cartridge rules support all three —
 | `puck compile --validate` needing a separate engine-registration step | Not real. `CliWorldVocabulary.EnsureInstalled()` runs inside `compile --validate` and `lint` themselves. |
 | `fmt` mutating what a document compiles to | Not real. `StringGrammarTests` pins reader and printer to one escape grammar over a generated value corpus, and `ProjectionLawTests`/`FormatProjectionLawTests` prove format-then-compile equals the original over every shipped source in both vocabularies. |
 | Lint skipping a name only a `basis`/import supplies | Fixed. `PuckLinter.References` composes the whole basis/import graph before building its name catalog. A *module* (no `schema`/`basis` of its own) still never gets such names reported missing — a fragment cannot know what an unknown root will supply, and that is by design, not a bug. |
-| A `let` referenced only inside a `when`/effect operand | Reported as unused by **PUCK_LINT_001** anyway. Operand text is opaque to the usage scan (it is handed whole to `Puck.State.ExpressionSpelling`), so a constant used only there looks unreferenced to the linter even though it is live. Verified by compiling a `let` used solely in a `when` gate. |
+| A `let` referenced inside a `when`/effect operand | Parsed operand trees participate in the usage scan. Literal cell keys and backquoted names do not count as binding reads. |
 | A `: Kind`/`as Kind` comparison-kind suffix beside `and`/`or` | Binds only to the ONE comparison it follows, never the enclosing chain, though it prints as if it scoped the whole thing. Wrap the annotated comparison in its own parens. |
 | Shapes/prototypes having "no sugar" | Stale. `shape Type "name" { }` and `prototypes { prototype "id" { document { } } }` are ordinary named blocks with full sculpting support — `avatars/moth.puck` authors 230 `shape` statements this way. |
 
@@ -186,3 +197,15 @@ edit loop — after the first decompile, edit the `.puck`, not the JSON.
 | `gaming-bricks` | Emulator hardware behavior once a cartridge is compiled — CPU/PPU/APU/timer accuracy, the Post batteries. |
 | `symbol-analysis` | A `.puck` name/state-row/prototype-id resolution question is **not** covered by `references`/`declarations` (C#-only) — use `puck lint`'s `PUCK_LINT_00x` family or the LSP instead. |
 | `content-search` | A `.puck`-only fact (a `let` name, a comment, an unexpanded `for` body) may not appear in the compiled JSON and vice versa — search whichever form the question actually needs. |
+
+## Records, pools, and retained turns
+
+Use the current [state data model](../../../docs/reference/state/data-model.md)
+and [rule reference](../../../docs/reference/state/rules.md) when editing records,
+pools, token knowledge, or retained turns. Pool lifetime tests must include
+release/reclaim and export/reload; a static slot lookup follows the current
+occupant, while a held handle checks its generation. Exercise module read/action
+exports through lexical bindings and include lossless compile/decompile laws.
+After changing this surface, regenerate schema, vocabulary, and name-registry
+outputs with their CLI owners and run the affected State, Rules, World, and
+World.Transpiler suites. A generated projection probe must cover every new arm.

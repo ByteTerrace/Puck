@@ -14,15 +14,19 @@ public sealed class McpInteropTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
     private static string Cli => typeof(CliPaths).Assembly.Location;
 
-    [Fact]
-    public async Task OfficialClientDiscoversExecutesAndReceivesImageFromRealCli() {
+    // The handshake revisions are what an editor or an agent harness opens with; the last is per-request metadata.
+    [InlineData("2025-06-18")]
+    [InlineData("2025-11-25")]
+    [InlineData("2026-07-28")]
+    [Theory]
+    public async Task OfficialClientDiscoversExecutesAndReceivesImageFromRealCli(string revision) {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         using var host = new LocalControlServer(createSession: () => new FixtureSession());
 
         for (var reconnect = 0; (reconnect < 2); reconnect++) {
             await using var client = await ConnectAsync(
                 path: host.AttachmentPath,
-                revision: "2026-07-28"
+                revision: revision
             );
             var tools = await client.ListToolsAsync(cancellationToken: Token);
 
@@ -86,10 +90,12 @@ public sealed class McpInteropTests {
             );
             var oversized = await client.CallToolAsync(
                 "puck_exec",
-                new Dictionary<string, object?> { ["command"] = new string(
+                new Dictionary<string, object?> {
+                    ["command"] = new string(
                     c: 'ç',
                     count: 8000
-                ) },
+                ),
+                },
                 cancellationToken: Token
             );
 
@@ -277,13 +283,15 @@ public sealed class McpInteropTests {
             var output = process.StandardOutput.ReadToEndAsync(cancellationToken: Token);
 
             if (oversized) {
-                try { await process.StandardInput.WriteAsync(
+                try {
+                    await process.StandardInput.WriteAsync(
                     new string(
                         c: ' ',
                         count: 65537
                     ).AsMemory(),
                     Token
-                ); await process.StandardInput.FlushAsync(cancellationToken: Token); } catch (IOException) { }
+                ); await process.StandardInput.FlushAsync(cancellationToken: Token);
+                } catch (IOException) { }
             }
             process.StandardInput.Close();
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
@@ -297,10 +305,12 @@ public sealed class McpInteropTests {
                 : 0),
                 process.ExitCode
             );
-            if (oversized) { Assert.Contains(
+            if (oversized) {
+                Assert.Contains(
                 "64 KiB",
                 await errors
-            ); } else { Assert.Empty(value: await errors); }
+            );
+            } else { Assert.Empty(value: await errors); }
         }
         using var attach = await LocalControlClient.ConnectAsync(
             attachmentPath: host.AttachmentPath,
@@ -319,10 +329,10 @@ public sealed class McpInteropTests {
 
     private static Task<McpClient> ConnectAsync(string path, string revision) => McpClient.CreateAsync(
         new StdioClientTransport(new() {
-        Command = "dotnet",
-        Arguments = [Cli, "mcp", "--profile", "operator", "--attach", path],
-        ShutdownTimeout = TimeSpan.FromSeconds(seconds: 5),
-    }),
+            Command = "dotnet",
+            Arguments = [Cli, "mcp", "--profile", "operator", "--attach", path],
+            ShutdownTimeout = TimeSpan.FromSeconds(seconds: 5),
+        }),
         new() { ProtocolVersion = revision },
         cancellationToken: Token
     );
@@ -332,10 +342,12 @@ public sealed class McpInteropTests {
 
         public void Dispose() { }
         public async Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) {
-            if (request.Command == "wait") { entered?.Release(); await Task.Delay(
+            if (request.Command == "wait") {
+                entered?.Release(); await Task.Delay(
                 cancellationToken: cancellationToken,
                 millisecondsDelay: Timeout.Infinite
-            ); }
+            );
+            }
             return ((request.Operation == "capture")
                 ? new(
                     request.Id,

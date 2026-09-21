@@ -66,8 +66,8 @@ public enum WindowInputModifiers {
 /// <param name="Vector">The relative delta (<see cref="WindowInputKind.PointerMove"/>), absolute position (<see cref="WindowInputKind.PointerPosition"/>), or two-axis wheel notches (<see cref="WindowInputKind.PointerWheel"/>); <see cref="Vector2.Zero"/> otherwise.</param>
 /// <param name="Phase">The transition the event represents: <see cref="CommandPhase.Started"/> for a key-down or pointer button-down, <see cref="CommandPhase.Completed"/> for a key-up or pointer button-up, <see cref="CommandPhase.Active"/> for a pointer move/position/wheel.</param>
 /// <param name="Modifiers">The modifier keys held when the event fired; <see cref="WindowInputModifiers.None"/> unless a platform stamps it (today only the letter-key path — see <see cref="LetterDown"/>).</param>
-/// <param name="DeviceId">The physical keyboard/text device that produced the event. The default value preserves
-/// aggregate-keyboard platforms; Raw Input backends stamp distinct ids.</param>
+/// <param name="DeviceId">The physical input device when the platform identifies it. The default value denotes
+/// an aggregate source, including the shared Windows cursor; raw keyboard and relative mouse reports carry distinct ids.</param>
 /// <param name="ButtonIndex">The zero-based button index for <see cref="WindowInputKind.PointerButton"/>, or -1
 /// otherwise. The range is intentionally not capped at the conventional five buttons.</param>
 public readonly record struct WindowInputEvent(
@@ -123,7 +123,7 @@ public readonly record struct WindowInputEvent(
             DeviceId: deviceId
         );
     }
-    /// <summary>A neutral absolute pointer position, attributed to the physical pointer device that produced it.</summary>
+    /// <summary>A neutral absolute pointer position. Use the default device id for an aggregate system cursor.</summary>
     public static WindowInputEvent PointerAbsolute(Vector2 position, InputDeviceId deviceId = default) {
         return new WindowInputEvent(
             Kind: WindowInputKind.PointerPosition,

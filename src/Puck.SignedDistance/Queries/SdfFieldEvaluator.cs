@@ -169,6 +169,23 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     internal bool HasShape => m_hasShape;
     // The exact march's sample budget, the budget a banded march spends on its exact samples.
     internal int MarchIterations => m_marchIterations;
+
+    /// <summary>Gets the structural work bound for one line-of-sight march, including its terminal sample.</summary>
+    public SdfLineOfSightWorkEnvelope LineOfSightWork {
+        get {
+            var samples = (((long)m_marchIterations) + 1L);
+
+            return new(
+                ProgramInstructionCount: m_instructions.Length,
+                ExactSampleBudget: m_marchIterations,
+                BoundSampleBudget: 0,
+                MaximumSamples: samples,
+                MaximumProgramEvaluations: samples,
+                MaximumInstructionVisits: (((UInt128)((ulong)samples)) * ((uint)m_instructions.Length))
+            );
+        }
+    }
+
     // The program's step scale (1/L) in fixed point, floored so it stays a lower-bound multiplier.
     internal FixedQ4816 StepScale => m_stepScale;
     // The program's Lipschitz bound L in fixed point, rounded up from the floored step scale so L * StepScale never
@@ -374,7 +391,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 !IsSupportedShape(shape: ((SdfShapeType)instruction.Shape))
             ) {
                 throw new ArgumentException(
-                    message: $"SdfFieldEvaluator cannot interpret instruction {index}'s shape {((SdfShapeType)instruction.Shape)} (its exact core needs runtime trig or texture sampling this wave does not implement). See SdfFieldEvaluator.cs's KEEP-IN-SYNC header.",
+                    message: $"SdfFieldEvaluator cannot interpret instruction {index}'s shape {((SdfShapeType)instruction.Shape)}; this shape has no deterministic field interpreter. See SdfFieldEvaluator.cs's KEEP-IN-SYNC header.",
                     paramName: nameof(instructions)
                 );
             }

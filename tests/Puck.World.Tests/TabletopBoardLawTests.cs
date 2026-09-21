@@ -18,10 +18,10 @@ public sealed class TabletopBoardLawTests {
     private static ActionPredicate All(params ActionPredicate[] predicates) => new ActionPredicate.All(Predicates: predicates);
     private static ActionPredicate.CompareState Cs(string state, ActionStateComparison comparison, decimal? value = null, string? key = null,
         string? comparandState = null, string? comparandKey = null) => new(
-            ComparandKey: comparandKey,
-            ComparandState: comparandState,
+            ComparandKey: StateChannelRef.OfNullable(spelling: comparandKey),
+            ComparandState: StateChannelRef.OfNullable(spelling: comparandState),
             Comparison: comparison,
-            Key: key,
+            Key: StateChannelRef.OfNullable(spelling: key),
             State: state,
             Value: value
         );
@@ -69,9 +69,9 @@ public sealed class TabletopBoardLawTests {
             state,
             value,
             ActionTarget.Self,
-            key,
-            fromState,
-            fromKey
+            StateChannelRef.OfNullable(spelling: key),
+            StateChannelRef.OfNullable(spelling: fromState),
+            StateChannelRef.OfNullable(spelling: fromKey)
         );
     private static WorldDefinition TabletopBridgeDocument(bool excludeOffFrameMover = true) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);

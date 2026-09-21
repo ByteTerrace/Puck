@@ -279,11 +279,16 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
 
-        if (LongestMatchingPunctuation(
-            context.Scanner.Buffer,
-            cursor.Offset,
-            ComparatorPunctuation
-        ) is not null) {
+        // A call that a comparator, an operator, or a key follows is an operand of a comparison: `count(deck) +
+        // count(hand) == 52`, `match(line, board, any, count)[cell] >= 1`.
+        if (
+            (LongestMatchingPunctuation(
+                context.Scanner.Buffer,
+                cursor.Offset,
+                ComparatorPunctuation
+            ) is not null) ||
+            (cursor.Current is '+' or '-' or '*' or '/' or '%' or '&' or '|' or '^' or '?' or '[')
+        ) {
             cursor.ResetPosition(position: savedPosition);
 
             return false;
@@ -332,11 +337,7 @@ public static partial class PuckParser {
                 message: $"Expected a comparison operator after '{leftText}' in a 'when' gate"
             );
         }
-        ValidateOperandText(
-            diagnostics: diagnostics,
-            span: leftSpan,
-            text: leftText
-        );
+        var leftOperand = ValidatedOperand(diagnostics: diagnostics, span: leftSpan, text: leftText);
 
         var comparator = ConsumeComparatorToken(context: context);
 
@@ -423,11 +424,7 @@ public static partial class PuckParser {
             rightText = rightText[..rightText.LastIndexOf(value: ':')].TrimEnd();
         }
 
-        ValidateOperandText(
-            diagnostics: diagnostics,
-            span: rightSpan,
-            text: rightText
-        );
+        var rightOperand = ValidatedOperand(diagnostics: diagnostics, span: rightSpan, text: rightText);
 
         var len = (cursor.Offset - start);
 
@@ -435,11 +432,11 @@ public static partial class PuckParser {
             Column: col,
             Comparator: comparator,
             Kind: kind,
-            LeftText: leftText,
+            Left: leftOperand,
             Length: len,
             Line: line,
             Offset: start,
-            RightText: rightText
+            Right: rightOperand
         );
     }
 }

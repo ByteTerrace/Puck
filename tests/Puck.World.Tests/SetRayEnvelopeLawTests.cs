@@ -55,7 +55,7 @@ public sealed class SetRayEnvelopeLawTests {
         return WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.SetRay(
-                Direction: "E",
+                Direction: CellName.Parse(candidate: "E"),
                 From: "0",
                 Pattern: "any",
                 Row: "board",

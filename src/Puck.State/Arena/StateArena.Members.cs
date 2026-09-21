@@ -53,6 +53,11 @@ public sealed partial class StateArena {
     public bool TryInsert(int rowOrdinal, CellName name, CellValue value, int position, out CellKey key, out string reason) {
         key = default;
 
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
+
         // Every refusal, including the value's admission, is decided before one byte moves, so a refused insert
         // leaves the row exactly as it was.
         if (!TryAdmitMember(
@@ -69,15 +74,7 @@ public sealed partial class StateArena {
 
         // The key table's room is decided here, before an eviction moves a byte; the intern itself lands after
         // the eviction so a refusal at either step leaves the row and the table as they were.
-        if (
-            !m_catalog.Keys.TryResolve(
-            key: out _,
-            name: name
-        ) &&
-            (m_catalog.Keys.Count >= StateCapacity.MaxCellKeys)
-        ) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' cannot mint cell '{name.Value}': the catalog already holds {StateCapacity.MaxCellKeys} distinct keys";
-
+        if (!m_keys.TryAdmitIntern(name: name, reason: out reason)) {
             return false;
         }
 
@@ -102,7 +99,7 @@ public sealed partial class StateArena {
                 val2: count
             );
         }
-        if (!m_catalog.Keys.TryIntern(
+        if (!m_keys.TryIntern(
             key: out key,
             name: name,
             reason: out reason
@@ -256,6 +253,10 @@ public sealed partial class StateArena {
     /// <param name="reason">Why the removal was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the cell was removed.</returns>
     public bool TryRemove(int rowOrdinal, CellKey key, out string reason) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
         if (!TryMemberRow(
             layout: out var layout,
             reason: out reason,
@@ -264,19 +265,20 @@ public sealed partial class StateArena {
             return false;
         }
 
-        if (!m_catalog.Keys.TryGetName(
+        if (!m_keys.TryGetAddress(
             key: key,
-            name: out _
+            name: out _,
+            ordinal: out var keyOrdinal
         )) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is addressed by a key this arena's catalog did not intern";
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is addressed by a key this arena does not resolve";
 
             return false;
         }
         if (!m_slotOfKey[rowOrdinal].TryGetValue(
-            key: key.Ordinal,
+            key: keyOrdinal,
             value: out var slot
         )) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_catalog.Keys.TryGetName(
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_keys.TryGetName(
                 key: key,
                 name: out var name
             )
@@ -306,6 +308,10 @@ public sealed partial class StateArena {
     /// clock, provenance, visibility, observation, and behavior override stay behind with the slot it
     /// left.</para></remarks>
     public bool TryTransfer(int fromOrdinal, int toOrdinal, CellKey key, bool insertFirst, out string reason) {
+        if ((m_poolMutationDepth == 0) && (m_catalog.IsPoolRow(rowOrdinal: fromOrdinal) || m_catalog.IsPoolRow(rowOrdinal: toOrdinal))) {
+            reason = "A state pool row cannot participate in a generic member transfer.";
+            return false;
+        }
         if (
             !TryMemberRow(
             layout: out var from,
@@ -321,19 +327,20 @@ public sealed partial class StateArena {
             return false;
         }
 
-        if (!m_catalog.Keys.TryGetName(
+        if (!m_keys.TryGetAddress(
             key: key,
-            name: out _
+            name: out _,
+            ordinal: out var keyOrdinal
         )) {
-            reason = $"row '{RowName(rowOrdinal: fromOrdinal)}' is addressed by a key this arena's catalog did not intern";
+            reason = $"row '{RowName(rowOrdinal: fromOrdinal)}' is addressed by a key this arena does not resolve";
 
             return false;
         }
         if (!m_slotOfKey[fromOrdinal].TryGetValue(
-            key: key.Ordinal,
+            key: keyOrdinal,
             value: out var slot
         )) {
-            reason = $"row '{RowName(rowOrdinal: fromOrdinal)}' holds no member '{m_catalog.Keys[key].Value}'";
+            reason = $"row '{RowName(rowOrdinal: fromOrdinal)}' holds no member '{m_keys[key].Value}'";
 
             return false;
         }
@@ -343,7 +350,7 @@ public sealed partial class StateArena {
             return false;
         }
         if (m_memberCounts[toOrdinal] >= to.CellCapacity) {
-            reason = $"row '{RowName(rowOrdinal: toOrdinal)}' holds its {to.CellCapacity} declared cells, so member '{m_catalog.Keys[key].Value}' has no room";
+            reason = $"row '{RowName(rowOrdinal: toOrdinal)}' holds its {to.CellCapacity} declared cells, so member '{m_keys[key].Value}' has no room";
 
             return false;
         }
@@ -377,7 +384,7 @@ public sealed partial class StateArena {
             ));
         }
 
-        var name = m_catalog.Keys[key];
+        var name = m_keys[key];
 
         // The landing is decided before the source gives the member up, so a destination that refuses leaves the
         // member where it was rather than in neither row.
@@ -474,6 +481,10 @@ public sealed partial class StateArena {
     /// <para><see cref="AppendGeneration"/> moves, because a reorder is not a tail push; a board derived from the
     /// row is recomputed, because two members naming one cell are resolved by their order.</para></remarks>
     public bool TryReorder(int rowOrdinal, ReadOnlySpan<int> order, out string reason) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
+            return false;
+        }
         if (!TryMemberRow(
             layout: out var layout,
             reason: out reason,
@@ -586,7 +597,7 @@ public sealed partial class StateArena {
             }
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Dimensions > 0) {
             WriteVectorSlot(
@@ -622,7 +633,7 @@ public sealed partial class StateArena {
             }
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Dimensions > 0) {
             WriteVectorSlot(
@@ -683,7 +694,7 @@ public sealed partial class StateArena {
             }
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Dimensions <= 0) {
             return;
@@ -713,7 +724,10 @@ public sealed partial class StateArena {
         var resolved = m_slotOfKey[rowOrdinal];
 
         resolved.Clear();
-
+        if (m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            // Numeric pool keys address fixed slots directly; no per-row key index is needed.
+            return;
+        }
         for (var position = 0; (position < m_memberCounts[rowOrdinal]); position++) {
             var slot = (layout.CellStart + position);
             var ordinal = m_memberKeys[slot];
@@ -754,7 +768,7 @@ public sealed partial class StateArena {
             return false;
         }
         if (
-            m_catalog.Keys.TryResolve(
+            m_keys.ContainsLocal(name: name) && m_keys.TryResolve(
             key: out var existing,
             name: name
         ) &&
@@ -878,6 +892,11 @@ public sealed partial class StateArena {
         }
     }
     private bool TryMemberRow(int rowOrdinal, out ArenaRowLayout layout, out string reason) {
+        if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            layout = default;
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is storage owned by a state pool";
+            return false;
+        }
         if (
             !TryRowLayout(
             layout: out layout,
@@ -900,7 +919,7 @@ public sealed partial class StateArena {
         return true;
     }
     private bool TryRemoveAt(int rowOrdinal, int position, out string reason) {
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
         var count = ((int)m_memberCounts[rowOrdinal]);
 
         if (((uint)position) >= ((uint)count)) {

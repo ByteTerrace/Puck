@@ -23,7 +23,7 @@ public sealed class ExpressionSpellingLawTests {
         name: name
     );
     private static string Spell(Instruction token) => token switch {
-        { Payload: InstructionPayload.State state } => state.Name,
+        { Payload: InstructionPayload.State state } => state.Name.Spelling,
         { Payload: InstructionPayload.Constant constant } => constant.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
         _ => (char.ToLowerInvariant(c: token.Operation.ToString()[0]) + token.Operation.ToString()[1..]),
     };
@@ -107,17 +107,18 @@ public sealed class ExpressionSpellingLawTests {
     [Fact]
     public void AMalformedPostfixListDoesNotPrint() {
         Assert.False(condition: ExpressionSpelling.TryPrint(
-            [Instruction.Of(operation: ExpressionOp.Add)],
-            out _
+            instructions: [Instruction.Of(operation: ExpressionOp.Add)],
+            text: out _
         ));
         Assert.False(condition: ExpressionSpelling.TryPrint(
-            [C(value: 1m), C(value: 2m)],
-            out _
+            instructions: [C(value: 1m), C(value: 2m)],
+            text: out _
         ));
     }
     [InlineData("", "empty")]
     [InlineData("a +", "reached the end")]
-    [InlineData("foo(1)", "not a function")]
+    [InlineData("foo(1 + 2)", "expected ')'")]
+    [InlineData("foo((1))", "a channel takes names and numbers")]
     [InlineData("minimum(1)", "expected ','")]
     [InlineData("minimum(1, 2, 3)", "argument")]
     [InlineData("1 2", "unexpected '2'")]
@@ -129,8 +130,8 @@ public sealed class ExpressionSpellingLawTests {
     public void AMalformedSpellingIsRefusedByName(string text, string expected) {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
-            text: text,
-            program: out _
+            program: out _,
+            text: text
         ));
         Assert.Contains(
             actualString: error,
@@ -138,21 +139,15 @@ public sealed class ExpressionSpellingLawTests {
             expectedSubstring: expected
         );
     }
-    // row.key and row[key] must parse to the identical instruction: dot access is syntax over the same state read,
-    // never a second representation.
+    // binding.field is a typed lexical pool reference. Ordinary keyed state keeps bracket syntax so the two
+    // runtime address spaces never collapse to the same string-shaped instruction.
     [Fact]
-    public void ADottedReadParsesToTheIdenticalTokenAsItsBracketForm() {
+    public void ADottedReadParsesAsATypedLexicalPoolField() {
         Assert.Equal(
-            Parse(text: "vitals[mana]"),
+            [Instruction.Operand(name: StateChannelRef.OfBindingField(binding: "vitals", field: "mana"))],
             Parse(text: "vitals.mana")
         );
-        Assert.Equal(
-            [S(
-                    key: "mana",
-                    name: "vitals"
-                )],
-            Parse(text: "vitals.mana")
-        );
+        Assert.NotEqual(Parse(text: "vitals[mana]"), Parse(text: "vitals.mana"));
     }
     // A decimal literal's own dot is never mistaken for dot access: the lexer decides name-vs-number from the
     // first character alone, so "0.25" is one constant token regardless of what follows.
@@ -192,20 +187,13 @@ public sealed class ExpressionSpellingLawTests {
             ExpressionSpelling.Print(instructions: [S("seat.one")])
         );
     }
-    // The key half of a dotted read may be a numeric key, exactly as bracket form admits one.
+    // Static pool fields carry their pool, slot, and field as typed members and round-trip through infix spelling.
     [Fact]
-    public void ADottedReadAdmitsANumericKeyTheSameAsBracketForm() {
-        Assert.Equal(
-            Parse(text: "board[5]"),
-            Parse(text: "board.5")
-        );
-        Assert.Equal(
-            [S(
-                    key: "5",
-                    name: "board"
-                )],
-            Parse(text: "board.5")
-        );
+    public void AStaticPoolFieldRoundTripsAsATypedReference() {
+        var expected = Instruction.Operand(name: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 5, field: "health"));
+
+        Assert.Equal([expected], Parse(text: "pieces[5].health"));
+        Assert.Equal("pieces[5].health", ExpressionSpelling.Print(instructions: [expected]));
     }
     // A trailing dot is refused by name — a dotted read is "row.key", and a dot with nothing after it is a parse
     // error naming the fix rather than a name that happens to end in a period.
@@ -213,8 +201,8 @@ public sealed class ExpressionSpellingLawTests {
     public void ATrailingDotIsRefusedByName() {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
-            text: "vitals.",
-            program: out _
+            program: out _,
+            text: "vitals."
         ));
         Assert.Contains(
             actualString: error,
@@ -222,46 +210,39 @@ public sealed class ExpressionSpellingLawTests {
             expectedSubstring: "ends with a dot"
         );
     }
-    // More than one dot is refused by name, naming the bracket-form fix — a dotted read admits exactly one dot.
+    // More than one dot is refused because a typed lexical pool-field read has exactly one qualifier.
     [Fact]
     public void MoreThanOneDotIsRefusedByNameNamingTheBracketFix() {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
-            text: "vitals.mana.max",
-            program: out _
+            program: out _,
+            text: "vitals.mana.max"
         ));
         Assert.Contains(
             actualString: error,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "more than one dot"
         );
-        Assert.Contains(
-            actualString: error,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "vitals[mana.max]"
-        );
     }
-    // A dynamic key wearing dot syntax ("row.$each") is refused by name — a literal key alone may spell as a dot;
-    // a dynamic key still needs bracket form.
+    // A reserved token cannot occupy the field half of a typed lexical pool reference.
     [Fact]
     public void ADottedKeyThatIsItselfReservedIsRefusedByNameNamingBracketForm() {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
-            text: "hp.$each",
-            program: out _
+            program: out _,
+            text: "hp.$each"
         ));
         Assert.Contains(
             actualString: error,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "hp[$each]"
+            expectedSubstring: "requires a plain field name"
         );
     }
-    // Print always emits bracket form, even for a program parsed from a dotted spelling: there is exactly one
-    // canonical printed form, though two admitted parsed ones.
+    // Typed lexical field spelling is stable through print and parse.
     [Fact]
-    public void PrintAlwaysEmitsBracketFormForADottedRead() {
+    public void PrintPreservesTypedLexicalPoolFieldSyntax() {
         Assert.Equal(
-            "vitals[mana]",
+            "vitals.mana",
             ExpressionSpelling.Print(instructions: Parse(text: "vitals.mana"))
         );
     }
@@ -438,22 +419,22 @@ public sealed class ExpressionSpellingLawTests {
             Parse(text: "bitField(v, 8, 4)")
         );
         Assert.Equal(
-            [S("m"), Instruction.Board(operation: ExpressionOp.BoardShift,
-                    index: "north",
+            [S("m"), Instruction.Board(index: "north",
+                    operation: ExpressionOp.BoardShift,
                     topology: "board"
                 )],
             Parse(text: "boardShift(m, board, north)")
         );
         Assert.Equal(
-            [S("m"), Instruction.Board(operation: ExpressionOp.BoardFill,
-                    index: "north",
+            [S("m"), Instruction.Board(index: "north",
+                    operation: ExpressionOp.BoardFill,
                     topology: "board"
                 )],
             Parse(text: "boardFill(m, board, north)")
         );
         Assert.Equal(
-            [S("m"), Instruction.Board(operation: ExpressionOp.BoardImage,
-                    index: "rot180",
+            [S("m"), Instruction.Board(index: "rot180",
+                    operation: ExpressionOp.BoardImage,
                     topology: "board"
                 )],
             Parse(text: "boardImage(m, board, rot180)")
@@ -531,6 +512,14 @@ public sealed class ExpressionSpellingLawTests {
             Parse(text: "$local:x ? 1 : 0")
         );
     }
+    [InlineData("$local:x + 1", "x + 1")]
+    [InlineData("embed(\"$physics:quiescent\")", "embed(\"$physics:quiescent\")")]
+    [InlineData("embed(\"a \\\" $local:x\") + $local:x", "embed(\"a \\\" $local:x\") + x")]
+    [Theory]
+    public void TheSourceDialectRespellsCodeAndLeavesAStringLiteralAsWritten(string document, string source) => Assert.Equal(
+        actual: ExpressionSpelling.ToSourceDialect(text: document),
+        expected: source
+    );
     [Fact]
     public void UnaryMinusFoldsIntoALiteralAndNegatesAnythingElse() {
         Assert.Equal(

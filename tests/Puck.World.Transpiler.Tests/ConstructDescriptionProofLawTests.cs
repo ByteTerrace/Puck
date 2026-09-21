@@ -28,12 +28,12 @@ public class ConstructDescriptionProofLawTests {
     private static string Doc(string body) => $"schema: \"puck.world.definition.v1\"\n\n{body}\n";
     // One source per described `slot` modifier, spelling that modifier and nothing else optional.
     private static string SourceFor(string member) => (member switch {
-        "space" => Doc(body: $"state {{\n{Space}\n    world {{\n        slot pos : Vector space(lore)\n    }}\n}}"),
-        _ => Doc(body: $"state {{\n    world {{\n        slot hp : Int = 1 {member}{Arguments(member: member)}\n    }}\n}}"),
+        "space" => Doc(body: $"state {{\n{Space}\n    world {{\n        slot pos space(lore)\n    }}\n}}"),
+        _ => Doc(body: $"state {{\n    world {{\n        slot hp = 1 {member}{Arguments(member: member)}\n    }}\n}}"),
     });
     private static string Arguments(string member) => (member switch {
         "advance" => "(perSecond: 1)",
-        "bounds" => "(minimum: 0, maximum: 9, overflow: Saturate)",
+        "bounds" => "(0..9, overflow: Saturate)",
         _ => "()",
     });
     private static JsonObject Compile(string source) {
@@ -85,12 +85,11 @@ public class ConstructDescriptionProofLawTests {
     }
 
     public static TheoryData<string> Modifiers() => new(values: WorldConstructs.ModifiersOf(enclosing: Enclosing, keyword: Closed).Order(comparer: StringComparer.Ordinal));
-
     [Fact]
     public void AWordTheDescriptionDoesNotCarryIsRefusedAndTheRefusalNamesWhatItDoes() {
         var compilation = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
-            source: Doc(body: "state {\n    world {\n        slot hp : Int = 1 freeze(1)\n    }\n}")
+            source: Doc(body: "state {\n    world {\n        slot hp = 1 freeze(1)\n    }\n}")
         );
 
         Assert.True(
@@ -101,9 +100,9 @@ public class ConstructDescriptionProofLawTests {
         var report = compilation.Diagnostics.FormatReport("");
 
         Assert.Contains(
-            expectedSubstring: "'freeze'",
             actualString: report,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "'freeze'"
         );
 
         // The refusal lists the admitted modifiers, and the list is the description's.
@@ -149,9 +148,9 @@ public class ConstructDescriptionProofLawTests {
         var printed = WorldDecompiler.Decompile(root: document);
 
         Assert.Contains(
-            expectedSubstring: name,
             actualString: printed,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: name
         );
         Assert.Equal(
             actual: Compile(source: printed).ToJsonString(),
@@ -175,9 +174,9 @@ public class ConstructDescriptionProofLawTests {
             comparisonType: StringComparison.Ordinal
         );
         Assert.Contains(
-            expectedSubstring: $"A `{Closed}` member",
             actualString: card,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"A `{Closed}` member"
         );
         Assert.Contains(
             expectedSubstring: $"| `{member.Spelling()}`",

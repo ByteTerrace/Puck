@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "puck": {
+            "args": [
+                "mcp",
+                "--profile",
+                "operator"
+            ],
+            "command": "puck"
+        }
+    }
+}

@@ -52,7 +52,7 @@ internal static class PuckHoverInfo {
         return PuckEmbeddingLsp.GetKeywordHoverCard(word: word);
     }
     internal static string? Declaration(string source, string word, int offset, DocumentVocabularyResolver? resolver = null) {
-        var vocabulary = (resolver?.Resolve(source) ?? WorldDocumentVocabulary.Instance);
+        var vocabulary = (resolver?.Resolve(source: source) ?? WorldDocumentVocabulary.Instance);
         var document = PuckParser.ParseDocumentWithDiagnostics(
             source: source,
             vocabulary: vocabulary
@@ -145,9 +145,9 @@ internal static class PuckHoverInfo {
                     var local = rule.Statements.OfType<LocalStatementNode>().FirstOrDefault(predicate: item => (item.Name == word));
                     if (local is not null) {
                         return Describe(
-                            source,
-                            local,
-                            $"{word} — rule local ({local.Kind})"
+                            node: local,
+                            source: source,
+                            title: $"{word} — rule local"
                         );
                     }
                     break;
@@ -251,9 +251,13 @@ internal static class PuckHoverInfo {
         UnaryExpressionNode unary => [unary.Operand],
         IndexExpressionNode index => [index.Target, index.Index],
         MemberAccessExpressionNode member => [member.Target],
-        RangeExpressionNode range => [range.Start, range.End],
+        RangeExpressionNode range => [.. OptionalRangeChildren(range: range)],
         _ => []
     };
+    private static IEnumerable<SyntaxNode> OptionalRangeChildren(RangeExpressionNode range) {
+        if (range.Start is { } start) { yield return start; }
+        if (range.End is { } end) { yield return end; }
+    }
     private static string? Comments(string source, SyntaxNode node) {
         var lines = source[..node.Offset].Split('\n');
         var comments = new List<string>();

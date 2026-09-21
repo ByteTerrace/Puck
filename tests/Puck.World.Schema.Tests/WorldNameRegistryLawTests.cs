@@ -7,6 +7,36 @@ namespace Puck.World.Schema.Tests;
 /// <summary>The name registry covers the document model, the checked-in table matches it, and an aliased import
 /// rewrites every spelling a name can take.</summary>
 public sealed class WorldNameRegistryLawTests {
+    [Fact]
+    public void VisitReadsFreshValuesAndPolymorphicArmsAfterWarmup() {
+        var tree = JsonNode.Parse(json: """
+            { "state": { "world": [{ "name": "beforeRow", "kind": "Int" }] },
+              "rules": [{ "name": "rule", "effects": [{ "$type": "setState", "state": "beforeTarget" }] }] }
+            """)!;
+
+        static List<string> Names(JsonNode document) {
+            var names = new List<string>();
+
+            WorldModuleNamespace.Visit(node: document, type: typeof(WorldDefinition), visitor: (_, _, value, _, _) => {
+                if ((value is JsonValue leaf) && leaf.TryGetValue<string>(value: out var name)) {
+                    names.Add(item: name);
+                }
+            });
+            return names;
+        }
+        Assert.Contains(expected: "beforeRow", collection: Names(document: tree));
+        Assert.Contains(expected: "beforeTarget", collection: Names(document: tree));
+        tree["state"]!["world"]![0]!["name"] = "afterRow";
+        tree["rules"]![0]!["effects"]![0] = JsonNode.Parse(json: """{ "$type": "forEachPool", "pool": "afterPool", "effects": [] }""");
+        var changed = Names(document: tree);
+
+        Assert.Contains(collection: changed, expected: "afterRow");
+        Assert.Contains(collection: changed, expected: "afterPool");
+        Assert.DoesNotContain(collection: changed, expected: "beforeRow");
+        Assert.DoesNotContain(collection: changed, expected: "beforeTarget");
+        Assert.Equal(expected: changed, actual: Names(document: tree.DeepClone()));
+    }
+
     private static readonly Dictionary<string, string> Declared = new(comparer: StringComparer.Ordinal) {
         ["board"] = "a_board",
         ["cube"] = "a_cube",
@@ -148,6 +178,48 @@ public sealed class WorldNameRegistryLawTests {
             expectedSubstring: "\"board\""
         );
     }
+    [Fact]
+    public void RestoreReferencesTouchesRegisteredReferencesButNotDeclarationsOrPlainText() {
+        const string Placeholder = "__puck_arg_0";
+        var module = JsonNode.Parse(json: /*lang=json*/ """
+            {
+              "state": { "world": [ { "name": "__puck_arg_0", "kind": "Int", "value": 0 } ] },
+              "rules": [ {
+                "name": "plain",
+                "forEach": "__puck_arg_0",
+                "gate": { "$type": "compareValue", "left": "__puck_arg_0 + 1", "comparison": "Equal", "right": 1 },
+                "effects": [ { "$type": "setState", "state": "__puck_arg_0", "key": "$cell:__puck_arg_0:$each", "value": 1 } ]
+              } ],
+              "hud": { "panels": [ {
+                "id": "plain", "layer": "Under", "style": "Strip",
+                "rect": { "x": 0, "y": 0, "width": 1, "height": 1 },
+                "elements": [ {
+                  "id": "plain", "kind": "Text", "style": "Primary",
+                  "rect": { "x": 0, "y": 0, "width": 1, "height": 1 },
+                  "binding": "state.__puck_arg_0", "template": "value {state.__puck_arg_0} __puck_arg_0"
+                } ]
+              } ] }
+            }
+            """)!.AsObject();
+
+        Assert.True(
+            WorldModuleNamespace.TryRestoreReferences(
+                module,
+                new Dictionary<string, string>(comparer: StringComparer.Ordinal) { [Placeholder] = "host" },
+                out var reason
+            ),
+            reason
+        );
+
+        Assert.Equal(Placeholder, module["state"]!["world"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("plain", module["rules"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("host", module["rules"]![0]!["forEach"]!.GetValue<string>());
+        Assert.Equal("host + 1", module["rules"]![0]!["gate"]!["left"]!.GetValue<string>());
+        Assert.Equal("host", module["rules"]![0]!["effects"]![0]!["state"]!.GetValue<string>());
+        Assert.Equal("$cell:host:$each", module["rules"]![0]!["effects"]![0]!["key"]!.GetValue<string>());
+        Assert.Equal("state.host", module["hud"]!["panels"]![0]!["elements"]![0]!["binding"]!.GetValue<string>());
+        Assert.Equal("value {state.host} __puck_arg_0", module["hud"]!["panels"]![0]!["elements"]![0]!["template"]!.GetValue<string>());
+    }
     [InlineData("state.board", "state.a_board")]
     [InlineData("state.board.from", "state.a_board.from")]
     [InlineData("state.board.$target", "state.a_board.$target")]
@@ -207,9 +279,9 @@ public sealed class WorldNameRegistryLawTests {
     [Fact]
     public void AFoldsFamilyAndItsBodysReadsAreBothVisited() {
         var program = ExpressionProgramJsonConverter.ToNode(program: new ExpressionProgram(Instructions: [Instruction.Fold(
-            operation: ExpressionOp.Count,
-            family: "board",
             binder: "c",
+            family: "board",
+            operation: ExpressionOp.Count,
             subprogram: 0
         )]) {
             Subprograms = [new Subprogram(
@@ -223,7 +295,7 @@ public sealed class WorldNameRegistryLawTests {
         WorldModuleNamespace.Visit(
             node: program,
             type: typeof(ExpressionProgram),
-            visitor: (holder, jsonName, value, field) => visited.Add(item: $"{jsonName}={value.GetValue<string>()}")
+            visitor: (holder, jsonName, value, field, _) => visited.Add(item: $"{jsonName}={value.GetValue<string>()}")
         );
         Assert.Equal(
             actual: visited,

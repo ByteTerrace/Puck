@@ -16,8 +16,9 @@ Start with four ideas:
   journal scope on the arena. Either every reversible effect in it lands, or
   the scope rewinds and none of them do.
 - **A host serves facets and owns what cannot be rewound.** The host supplies
-  the tick, answers the capabilities a rule declared it needs, and fires an
-  irreversible arm only after the scope has committed.
+  the tick, answers the capabilities a rule declared it needs, installs a
+  firing's transactional arms as one unit with its commit, and delivers every
+  other arm that leaves the arena only after it.
 
 ## See the whole system
 
@@ -29,7 +30,8 @@ flowchart TB
     Admit --> Evaluate["Evaluation: gate, bindings,<br/>one journal scope per firing"]
     Evaluate --> Arena["StateArena: columns, journal scopes,<br/>versions, hash"]
     Arena -- "Export / Import" --> Document["StateRow list (serialization)"]
-    Evaluate -- "after commit" --> Outward["Irreversible arms:<br/>saves, cues, placements"]
+    Evaluate -- "with the commit" --> Unit["Transactional arms:<br/>document rows, as one unit"]
+    Evaluate -- "after the commit" --> Outward["Delivered arms:<br/>saves, cues, poses"]
     Search["Search: candidates as scopes"] --> Arena
 ```
 
@@ -78,6 +80,81 @@ rules and host admission provide that meaning.
 Numeric expressions use integers or [Q48.16 fixed-point values](maths.md);
 rows also support booleans and text. The encoding and addressing rules belong
 to the [data-model chapter](state/data-model.md).
+
+## Store bounded records and relationships
+
+Pool storage reserves fixed identity slots with presence bits. Releasing an
+instance leaves a hole; it never shifts another instance. `CellCount` returns the
+live count. Use `TryNextCell` to visit every held cell in physical slot order
+without observing holes, or `CopyPoolSnapshot` for live handles in slot order.
+Generated pool rows do not accept positional reads; handle and cursor access keep
+their identity capacity separate from their live count. Claim, release, and rewind
+journal only the affected slots; free-slot selection and dependent-pair cascades
+still perform bounded scans.
+
+A handle read uses the arena's address table and checks catalog ownership,
+occupancy, and generation. `TryReadRaw` returns a numeric field's stored number;
+`TryReadLiveRaw` evaluates its traits at the supplied time. Both return a `long`
+in the field's own kind and refuse text or vector fields. Timed numeric reads
+share the same evaluator as carrier reads without constructing a `CellValue`.
+`TryRead` and `TryReadLive` return the full carrier.
+
+Generated pool storage rows cannot be named by authored rules, transforms, or
+search plans, including through a channel object. Use pool iteration and typed
+pool-field references. The compiler retains generated rows by ordinal for
+handle evaluation, dataflow, and costing.
+
+A `StateRecord` groups typed fields and their defaults. A `StatePool` gives that
+record a fixed identity universe. `StateArena.TryClaim` chooses the lowest free
+slot, returns a `StateInstanceHandle` containing the pool ordinal, slot, and
+generation, and installs every field default before later effects write it.
+`TryRelease` advances the slot generation, so a handle from an earlier lifetime
+can neither read nor write a reclaimed slot.
+The runtime handle is also bound to its `StateCatalog`: arenas using the same
+catalog may share it, while a replacement catalog refuses it. Persistence stores
+the stable pool name, slot, and generation, then uses
+`StateCatalog.CreateInstanceHandle` after resolving that name in the current catalog.
+
+Text fields support literal writes and typed copies between ordinary rows and
+pool fields. A missing or stale copy source leaves its destination unchanged.
+Numeric rule predicates refuse text and vector pool fields; vector operations
+use their declared vector space.
+
+`StatePairPool` stores a record for a relationship between two live handles.
+`TryClaimPair` validates both endpoint lifetimes and derives the pair's stable
+slot from their endpoint slots. Directed pairs preserve endpoint order.
+Undirected pairs require one shared endpoint pool and use canonical endpoint
+order. `AllowSelf` controls whether an instance may pair with itself. Releasing
+an endpoint releases every incident pair, including dependent pair pools, as one
+journaled operation. Pair dependencies must form an acyclic graph.
+
+The identity universe and live limit answer different questions. An ordinary
+pool's universe is `Capacity`; a pair pool's universe is left capacity multiplied
+by right capacity. That product must fit `StateCapacity.MaxCellsPerRow`, while
+`MaxLive` limits the number currently present. The catalog reserves every numeric
+slot key and generates protected membership, generation, and field rows. Generic
+row mutation and import APIs refuse those rows.
+
+Persistence uses `StatePoolSnapshot`: one nonnegative generation for every slot,
+plus every field value for every live slot. Pair snapshots also require live
+endpoints. `StateArena.ToPools()` and `ToPairPools()` return declarations carrying
+complete snapshots. Relayout carries these protected rows internally and refuses
+the whole replacement if the new shape cannot hold them.
+
+World retains these declarations and snapshots in `state`; generated rows are
+runtime storage and never authored or serialized as ordinary rows. Its
+`properties.attachments` entries identify a pool, slot, generation, and either
+a named single-inhabitant placement or a zero-based local seat. Interactions
+may name those pools on either side: geometry uses the attached bodies, while
+`left.field` and `right.field` address their records. A release detaches that
+lifetime; reclaiming the slot does not attach its replacement automatically.
+
+An owned identity selects capacity-one pools through `identity.records`.
+`WorldIdentity.TryReadRecord` and `TryWriteRecord` preserve typed fields; a
+successful write updates its owned document for the persistence service to save.
+Travel and checkpoints carry only those selected records and their schema
+dependencies. Unselected state remains private. Time traits such as advance and
+deadline clocks currently belong to ordinary rows, not record fields.
 
 ## Evaluate a small rule
 

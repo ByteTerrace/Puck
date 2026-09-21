@@ -139,6 +139,7 @@ internal sealed partial class WorldScreenBinder {
         ) {
             feed.EnvelopeRegistration?.Dispose();
             feed.EnvelopeRegistration = destination.Server.Envelope.Configure(
+                allowGrowth: true,
                 programWordCapacity: frameSource.WorstCaseProgramWordCapacity,
                 instanceCapacity: frameSource.WorstCaseInstanceCapacity,
                 measure: emitter.MeasureCandidate

@@ -76,6 +76,14 @@ public static class VectorArenaFixture {
 
         return key;
     }
+    /// <summary>Resolves an arena-owned key, including a name minted after catalog compilation.</summary>
+    /// <param name="arena">The arena holding the key ledger.</param>
+    /// <param name="value">The key's name.</param>
+    /// <returns>The key.</returns>
+    public static CellKey Key(StateArena arena, string value) {
+        Assert.True(condition: arena.Keys.TryResolve(name: Name(value: value), key: out var key));
+        return key;
+    }
     /// <summary>Returns a validated cell name.</summary>
     /// <param name="value">The name's text.</param>
     /// <returns>The name.</returns>

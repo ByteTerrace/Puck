@@ -54,6 +54,9 @@ inside the unit square—each coordinate in [-1, 1], the frame every profile
 is scaled from and the frame the prism's cull reach covers—convex and
 non-degenerate; `cornerRadius` is a fraction of the raw vertices' own
 inradius, the profile's one rounding control). Omission uses `Trapezoid`.
+`Path` adds bounded curved contours and variable-width strokes; see
+[curved path profiles](../../docs/rendering/sdf/reference/materials-and-primitives.md#curved-path-profiles)
+for the segment vocabulary, error tolerance, budgets, and contact limitation.
 Extrusion caps stay flat; corner rounding or chamfering shapes the outline,
 while `dilate` rounds the depth edges too. Polygon and ellipse profiles scale
 their canonical outline in X/Y; a convex profile's vertices carry their own

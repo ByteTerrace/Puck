@@ -8,6 +8,29 @@ namespace Puck.World.Schema.Tests;
 /// only through the export list the registry assigns the referencing field, and the registry assigns the facets
 /// a host's kit, placement, rule, and HUD bindings bind through.</summary>
 public sealed class WorldExportsLawTests {
+    [InlineData("{\"$type\":\"release\",\"binding\":\"unit\"}")]
+    [InlineData("{\"$type\":\"setState\",\"state\":\"unit.hp\",\"value\":1}")]
+    [Theory]
+    public void ReadExportDoesNotPermitLexicalPoolMutation(string effect) {
+        var module = Host(body: """{"state":{"records":[{"name":"Unit","fields":[]}],"pools":[{"name":"units","record":"Unit","capacity":2}]}}""");
+        var own = Host(body: $$"""{"rules":[{"name":"host","poolForEach":{"pool":"units","binding":"unit"},"effects":[{{effect}}]}]}""");
+        var exports = new WorldExports(Reads: ["units"]);
+
+        Assert.False(condition: WorldModuleExports.TryCheckLayers(hostPath: "host", ownBody: own, basis: [], imports: [("module", module, exports)], surfaces: out _, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "units");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "action");
+        Assert.True(condition: WorldModuleExports.TryCheckLayers(hostPath: "host", ownBody: own, basis: [], imports: [("module", module, exports with { Actions = ["units"] })], surfaces: out _, reason: out reason), userMessage: reason);
+    }
+    [InlineData("{\"rules\":[{\"name\":\"host\",\"effects\":[{\"$type\":\"forEachPool\",\"pool\":\"units\",\"binding\":\"unit\",\"effects\":[{\"$type\":\"release\",\"binding\":\"unit\"}]}]}]}")]
+    [InlineData("{\"interactions\":{\"interactions\":[{\"name\":\"host\",\"left\":\"units\",\"right\":\"units\",\"effects\":[{\"$type\":\"setState\",\"state\":\"left.hp\",\"value\":1}]}]}}")]
+    [Theory]
+    public void ReadExportDoesNotPermitNestedOrInteractionPoolMutation(string body) {
+        var module = Host(body: """{"state":{"records":[{"name":"Unit","fields":[]}],"pools":[{"name":"units","record":"Unit","capacity":2}]}}""");
+
+        Assert.False(condition: WorldModuleExports.TryCheckLayers(hostPath: "host", ownBody: Host(body: body), basis: [], imports: [("module", module, new WorldExports(Reads: ["units"]))], surfaces: out _, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "action");
+    }
+
     private static JsonObject Host(string body) => ((JsonObject)JsonNode.Parse(json: body)!);
     private static JsonObject Module(string exports) => ((JsonObject)JsonNode.Parse(json: $$"""
         {

@@ -395,10 +395,10 @@ public static partial class CreationCanonicalizer {
                     Path: $"drivers[{i}].signal"
                 ));
             }
-            if (driver.BlendInSeconds is { } blendIn && (!float.IsFinite(blendIn) || blendIn < 0f)) {
+            if ((driver.BlendInSeconds is { } blendIn) && (!float.IsFinite(f: blendIn) || (blendIn < 0f))) {
                 errors.Add(item: new(Message: "blendInSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendInSeconds"));
             }
-            if (driver.BlendOutSeconds is { } blendOut && (!float.IsFinite(blendOut) || blendOut < 0f)) {
+            if ((driver.BlendOutSeconds is { } blendOut) && (!float.IsFinite(f: blendOut) || (blendOut < 0f))) {
                 errors.Add(item: new(Message: "blendOutSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendOutSeconds"));
             }
             if (
@@ -566,7 +566,7 @@ public static partial class CreationCanonicalizer {
             )
             ) {
                 errors.Add(item: new(
-                    Message: $"bone '{chain[i]}' does not descend from '{chain[i - 1]}' through parent, so the chain is not one limb.",
+                    Message: $"bone '{chain[i]}' does not descend from '{chain[(i - 1)]}' through parent, so the chain is not one limb.",
                     Path: $"{path}.chain[{i}]"
                 ));
                 resolved = false;
@@ -618,97 +618,97 @@ public static partial class CreationCanonicalizer {
 
         switch (target.Kind) {
             case CreationEffectorTargetDocument.KindSurface: {
-                if (target.Direction is not { } direction) {
-                    errors.Add(item: new(
-                        Message: "direction is required for a surface target.",
-                        Path: $"{path}.direction"
-                    ));
-                } else if (!IsFinite(vector: direction)) {
-                    errors.Add(item: new(
-                        Message: "direction is non-finite.",
-                        Path: $"{path}.direction"
-                    ));
-                } else if (direction.Value == Vector3.Zero) {
-                    errors.Add(item: new(
-                        Message: "direction is zero, which names no direction.",
-                        Path: $"{path}.direction"
-                    ));
-                }
-                if (target.Reach is not { } reach) {
-                    errors.Add(item: new(
-                        Message: "reach is required for a surface target.",
-                        Path: $"{path}.reach"
-                    ));
-                } else if (
-                    (reach.Reference is null) &&
-                    (!float.IsFinite(f: reach.Value) ||
-                    (reach.Value <= 0f) ||
-                    (reach.Value > CreationEffectorTargetDocument.MaxReach))
-                ) {
-                    errors.Add(item: new(
-                        Message: $"reach {reach.Value} is outside (0, {CreationEffectorTargetDocument.MaxReach}] world units.",
-                        Path: $"{path}.reach"
-                    ));
-                }
-                if (
-                    (target.Standoff is { Reference: null } standoff) &&
-                    (!float.IsFinite(f: standoff.Value) ||
-                    (standoff.Value < 0f) ||
-                    (standoff.Value > CreationEffectorTargetDocument.MaxStandoff))
-                ) {
-                    errors.Add(item: new(
-                        Message: $"standoff {standoff.Value} is outside [0, {CreationEffectorTargetDocument.MaxStandoff}] world units.",
-                        Path: $"{path}.standoff"
-                    ));
-                }
-
-                break;
-            }
-            case CreationEffectorTargetDocument.KindBody: {
-                if (target.Index is not { } index) {
-                    errors.Add(item: new(
-                        Message: "index is required for a body target.",
-                        Path: $"{path}.index"
-                    ));
-                } else if (index < 0) {
-                    errors.Add(item: new(
-                        Message: $"index {index} is negative.",
-                        Path: $"{path}.index"
-                    ));
-                }
-                if (target.Offset is { } offset) {
-                    if (!IsFinite(vector: offset)) {
+                    if (target.Direction is not { } direction) {
                         errors.Add(item: new(
-                            Message: "offset is non-finite.",
-                            Path: $"{path}.offset"
+                            Message: "direction is required for a surface target.",
+                            Path: $"{path}.direction"
                         ));
-                    } else if (offset.Length() > CreationEffectorTargetDocument.MaxOffset) {
+                    } else if (!IsFinite(vector: direction)) {
                         errors.Add(item: new(
-                            Message: $"offset reaches {offset.Length()}, past the {CreationEffectorTargetDocument.MaxOffset}-unit bound.",
-                            Path: $"{path}.offset"
+                            Message: "direction is non-finite.",
+                            Path: $"{path}.direction"
+                        ));
+                    } else if (direction.Value == Vector3.Zero) {
+                        errors.Add(item: new(
+                            Message: "direction is zero, which names no direction.",
+                            Path: $"{path}.direction"
                         ));
                     }
-                }
+                    if (target.Reach is not { } reach) {
+                        errors.Add(item: new(
+                            Message: "reach is required for a surface target.",
+                            Path: $"{path}.reach"
+                        ));
+                    } else if (
+                        (reach.Reference is null) &&
+                        (!float.IsFinite(f: reach.Value) ||
+                        (reach.Value <= 0f) ||
+                        (reach.Value > CreationEffectorTargetDocument.MaxReach))
+                    ) {
+                        errors.Add(item: new(
+                            Message: $"reach {reach.Value} is outside (0, {CreationEffectorTargetDocument.MaxReach}] world units.",
+                            Path: $"{path}.reach"
+                        ));
+                    }
+                    if (
+                        (target.Standoff is { Reference: null } standoff) &&
+                        (!float.IsFinite(f: standoff.Value) ||
+                        (standoff.Value < 0f) ||
+                        (standoff.Value > CreationEffectorTargetDocument.MaxStandoff))
+                    ) {
+                        errors.Add(item: new(
+                            Message: $"standoff {standoff.Value} is outside [0, {CreationEffectorTargetDocument.MaxStandoff}] world units.",
+                            Path: $"{path}.standoff"
+                        ));
+                    }
 
-                break;
-            }
+                    break;
+                }
+            case CreationEffectorTargetDocument.KindBody: {
+                    if (target.Index is not { } index) {
+                        errors.Add(item: new(
+                            Message: "index is required for a body target.",
+                            Path: $"{path}.index"
+                        ));
+                    } else if (index < 0) {
+                        errors.Add(item: new(
+                            Message: $"index {index} is negative.",
+                            Path: $"{path}.index"
+                        ));
+                    }
+                    if (target.Offset is { } offset) {
+                        if (!IsFinite(vector: offset)) {
+                            errors.Add(item: new(
+                                Message: "offset is non-finite.",
+                                Path: $"{path}.offset"
+                            ));
+                        } else if (offset.Length() > CreationEffectorTargetDocument.MaxOffset) {
+                            errors.Add(item: new(
+                                Message: $"offset reaches {offset.Length()}, past the {CreationEffectorTargetDocument.MaxOffset}-unit bound.",
+                                Path: $"{path}.offset"
+                            ));
+                        }
+                    }
+
+                    break;
+                }
             default: {
-                if (!CreationDriverDocument.IsStateSignal(signal: target.Reference)) {
-                    errors.Add(item: new(
-                        Message: $"reference '{target.Reference}' is not a '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]' state reference.",
-                        Path: $"{path}.reference"
-                    ));
-                }
+                    if (!CreationDriverDocument.IsStateSignal(signal: target.Reference)) {
+                        errors.Add(item: new(
+                            Message: $"reference '{target.Reference}' is not a '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]' state reference.",
+                            Path: $"{path}.reference"
+                        ));
+                    }
 
-                break;
-            }
+                    break;
+                }
         }
     }
     private static void ValidateEffectorPlant(CreationDocument document, CreationPlantDocument? plant, List<DocumentValidationError> errors, string path) {
         if (plant is null) {
             return;
         }
-        if (plant.SwingWeight is { } swingWeight && (!float.IsFinite(swingWeight) || swingWeight < 0f || swingWeight > 1f)) {
+        if ((plant.SwingWeight is { } swingWeight) && (!float.IsFinite(f: swingWeight) || (swingWeight < 0f) || (swingWeight > 1f))) {
             errors.Add(item: new(Message: "swingWeight must be finite and in [0, 1].", Path: $"{path}.swingWeight"));
         }
         if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
@@ -1024,6 +1024,10 @@ public static partial class CreationCanonicalizer {
                 // slot carries only its parent's delta frame (its geometry sits wherever the fold carries it), and a
                 // grouped member rides its group's instance — either would re-emit the reference at the wrong place.
                 var reference = shapes[referenceIndex];
+
+                if (reference.Profile?.Kind == SdfPrismProfileKind.Path) {
+                    errors.Add(item: new(Message: "a trim cannot reference a Path profile; author the band as its own path.", Path: $"{trimPath}.shape"));
+                }
 
                 if (reference.Domain is { Count: > 0 }) {
                     errors.Add(item: new(Message: $"reference '{trim.Shape}' carries domain operators, whose fold images a trim's copy of it could not follow.", Path: $"{trimPath}.shape"));
@@ -2202,7 +2206,7 @@ public static partial class CreationCanonicalizer {
 
         var errors = new List<DocumentValidationError>();
         var shapeIds = new HashSet<int>();
-        var lookup = new ShapeLookup(shapes: document.Shapes ?? []);
+        var lookup = new ShapeLookup(shapes: (document.Shapes ?? []));
 
         for (var i = 0; (i < (document.Shapes?.Count ?? 0)); i++) {
             var shape = document.Shapes![i];
@@ -2237,33 +2241,34 @@ public static partial class CreationCanonicalizer {
                     Message: $"primitive '{shape.Type}' is not recognized."
                 ));
             }
-            if (shape.Taper is { } taper && (shape.Type != SdfSolidPrimitive.Prism || !float.IsFinite(taper) || taper < 0f || taper > 1f)) {
-                errors.Add(new(Path: $"shapes[{i}].taper", Message: "taper requires Prism and a finite value in [0, 1]."));
+            if ((shape.Taper is { } taper) && ((shape.Type != SdfSolidPrimitive.Prism) || !float.IsFinite(f: taper) || (taper < 0f) || (taper > 1f))) {
+                errors.Add(item: new(Message: "taper requires Prism and a finite value in [0, 1].", Path: $"shapes[{i}].taper"));
             }
-            if (shape.Profile is { } profile && (shape.Type != SdfSolidPrimitive.Prism || !profile.IsValid())) {
-                errors.Add(new(Path: $"shapes[{i}].profile", Message: "profile requires Prism, a defined kind, cornerRadius in [0, 1], and sides in [3, 32]."));
+            if ((shape.Profile is { } profile) && ((shape.Type != SdfSolidPrimitive.Prism) || !profile.IsValid())) {
+                errors.Add(item: new(Message: "profile requires Prism and valid profile parameters; Path requires cornerRadius 0 and valid bounded contours.", Path: $"shapes[{i}].profile"));
             }
-            if (shape.Lift is { } lift && (shape.Type != SdfSolidPrimitive.Prism || !Enum.IsDefined(value: lift))) {
-                errors.Add(new(Path: $"shapes[{i}].lift", Message: "lift requires Prism and one of extrude or revolve."));
+            ValidatePathProfile(errors: errors, index: i, shape: shape);
+            if ((shape.Lift is { } lift) && ((shape.Type != SdfSolidPrimitive.Prism) || !Enum.IsDefined(value: lift))) {
+                errors.Add(item: new(Message: "lift requires Prism and one of extrude or revolve.", Path: $"shapes[{i}].lift"));
             }
-            if (shape.Rounding is { } rounding && ((shape.Type is not (SdfSolidPrimitive.Prism or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone)) || !float.IsFinite(rounding) || rounding < 0f)) {
-                errors.Add(new(Path: $"shapes[{i}].rounding", Message: "rounding requires Prism, Cylinder or Cone and a finite value of at least zero."));
+            if ((shape.Rounding is { } rounding) && ((shape.Type is not (SdfSolidPrimitive.Prism or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone)) || !float.IsFinite(f: rounding) || (rounding < 0f))) {
+                errors.Add(item: new(Message: "rounding requires Prism, Cylinder or Cone and a finite value of at least zero.", Path: $"shapes[{i}].rounding"));
             }
-            if (shape.Chamfer is { } chamfer && ((shape.Type is not (SdfSolidPrimitive.Box or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Prism)) || !float.IsFinite(chamfer) || chamfer < 0f)) {
-                errors.Add(new(Path: $"shapes[{i}].chamfer", Message: "chamfer requires Box, Cylinder or Prism and a finite value of at least zero."));
+            if ((shape.Chamfer is { } chamfer) && ((shape.Type is not (SdfSolidPrimitive.Box or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Prism)) || !float.IsFinite(f: chamfer) || (chamfer < 0f))) {
+                errors.Add(item: new(Message: "chamfer requires Box, Cylinder or Prism and a finite value of at least zero.", Path: $"shapes[{i}].chamfer"));
             }
-            if ((shape.Chamfer ?? 0f) != 0f && (shape.Rounding ?? 0f) != 0f) {
-                errors.Add(new(Path: $"shapes[{i}].chamfer", Message: "chamfer and rounding cannot both be nonzero on one shape."));
+            if (((shape.Chamfer ?? 0f) != 0f) && ((shape.Rounding ?? 0f) != 0f)) {
+                errors.Add(item: new(Message: "chamfer and rounding cannot both be nonzero on one shape.", Path: $"shapes[{i}].chamfer"));
             }
-            if (shape.Flare is { } flare && (!float.IsFinite(flare.Amount) || !float.IsFinite(flare.Bulge) || !float.IsFinite(flare.Span) || (flare.Span <= 0f) || !float.IsFinite(flare.Top ?? 0f) || (uint)flare.Axis > 2u || !float.IsFinite(flare.StartScale) || flare.StartScale <= 0f)) {
-                errors.Add(new(Path: $"shapes[{i}].flare", Message: "flare requires a finite amount, bulge and top, and a finite span greater than zero."));
+            if ((shape.Flare is { } flare) && (!float.IsFinite(f: flare.Amount) || !float.IsFinite(f: flare.Bulge) || !float.IsFinite(f: flare.Span) || (flare.Span <= 0f) || !float.IsFinite(f: (flare.Top ?? 0f)) || (((uint)flare.Axis) > 2u) || !float.IsFinite(f: flare.StartScale) || (flare.StartScale <= 0f))) {
+                errors.Add(item: new(Message: "flare requires a finite amount, bulge and top, and a finite span greater than zero.", Path: $"shapes[{i}].flare"));
             }
             ValidateShapeErode(
                 errors: errors,
                 index: i,
                 shape: shape
             );
-            ValidateCells(document, shape, errors, $"shapes[{i}].cells");
+            ValidateCells(document: document, errors: errors, path: $"shapes[{i}].cells", shape: shape);
             ValidateShear(
                 errors: errors,
                 path: $"shapes[{i}].shear",
@@ -2274,8 +2279,8 @@ public static partial class CreationCanonicalizer {
                 path: $"shapes[{i}].bumps",
                 shape: shape
             );
-            if (shape.Exponent is { } exponent && (shape.Type != SdfSolidPrimitive.Superellipsoid || !float.IsFinite(exponent) || exponent < SdfProgramBuilder.MinSuperellipsoidExponent || exponent > SdfProgramBuilder.MaxSuperellipsoidExponent)) {
-                errors.Add(new(Path: $"shapes[{i}].exponent", Message: $"exponent requires Superellipsoid and a finite value in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}]."));
+            if ((shape.Exponent is { } exponent) && ((shape.Type != SdfSolidPrimitive.Superellipsoid) || !float.IsFinite(f: exponent) || (exponent < SdfProgramBuilder.MinSuperellipsoidExponent) || (exponent > SdfProgramBuilder.MaxSuperellipsoidExponent))) {
+                errors.Add(item: new(Message: $"exponent requires Superellipsoid and a finite value in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}].", Path: $"shapes[{i}].exponent"));
             }
             if (
                 (shape.Blend is { } blend) &&
@@ -2318,7 +2323,7 @@ public static partial class CreationCanonicalizer {
                     refusal: out var scaleRefusal,
                     scale: shape.Scale,
                     type: shape.Type,
-                    taper: shape.Taper ?? 0.5f,
+                    taper: (shape.Taper ?? 0.5f),
                     profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude),
                     rounding: (shape.Rounding ?? 0f),

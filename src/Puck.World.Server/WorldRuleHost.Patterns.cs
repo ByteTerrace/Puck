@@ -26,6 +26,7 @@ public sealed partial class WorldRuleHost {
             : new long[WordCeiling(definition: definition)]
         );
     }
+
     // The longest word any source in this document can produce: the widest row ceiling, capped at the word cap.
     private static int WordCeiling(WorldDefinition definition) {
         var ceiling = 1;
@@ -104,11 +105,19 @@ public sealed partial class WorldRuleHost {
                 cells: cells,
                 start: start
             ); (index < cells.Count); index++) {
-                BoundTokenKey = Host.Arena.Catalog.Keys.Intern(name: cells[index].Key);
-                BoundPreviousKey = ((index > 0)
-                    ? Host.Arena.Catalog.Keys.Intern(name: cells[(index - 1)].Key)
-                    : default
+                _ = Host.Arena.Keys.TryResolve(
+                    key: out var tokenKey,
+                    name: cells[index].Key
                 );
+                BoundTokenKey = tokenKey;
+                BoundPreviousKey = default;
+                if (index > 0) {
+                    _ = Host.Arena.Keys.TryResolve(
+                        key: out var previousKey,
+                        name: cells[(index - 1)].Key
+                    );
+                    BoundPreviousKey = previousKey;
+                }
                 word[length++] = (RuleExpressions.TryEvaluate(
                     fault: out _,
                     kind: kind,

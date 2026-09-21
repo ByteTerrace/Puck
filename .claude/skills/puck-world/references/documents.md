@@ -190,9 +190,9 @@ its whole authority surface.
   from population capacity. Do not use live instance count to size reserved
   bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
-- `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 256`,
+- `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 1024`,
   `MaxCellsPerRow = TopologyCompilation.MaxCells` (an authored `capacity` may only narrow it),
-  `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
+  `MaxTextValueLength = 1024` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed
   per-body register/checkpoint width).
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`,

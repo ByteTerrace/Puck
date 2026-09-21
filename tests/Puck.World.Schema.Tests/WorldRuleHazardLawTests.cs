@@ -6,6 +6,38 @@ namespace Puck.World.Schema.Tests;
 /// write, and two writes of one cell with a set among them — never a pair whose gates make it impossible on one
 /// tick, and never a pair of plain adds.</summary>
 public sealed class WorldRuleHazardLawTests {
+    [Fact]
+    public void SeparateAnalysisRequestsShareTheCompilationAndRespectRuleEditsWithTheSameCatalog() {
+        var definition = Document(
+            Rule("faint", new ActionEffect.SetState(State: "fainted", Value: 1m), HpAtMost(value: 0)),
+            Rule("damage", new ActionEffect.AddState(State: "hp", Value: -3m))
+        );
+        var compilation = WorldRuleCompilation.Compile(definition: definition);
+        var hazards = WorldRuleHazards.Analyze(compilation: compilation);
+        Assert.Single(collection: hazards);
+        Assert.Equal(WorldRuleHazards.Analyze(definition: definition), hazards);
+        Parallel.For(0, 16, _ => Assert.Same(hazards, WorldRuleHazards.Analyze(compilation: compilation)));
+        Assert.Equal(WorldRuleWorkBudget.Measure(definition: definition), WorldRuleWorkBudget.Measure(compilation: compilation));
+        Assert.Equal(compilation.WorkBudget, compilation.CostReport.WorkBudget);
+        Assert.Same(compilation.WorkContributors, WorldRuleWorkBudget.Contributors(compilation: compilation));
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; (index < 1000); index++) {
+            _ = WorldRuleHazards.Analyze(compilation: compilation);
+            _ = WorldRuleWorkBudget.Measure(compilation: compilation);
+            _ = WorldRuleWorkBudget.Contributors(compilation: compilation);
+            _ = compilation.CostReport;
+        }
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        Assert.Equal(actual: allocated, expected: 0L);
+
+        Assert.NotNull(@object: definition.Rules);
+        var reordered = definition with { Rules = [definition.Rules[1], definition.Rules[0]] };
+        Assert.Same(definition.StateCatalog, reordered.StateCatalog);
+        var replacement = WorldRuleCompilation.Compile(definition: reordered);
+        Assert.Empty(collection: replacement.Hazards);
+        Assert.Single(collection: compilation.Hazards);
+    }
+
     private static WorldDefinition Document(params WorldRule[] rules) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: [Slot(name: "phase"), Slot(name: "hp"), Slot(name: "fainted"), Slot(name: "armor")]),
@@ -273,13 +305,18 @@ public sealed class WorldRuleHazardLawTests {
         );
         Assert.Empty(collection: compilation.Interactions);
         Assert.Empty(collection: compilation.Tables);
-        var changed = definition with { Rules = [Rule(
+        Assert.Equal(WorldRuleWorkBudget.Measure(definition: definition), compilation.WorkBudget);
+        Assert.Equal(WorldRuleWorkBudget.Contributors(definition: definition), compilation.WorkContributors);
+        Assert.Same(compilation.WorkContributors, compilation.CostReport.Contributors);
+        var changed = definition with {
+            Rules = [Rule(
                 "heal",
                 new ActionEffect.AddState(
                     "hp",
                     Value: 4
                 )
-            )] };
+            )],
+        };
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
@@ -297,13 +334,15 @@ public sealed class WorldRuleHazardLawTests {
             "heal",
             Assert.Single(collection: next.Rules).Name
         );
-        var invalid = changed with { Rules = [Rule(
+        var invalid = changed with {
+            Rules = [Rule(
                 "bad",
                 new ActionEffect.SetState(
                     "missing",
                     Value: 1
                 )
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             compilation: out var refused,

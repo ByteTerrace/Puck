@@ -113,6 +113,16 @@ public sealed partial class WorldPopulation {
                 revokedKeys.Add(item: (key.Capability, key.Subject));
             }
 
+            var residue = body.CaptureIntegrationResidue();
+            var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);
+            residue = residue with {
+                // Contact-field versions are process-local rebuild counters. A population checkpoint retains only
+                // equality with the current field, using canonical representatives so capture/restore/capture is
+                // byte-stable even when reconstruction assigns a different counter.
+                ContactFieldObservationCurrent = contactFieldObservationCurrent,
+                LastContactFieldVersion = (contactFieldObservationCurrent ? 0UL : 1UL),
+            };
+
             entries.Add(item: new WorldPopulationEntryCheckpoint(
                 Index: index,
                 KitIndex: entry.KitIndex,
@@ -163,7 +173,7 @@ public sealed partial class WorldPopulation {
                 Position: body.FixedPosition,
                 Yaw: body.FixedYaw,
                 DynamicState: body.CaptureTransferState(),
-                Residue: body.CaptureIntegrationResidue(),
+                Residue: residue,
                 Profile: body.Profile?.Project(),
                 Navigation: new WorldPopulationNavigationCheckpoint(
                     ActiveProducerDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
@@ -275,7 +285,10 @@ public sealed partial class WorldPopulation {
             entry.Body = body;
             entry.Active = true;
             body.ApplyTransferState(state: captured.DynamicState);
-            body.ApplyIntegrationResidue(residue: captured.Residue);
+            body.ApplyIntegrationResidue(
+                contactFieldVersion: ContactFieldVersion,
+                residue: captured.Residue
+            );
 
             var designationCount = Math.Min(
                 val1: captured.Designations.Length,

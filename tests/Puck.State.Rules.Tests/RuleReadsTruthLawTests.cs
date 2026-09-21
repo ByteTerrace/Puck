@@ -4,7 +4,7 @@ using Xunit;
 namespace Puck.State.Rules.Tests;
 
 /// <summary>Proves every rule read of a cell carrying a <see cref="StateDynamics"/> trait — a gate, an expression
-/// operand, an arithmetic write's operand, an effect source, a reduction, a computed key, a countdown — takes the
+/// operand, an arithmetic write's operand, an effect source, a reduction, a computed key — takes the
 /// stored truth rather than the follower's eased sample, while a cell under <see cref="StateAdvance"/> or
 /// <see cref="StateCycle"/> still reads live.</summary>
 public sealed class RuleReadsTruthLawTests {
@@ -105,16 +105,6 @@ public sealed class RuleReadsTruthLawTests {
                 )
             ]
         ),
-        new StateRow(
-            Name: RulesFixture.Name(value: "countdown"),
-            Kind: CellKind.Int,
-            Min: 0L,
-            Dynamics: new StateDynamics(Row: "ease"),
-            Cells: [new StateCell(
-                Key: StateRow.SlotKey,
-                Value: CellValue.Int(value: 0L)
-            )]
-        )
     ]);
     private static CellKey Key(StateCatalog catalog, string? name = null) =>
         catalog.Keys.Intern(name: ((name is null) ? StateRow.SlotKey : RulesFixture.Name(value: name)));
@@ -512,57 +502,6 @@ public sealed class RuleReadsTruthLawTests {
                 row: "out"
             ),
             expected: 75L
-        );
-    }
-    [Fact]
-    public void CountdownEffectReadingAnEasedCellReadsStoredTruth() {
-        var (host, evaluator, context, arena) = Arrange();
-        var countdownOrdinal = EvaluatorFixture.Ordinal(
-            host: host,
-            row: "countdown"
-        );
-        var slotKey = Key(catalog: arena.Catalog);
-
-        // Retarget countdown to 60 at tick 0.
-        Assert.True(condition: arena.TryWriteLive(
-            key: slotKey,
-            operand: 60L,
-            reason: out var reason,
-            rowOrdinal: countdownOrdinal,
-            time: host.Time,
-            write: StateWriteKind.Set
-        ), userMessage: reason);
-
-        // Countdown effect decrements by min(current, stepTicks).
-        var rule = new Rule(
-            Name: RulesFixture.Name(value: "countdownStep"),
-            Effects: [new ActionEffect.CountdownState(State: "countdown")],
-            Mode: ActionTriggerMode.Level
-        );
-        var compiled = RuleCompiler.CompileAll(
-            context: context,
-            rules: [rule]
-        );
-        var latch = new RuleLatch();
-
-        // Step by 5 ticks at tick 1. Truth is 60, min(60, 5) = 5 -> countdown becomes 55.
-        // If eased sample (< 5) was read, min would decrement by less than 5.
-        host.Advance(
-            engineTick: 1UL,
-            tick: 1UL
-        );
-        evaluator.Evaluate(
-            latch: latch,
-            rules: compiled,
-            stepTicks: 5UL
-        );
-
-        Assert.Equal(
-            actual: EvaluatorFixture.Cell(
-                host: host,
-                row: "countdown"
-            ),
-            expected: 55L
         );
     }
     // The fix must not flatten a value-over-time trait to its stored base: an accumulating cell's live value is the

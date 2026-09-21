@@ -118,7 +118,7 @@ public sealed class TransformFiringLawTests {
                             value: origin
                         ),
                         new ActionEffect.TransformState(Transform: new StateTransform.SetRay(
-                            Direction: "E",
+                            Direction: CellName.Parse(candidate: "E"),
                             From: "$cell:rankValue:$value",
                             Pattern: "ones",
                             Row: "board",

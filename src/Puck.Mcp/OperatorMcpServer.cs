@@ -13,6 +13,7 @@ namespace Puck.Mcp;
 public static class OperatorMcpServer {
     private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["command"],"additionalProperties":false}""");
     private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"additionalProperties":false}""");
+
     internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript"],"additionalProperties":false}""");
 
     internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, CancellationToken token, long requestId = 1) {
@@ -77,7 +78,8 @@ public static class OperatorMcpServer {
                     unknown: false
                 );
             }
-            var cellKey = (string.IsNullOrEmpty(key) ? "$value" : key);
+            var cellKey = (string.IsNullOrEmpty(value: key) ? "$value" : key);
+
             command = $"world.state.cell.set {row} {cellKey} {vector}";
         }
         if (LocalControlServer.Validate(request: new(
@@ -216,8 +218,9 @@ public static class OperatorMcpServer {
         using var interruptIo = lifetime.Token.Register(callback: () => { bounded.Dispose(); output.Dispose(); });
         await using var server = McpServer.Create(
             transport,
+            // No revision is pinned: a pinned one turns the initialize handshake off, and an editor or an agent
+            // harness opens with it. The server answers whichever revision the client speaks.
             new McpServerOptions {
-                ProtocolVersion = "2026-07-28",
                 ServerInfo = new() { Name = "puck-operator", Version = "1.0.0" },
                 ServerInstructions = "Trusted local Operator: full Puck Console authority. Call tools serially. Exec evaluates one Puck console line. A submitted result is not an authoritative mutation receipt. Capture returns the next completed composed PNG, including overlays. Cancellation or timeout closes the attachment; restart the adapter and inspect state before any retry. World continues running. Participant and remote access are not provided.",
                 Filters = new() {

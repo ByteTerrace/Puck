@@ -32,7 +32,8 @@ public sealed record StabilizeGroupNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? Undo = null
 ) : StatementNode(
     Offset,
     Length,
@@ -71,7 +72,8 @@ public sealed record WorkflowNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? Undo = null
 ) : StatementNode(
     Offset,
     Length,
@@ -91,6 +93,8 @@ public sealed record WorkflowNode(
 /// <param name="Column">The 1-based column number in source text.</param>
 /// <param name="NameExpression">An interpolated name, when the header wrote one instead of a literal; only a
 /// lowering scope can resolve it, so <see cref="Name"/> stays empty until then.</param>
+/// <param name="PoolForEach">The pool named by a whole-rule <c>for each</c> header, or none.</param>
+/// <param name="PoolBinding">The lexical instance binding named by a whole-rule <c>for each</c> header, or none.</param>
 public sealed record RuleBlockNode(
     string Name,
     IReadOnlyList<StatementNode> Statements,
@@ -98,26 +102,25 @@ public sealed record RuleBlockNode(
     int Length = 0,
     int Line = 1,
     int Column = 1,
-    ExpressionNode? NameExpression = null
+    ExpressionNode? NameExpression = null,
+    string? PoolForEach = null,
+    string? PoolBinding = null
 ) : StatementNode(
     Offset,
     Length,
     Line,
     Column
 );
-/// <summary><c>local name : Kind = &lt;operand&gt;</c>. <see cref="Kind"/> is required — <c>RuleLocal.Kind</c> has
-/// no default — so its absence is PUCK006, never a silent default.</summary>
+/// <summary><c>local name = &lt;operand&gt;</c>. The rule compiler infers the value's kind from the expression.</summary>
 /// <param name="Name">The local's name.</param>
-/// <param name="Kind">The required kind annotation, <c>"Int"</c> or <c>"Fixed"</c>.</param>
-/// <param name="ExpressionText">The raw initializer span, already validated through <c>ExpressionSpelling.TryParse</c>.</param>
+/// <param name="Expression">The parsed initializer operand.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 public sealed record LocalStatementNode(
     string Name,
-    string Kind,
-    string ExpressionText,
+    OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -167,13 +170,13 @@ public sealed record OptionBlockNode(
     Column
 );
 /// <summary><c>score: &lt;operand&gt;</c> inside an <see cref="OptionBlockNode"/> — required (PUCK013 otherwise).</summary>
-/// <param name="Text">The raw operand span, already validated through <c>ExpressionSpelling.TryParse</c>.</param>
+/// <param name="Expression">The parsed score operand.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 public sealed record ScoreStatementNode(
-    string Text,
+    OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
     int Line = 1,

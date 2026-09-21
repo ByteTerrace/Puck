@@ -84,6 +84,8 @@ public static class SdfSolidGeometry {
         ));
 
         return profile.Kind switch {
+            SdfPrismProfileKind.Path when ((lift == SdfLift.Extrude) && (rounding == 0f)) => chain.Path(
+                profile.Path!, new Vector2(x: scale.X, y: scale.Y), scale.Z, material, blend, smooth, detail),
             SdfPrismProfileKind.RoundedRectangle => chain.RoundedRectangle(
             scale.X,
             scale.Y,
@@ -1132,7 +1134,7 @@ public static class SdfSolidGeometry {
                         // Convex's CornerRadius IS the corner rounding (SdfProgramBuilder.ConvexPolygon), so the
                         // separate rounding field has no independent room left — zero here, like Polygon's own baked
                         // constant leaves it none.
-                        SdfPrismProfileKind.Convex => 0f,
+                        SdfPrismProfileKind.Convex or SdfPrismProfileKind.Path => 0f,
                         // The trapezoid's ceiling is the builder's own: the narrower end's inset width reaching zero
                         // binds before the half-height does whenever the profile is thinner than it is tall.
                         _ => SdfProgramBuilder.TrapezoidRoundingCeiling(

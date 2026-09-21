@@ -8,6 +8,9 @@ public static class PuckDiagnosticCodes {
     public const string AddonHash = "PUCK023";
     /// <summary>An addon payload defect.</summary>
     public const string AddonPayload = "PUCK021";
+    /// <summary>PUCK109: a source spells the retired <c>countdown</c> statement. A due tick is written with
+    /// <c>schedule row in Ns</c> and read back by comparing <c>$tick</c> against the row.</summary>
+    public const string CountdownStatementRetired = "PUCK109";
     /// <summary>A <c>local</c> missing or carrying an unparsable initializer.</summary>
     public const string LocalInitializerMissing = "PUCK007";
     /// <summary>A <c>local</c> missing its required kind annotation.</summary>
@@ -78,8 +81,30 @@ public static class PuckDiagnosticCodes {
     public const string NestedTransaction = "PUCK019";
     /// <summary>An <c>onFailure</c> outside a <c>transaction</c>, or a second one inside the same transaction.</summary>
     public const string OnFailureStructure = "PUCK014";
+    /// <summary>An operand spells a reserved channel with colons (<c>$reduce:count:zone</c>); the source spells it
+    /// as a call (<c>count(zone)</c>), and a rule local by its bare name.</summary>
+    public const string OperandColonChannel = "PUCK106";
+    /// <summary>PUCK110: a call argument that holds a name, a cell key, a value expression, or a word of a closed
+    /// vocabulary is written as a plain string literal. Such an argument is written bare, and the message names
+    /// the bare spelling; an interpolated string computes a name, a key or a word and is admitted there.</summary>
+    public const string ArgumentWrittenBare = "PUCK110";
+    /// <summary>PUCK112: a member that holds a value expression is written as an interpolated string. An
+    /// expression is written bare, and an interpolated string stands inside it only as an atom that computes one
+    /// name or one number; the message names the bare spelling.</summary>
+    public const string ExpressionBuiltAsText = "PUCK112";
+    /// <summary>PUCK111: a call argument that holds free text is written as a bare word. Text is a string
+    /// literal.</summary>
+    public const string ArgumentWrittenQuoted = "PUCK111";
     /// <summary>Operand text that <c>ExpressionSpelling</c> refused.</summary>
     public const string OperandParse = "PUCK002";
+    /// <summary>PUCK107: a <c>table</c>/<c>slot</c>/<c>grid</c> declaration spells its cell kind explicitly
+    /// (<c>: Int</c>, <c>: Fixed</c>, ...); the kind is inferred from the row's cells, value, and modifiers, so the
+    /// annotation is dropped rather than written.</summary>
+    public const string StateDeclarationKindAnnotated = "PUCK107";
+    /// <summary>PUCK108: a <c>local</c> spells its kind explicitly (<c>: Int</c>/<c>: Fixed</c> or <c>as Int</c>/
+    /// <c>as Fixed</c>); the kind is inferred from its expression, so the annotation is dropped rather than
+    /// written.</summary>
+    public const string LocalKindAnnotated = "PUCK108";
     /// <summary>A reserved word used where a name was expected.</summary>
     public const string ReservedWordAsName = "PUCK018";
     /// <summary>A row reference that resolved to something other than exactly one state-row read.</summary>

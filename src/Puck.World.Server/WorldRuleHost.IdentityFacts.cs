@@ -15,7 +15,7 @@ public sealed partial class WorldRuleHost {
     private WorldIdentity?[] m_identityLaneBound = [];
     private int[] m_identityLaneRevision = [];
     private StateCatalog? m_cachedIdentityLaneCatalog;
-    private StateCatalog? m_identityLaneKeyCatalog;
+    private CellKeyTable? m_identityLaneKeyTable;
     private int m_cachedIdentityLaneOrdinal = -1;
 
     // The lane row's catalog ordinal, or -1 when the document declares none.
@@ -48,15 +48,15 @@ public sealed partial class WorldRuleHost {
     private readonly record struct PendingIdentityFact(WorldIdentity Identity, CellName Key, int LaneOrdinal, CellKey LaneKey, long Value);
 
     // The interned lane key of one (body, fact) pair. Spelling it allocates, so each pair is spelled once; the
-    // cache is dropped with the catalog whose table minted the keys in it.
+    // cache is dropped with the arena table whose runtime addresses it holds.
     private CellKey IdentityLaneKey(int bodyIndex, string fact) {
-        var catalog = Host.Arena.Catalog;
+        var keys = Host.Arena.Keys;
 
         if (!ReferenceEquals(
-            objA: m_identityLaneKeyCatalog,
-            objB: catalog
+            objA: m_identityLaneKeyTable,
+            objB: keys
         )) {
-            m_identityLaneKeyCatalog = catalog;
+            m_identityLaneKeyTable = keys;
 
             m_identityLaneKeys.Clear();
         }
@@ -67,8 +67,8 @@ public sealed partial class WorldRuleHost {
             key: (bodyIndex, fact)
         );
 
-        if (!exists) {
-            key = catalog.Keys.Intern(name: CellName.Parse(candidate: WorldIdentityFactLane.Key(
+        if (!exists || !keys.TryGetName(key: key, name: out _)) {
+            key = keys.Intern(name: CellName.Parse(candidate: WorldIdentityFactLane.Key(
                 bodyIndex: bodyIndex,
                 fact: fact
             )));
@@ -117,19 +117,18 @@ public sealed partial class WorldRuleHost {
     }
     private void ReloadIdentityFactLane(int rowOrdinal, int bodyIndex, WorldIdentity? profile) {
         var facts = profile?.Facts;
-        var count = Host.Arena.CellCount(rowOrdinal: rowOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < count); position++) {
+        while (Host.Arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
             if (
-                !Host.Arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            ) ||
                 !WorldIdentityFactLane.TryParse(
                 bodyIndex: out var owner,
                 fact: out var fact,
-                key: Host.Arena.Catalog.Keys[key].Value
+                key: Host.Arena.Keys[key].Value
             ) ||
                 (owner != bodyIndex) ||
                 ((facts is not null) && (StateRows.FindCell(
@@ -193,7 +192,7 @@ public sealed partial class WorldRuleHost {
         }
         if (Host.Arena.TryMint(
             key: out _,
-            name: Host.Arena.Catalog.Keys[key],
+            name: Host.Arena.Keys[key],
             reason: out reason,
             rowOrdinal: rowOrdinal,
             value: CellValue.Int(value: value)
@@ -203,7 +202,7 @@ public sealed partial class WorldRuleHost {
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
                 channel: "world.identity",
-                text: $"[world.identity: lane cell '{Host.Arena.Catalog.Keys[key]}' refused — {reason}]"
+                text: $"[world.identity: lane cell '{Host.Arena.Keys[key]}' refused — {reason}]"
             );
         }
     }

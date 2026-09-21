@@ -3,7 +3,8 @@
 This suite exercises the fixed-step host and render-node contracts. It covers
 hosting control, adversarial control cases, capability ownership, and the
 local control and publication seams through `ControlTests`,
-`ControlAdversarialTests`, and `HostingContractTests`.
+`ControlAdversarialTests`, and `HostingContractTests`. `CommandCompletionControlTests`
+checks that control requests wait for applied and refused authority verdicts.
 
 ## Running
 

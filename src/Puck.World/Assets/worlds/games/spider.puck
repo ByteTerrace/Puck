@@ -53,12 +53,12 @@ let allPiles = concat(["solitaireSpiderPile0", ""], tableauPiles, ["solitaireSpi
 
 state {
   world {
-    table solitaireSpiderCards: Int capacity(deckSize) = range(0, deckSize)
+    table solitaireSpiderCards capacity(deckSize) = range(0, deckSize)
 
     row {
       name: "solitaireSpiderRank"
       kind: "Int"
-      domain: keysOf(row: "solitaireSpiderCards")
+      domain: keysOf(row: solitaireSpiderCards)
       capacity: deckSize
       cells: map(range(0, deckSize), i => { key: $"{i}", value: i % rankCount + 1 })
     }
@@ -66,7 +66,7 @@ state {
     row {
       name: "solitaireSpiderSuit"
       kind: "Int"
-      domain: keysOf(row: "solitaireSpiderCards")
+      domain: keysOf(row: solitaireSpiderCards)
       capacity: deckSize
       cells: map(range(0, deckSize), i => { key: $"{i}", value: floor(i % deckCards / rankCount) })
     }
@@ -74,7 +74,7 @@ state {
     row {
       name: "solitaireSpiderFace"
       kind: "Int"
-      domain: keysOf(row: "solitaireSpiderCards")
+      domain: keysOf(row: solitaireSpiderCards)
       capacity: deckSize
       cells: map(range(0, deckSize), i => { key: $"{i}", value: 0 })
     }
@@ -104,7 +104,7 @@ state {
 
     pile solitaireSpiderPile12 of solitaireSpiderCards capacity(deckSize)
 
-    table solitaireSpider: Int capacity(27) {
+    table solitaireSpider capacity(27) {
       request = 0
       applied = 0
       action = SpiderAction.None
@@ -150,8 +150,8 @@ state {
 patterns [
   {
     name: "solitaireSpiderLength"
-    kind: "Int"
-    value: "1"
+    kind: Int
+    value: 1
     symbols [
       {
         name: "any"
@@ -163,8 +163,8 @@ patterns [
   }
   {
     name: "solitaireSpiderSingle"
-    kind: "Int"
-    value: "1"
+    kind: Int
+    value: 1
     symbols [
       {
         name: "any"
@@ -176,8 +176,8 @@ patterns [
   }
   {
     name: "solitaireSpiderRun"
-    kind: "Int"
-    value: "solitaireSpiderFace[$token] * (1 + (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))"
+    kind: Int
+    value: solitaireSpiderFace[$token] * (1 + (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))
     symbols [
       {
         name: "face"
@@ -198,8 +198,8 @@ patterns [
   }
   {
     name: "solitaireSpiderLanding"
-    kind: "Int"
-    value: "(solitaireSpiderRank[$token] == solitaireSpiderRank[solitaireSpider[card]] + 1)"
+    kind: Int
+    value: solitaireSpiderRank[$token] == solitaireSpiderRank[solitaireSpider[card]] + 1
     symbols [
       {
         name: "yes"
@@ -215,8 +215,8 @@ patterns [
   }
   {
     name: "solitaireSpiderComplete"
-    kind: "Int"
-    value: "solitaireSpiderFace[$token] * ((solitaireSpiderRank[$token] == 13) + 2 * (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))"
+    kind: Int
+    value: solitaireSpiderFace[$token] * ((solitaireSpiderRank[$token] == 13) + 2 * (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))
     symbols [
       {
         name: "king"
@@ -248,13 +248,13 @@ rule "solitaireSpider-new-deal" {
 }
 
 rule "solitaireSpider-gather" {
-  when solitaire[table] == 2 and solitaireSpider[stage] == stageGather and $reduce:count:$zones[solitaireSpider[gatherStep]] > 0
+  when solitaire[table] == 2 and solitaireSpider[stage] == stageGather and count($zones[solitaireSpider[gatherStep]]) > 0
   zones: gatherPiles
-  transform transfer(from: "$zones[solitaireSpider[gatherStep]]", to: "solitaireSpiderPile0", selector: "Slice", key: "$zone:$zones[solitaireSpider[gatherStep]]:first")
+  transform transfer(from: $zones[solitaireSpider[gatherStep]], to: solitaireSpiderPile0, selector: Slice, key: zone($zones[solitaireSpider[gatherStep]], first))
 }
 
 rule "solitaireSpider-attributes-start" {
-  when solitaire[table] == 2 and solitaireSpider[stage] == stageGather and solitaireSpider[gatherStep] == 10 and $reduce:count:solitaireSpiderPile0 == deckSize
+  when solitaire[table] == 2 and solitaireSpider[stage] == stageGather and solitaireSpider[gatherStep] == 10 and count(solitaireSpiderPile0) == deckSize
   solitaireSpider[stage] = stageAttributes
 }
 
@@ -302,21 +302,21 @@ rule "solitaireSpider-prepare-move" {
 rule "solitaireSpider-source" {
   when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 0 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[action] == SpiderAction.Move and $zones[solitaireSpider[from]][solitaireSpider[card]] == 1
   zones: columnPiles
-  solitaireSpider[sourceOk] = $match:solitaireSpiderRun:$zones[solitaireSpider[from]][solitaireSpider[card]]
-  solitaireSpider[runLength] = $match:solitaireSpiderLength:$zones[solitaireSpider[from]]:prefix[solitaireSpider[card]]
+  solitaireSpider[sourceOk] = match(solitaireSpiderRun, $zones[solitaireSpider[from]])[solitaireSpider[card]]
+  solitaireSpider[runLength] = match(solitaireSpiderLength, $zones[solitaireSpider[from]], prefix)[solitaireSpider[card]]
 }
 
 rule "solitaireSpider-target" {
   when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 0 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[action] == SpiderAction.Move and solitaireSpider[sourceOk] == 1
   zones: columnPiles
-  solitaireSpider[targetOk] = $reduce:count:$zones[solitaireSpider[to]] == 0 ? 1 : $match:solitaireSpiderLanding:$zones[solitaireSpider[to]]
+  solitaireSpider[targetOk] = count($zones[solitaireSpider[to]]) == 0 ? 1 : match(solitaireSpiderLanding, $zones[solitaireSpider[to]])
 }
 
 rule "solitaireSpider-move" {
   when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 0 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[action] == SpiderAction.Move and solitaireSpider[sourceOk] == 1 and solitaireSpider[targetOk] == 1 and (solitaireSpider[from] != solitaireSpider[to] : Int)
   zones: allPiles
   transaction {
-    transform transfer(from: "$zones[solitaireSpider[from]]", to: "$zones[solitaireSpider[to]]", selector: "Slice", key: "$cell:solitaireSpider:card")
+    transform transfer(from: $zones[solitaireSpider[from]], to: $zones[solitaireSpider[to]], selector: Slice, key: solitaireSpider[card])
     solitaireSpider[moves] = solitaireSpider[moves] + 1
     solitaireSpider[busy] = 1
     solitaireSpider[score] = solitaireSpider[score] - 1
@@ -326,7 +326,7 @@ rule "solitaireSpider-move" {
 }
 
 rule "solitaireSpider-draw-start" {
-  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 0 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[action] == SpiderAction.Draw and $reduce:count:solitaireSpiderPile0 >= columnCount and $reduce:count:solitaireSpiderPile2 > 0 and $reduce:count:solitaireSpiderPile3 > 0 and $reduce:count:solitaireSpiderPile4 > 0 and $reduce:count:solitaireSpiderPile5 > 0 and $reduce:count:solitaireSpiderPile6 > 0 and $reduce:count:solitaireSpiderPile7 > 0 and $reduce:count:solitaireSpiderPile8 > 0 and $reduce:count:solitaireSpiderPile9 > 0 and $reduce:count:solitaireSpiderPile10 > 0 and $reduce:count:solitaireSpiderPile11 > 0
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 0 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[action] == SpiderAction.Draw and count(solitaireSpiderPile0) >= columnCount and count(solitaireSpiderPile2) > 0 and count(solitaireSpiderPile3) > 0 and count(solitaireSpiderPile4) > 0 and count(solitaireSpiderPile5) > 0 and count(solitaireSpiderPile6) > 0 and count(solitaireSpiderPile7) > 0 and count(solitaireSpiderPile8) > 0 and count(solitaireSpiderPile9) > 0 and count(solitaireSpiderPile10) > 0 and count(solitaireSpiderPile11) > 0
   transaction {
     solitaireSpider[stage] = stageDraw
     solitaireSpider[busy] = 1
@@ -364,19 +364,19 @@ rule "solitaireSpider-reject" {
 }
 
 rule "solitaireSpider-reveal" {
-  when solitaire[table] == 2 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[stage] == stageIdle and $reduce:count:$zones[$each] > 0 and ((solitaireSpiderFace[$zone:$zones[$each]:last] ?? 1) == 0 : Int)
-  forEach: "$zones"
+  when solitaire[table] == 2 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[stage] == stageIdle and count($zones[$each]) > 0 and ((solitaireSpiderFace[zone($zones[$each], last)] ?? 1) == 0 : Int)
+  forEach: $zones
   zones: tableauPiles
-  solitaireSpiderFace[$zone:$zones[$each]:last] = 1
+  solitaireSpiderFace[zone($zones[$each], last)] = 1
   solitaireSpider[busy] = 1
   solitaireSpider[changed] = 1
 }
 
 rule "solitaireSpider-complete" {
-  when solitaire[table] == 2 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 1 and $match:solitaireSpiderComplete:$zones[solitaireSpider[scan]] == 1
+  when solitaire[table] == 2 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[stage] == stageIdle and solitaireSpider[busy] == 1 and match(solitaireSpiderComplete, $zones[solitaireSpider[scan]]) == 1
   zones: tableauPiles
   transaction {
-    transform transfer(from: "$zones[solitaireSpider[scan]]", to: "solitaireSpiderPile12", selector: "Last", count: rankCount)
+    transform transfer(from: $zones[solitaireSpider[scan]], to: solitaireSpiderPile12, selector: Last, count: rankCount)
     solitaireSpider[score] = solitaireSpider[score] + 100
     solitaireSpider[changed] = 1
   }
@@ -401,5 +401,5 @@ rule "solitaireSpider-attribute-advance" {
 
 rule "solitaireSpider-win" {
   when solitaire[table] == 2 and solitaireSpider[status] == SpiderStatus.Playing and solitaireSpider[busy] == 0
-  solitaireSpider[status] = ($reduce:count:solitaireSpiderPile12) == deckSize ? SpiderStatus.Won : SpiderStatus.Playing
+  solitaireSpider[status] = (count(solitaireSpiderPile12)) == deckSize ? SpiderStatus.Won : SpiderStatus.Playing
 }

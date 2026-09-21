@@ -7,6 +7,22 @@ process handling, branding asset synchronization, and MCP behavior. Individual f
 and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.
 
+`StartupBenchmarkTests` checks that incomplete or failed samples cannot produce
+a corpus average, pending or unrelated captures cannot prove rendered readiness,
+missing overlays fail rendered samples, and process output carries elapsed observation times.
+`CliProcessHandshakeTests` checks that output can release a final stdin command
+without closing input early, and that early exit and timeout remain bounded. Actual startup performance
+requires running `puck bench startup` against the built World executable.
+
+`CompileBatchTests` verifies ordered compilation, independent source bindings,
+byte parity with single-source compilation, stopping on failure, and refusal
+of batch requests with a shared output path or watch mode.
+`CompositionCompileCommandTests` verifies that one source can publish several
+named world documents, that a refused member publishes none of them, and that
+`--output` names their directory. It also covers explicit asset-lock updates,
+the semantic-validation gate on an update, stale-byte refusal without output
+replacement, and the current refusal to relocate an asset-bearing document.
+
 The release laws cover immutable deployment configuration references, exclusive
 controller ownership, complete official package preparation, registry retention
 readback, bootstrap refusal over existing gameplay, and cancellation of an owned

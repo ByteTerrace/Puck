@@ -36,7 +36,7 @@ public sealed class WorldDecisionLawTests {
             Name(value: name),
             [],
             gate,
-            ForEach: forEach,
+            ForEach: StateChannelRef.OfNullable(spelling: forEach),
             Decision: policy
         );
     private static WorldDecision Policy(params WorldDecisionOption[] options) => new(
@@ -937,9 +937,9 @@ public sealed class WorldDecisionLawTests {
         var one = WorldRuleWorkBudget.Measure(definition: Document(Rule(Policy(Option(
             "a",
             1
-        ))))).WorkUnitsPerTick;
+        ))))).WorkUnitsPerTick.Units;
 
-        Assert.True(condition: (WorldRuleWorkBudget.Measure(definition: document).WorkUnitsPerTick > one));
+        Assert.True(condition: (WorldRuleWorkBudget.Measure(definition: document).WorkUnitsPerTick.Units > one));
     }
     [InlineData(1)]
     [InlineData(32)]

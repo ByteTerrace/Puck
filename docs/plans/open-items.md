@@ -8,11 +8,14 @@ starting work, and tick or remove an item in the same change that closes it.
 
 These items came from a retired plan and are not owned by any single surviving plan.
 
-- [ ] One authored sort replacing the `sortZone` and `sortKeyed` frontends (see [Keep definitions, storage, and reads distinct](../reference/state/data-model.md#keep-definitions-storage-and-reads-distinct)).
+- [x] Honor launcher help/version actions before host setup. Native help (including `-h`) and standalone version probes exit before world/config loading and state-directory creation; invalid options still refuse. Version combined with other arguments follows the parser's refusal.
+- [x] One authored `sort` with explicit numeric keys, replacing the `sortZone` and `sortKeyed` frontends. Compilation selects own-value or token-attribute storage paths; stable ties, per-key direction, row-shape refusal, domain checks and allocation ceilings are covered (see [Keep definitions, storage, and reads distinct](../reference/state/data-model.md#keep-definitions-storage-and-reads-distinct)).
 - [x] Separate storage kind from the participant role's `Counter` and `Timer` ownership, landed as `StateParticipantRole` (see [Choose behavior deliberately](../reference/state/data-model.md#choose-behavior-deliberately)).
-- [ ] Extend compilation-receipt reuse to boot, checkpoint restore, and separate hazard/budget requests; catalog shape alone is not a safe cache key (see [compiled worlds](runtime-and-delivery.md#compiled-worlds)).
-- [ ] A rigid body spawned exactly touching a static surface never establishes contact: it free-falls while reporting grounded. Found authoring `games/pong.puck`, which places its ball above the floor to avoid it.
-- [ ] A sphere-against-box rigid pair rests much further apart than its half-extents predict, so a Distance interaction authored at the geometric contact range never latches. `games/pong.puck` authors its paddle range at 1 for that reason.
+- [ ] Complete compilation-receipt reuse across boot admission. Hazard/budget requests share installed programs and analysis; server construction and machine preparation share an operation-owned local admission result. Checkpoint restore carries the deserialized result through construction, retained-turn checks and installation, validating a distinct journal base separately. File/DSL loaders retain the final receipt through boot and local instance preparation; post-build wiring rechecks environment-dependent sections without recompiling rules. Bytes, file and asynchronous loaders settle draws and document bindings before one full admission. Row settlement, receipt propagation beyond hosted asynchronous loading, and boot overrides still need the once-per-load acceptance gate; catalog shape alone is not a safe cache key (see [compiled worlds](runtime-and-delivery.md#compiled-worlds)).
+- [ ] Bind `puck format` named arguments against the actual project build closure. `NamedArgsPhase.BuildProjectCompilation` selects the first matching assembly under all `bin` directories, which can be stale or from another configuration. A witnessed rewrite changed `Assert.NotNull(admission)` to the pointer overload's `value:` name and broke a previously passing build. Replace the guessed closure, preserve valid overload binding, and pin stale/multiple-output and unresolved-type cases.
+- [ ] Prove all outcomes of boot row sources against their consuming fields. Numeric draws are checked against state row bounds, but `bodies.capacityRow` census coherence and `host.backendRow` token validity are checked against the selected result. Their source admission must refuse a generator that can produce an inadmissible field value, independently of seed and instance identity.
+- [x] Investigate Pong's exact-touch spawn and stale grounded facts. Exact-touch contact works; rigid integration now publishes its current grounded/rising/falling facts. Laws cover both exact-touch and elevated spawns, and Pong starts on the floor.
+- [x] Replace sphere/box bounding-box contact with shared closest-point geometry for static and dynamic queries, retaining shallow compound corrections. Laws cover faces, edges, corners, interior centers, rotation and allocation. A Distance interaction still measures body roots, not collider surfaces; Pong's interaction range is a gameplay trigger.
 
 ## Cross-plan maintenance
 
@@ -28,9 +31,16 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] Embeddings.
 - [ ] C1 ceilings as prices, with the reference schedule and activation.
 - [x] S1 the projection law; S2 the printing tree.
-- [ ] S7a pools in state, S8's runner.
-- [ ] C2 to C6; S4 the construct table; S5 `puck migrate`; the costing correction.
-- [ ] S3 operands as grammar; S7b records and pools; S8's construct; S6's expander; G4 Tetris, G1 Go, G16 Baba Is You.
+- [ ] S7 pools: records, generation-aware handles, pair storage, snapshots, typed field references, advancing fields, logical body carriers, identity transfer, and Arena/Pong migrations are implemented. The complete acceptance scenarios, including Baba, remain; see [records and pools](records-and-pools.md).
+- [x] C3 match positions; C4 selective token push; C5 token rewrite through pool iteration; C6 retained turn undo.
+- [x] C2; S4 the construct table; S5 `puck migrate`; the costing correction.
+- [x] S3 structural operand grammar.
+- [x] S3 shipped-source migration: a call argument has one spelling and no source spells a colon channel outside an interpolated string.
+- [x] S3 remainder: an interpolated string computes a name or text and never program text, so an expression is always written bare.
+- [x] The operand tree: sugar operands carry parsed trees, generic members project structurally into them, atoms remain opaque, and module aliases reach bare binding words. Structural binding replaces the emitter's text-rewriting passes; laws cover these paths and source round trips.
+- [x] S8's runner and its `test` construct for a world; S6's expander; S6's multi-world sources, `border`, `door`, and the asset lock.
+- [ ] S8's module tests: `with module(arguments)` in the test runner, and composition-level distributed tests.
+- [ ] G4 Tetris, G1 Go, G16 Baba Is You.
 - [ ] S6's remainder: the forcing world, and the island, districts, and shards onto its modules.
 - [ ] Deferred as a block: Monopoly, Wordle, Match-3, Catan, tower defense, Ribbon.
 

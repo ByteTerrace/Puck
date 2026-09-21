@@ -20,11 +20,36 @@ or make universal physical deadlines a prerequisite for this work.
 
 ## Implementation status
 
-The typed scaffolding and the accounting split exist. The evidence manifest
+The typed scaffolding exists and the accounting structure of §4 is in place:
+heuristic work is a typed bound that propagates an unpriced operation or an
+overflow, lines separate setup, check, and firing, and interactions, decisions,
+sorts, and transactions are priced at the paths they execute, held against the
+evaluator's own trace on enumerated worlds. Search (§6) spends a reserved,
+resumable allowance per job, chance plies and playouts included, in the same
+heuristic units. The evidence manifest
 (`src/Puck.State/ReferenceSchedule.json`) pins eight targets and prices the
 unary expression operations; every other coefficient, and the whole memory
 profile, is recorded as unmodeled, and admission still runs on the heuristic
-work units. The work is two packages of
+work units. The held-cell cursor migration changed the expression and row-fold
+sources. Their manifest pins track those sources, but their native lowering and
+instruction-service evidence still needs regeneration for all eight targets as
+part of C1. The candidate timing check is a regression measurement, not that
+evidence. `puck bench state-evidence` replays the pinned instruction-service
+evidence through the specified LLVM version; it does not reconstruct missing
+Native AOT paths, helper formulas, or memory-service measurements.
+
+One compilation now retains its work sheet and report for server and console
+consumers. Browser and portal worker reports preserve exact counts and distinguish
+known, unmodeled, and overflowed bounds. The report remains diagnostic: recurring
+reference cycles and synchronous edit costs are unresolved, and heuristic
+admission remains active. Draft analysis separates a successfully produced report
+from document validation, so a budget refusal can still show its contributors.
+Resource dimensions report the arena's measured admission footprint and label
+unmodeled total memory explicitly. Contributors carry indexed document locations;
+standalone source analysis resolves them to defining files, lines, and module
+instances without changing the prices.
+
+The work is two packages of
 [the programme](state-and-language.md): [C1](state-and-language.md#c1--ceilings-as-prices)
 builds the reference schedule and activates it, and
 [the costing correction](state-and-language.md#the-costing-correction) fixes the

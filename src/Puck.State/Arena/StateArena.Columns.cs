@@ -107,6 +107,14 @@ public sealed partial class StateArena {
                     value: (value != 0L),
                     words: m_presence
                 );
+                if (m_poolOfDomainRow.Length != 0) {
+                    var row = m_layout.RowOf(column: column, index: index);
+                    var pool = m_poolOfDomainRow[row];
+
+                    if (pool >= 0) {
+                        SetBit(words: m_poolOccupancy[pool], index: (index - m_layout[row].CellStart), value: (value != 0L));
+                    }
+                }
 
                 break;
             case ArenaColumn.ClockSet:
@@ -216,7 +224,9 @@ public sealed partial class StateArena {
 
                 break;
             case ArenaColumn.Visibility:
+                m_visibilityBytes -= StateVisibilityStorage.RetainedBytes(value: m_visibilities?[index]);
                 (m_visibilities ??= new StateVisibility?[m_layout.CellSlotCount])[index] = ((StateVisibility?)value);
+                m_visibilityBytes += StateVisibilityStorage.RetainedBytes(value: ((StateVisibility?)value));
 
                 break;
             case ArenaColumn.Observation:
@@ -242,6 +252,7 @@ public sealed partial class StateArena {
                 previous: previous
             );
         } else if (previous != value) {
+            RetainDirectWrite(column: column, index: index, number: previous);
             m_changeEpoch++;
 
             MarkVersion(
@@ -277,6 +288,7 @@ public sealed partial class StateArena {
             objA: previous,
             objB: value
         )) {
+            RetainDirectWrite(column: column, index: index, number: 0L, reference: previous);
             m_changeEpoch++;
 
             MarkVersion(

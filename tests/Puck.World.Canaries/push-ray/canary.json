@@ -1,0 +1,52 @@
+{
+  "id": "push-ray",
+  "title": "Pool-token push along a live-origin ray",
+  "binding": "A mover and two PUSH tokens advance into a terminator cell occupied by a passable token. The passable token stays in place and shares its cell with both pushed tokens; the alternate request keeps every token at its authored cell.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 3,
+  "timeoutSeconds": 30,
+  "fixtures": ["fixture.puck"],
+  "positive": {
+    "expect": [
+      { "name": "mover-advanced", "present": true, "match": "contains", "text": "'moverCell' kind=Int value=1", "stream": "stdout", "type": "line" },
+      { "name": "first-pushed", "present": true, "match": "contains", "text": "'firstPushCell' kind=Int value=2", "stream": "stdout", "type": "line" },
+      { "name": "second-pushed", "present": true, "match": "contains", "text": "'secondPushCell' kind=Int value=2", "stream": "stdout", "type": "line" },
+      { "name": "passable-stayed", "present": true, "match": "contains", "text": "'passableCell' kind=Int value=2", "stream": "stdout", "type": "line" },
+      { "name": "no-rule-refusal", "present": false, "match": "contains", "text": "effect refused", "stream": "stderr", "type": "line" },
+      { "name": "clean-wire", "present": true, "match": "contains", "text": "[wire.errors: 0 rejected]", "stream": "stdout", "type": "line" }
+    ],
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.state.cell.set", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.wait", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 2 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 3 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 4 },
+      { "verb": "wire.errors", "outcome": "accepted", "occurrence": 1 }
+    ],
+    "world": "tests/Puck.World.Canaries/push-ray/fixture.world.json"
+  },
+  "discriminating": {
+    "expect": [
+      { "name": "mover-stayed", "present": true, "match": "contains", "text": "'moverCell' kind=Int value=0", "stream": "stdout", "type": "line" },
+      { "name": "first-stayed", "present": true, "match": "contains", "text": "'firstPushCell' kind=Int value=1", "stream": "stdout", "type": "line" },
+      { "name": "second-stayed", "present": true, "match": "contains", "text": "'secondPushCell' kind=Int value=1", "stream": "stdout", "type": "line" },
+      { "name": "passable-stayed", "present": true, "match": "contains", "text": "'passableCell' kind=Int value=2", "stream": "stdout", "type": "line" },
+      { "name": "no-rule-refusal", "present": false, "match": "contains", "text": "effect refused", "stream": "stderr", "type": "line" },
+      { "name": "clean-wire", "present": true, "match": "contains", "text": "[wire.errors: 0 rejected]", "stream": "stdout", "type": "line" }
+    ],
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.state.cell.set", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.wait", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 2 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 3 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 4 },
+      { "verb": "wire.errors", "outcome": "accepted", "occurrence": 1 }
+    ],
+    "world": "tests/Puck.World.Canaries/push-ray/fixture.world.json"
+  }
+}

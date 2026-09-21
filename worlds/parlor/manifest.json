@@ -1,0 +1,30 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "parlor",
+  "name": "Puck Parlor",
+  "version": "0.1.0",
+  "basis": "parlor.basis.puck",
+  "worlds": [
+    {
+      "id": "chess",
+      "source": "chess.puck"
+    },
+    {
+      "id": "chinese-checkers",
+      "source": "chinese-checkers.puck"
+    },
+    {
+      "id": "hearts",
+      "source": "hearts.puck"
+    }
+  ],
+  "files": [
+    "README.md",
+    "parlor.basis.puck",
+    "chess.puck",
+    "chinese-checkers.puck",
+    "hearts.puck",
+    "fonts/inter-regular.ttf",
+    "fonts/Inter-LICENSE.txt"
+  ]
+}

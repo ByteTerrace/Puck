@@ -15,6 +15,10 @@ public class RoundTripFidelityTests {
         var original = JsonNode.Parse(json);
 
         WorldExpressionJson.Lower(node: original);
+        WorldChannelNodes.Lower(
+            document: original,
+            type: typeof(WorldDefinition)
+        );
         var recompiled = RoundTrip(json: json);
         var mismatch = JsonMismatch.Find(
             actual: recompiled,
@@ -28,6 +32,10 @@ public class RoundTripFidelityTests {
         var source = JsonNode.Parse(json);
 
         WorldExpressionJson.Lower(node: source);
+        WorldChannelNodes.Lower(
+            document: source,
+            type: typeof(WorldDefinition)
+        );
 
         var puck = WorldDecompiler.Decompile(jsonText: source!.ToJsonString());
         var lowered = WorldCompiler.Compile(
@@ -203,7 +211,7 @@ public class RoundTripFidelityTests {
 
         Assert.Equal(
             expected,
-            gain!.GetValue<double>(),
+            gain.AsNumber()!.Value,
             9
         );
     }

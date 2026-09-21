@@ -5,163 +5,106 @@ public sealed partial class ArenaSearch {
     private const long TranspositionLower = 2L;
     private const long TranspositionUpper = 3L;
 
+    private static Level At(Job job, int p) => ((p == 0)
+        ? job.Root
+        : job.Levels[(p - 1)]
+    );
+
     // One step's worth of iterative-deepening negamax over the job's own explicit ply stack: the recursion below the
-    // root runs on that stack rather than the call stack, so a step boundary can suspend it anywhere. The root ply
-    // never prunes and never skips a candidate, so an unscored job's root outputs are the same set either way.
-    private void Walk(Job job) {
+    // root runs on that stack rather than the call stack, so a step boundary can suspend it anywhere, a chance ply
+    // included. The root ply never prunes and never skips a candidate, so an unscored job's root outputs are the
+    // same set either way.
+    //
+    // Every iteration is one unit. The walk runs a unit only while the step's allowance still holds the costliest
+    // unit the job has, then charges what the unit it ran actually cost, so `spent` never passes the allowance.
+    // Returns what the step has spent once it yields.
+    private long Walk(Job job, long spent) {
         var plan = job.Plan;
         var shapes = plan.Shapes;
         var cells = plan.CellCount;
+        var work = plan.Work;
 
         if (job.TokenCount != job.Legal.Length) {
             job.Running = false;
 
-            return;
+            return spent;
         }
 
-        // A chance node at the root replaces the whole root's move choice — there is nothing to choose before the
-        // draw, so this job never enumerates a shape and lands its one averaged value in a single step. One step is
-        // one pass, so it searches the plan's whole depth rather than the first deepening pass's: the draw spends
-        // one ply of it, as a chance node inside the walk does.
-        if (plan.Chance is { AtDepth: 0 } rootChance) {
-            job.Best = ChanceExpectation(
-                atRoot: true,
-                job: job,
-                remainingDepth: (plan.Depth - 1)
-            );
-            job.BestTarget = -1;
-            job.BestToken = -1;
-            job.Nodes += Math.Max(
-                val1: 1,
-                val2: rootChance.Weights.Length
-            );
-            job.Running = false;
-
-            return;
-        }
-
+        // A chance node at the root replaces the whole root's move choice, so the root is the chance ply and the
+        // job's one pass searches beneath it with whatever score its judge reads.
+        var chanceAt = (plan.Chance?.AtDepth ?? -1);
         var maxN = (plan.ScoresOrdinal >= 0);
-        var hasScore = ((plan.Scored || maxN) && (plan.Method == SearchMethod.Negamax));
+        var hasScore = ((chanceAt == 0)
+            ? job.Judge.Scores
+            : ((plan.Scored || maxN) && (plan.Method == SearchMethod.Negamax))
+        );
+
+        if (
+            (chanceAt > 0) &&
+            !hasScore
+        ) {
+            chanceAt = -1;
+        }
+
         var wideWords = ((job.Wide is not null)
             ? WideWordsPerToken(cellCount: cells)
             : 0
         );
-        var budget = plan.Nodes;
+        var judgedAtEntry = job.Nodes;
+        var unit = work.Unit;
 
         while (
-            (budget > 0) &&
-            job.Running
+            job.Running &&
+            ((job.Nodes - judgedAtEntry) < plan.Nodes) &&
+            ((work.Allowance - spent) >= unit)
         ) {
             if (job.TreeActive) {
-                StepTree(job: job);
-                job.Nodes++;
-                budget--;
+                spent += StepTree(job: job);
 
                 continue;
             }
 
             var p = job.Active;
-            var shapeIndex = CursorShape(
+            var level = At(
                 job: job,
                 p: p
             );
 
+            if (p == chanceAt) {
+                spent += StepChance(
+                    hasScore: hasScore,
+                    job: job,
+                    level: level,
+                    p: p
+                );
+
+                continue;
+            }
+
+            var shapeIndex = level.Shape;
+
             if (shapeIndex >= shapes.Length) {
-                if (p == 0) {
-                    if (
-                        !hasScore ||
-                        (job.PassDepth >= plan.Depth)
-                    ) {
-                        if (plan.Method == SearchMethod.Tree) {
-                            StartTree(job: job);
-                        } else {
-                            job.Running = false;
-                        }
-                    } else {
-                        job.PassDepth++;
-
-                        ResetPass(job: job);
-                    }
-                } else {
-                    var parent = (p - 1);
-
-                    if (maxN) {
-                        // The completed ply's own side buffer carries the best line's vector — the leaf's, if one
-                        // was ever folded there, or, when no candidate was accepted, the position's own scores as
-                        // the ply found them.
-                        FoldSeats(
-                            job: job,
-                            p: parent,
-                            target: CursorTarget(
-                                job: job,
-                                p: parent
-                            ),
-                            token: CursorToken(
-                                job: job,
-                                p: parent
-                            ),
-                            vector: job.Levels[(p - 1)].Seats
-                        );
-                    } else {
-                        StoreTransposition(
-                            job: job,
-                            level: job.Levels[(p - 1)],
-                            remaining: (job.PassDepth - p)
-                        );
-                        Fold(
-                            job: job,
-                            p: parent,
-                            target: CursorTarget(
-                                job: job,
-                                p: parent
-                            ),
-                            token: CursorToken(
-                                job: job,
-                                p: parent
-                            ),
-                            value: -CursorBest(
-                                job: job,
-                                p: p
-                            )
-                        );
-                    }
-
-                    PopScope(job: job);
-                    AdvanceCandidate(
-                        cellCount: cells,
-                        job: job,
-                        p: parent,
-                        shapes: shapes,
-                        tokenCount: job.TokenCount
-                    );
-                    job.Active = parent;
-                }
+                CompletePly(
+                    chanceAt: chanceAt,
+                    hasScore: hasScore,
+                    job: job,
+                    level: level,
+                    maxN: maxN,
+                    p: p
+                );
+                spent += SearchWork.Cursor;
 
                 continue;
             }
 
             var shape = shapes[shapeIndex];
-            var token = CursorToken(
-                job: job,
-                p: p
-            );
+            var token = level.Token;
 
             if (token >= job.TokenCount) {
-                SetCursorShape(
-                    job: job,
-                    p: p,
-                    value: (shapeIndex + 1)
-                );
-                SetCursorTarget(
-                    job: job,
-                    p: p,
-                    value: 0
-                );
-                SetCursorToken(
-                    job: job,
-                    p: p,
-                    value: 0
-                );
+                level.Shape = (shapeIndex + 1);
+                level.Target = 0;
+                level.Token = 0;
+                spent += SearchWork.Cursor;
 
                 continue;
             }
@@ -171,41 +114,17 @@ public sealed partial class ArenaSearch {
                 token: token
             );
             var onBoard = ((from >= 0L) && (from < cells));
+            var candidateIndex = level.Target;
 
-            if (onBoard != (shape.Kind != SearchShapeKind.Drop)) {
-                // This shape does not apply to the token in its current state (on the board for every shape but
-                // drop, off it for drop), so every candidate for this token under this shape is skipped.
-                SetCursorTarget(
-                    job: job,
-                    p: p,
-                    value: 0
-                );
-                SetCursorToken(
-                    job: job,
-                    p: p,
-                    value: (token + 1)
-                );
-
-                continue;
-            }
-
-            var candidateIndex = CursorTarget(
-                job: job,
-                p: p
-            );
-            var bound = shape.CandidateCount(cellCount: cells);
-
-            if (candidateIndex >= bound) {
-                SetCursorTarget(
-                    job: job,
-                    p: p,
-                    value: 0
-                );
-                SetCursorToken(
-                    job: job,
-                    p: p,
-                    value: (token + 1)
-                );
+            // A shape that does not apply to the token where it stands (on the board for every shape but drop, off
+            // it for drop) offers it no candidate, and a cursor past the shape's last candidate is done with it.
+            if (
+                (onBoard != (shape.Kind != SearchShapeKind.Drop)) ||
+                (candidateIndex >= shape.CandidateCount(cellCount: cells))
+            ) {
+                level.Target = 0;
+                level.Token = (token + 1);
+                spent += SearchWork.Cursor;
 
                 continue;
             }
@@ -221,11 +140,8 @@ public sealed partial class ArenaSearch {
                 target: out var target,
                 token: token
             )) {
-                SetCursorTarget(
-                    job: job,
-                    p: p,
-                    value: (candidateIndex + 1)
-                );
+                level.Target = (candidateIndex + 1);
+                spent += work.Inspect;
 
                 continue;
             }
@@ -241,12 +157,9 @@ public sealed partial class ArenaSearch {
                 target: target,
                 token: token
             );
+            spent += work.Candidate;
 
-            var mover = CursorBaseTurn(
-                job: job,
-                p: p
-            );
-            var accepted = ((Slot(rowOrdinal: plan.VerdictOrdinal) == plan.Accept) && (Slot(rowOrdinal: plan.TurnOrdinal) != mover));
+            var accepted = ((Slot(rowOrdinal: plan.VerdictOrdinal) == plan.Accept) && (Slot(rowOrdinal: plan.TurnOrdinal) != level.BaseTurn));
 
             if (
                 (p == 0) &&
@@ -268,135 +181,76 @@ public sealed partial class ArenaSearch {
                 }
             }
 
-            var descends = (hasScore && accepted && (p < (job.PassDepth - 1)));
+            var scores = (hasScore && accepted);
+            // A table entry is a negamax value of a position searched without a draw beneath it, so only the plies
+            // above the chance ply read and write one.
+            var keyed = (!maxN && (job.TtKey is not null) && ((chanceAt < 0) || ((p + 1) < chanceAt)));
 
             if (
-                hasScore &&
-                accepted &&
-                (plan.Chance is { } chance) &&
-                (chance.AtDepth == (p + 1))
+                scores &&
+                ((p + 1) == chanceAt)
             ) {
-                // The next ply is the job's own chance node: it never enumerates a move of its own, so this
-                // candidate folds directly to the chance-averaged value of the position it reached.
-                Fold(
+                // The next ply is the job's chance ply: it enumerates outcomes rather than moves, and folds their
+                // weighted average back here as this candidate's value.
+                var next = OpenPly(
+                    alpha: -SearchCapacity.MateScore,
+                    beta: SearchCapacity.MateScore,
+                    entryTarget: target,
                     job: job,
-                    p: p,
-                    target: target,
-                    token: token,
-                    value: ChanceExpectation(
-                        atRoot: false,
-                        job: job,
-                        remainingDepth: ((job.PassDepth - p) - 2)
-                    )
+                    keyed: false,
+                    p: (p + 1)
                 );
-                PopScope(job: job);
-                AdvanceCandidate(
-                    cellCount: cells,
-                    job: job,
-                    p: p,
-                    shapes: shapes,
-                    tokenCount: job.TokenCount
-                );
+
+                next.ChanceSum = Int128.Zero;
+                next.ChanceWeight = 0UL;
             } else if (
-                descends &&
-                !maxN &&
-                TryProbeTransposition(
-                job: job,
-                p: p,
-                remaining: ((job.PassDepth - p) - 1),
-                value: out var known
-            )
+                scores &&
+                (p < (job.PassDepth - 1))
             ) {
-                // The child position was searched to at least this depth already: fold its value without descending.
-                Fold(
-                    job: job,
-                    p: p,
-                    target: target,
-                    token: token,
-                    value: -known
-                );
-                PopScope(job: job);
-                AdvanceCandidate(
-                    cellCount: cells,
-                    job: job,
-                    p: p,
-                    shapes: shapes,
-                    tokenCount: job.TokenCount
-                );
-            } else if (descends) {
-                var next = (p + 1);
-                var level = job.Levels[(next - 1)];
-
-                level.AlphaEntry = -CursorBeta(
-                    job: job,
-                    p: p
-                );
-                level.Key = PositionKey(job: job);
-
-                // The child ply starts out remembering the position it was handed; a max-n fold that never improves
-                // on it reads the same vector a static evaluation of a side with no move would.
-                ReadSeats(
-                    into: level.Seats,
-                    job: job
-                );
-                SetCursorAlpha(
-                    job: job,
-                    p: next,
+                if (
+                    keyed &&
+                    TryProbeTransposition(
+                        job: job,
+                        level: level,
+                        remaining: ((job.PassDepth - p) - 1),
+                        value: out var known
+                    )
+                ) {
+                    // The child position was searched to at least this depth already: fold its value without
+                    // descending.
+                    Fold(
+                        level: level,
+                        target: target,
+                        token: token,
+                        value: -known
+                    );
+                    PopScope(job: job);
+                    AdvanceCandidate(
+                        cellCount: cells,
+                        level: level,
+                        p: p,
+                        shapes: shapes,
+                        tokenCount: job.TokenCount
+                    );
+                } else {
                     // A max-n level never prunes on another seat's bound — one seat's gain is not another's loss —
                     // so it descends the full window instead of the negamax negate-and-swap.
-                    value: (maxN
-                        ? -SearchCapacity.MateScore
-                        : -CursorBeta(
-                            job: job,
-                            p: p
-                        ))
-                );
-                SetCursorBaseTurn(
-                    job: job,
-                    p: next,
-                    value: Slot(rowOrdinal: plan.TurnOrdinal)
-                );
-                SetCursorBest(
-                    job: job,
-                    p: next,
-                    value: -SearchCapacity.MateScore
-                );
-                SetCursorBestMove(
-                    job: job,
-                    p: next,
-                    target: -1,
-                    token: -1
-                );
-                SetCursorBeta(
-                    job: job,
-                    p: next,
-                    value: (maxN
-                        ? SearchCapacity.MateScore
-                        : -CursorAlpha(
-                            job: job,
-                            p: p
-                        ))
-                );
-                SetCursorShape(
-                    job: job,
-                    p: next,
-                    value: 0
-                );
-                SetCursorTarget(
-                    job: job,
-                    p: next,
-                    value: 0
-                );
-                SetCursorToken(
-                    job: job,
-                    p: next,
-                    value: 0
-                );
-                job.Active = next;
+                    _ = OpenPly(
+                        alpha: (maxN
+                            ? -SearchCapacity.MateScore
+                            : -level.Beta),
+                        beta: (maxN
+                            ? SearchCapacity.MateScore
+                            : -level.Alpha),
+                        entryTarget: target,
+                        job: job,
+                        keyed: keyed,
+                        p: (p + 1)
+                    );
+                }
             } else {
                 if (
-                    hasScore &&
-                    accepted &&
+                    scores &&
                     maxN
                 ) {
                     ReadSeats(
@@ -410,43 +264,237 @@ public sealed partial class ArenaSearch {
                         token: token,
                         vector: job.Seats
                     );
-                } else if (
-                    hasScore &&
-                    accepted
-                ) {
+                } else if (scores) {
                     Fold(
-                        job: job,
-                        p: p,
+                        level: level,
                         target: target,
                         token: token,
-                        value: job.Judge.Score(view: View(ply: job.ScopeCount))
+                        value: job.Judge.Score(view: View(ply: MovePly(job: job)))
                     );
                 }
 
                 PopScope(job: job);
                 AdvanceCandidate(
                     cellCount: cells,
-                    job: job,
+                    level: level,
                     p: p,
                     shapes: shapes,
                     tokenCount: job.TokenCount
                 );
             }
-
-            job.Nodes++;
-            budget--;
         }
+
+        return spent;
+    }
+    // Opens ply p over the position the arena holds and makes it the active one. A chance ply and the move ply
+    // beneath one open on the full window: an average has no bound to prune against.
+    private Level OpenPly(Job job, int p, int entryTarget, long alpha, long beta, bool keyed) {
+        var level = job.Levels[(p - 1)];
+
+        level.Alpha = alpha;
+        level.AlphaEntry = alpha;
+        level.BaseTurn = Slot(rowOrdinal: job.Plan.TurnOrdinal);
+        level.Best = -SearchCapacity.MateScore;
+        level.BestTarget = -1;
+        level.BestToken = -1;
+        level.Beta = beta;
+        level.EntryTarget = entryTarget;
+        // Only a ply whose value the table will store needs the key of the position it opened on.
+        level.Key = (keyed
+            ? PositionKey(
+                job: job,
+                movePly: MovePly(job: job)
+            )
+            : 0UL
+        );
+        level.Shape = 0;
+        level.Target = 0;
+        level.Token = 0;
+
+        // The ply starts out remembering the position it was handed; a max-n fold that never improves on it reads
+        // the same vector a static evaluation of a side with no move would.
+        ReadSeats(
+            into: level.Seats,
+            job: job
+        );
+        job.Active = p;
+
+        return level;
+    }
+    // One unit of a chance ply: the next outcome applied and, at the frontier, scored; or, once every outcome has
+    // folded, the ply's weighted average handed to its parent. Returns what the unit cost.
+    //
+    // The average is the side's that moved into the node. Beneath the root that is the mover of the ply above, so
+    // a reply searched under an outcome folds negated like any other; at the root the side to move after the draw
+    // is the one the job searches for, and its reply folds as it stands.
+    private long StepChance(Job job, Level level, int p, bool hasScore) {
+        var chance = job.Plan.Chance!;
+        var outcome = level.Target;
+
+        if (outcome >= chance.Weights.Length) {
+            var value = RoundedWeightedAverage(
+                totalWeight: level.ChanceWeight,
+                weightedSum: level.ChanceSum
+            );
+
+            if (p == 0) {
+                job.Best = value;
+                job.BestTarget = -1;
+                job.BestToken = -1;
+                job.Running = false;
+            } else {
+                var parent = At(
+                    job: job,
+                    p: (p - 1)
+                );
+
+                Fold(
+                    level: parent,
+                    target: level.EntryTarget,
+                    token: parent.Token,
+                    value: value
+                );
+                PopScope(job: job);
+                AdvanceCandidate(
+                    cellCount: job.Plan.CellCount,
+                    level: parent,
+                    p: (p - 1),
+                    shapes: job.Plan.Shapes,
+                    tokenCount: job.TokenCount
+                );
+                job.Active = (p - 1);
+            }
+
+            return SearchWork.Cursor;
+        }
+
+        PushChanceScope(
+            job: job,
+            outcome: outcome
+        );
+
+        if (
+            hasScore &&
+            (((job.PassDepth - p) - 1) > 0)
+        ) {
+            _ = OpenPly(
+                alpha: -SearchCapacity.MateScore,
+                beta: SearchCapacity.MateScore,
+                entryTarget: -1,
+                job: job,
+                keyed: false,
+                p: (p + 1)
+            );
+        } else {
+            FoldOutcome(
+                level: level,
+                value: EvaluateOutcome(job: job),
+                weight: chance.Weights[outcome]
+            );
+            PopScope(job: job);
+            level.Target = (outcome + 1);
+        }
+
+        return job.Plan.Work.Outcome;
+    }
+    // Ply p has tried every candidate. The root starts its next pass, hands over to the tree, or finishes; a ply
+    // beneath a chance ply folds its reply into the outcome that opened it; every other ply folds into the
+    // candidate that opened it and lets the parent move on.
+    private void CompletePly(Job job, Level level, int p, int chanceAt, bool hasScore, bool maxN) {
+        var plan = job.Plan;
+
+        if (p == 0) {
+            if (
+                !hasScore ||
+                (job.PassDepth >= plan.Depth)
+            ) {
+                if (plan.Method == SearchMethod.Tree) {
+                    StartTree(job: job);
+                } else {
+                    job.Running = false;
+                }
+            } else {
+                job.PassDepth++;
+
+                ResetPass(job: job);
+            }
+
+            return;
+        }
+
+        var parent = At(
+            job: job,
+            p: (p - 1)
+        );
+
+        if ((p - 1) == chanceAt) {
+            FoldOutcome(
+                level: parent,
+                value: ((chanceAt == 0)
+                    ? level.Best
+                    : -level.Best),
+                weight: plan.Chance!.Weights[parent.Target]
+            );
+            PopScope(job: job);
+            parent.Target++;
+            job.Active = (p - 1);
+
+            return;
+        }
+
+        if (maxN) {
+            // The completed ply's own side buffer carries the best line's vector — the leaf's, if one was ever
+            // folded there, or, when no candidate was accepted, the position's own scores as the ply found them.
+            FoldSeats(
+                job: job,
+                p: (p - 1),
+                target: level.EntryTarget,
+                token: parent.Token,
+                vector: level.Seats
+            );
+        } else {
+            if (
+                (chanceAt < 0) ||
+                (p < chanceAt)
+            ) {
+                StoreTransposition(
+                    job: job,
+                    level: level,
+                    remaining: (job.PassDepth - p)
+                );
+            }
+
+            Fold(
+                level: parent,
+                target: level.EntryTarget,
+                token: parent.Token,
+                value: -level.Best
+            );
+        }
+
+        PopScope(job: job);
+        AdvanceCandidate(
+            cellCount: plan.CellCount,
+            level: parent,
+            p: (p - 1),
+            shapes: plan.Shapes,
+            tokenCount: job.TokenCount
+        );
+        job.Active = (p - 1);
     }
     // Reads a stored value for the position the arena holds when it was searched to at least `remaining` plies and
     // its bound decides the child's window (-beta, -alpha) the way a fresh search would have.
-    private bool TryProbeTransposition(Job job, int p, int remaining, out long value) {
+    private bool TryProbeTransposition(Job job, Level level, int remaining, out long value) {
         value = 0L;
 
         if (job.TtKey is not { } keys) {
             return false;
         }
 
-        var key = PositionKey(job: job);
+        var key = PositionKey(
+            job: job,
+            movePly: MovePly(job: job)
+        );
         var slot = ((int)(key & ((ulong)(keys.Length - 1))));
         var meta = job.TtMeta![slot];
 
@@ -460,14 +508,8 @@ public sealed partial class ArenaSearch {
 
         var stored = job.TtValue![slot];
         var flag = (meta >> 8);
-        var childAlpha = -CursorBeta(
-            job: job,
-            p: p
-        );
-        var childBeta = -CursorAlpha(
-            job: job,
-            p: p
-        );
+        var childAlpha = -level.Beta;
+        var childBeta = -level.Alpha;
 
         if (
             (flag == TranspositionExact) ||
@@ -499,58 +541,25 @@ public sealed partial class ArenaSearch {
         job.TtValue![slot] = level.Best;
         keys[slot] = level.Key;
     }
-    private static void AdvanceCandidate(Job job, int p, SearchShapePlan[] shapes, int cellCount, int tokenCount) {
-        var shapeIndex = CursorShape(
-            job: job,
-            p: p
-        );
-        var bound = shapes[shapeIndex].CandidateCount(cellCount: cellCount);
-        var candidate = (CursorTarget(
-            job: job,
-            p: p
-        ) + 1);
+    private static void AdvanceCandidate(Level level, int p, SearchShapePlan[] shapes, int cellCount, int tokenCount) {
+        var candidate = (level.Target + 1);
 
-        if (candidate >= bound) {
-            SetCursorToken(
-                job: job,
-                p: p,
-                value: (CursorToken(
-                    job: job,
-                    p: p
-                ) + 1)
-            );
+        if (candidate >= shapes[level.Shape].CandidateCount(cellCount: cellCount)) {
+            level.Token++;
             candidate = 0;
         }
 
-        SetCursorTarget(
-            job: job,
-            p: p,
-            value: candidate
-        );
+        level.Target = candidate;
 
         // The root ply never prunes: every candidate is tried, so the root outputs are exhaustive whether or not a
         // score is authored. A ply past the root may cut once its window has closed — forcing both the token and
         // shape cursors to their sentinel completes the ply on the very next iteration.
         if (
             (p > 0) &&
-            (CursorAlpha(
-            job: job,
-            p: p
-        ) >= CursorBeta(
-            job: job,
-            p: p
-        ))
+            (level.Alpha >= level.Beta)
         ) {
-            SetCursorShape(
-                job: job,
-                p: p,
-                value: shapes.Length
-            );
-            SetCursorToken(
-                job: job,
-                p: p,
-                value: tokenCount
-            );
+            level.Shape = shapes.Length;
+            level.Token = tokenCount;
         }
     }
     // Reads every seat's own score off the arena, in the scores row's own cell order. A seat the row does not cover
@@ -572,148 +581,34 @@ public sealed partial class ArenaSearch {
     // buffer, which a later fold up to p's parent reads its own seat back out of. Alpha is left alone, so the
     // window never closes and AdvanceCandidate's cutoff never fires.
     private static void FoldSeats(Job job, int p, ReadOnlySpan<long> vector, int token, int target) {
-        var mover = CursorBaseTurn(
+        var level = At(
             job: job,
             p: p
         );
+        var mover = level.BaseTurn;
         var value = (((mover >= 0L) && (mover < vector.Length))
             ? vector[((int)mover)]
             : 0L
         );
 
-        if (value > CursorBest(
-            job: job,
-            p: p
-        )) {
-            SetCursorBest(
-                job: job,
-                p: p,
-                value: value
-            );
-            SetCursorBestMove(
-                job: job,
-                p: p,
-                target: target,
-                token: token
-            );
+        if (value > level.Best) {
+            level.Best = value;
+            level.BestTarget = target;
+            level.BestToken = token;
 
             if (p > 0) {
-                vector.CopyTo(destination: job.Levels[(p - 1)].Seats);
+                vector.CopyTo(destination: level.Seats);
             }
         }
     }
-    private static void Fold(Job job, int p, long value, int token, int target) {
-        if (value > CursorBest(
-            job: job,
-            p: p
-        )) {
-            SetCursorBest(
-                job: job,
-                p: p,
-                value: value
-            );
-            SetCursorBestMove(
-                job: job,
-                p: p,
-                target: target,
-                token: token
-            );
+    private static void Fold(Level level, long value, int token, int target) {
+        if (value > level.Best) {
+            level.Best = value;
+            level.BestTarget = target;
+            level.BestToken = token;
         }
-        if (value > CursorAlpha(
-            job: job,
-            p: p
-        )) {
-            SetCursorAlpha(
-                job: job,
-                p: p,
-                value: value
-            );
-        }
-    }
-    private static long CursorAlpha(Job job, int p) => ((p == 0)
-        ? job.Alpha
-        : job.Levels[(p - 1)].Alpha
-    );
-    private static long CursorBaseTurn(Job job, int p) => ((p == 0)
-        ? job.BaseTurn
-        : job.Levels[(p - 1)].BaseTurn
-    );
-    private static long CursorBest(Job job, int p) => ((p == 0)
-        ? job.Best
-        : job.Levels[(p - 1)].Best
-    );
-    private static long CursorBeta(Job job, int p) => ((p == 0)
-        ? job.Beta
-        : job.Levels[(p - 1)].Beta
-    );
-    private static int CursorShape(Job job, int p) => ((p == 0)
-        ? job.Shape
-        : job.Levels[(p - 1)].Shape
-    );
-    private static int CursorTarget(Job job, int p) => ((p == 0)
-        ? job.Target
-        : job.Levels[(p - 1)].Target
-    );
-    private static int CursorToken(Job job, int p) => ((p == 0)
-        ? job.Token
-        : job.Levels[(p - 1)].Token
-    );
-    private static void SetCursorAlpha(Job job, int p, long value) {
-        if (p == 0) {
-            job.Alpha = value;
-        } else {
-            job.Levels[(p - 1)].Alpha = value;
-        }
-    }
-    private static void SetCursorBaseTurn(Job job, int p, long value) {
-        if (p == 0) {
-            job.BaseTurn = value;
-        } else {
-            job.Levels[(p - 1)].BaseTurn = value;
-        }
-    }
-    private static void SetCursorBest(Job job, int p, long value) {
-        if (p == 0) {
-            job.Best = value;
-        } else {
-            job.Levels[(p - 1)].Best = value;
-        }
-    }
-    private static void SetCursorBestMove(Job job, int p, int token, int target) {
-        if (p == 0) {
-            job.BestTarget = target;
-            job.BestToken = token;
-        } else {
-            job.Levels[(p - 1)].BestTarget = target;
-            job.Levels[(p - 1)].BestToken = token;
-        }
-    }
-    private static void SetCursorBeta(Job job, int p, long value) {
-        if (p == 0) {
-            job.Beta = value;
-        } else {
-            job.Levels[(p - 1)].Beta = value;
-        }
-    }
-    private static void SetCursorShape(Job job, int p, int value) {
-        if (p == 0) {
-            job.Shape = value;
-        } else {
-            job.Levels[(p - 1)].Shape = value;
-        }
-    }
-    private static void SetCursorTarget(Job job, int p, int value) {
-        if (p == 0) {
-            job.Target = value;
-        } else {
-            job.Levels[(p - 1)].Target = value;
-        }
-    }
-    private static void SetCursorToken(Job job, int p, int value) {
-        if (p == 0) {
-            job.Token = value;
-        } else {
-            job.Levels[(p - 1)].Token = value;
+        if (value > level.Alpha) {
+            level.Alpha = value;
         }
     }
 }

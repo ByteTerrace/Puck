@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Puck.State;
 
 /// <summary>A <c>nearest</c>: the top-<c>k</c> keys of a vector table ranked against a query vector.</summary>
@@ -84,35 +82,42 @@ public static partial class ArenaVectorTransforms {
         }
 
         var candidateCount = from.Count;
-        var candidates = new List<NearestCandidate>(capacity: candidateCount);
 
-        for (var position = 0; (position < candidateCount); position++) {
+        using var candidatesLease = arena.Scratch.Rent<NearestCandidate>(length: candidateCount);
+        using var matchesLease = arena.Scratch.Rent<VectorTransforms.NearestMatch>(length: request.K);
+
+        var candidates = candidatesLease.Span;
+        var gathered = 0;
+
+        var cursor = 0;
+
+        while (arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: from.RowOrdinal
+        )) {
             if (
-                from.TryKeyAt(
-                key: out var key,
-                position: position
-            ) &&
                 from.TryReadMemory(
                 components: out var components,
                 key: key
             )
             ) {
-                candidates.Add(item: new NearestCandidate(
+                candidates[gathered++] = new NearestCandidate(
                     Admitted: Admits(
                         arena: arena,
                         key: key,
                         whereRowOrdinal: request.WhereRowOrdinal
                     ),
                     Components: components,
-                    Key: arena.Catalog.Keys[key: key]
-                ));
+                    Key: arena.Keys[key: key]
+                );
             }
         }
 
-        var matches = new VectorTransforms.NearestMatch[request.K];
+        var matches = matchesLease.Span;
         var matched = VectorTransforms.SelectNearest(
-            candidates: CollectionsMarshal.AsSpan(list: candidates),
-            excludeKey: (arena.Catalog.Keys.TryGetName(
+            candidates: candidates[..gathered],
+            excludeKey: (arena.Keys.TryGetName(
                 key: request.Exclude,
                 name: out var excluded
             )

@@ -1,0 +1,118 @@
+{
+  "cameras": [
+    {
+      "name": "front",
+      "renderHeight": 900,
+      "renderWidth": 720,
+      "rig": {
+        "name": "front",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                4.8
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.5419
+          }
+        ],
+        "version": "puck.camera.program.v1"
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "card",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "card",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "card",
+        "palette": [
+          {
+            "color": "#F2ECDD",
+            "roughness": 0.55,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "profile": {
+              "cornerRadius": 0.09,
+              "kind": "RoundedRectangle"
+            },
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.88,
+              1.24,
+              0.02
+            ],
+            "smooth": 0,
+            "taper": 1,
+            "type": "Prism"
+          }
+        ]
+      },
+      "id": "card"
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "$value",
+            "value": "[2, 0, 0]"
+          }
+        ],
+        "kind": "Text",
+        "name": "spot"
+      }
+    ]
+  }
+}

@@ -81,7 +81,12 @@ public sealed record ExpressionStatementNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets whether this invocation was authored with the compile-time <c>use</c> keyword.</summary>
+    public bool IsUse { get; init; }
+    /// <summary>Gets the optional namespace applied to a <c>use</c> expansion.</summary>
+    public string? UseAlias { get; init; }
+}
 /// <summary>A module import declaration: <c>import "path" [as alias]</c>.</summary>
 /// <param name="Path">The relative path to the imported fragment document.</param>
 /// <param name="Alias">The optional alias prefix for declared symbols.</param>
@@ -121,7 +126,10 @@ public sealed record ExportNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets whether the author wrote an export facet before the names.</summary>
+    public bool FacetExplicit { get; init; } = true;
+}
 /// <summary>A compile-time variable declaration: <c>let name = expression</c>.</summary>
 /// <param name="Name">The identifier name.</param>
 /// <param name="Value">The initializer expression.</param>
@@ -163,7 +171,12 @@ public sealed record TemplateNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets whether this declaration was authored as a typed <c>module</c>.</summary>
+    public bool IsModule { get; init; }
+    /// <summary>Gets the defining source path when this declaration came through an import.</summary>
+    public string? DefinitionPath { get; init; }
+}
 /// <summary>One formal parameter of a template declaration.</summary>
 /// <param name="Name">The parameter name.</param>
 /// <param name="DefaultValue">The optional default expression when omitted by caller.</param>
@@ -183,7 +196,12 @@ public sealed record TemplateParameterNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets the optional module parameter kind.</summary>
+    public string? Kind { get; init; }
+    /// <summary>Gets the exports a <c>Module</c> argument must provide.</summary>
+    public IReadOnlyList<string> RequiredExports { get; init; } = [];
+}
 /// <summary>A structural block statement: <c>identifier ["name"] { ... }</c>.</summary>
 /// <param name="Identifier">The block section identifier (e.g., 'host', 'views', 'layout', 'seatRig').</param>
 /// <param name="Name">An optional name identifying the instance (e.g. 'overview', 'moth-study').</param>
@@ -246,7 +264,10 @@ public abstract record ExpressionNode(int Offset = 0, int Length = 0, int Line =
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets whether explicit parentheses make this value an expression when used as a cell key.</summary>
+    public bool Parenthesized { get; init; }
+}
 /// <summary>A literal scalar value (string, integer, float, boolean, or null) with optional unit suffix.</summary>
 /// <param name="Value">The parsed raw value object.</param>
 /// <param name="Unit">The optional unit symbol (e.g. 's', 'hz', 'deg').</param>
@@ -509,15 +530,15 @@ public sealed record ArrayExpressionNode(
     Column
 );
 /// <summary>A range expression: <c>start..end</c>.</summary>
-/// <param name="Start">The start bound expression.</param>
-/// <param name="End">The end bound expression.</param>
+/// <param name="Start">The start bound expression, or <see langword="null"/> for an open start.</param>
+/// <param name="End">The end bound expression, or <see langword="null"/> for an open end.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 public sealed record RangeExpressionNode(
-    ExpressionNode Start,
-    ExpressionNode End,
+    ExpressionNode? Start,
+    ExpressionNode? End,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -618,6 +639,43 @@ public abstract record InterpolationSegment {
     /// <param name="Expression">The hole's expression.</param>
     public sealed record Hole(ExpressionNode Expression) : InterpolationSegment;
 }
+/// <summary>A parsed name, cell key or expression whose identifiers the document vocabulary binds by position.
+/// The original text is retained for diagnostics and unchanged-source formatting.</summary>
+/// <remarks>An interpolated string inside the text is an atom: it computes one name or one number while
+/// lowering, and the operand grammar reads the result where the atom stood. The atoms are held parsed, so a
+/// rewrite and a reference walk reach their holes. <see cref="Parsing.PuckParser.CreateOperand(string, Lowering.DocumentValueForm, int, int, int, int)"/> builds the node
+/// with the atoms its text holds.</remarks>
+/// <param name="Text">The operand text, trimmed.</param>
+/// <param name="Form">Which grammar the vocabulary reads <paramref name="Text"/> in.</param>
+/// <param name="Atoms">The interpolated strings inside <paramref name="Text"/>, in written order.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record OperandExpressionNode(
+    string Text,
+    Lowering.DocumentValueForm Form,
+    IReadOnlyList<OperandAtom> Atoms,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+) {
+    /// <summary>Gets the parsed operand tree. Names remain unresolved until the document vocabulary lowers it.</summary>
+    public Puck.State.ExpressionSpelling.SyntaxNode? Syntax { get; init; }
+    /// <summary>Gets the syntax refusal, or an empty string when <see cref="Syntax"/> is present.</summary>
+    public string SyntaxError { get; init; } = string.Empty;
+}
+/// <summary>One interpolated string inside an operand's text.</summary>
+/// <param name="Start">The atom's first character within the operand's text.</param>
+/// <param name="Length">The atom's length within the operand's text.</param>
+/// <param name="Value">The parsed interpolated string.</param>
+public sealed record OperandAtom(int Start, int Length, InterpolatedStringNode Value);
 /// <summary>A <c>$"…"</c> or <c>$"""…"""</c> string, whose holes are evaluated while lowering.</summary>
 /// <param name="Segments">The literal runs and holes, in written order.</param>
 /// <param name="Offset">The character offset within the source text.</param>

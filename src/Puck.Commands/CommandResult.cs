@@ -27,9 +27,25 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// broke" has the distinction the text alone cannot carry.
     /// </summary>
     public bool Faulted { get; init; }
+    /// <summary>
+    /// Gets the pending verdict of work this handler started and an authority decides later, or
+    /// <see langword="null"/> when this result is the whole of what the command did. A session that settles results
+    /// reports the verdict in this result's place and holds its next line behind it.
+    /// </summary>
+    public CommandSettlement? Settlement { get; init; }
     /// <summary>Gets a result that produces no transcript output and leaves the transcript unchanged.</summary>
     public static CommandResult None => new("");
 
+    /// <summary>Creates a result for work whose verdict arrives later.</summary>
+    /// <param name="settlement">The pending verdict, which its creator settles on every path.</param>
+    /// <returns>A result with no output of its own and <see cref="Settlement"/> set.</returns>
+    public static CommandResult Settling(CommandSettlement settlement) {
+        ArgumentNullException.ThrowIfNull(argument: settlement);
+
+        return new(Output: "") {
+            Settlement = settlement,
+        };
+    }
     /// <summary>Creates a result that requests the transcript be cleared and produces no output.</summary>
     /// <returns>A result with <see cref="ClearTranscript"/> set to <see langword="true"/>.</returns>
     public static CommandResult Cleared() => new(

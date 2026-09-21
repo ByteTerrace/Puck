@@ -483,8 +483,8 @@ public sealed partial class WorldBody {
         return fact switch {
             ActionFact.Grounded => m_grounded,
             ActionFact.Airborne => !m_grounded,
-            ActionFact.Rising => (m_verticalVelocity > FixedQ4816.Zero),
-            ActionFact.Falling => (m_verticalVelocity < FixedQ4816.Zero),
+            ActionFact.Rising => ((IsRigid ? m_rigidVelocity.Y : m_verticalVelocity) > FixedQ4816.Zero),
+            ActionFact.Falling => ((IsRigid ? m_rigidVelocity.Y : m_verticalVelocity) < FixedQ4816.Zero),
             ActionFact.InMedium => m_inMedium,
             ActionFact.AtMediumBand => m_atMediumBand,
             ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(),

@@ -195,6 +195,46 @@ public sealed class CueLawTests {
             userMessage: $"the struck ball never moved along the seat's heading — before={before} after={ball.FixedPosition}"
         );
     }
+    // The impulses of one firing are preflighted as the sequence they land in. Each of these fits under the speed
+    // ceiling alone and the pair does not, so the firing is refused before its commit and neither lands; judged one
+    // at a time, the first would land and the second refuse after the commit.
+    [Fact]
+    public void TwoStrikesThatTogetherPassTheSpeedCeilingRefuseTheFiringAndLeaveTheBallAtRest() {
+        using var probe = JoinSeatAndBall(definition: BuildCueDocument(seedMagnitude: FixedQ4816.Zero));
+        var ceiling = probe.Server.Population.RigidVelocityCeiling;
+        // Mass 1, so an impulse is the speed it adds: three quarters of the ceiling, twice.
+        var magnitude = ((ceiling * FixedQ4816.FromDouble(value: 3d)) / FixedQ4816.FromDouble(value: 4d));
+        var strike = new WorldEffect.ApplyRigidImpulse(
+            HeadingKey: "body:0",
+            Key: $"body:{BallIndex}",
+            MagnitudeKey: "0",
+            MagnitudeState: MagnitudeRow
+        );
+        var definition = BuildCueDocument(seedMagnitude: magnitude) with {
+            Rules = [new WorldRule(
+                Name: CellName.Parse(candidate: "double-strike"),
+                Mode: ActionTriggerMode.Edge,
+                Effects: [strike, strike]
+            )],
+        };
+
+        using var fixture = JoinSeatAndBall(definition: definition);
+        var ball = fixture.Server.Body(index: BallIndex)!;
+
+        fixture.Step();
+
+        Assert.Equal(
+            actual: ball.RigidVelocity,
+            expected: FixedVector3.Zero
+        );
+        Assert.Contains(
+            collection: fixture.Server.RuleRuntimeDiagnostics(),
+            filter: static candidate => Equals(
+                objA: candidate.Refusal,
+                objB: WorldRuleEffectRefusal.RigidImpulseOutOfRange
+            )
+        );
+    }
     [Fact]
     public void AStrikeOnABodyTheSeatDoesNotTargetRefusesAndLeavesEveryRigidBodyAtRest() {
         // The seat's own body (index 0) carries the base locomotion kit, never the rigid "ball" kit — the "does not

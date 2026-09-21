@@ -439,10 +439,12 @@ public sealed class WorldCameraProgramValidationLawTests {
     [Fact]
     public void ASeatRigWithoutAnOrbitOpIsRefusedByName() {
         var denied = (Fixtures.BuildDocument() with {
-            ViewsRaw = (Fixtures.BuildDocument().Views with { SeatRig = Program(
+            ViewsRaw = (Fixtures.BuildDocument().Views with {
+                SeatRigRaw = Program(
             "seatChase",
             Fov()
-        ) }),
+        ),
+            }),
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(

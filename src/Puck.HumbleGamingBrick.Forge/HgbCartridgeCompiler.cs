@@ -1506,7 +1506,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
         static string? Bare(ExpressionProgram? expression) =>
             ((expression?.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])
-                ? state.Name
+                ? state.Name.Spelling
                 : null
             );
 
@@ -1639,7 +1639,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
         void Read(InstructionPayload.State state, bool guard) {
             if (CartridgeExpressions.TryKey(
-                name: state.Name,
+                name: state.Name.Spelling,
                 button: out var button,
                 mode: out var mode
             )) {
@@ -1651,9 +1651,9 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 return;
             }
 
-            if (CartridgeExpressions.Index(key: state.Key) is { } index) {
+            if (CartridgeExpressions.Index(key: state.Key?.Spelling) is { } index) {
                 Element(
-                    array: state.Name,
+                    array: state.Name.Spelling,
                     index: index,
                     guard: guard
                 );
@@ -1665,9 +1665,9 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 return;
             }
 
-            emitter.LoadAFromAddress(address: ((guard && (state.Name == document.Scene))
+            emitter.LoadAFromAddress(address: ((guard && (state.Name.Spelling == document.Scene))
                 ? SceneAddress
-                : (ushort)variables[state.Name]));
+                : (ushort)variables[state.Name.Spelling]));
         }
 
         // Leaves 1 in the accumulator while the button satisfies the mode, and 0 otherwise.

@@ -48,7 +48,9 @@ public static class StateRows {
 
         return null;
     }
-    /// <summary>Finds a state row by stable name — the one row-find every reader of the section shares.</summary>
+    /// <summary>Finds an authored state row by stable name — the one row-find every reader of the section shares.
+    /// A generated storage row is addressed by catalog ordinal and never resolves by name, so no authored name
+    /// reaches engine-owned storage through any consumer.</summary>
     /// <typeparam name="TRow">The row type the list carries; a document project's own derived row resolves as
     /// itself.</typeparam>
     /// <param name="rows">The section's rows, or <see langword="null"/> for none.</param>
@@ -72,10 +74,38 @@ public static class StateRows {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                return row;
+                return (row.Generated ? null : row);
             }
         }
 
         return null;
+    }
+    /// <summary>Gets a value indicating whether <paramref name="name"/> is a generated storage row's name.</summary>
+    /// <typeparam name="TRow">The row type the list carries.</typeparam>
+    /// <param name="rows">The section's expanded rows, or <see langword="null"/> for none.</param>
+    /// <param name="name">The row name to test.</param>
+    /// <returns><see langword="true"/> when a generated row carries that name.</returns>
+    /// <remarks>A refusal that names engine-owned storage asks this; nothing reads such a row through it.</remarks>
+    public static bool IsGeneratedRowName<TRow>(IReadOnlyList<TRow>? rows, string name) where TRow : StateRow {
+        if (rows is null) {
+            return false;
+        }
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+
+            if (
+                (row is not null) &&
+                string.Equals(
+                a: row.Name.Value,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return row.Generated;
+            }
+        }
+
+        return false;
     }
 }

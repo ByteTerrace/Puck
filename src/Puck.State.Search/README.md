@@ -7,7 +7,7 @@ runs a set of `ArenaSearchPlan` jobs over one `StateArena`, and
 lands its answer as `ArenaSearchWrite`s, which a caller installs through
 whatever mutation door it owns.
 
-Four properties hold for every job:
+These properties hold for every job:
 
 - **A candidate is a scope, not a copy.** `ArenaSearchCandidate` opens a journal
   scope on the arena, the candidate's writes and its judge's writes land inside
@@ -23,9 +23,21 @@ Four properties hold for every job:
   rewound.
 - **A position is what the job can read.** The transposition key folds the rows
   the plan addresses and the rows the judge reads or writes, so two positions
-  differing only outside that reach transpose.
+  differing only outside that reach transpose. Pool effects contribute their
+  generated live, generation, and typed field rows to that dataflow; a reclaimed
+  slot therefore forms a different position even when its field defaults match
+  the earlier lifetime. Authored search row references cannot name generated
+  storage directly; `ArenaSearchPlan.TryResolve` refuses those names.
 - **Nothing is drawn from the store.** A tree job's playout draws advance a
   SplitMix64 stream seeded by an authored plan field.
+- **A step spends a bounded amount of work.** A plan's `SearchWork` prices every
+  unit of the walk (a cursor move, a refused or a judged candidate, a chance
+  outcome, a tree step, a replay, a restart) and carries the step's allowance.
+  The walk reserves its costliest unit before it runs any and yields when that
+  no longer fits, so no step spends past the allowance, and a plan whose
+  allowance cannot cover a restart, a full replay and one unit is refused by
+  that sum. A chance ply sits on the same explicit stack as a move ply and
+  folds one outcome a unit, so a step can suspend inside it.
 
 Negamax (iterative deepening, alpha-beta, transpositions), UCB1 tree search,
 chance nodes (`ArenaSearchChancePlan`), and per-seat max-n scores are all

@@ -10,7 +10,7 @@ world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
 `ActionTriggerMode` primitive a kit's per-body actions use, one level up.
 Optional deliberately: a new REQUIRED section would refuse every existing
 document at boot for declaring nothing. Only `all`/`any`/`not`/`compareState`
-predicates and `setState`/`addState`/`countdownState`/`generate`/`pose`/`save`/`if`
+predicates and `setState`/`addState`/`generate`/`pose`/`save`/`if`
 effects are admissible at world scope — plus,
 each admitting an EXISTING `WorldMutation` kind into the rule effect set (riding
 the exact seam `generate` proved, never a new door), `upsertHudPanel`/
@@ -21,7 +21,7 @@ rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 `position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two),
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
 journal, and deliberately outside the `gatesDrive` check, which is what lets a
-`dead == 1 && respawnIn <= 0` rule move a body its own gate row has frozen.
+`dead == 1 && $tick >= respawnIn` rule move a body its own gate row has frozen.
 `setState` with `text` writes a `kind=Text` cell (exactly one of `value`/
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
@@ -169,8 +169,9 @@ resolved through the SAME operand walk (reserved channels included) — never bo
 never neither, and the two sides must resolve to the same cell kind. That one
 widening is the periodicity/cooldown/round-boundary vocabulary (gate `$tick`
 against a schedule row your effects advance for "every N ticks"; a request-gated
-cooldown is a `min: 0` countdown row decremented while `>0`, gated `<=0`,
-NOT a `$tick` threshold — see `WorldRules.cs` remarks). `mode` is `Level` (fires
+cooldown is an `int` row holding the absolute tick the cooldown ends, armed on
+use with `schedule row in Ns`, gated `$tick >= row` — a `$tick` threshold, not a
+relative countdown — see `Rule.cs` remarks). `mode` is `Level` (fires
 every tick the gate holds) or `Edge` (fires once per crossing, re-arming when the
 gate closes) — a rule that writes a row almost always wants `Edge`. A rule's `name`
 is a `CellName`, the SAME validated-identifier type a state row and a cell
@@ -261,7 +262,8 @@ placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
 The arena module (`src/Puck.World/Assets/worlds/modules/arena.world.json`) is the worked example: two
 boot-declared region placements (`firePit`/`icePool`), `Region` interactions
-that set countdown cells, and `Level` rules that drain/countdown them.
+that schedule a burn/freeze deadline, and `Level` rules that act while `$tick`
+has not yet reached it.
 
 ## Discrete state, patterns, and impressions
 

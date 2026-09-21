@@ -4,6 +4,9 @@ This xUnit v3 suite targets `net10.0` and checks the browser-hosted world engine
 
 ## Verification
 
+`BrowserCostReportLawTests` checks shared report parity, replacement on rebind,
+and exact wire counts with no invented zero for missing evidence.
+
 Run the focused suite from the repository root:
 
 ```powershell

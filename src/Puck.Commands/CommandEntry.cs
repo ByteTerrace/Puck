@@ -51,10 +51,11 @@ public readonly record struct CommandEntry {
         Value = value;
     }
 
-    /// <summary>The per-session read-after-write barrier this entry releases when it is applied, or
-    /// <see langword="null"/>. Local-only coordination like <see cref="Device"/>, never deterministic snapshot
-    /// identity; a re-driven entry reconstructs it as <see langword="null"/>.</summary>
-    internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
+    /// <summary>The text session that submitted this entry, whose read-after-write barrier the entry releases and
+    /// which its result settles with when it is applied, or <see langword="null"/>. Local-only coordination like
+    /// <see cref="Device"/>, never deterministic snapshot identity; a re-driven entry reconstructs it as
+    /// <see langword="null"/>.</summary>
+    internal TextCommandSession? Session { get; init; }
 
     /// <summary>Whether the physical signal that produced this entry created its device-to-slot assignment. Unlike
     /// <see cref="Device"/>, this is deterministic snapshot semantics so a first-seat gesture is consumed identically

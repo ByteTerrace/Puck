@@ -1,0 +1,13 @@
+{
+    "servers": {
+        "puck": {
+            "args": [
+                "mcp",
+                "--profile",
+                "operator"
+            ],
+            "command": "puck",
+            "type": "stdio"
+        }
+    }
+}

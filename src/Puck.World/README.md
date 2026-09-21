@@ -58,6 +58,27 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 ```
 
 `--exit-after-seconds 0` (or omitting the flag) runs until the window closes.
+
+For repeated launches, publish once for the target desktop and run that artifact:
+
+```powershell
+dotnet publish src/Puck.World -c Release -r win-x64 --self-contained false -o artifacts/world
+dotnet artifacts/world/Puck.World.dll --world worlds/parlor/chess.puck
+```
+
+Use `linux-x64` for a Linux desktop. World publishes with
+[ReadyToRun](https://learn.microsoft.com/en-us/dotnet/core/deploying/ready-to-run)
+precompilation to reduce first-use JIT work. This makes publishing slower and
+assemblies larger; ordinary `dotnet build` and `dotnet run` still use IL.
+`-p:PublishReadyToRun=false` opts out for a comparison. Restore prepares both
+desktop runtime graphs and the compiler pack, so a later publish can use
+`--no-restore`. CI publishes the already-built portable assemblies with
+`AppendRuntimeIdentifierToOutputPath=false` and `--no-build`; the project
+regenerates the runtime-specific dependency manifest in the publish directory.
+Precompilation does not rebuild C# sources or replace the portable build's
+manifest. Measure a published artifact with
+`puck bench startup --world-artifact artifacts/world/Puck.World.dll`.
+
 Boot prints one line naming the world-definition file it loaded (an explicit
 `--world <path>` or the shipped `Assets/worlds/puck.world.json`), one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
@@ -65,6 +86,10 @@ flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
 because changing APIs rebuilds the whole render host.
+
+`--help` (or `-h`) and `--version` exit before host setup: they do not load a
+world, open a window, or initialize storage. Use `--version` alone; the parser
+refuses combining it with other arguments. Invalid options exit with a diagnostic.
 
 Compiled SDF shaders can change within that running host: finish `CompileShaders`,
 then issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` and inspect
@@ -852,8 +877,7 @@ touching the board when the request names an out-of-bounds or already-occupied
 cell, so a bad request never sticks. `ttt-check-win` (gated on
 `tttBoardVersion` having advanced) folds all 76 four-in-a-row lines—each a
 literal 64-bit cell mask, `(occupancyMask & lineMask) == lineMask`—through
-eight-line chunks (the 64-token expression ceiling bounds how many lines one
-expression ORs together) into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
+eight-line chunks into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
 moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
 dedicated verb, since the generic one already answers it.
 

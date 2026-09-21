@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Collections.Immutable;
 
 namespace Puck.World;
 
@@ -64,6 +65,7 @@ public sealed record WorldIdentitySeed(SafeName Id, string Name, string Color);
 /// <see cref="WorldVoiceProfile"/>).</param>
 /// <param name="Facts">The facts row this identity carries and its capacity, or <see langword="null"/> for
 /// <see cref="WorldIdentityFacts.Default"/>.</param>
+/// <param name="Records">The capacity-one pools owned by this identity and carried across authority boundaries.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldIdentityDefinition(
     SafeName Id,
@@ -73,8 +75,12 @@ public sealed record WorldIdentityDefinition(
     CellName TurnSpeedState,
     IReadOnlyList<WorldControllerStateSlots>? Controllers = null,
     WorldVoiceProfile? Voice = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityFacts? Facts = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityFacts? Facts = null,
+    IReadOnlyList<CellName>? Records = null
 ) {
+    /// <summary>Gets the immutable selection of identity-owned record pools.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CellName>? Records { get => field; init => field = value?.ToImmutableArray(); } = Records?.ToImmutableArray();
     /// <summary>Gets the facts row and capacity — <see cref="Facts"/>, or <see cref="WorldIdentityFacts.Default"/>
     /// when the section authors none.</summary>
     [JsonIgnore]

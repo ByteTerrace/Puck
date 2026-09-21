@@ -124,7 +124,9 @@ internal static class CliProcess {
         CliProcessOutputStream stream,
         List<CliProcessOutputLine> events,
         object eventGate,
-        Func<long> nextSequence
+        Func<long> nextSequence,
+        long startedAt,
+        Action<CliProcessOutputLine>? onOutput
     ) {
         var text = new StringBuilder();
 
@@ -132,17 +134,22 @@ internal static class CliProcess {
             text.AppendLine(value: line);
 
             lock (eventGate) {
-                events.Add(item: new CliProcessOutputLine(
+                var observed = new CliProcessOutputLine(
+                    ElapsedMilliseconds: Stopwatch.GetElapsedTime(startingTimestamp: startedAt).TotalMilliseconds,
                     Line: line,
                     Sequence: nextSequence(),
                     Stream: stream
-                ));
+                );
+
+                events.Add(item: observed);
+                onOutput?.Invoke(observed);
             }
         }
 
         return text.ToString();
     }
-    private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
+    private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
+        Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput) {
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         var startInfo = new ProcessStartInfo {
             CreateNoWindow = true,
@@ -160,36 +167,49 @@ internal static class CliProcess {
             startInfo.ArgumentList.Add(item: argument);
         }
 
+        var startedAt = Stopwatch.GetTimestamp();
         using var process = (Process.Start(startInfo: startInfo)
             ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
         using var cancellation = new CancellationTokenSource(delay: timeout);
         var events = new List<CliProcessOutputLine>();
         var eventGate = new object();
         var sequence = 0L;
+        var continuation = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        var exited = process.WaitForExitAsync(cancellationToken: cancellation.Token);
+        // Both pumps invoke this under eventGate, preserving observation order for stateful predicates.
+        void Observe(CliProcessOutputLine line) {
+            if (continueWhen?.Invoke(line) == true) { continuation.TrySetResult(); }
+        }
         var stdout = PumpAsync(
             reader: process.StandardOutput,
             stream: CliProcessOutputStream.Stdout,
             events: events,
             eventGate: eventGate,
-            nextSequence: () => Interlocked.Increment(location: ref sequence)
+            nextSequence: () => Interlocked.Increment(location: ref sequence),
+            startedAt: startedAt,
+            onOutput: ((continueWhen is null) ? null : Observe)
         );
         var stderr = PumpAsync(
             reader: process.StandardError,
             stream: CliProcessOutputStream.Stderr,
             events: events,
             eventGate: eventGate,
-            nextSequence: () => Interlocked.Increment(location: ref sequence)
+            nextSequence: () => Interlocked.Increment(location: ref sequence),
+            startedAt: startedAt,
+            onOutput: ((continueWhen is null) ? null : Observe)
         );
         var inputPump = WriteInputAsync(
             writer: process.StandardInput,
             input: input,
+            continueAfter: ((continueWhen is null) ? null : Task.WhenAny(task1: continuation.Task, task2: exited)),
+            continuationInput: continuationInput,
             cancellationToken: cancellation.Token
         );
         var timedOut = false;
 
         try {
             await Task.WhenAll(
-                process.WaitForExitAsync(cancellationToken: cancellation.Token),
+                exited,
                 inputPump
             ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) when (cancellation.IsCancellationRequested) {
@@ -217,13 +237,19 @@ internal static class CliProcess {
             TimedOut: timedOut
         );
     }
-    private static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken) {
+    private static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken,
+        Task? continueAfter, string continuationInput) {
         try {
             if (input.Length != 0) {
                 await writer.WriteAsync(
                     buffer: input.AsMemory(),
                     cancellationToken: cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            if (continueAfter is not null) {
+                await writer.FlushAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                await continueAfter.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                await writer.WriteAsync(continuationInput.AsMemory(), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch (IOException) {
             // An early-exiting child closes its pipe. The missing runner-owned terminal response makes the proof fail;
@@ -241,9 +267,14 @@ internal static class CliProcess {
     /// timeout down to the remainder: <see cref="RunCaptured"/> kills a child whose timeout elapses, and on Windows a
     /// killed child reports exit code -1 with both streams empty — indistinguishable from a failure to launch.</remarks>
     public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) => (budget - clock.Elapsed);
-    public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
+    // An optional output predicate releases a final stdin chunk. Keep stdin open while waiting, flush the initial
+    // chunk first, and stop waiting if the child exits or times out. Ordinary one-shot callers are unchanged.
+    public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
+        Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "") =>
         RunCapturedAsync(
             arguments: arguments,
+            continuationInput: continuationInput,
+            continueWhen: continueWhen,
             fileName: fileName,
             input: input,
             timeout: timeout
@@ -297,7 +328,8 @@ internal enum CliProcessOutputStream {
     Stdout,
     Stderr,
 }
-internal sealed record CliProcessOutputLine(string Line, long Sequence, CliProcessOutputStream Stream);
+// Observation time includes process launch and pipe delivery; it is an upper bound on when the child wrote the line.
+internal sealed record CliProcessOutputLine(string Line, long Sequence, CliProcessOutputStream Stream, double ElapsedMilliseconds);
 internal sealed record CliProcessResult(
     int ExitCode,
     IReadOnlyList<CliProcessOutputLine> OutputLines,

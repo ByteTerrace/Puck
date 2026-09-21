@@ -96,7 +96,7 @@ internal static class McpCommand {
         };
         var command = new Command(
             description: """
-            Optional Puck Console/MCP hosting over local stdio or OAuth-protected HTTP. Both target MCP 2026-07-28.
+            Optional Puck Console/MCP hosting over local stdio or OAuth-protected HTTP. Both target MCP 2026-07-28; local stdio also answers the initialize handshake of earlier revisions.
 
               puck mcp --profile operator [--attach <attachment file|latest>]    local stdio, one attachment
               puck mcp --silo <silo.json> --http <configuration.json>           hosted HTTP over an owned World silo

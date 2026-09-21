@@ -171,19 +171,19 @@
     {
       "name": "ambient-tune",
       "source": "Assets/worlds/tunes/ambient-tune.audio.json",
-      "hash": "f2b82f5f2228bb3719eefcaa0f9b77f2fef8323a7e78d7352a8f53d2f3598d2a"
+      "hash": "6651c152c660a28610dd7d6d6b8e12994f227099b5bc88978ce85e7e19228d07"
     },
     {
       "name": "arrival-tune",
       "source": "Assets/worlds/tunes/arrival-tune.audio.json",
-      "hash": "2fa8d8fcbf9d63b008645454a1c22dd6bc1a2139bf49fe47e0cd53e32f287363"
+      "hash": "f14ead2f6b26fe55d520607f34c84de725b72d66ea969aeae39edd0c24681bb7"
     }
   ],
   "patches": [
     {
       "name": "stinger",
       "source": "Assets/worlds/patches/stinger.synth.json",
-      "hash": "801610fca95dd3fc7b848f11d7f0faedc1b8f9a38737c697e981a80aeb406a03"
+      "hash": "5126a83fc5816863b6ecf981ef238ef346653c028a589520d766ec4ab82260ca"
     }
   ]
 }

@@ -1,0 +1,244 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+documentId: "path-profiles"
+
+host {
+  presentation: offscreen
+  width: 640
+  height: 480
+  targetHertz: 0
+  rayQuery: true
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  exitAfterSeconds: 0
+  timing: false
+}
+
+simulation {
+  rateHz: 30
+}
+
+cameras [
+  {
+    name: "front"
+    renderWidth: 640
+    renderHeight: 480
+    rig {
+      name: "front"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 5]))
+        lookAt(subject: worldPoint(point: [0, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
+
+views {
+  layout "paths" {
+    slots [
+      {
+        camera: "front"
+      }
+    ]
+  }
+}
+
+captures {
+  directory: "captures"
+  rows [
+    {
+      station: paths
+      ticks [60, 90]
+      palette [
+        {
+          material: 0
+          color: "#741A27"
+        }
+        {
+          material: 1
+          color: "#7D6934"
+        }
+        {
+          material: 2
+          color: "#176072"
+        }
+        {
+          material: 3
+          color: "#141A27"
+        }
+      ]
+    }
+  ]
+}
+
+prototypes {
+  prototype "profiles" {
+    document {
+      schema: "puck.creation.v1"
+      name: "profiles"
+      palette [
+        {
+          color: "#E52C45"
+          roughness: 0.45
+          specular: 0.2
+        }
+        {
+          color: "#F8CF62"
+          roughness: 0.25
+          specular: 0.3
+        }
+        {
+          color: "#27BADD"
+          roughness: 0.4
+          specular: 0.2
+        }
+      ]
+      shape Prism "curved-lobes" {
+        position [0.8, 0.1, 0]
+        scale [0.8, 0.8, 0.04]
+        material: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0, -0.55]
+                segments [
+                  {
+                    end [0.5, -0.05]
+                  }
+                  {
+                    end [0, 0.45]
+                    arcCenter [0.25, 0.2]
+                  }
+                  {
+                    end [-0.5, -0.05]
+                    arcCenter [-0.25, 0.2]
+                  }
+                  {
+                    end [0, -0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      shape Prism "tapered-curve" {
+        position [0, 0.55, 0]
+        scale [1.2, 1.2, 0.035]
+        material: 1
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            stroke {
+              radiusStart: 0.08
+              radiusEnd: 0.025
+              smooth: true
+              from: 0.2
+              to: 0.95
+            }
+            contours [
+              {
+                start [-0.3, 0]
+                segments [
+                  {
+                    control [0, -0.6]
+                    end [0.3, -0.15]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      shape Prism "hollow-contour" {
+        position [-0.9, 0, 0]
+        scale [0.65, 0.65, 0.06]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            contours [
+              {
+                start [0.65, 0]
+                segments [
+                  {
+                    end [0.65, 0]
+                    arcCenter [0, 0]
+                  }
+                ]
+              }
+              {
+                start [0.25, 0]
+                segments [
+                  {
+                    end [0.25, 0]
+                    arcCenter [0, 0]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      shape Prism "cubic-curve" {
+        position [0, -0.65, 0]
+        scale [1.3, 0.5, 0.045]
+        material: 1
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            stroke {
+              radiusStart: 0.045
+              radiusEnd: 0.045
+            }
+            contours [
+              {
+                start [-0.7, -0.1]
+                segments [
+                  {
+                    control [-0.2, 0.8]
+                    control2 [0.2, -0.8]
+                    end [0.7, 0.1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+
+placements {
+  placement "profiles" {
+    prototype: "profiles"
+    position [0, 0, 0]
+  }
+}

@@ -16,6 +16,8 @@ namespace Puck.Text;
 /// contextual positioning is not read. CFF execution, boundary processing, and per-glyph raster work have fixed
 /// safety limits; exceeding a limit throws rather than returning a partial atlas. Quantized and filtered samples
 /// are not guaranteed conservative sphere-tracing steps.
+/// <para>Parsing, budget reservations, and packing are ordered. Rasterization uses at most four workers over
+/// disjoint glyph rectangles; worker scheduling does not change pixel arithmetic or metadata order.</para>
 /// </remarks>
 public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
     private sealed record GlyphRaster(
@@ -474,6 +476,39 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
         var rgba = new byte[checked(((shelves.Width * shelves.Height) * 4))];
         var cellsByGlyphId = new Dictionary<ushort, (FontAtlasBounds Atlas, FontAtlasBounds Plane)>();
 
+        void Rasterize(int index) {
+            var glyph = drawableGlyphs[index];
+            var placement = shelves.Placements[index];
+
+            MtsdfGlyphField.EvaluateCell(
+                budget: budget,
+                atlasRgba: rgba,
+                atlasWidth: shelves.Width,
+                cellHeight: placement.Height,
+                cellWidth: placement.Width,
+                cellX: placement.X,
+                cellY: placement.Y,
+                distanceRange: request.Options.DistanceRange,
+                prepared: prepared[index],
+                offsetX: (request.Options.Padding - MathF.Floor(x: glyph.Glyph.Left)),
+                offsetY: (request.Options.Padding - MathF.Floor(x: glyph.Glyph.Top))
+            );
+        }
+
+        // PrepareCell reserved ALL raster work before allocating the image. Evaluation only reads the budget's
+        // cancellation token and its prepared geometry, and each cell owns a disjoint rectangle in rgba.
+        // Keep metadata assembly below serial so scheduling cannot affect atlas order or kerning.
+        if ((drawableGlyphs.Length > 1) && (Environment.ProcessorCount > 1)) {
+            Parallel.For(0, drawableGlyphs.Length, new ParallelOptions {
+                CancellationToken = budget.CancellationToken,
+                MaxDegreeOfParallelism = Math.Min(val1: 4, val2: Environment.ProcessorCount),
+            }, Rasterize);
+        } else {
+            for (var index = 0; (index < drawableGlyphs.Length); index++) {
+                Rasterize(index: index);
+            }
+        }
+
         for (var index = 0; (index < drawableGlyphs.Length); index++) {
             var glyph = drawableGlyphs[index];
             var placement = shelves.Placements[index];
@@ -488,19 +523,6 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             var planeLeft = ((glyphLeft - request.Options.Padding) / request.Options.FontPixelSize);
             var planeTop = (-(glyphTop - request.Options.Padding) / request.Options.FontPixelSize);
 
-            MtsdfGlyphField.EvaluateCell(
-                budget: budget,
-                atlasRgba: rgba,
-                atlasWidth: shelves.Width,
-                cellHeight: glyphHeight,
-                cellWidth: glyphWidth,
-                cellX: cellX,
-                cellY: cellY,
-                distanceRange: request.Options.DistanceRange,
-                prepared: prepared[index],
-                offsetX: (request.Options.Padding - glyphLeft),
-                offsetY: (request.Options.Padding - glyphTop)
-            );
             cellsByGlyphId.Add(
                 key: glyph.GlyphId,
                 value: (

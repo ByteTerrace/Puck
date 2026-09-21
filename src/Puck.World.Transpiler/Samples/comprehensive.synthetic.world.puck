@@ -35,17 +35,17 @@ template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
 // Host settings block
 host {
   authority: null
-  backend: "auto"
+  backend: auto
   exitAfterSeconds: 0
   fullscreen: false
   genlock: null
   height: 720
   journalDepth: 2000
   listen: null
-  presentMode: "Immediate"
-  presentation: "Windowed"
+  presentMode: Immediate
+  presentation: Windowed
   rayQuery: true
-  surfaceFormat: "r8g8b8a8"
+  surfaceFormat: r8g8b8a8
   targetHertz: targetFps
   timing: false
   width: 1280
@@ -153,7 +153,7 @@ placements {
 rule "advance-round" {
   when tableState[activeRound] < 8 and not tableState[locked] == 1
   mode: Edge
-  local seat: Int = $each
+  local seat = $each
   tableState[activeRound] += 1
   schedule tableState[settle] in 0.25s
   transaction {
@@ -165,7 +165,7 @@ rule "advance-round" {
 }
 
 rule "choose-seat" {
-  forEach: "seat"
+  forEach: seat
   decision {
     periodSeconds: 1s
     commitmentSeconds: 3s

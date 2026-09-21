@@ -214,7 +214,7 @@ public sealed class IslandLawTests {
     public void TheGamesStandOnTheMarketHallFloor() {
         var definition = AuthoredGameFixtures.Nexus;
 
-        foreach (var root in new[] { "tabletop", "hexTable", "mancalaTable", "billiardsTray", "bowlingLane", "dominoRun" }) {
+        foreach (var root in new[] { "hexTable", "mancalaTable", "billiardsTray", "bowlingLane", "dominoRun" }) {
             var placement = Assert.Single(
                 collection: definition.Placements,
                 predicate: row => (row.Id == root)

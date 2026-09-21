@@ -511,10 +511,20 @@ Client code never mutates local state before the server's verdict
 (`WorldRuleHost.cs`, `WorldServer.Arena.cs`) inside its own firing's journal
 scope, and rules read through the same arena; one rule firing is one scope,
 committed on success and rewound on the first refusal. What the arena
-accumulated across the tick's firings exports into one mutation through the
-ordinary door at the end of the tick (`InstallArenaExport`), so every other
-reader (bodies, fields, search, the console) sees a rule's write only after
-that export. Row versions on the arena drive the rule scheduler and memoized
+accumulated across the tick's firings is published into the installed document
+at the end of the tick (`WorldServer.PublishArena`), so every other reader
+(bodies, fields, search, the console) sees a rule's write only after that
+publication. Only rows whose version moved are read back out of the arena; the
+rest of the installed rows are kept. Publication ends in
+`WorldDocument.ReconcileStateConsumers`, the same routine a value mutation ends
+in, so anything outside the arena that caches a state value (drive gates, field
+input, body scale, inhabit counts) is added there, never to one door. A
+document-row arm is `EffectNeeds.Transactional`: a firing's rows are prepared
+as one `WorldMutation.Batch` through `WorldDocument.TryPrepareMutation` before
+the arena scope commits, where any gate's refusal rewinds the firing, and
+installed by `InstallPrepared` after it. A gate added to the mutation door goes
+in `TryPrepareMutation`; nothing in `InstallPrepared` may refuse. Every other world arm is delivered after
+the commit, and a failed delivery is counted and undoes nothing. Row versions on the arena drive the rule scheduler and memoized
 bindings (`RuleSchedule`, `IStateReader.TryRowVersion`); a rule whose read
 rows are unchanged keeps its closed verdict. A text cell, a removal, a draw, a
 shuffle, and a random or slice transfer take the same arena kernels
@@ -534,7 +544,7 @@ cannot hold that type itself, since `build/Architecture.props`'s
 output if one slips in. A fixture server narrates only if it is handed the
 sink (`Fixtures.FreshServer` does), so a law that captures `Console.Error`
 reads what the game prints.
-A body sleeps after `bodies.sleepAfterTicks` idle engine ticks (0 never sleeps)
+A body sleeps after `bodies.sleepAfterSeconds` idle (0 never sleeps; a multiple of 1/800 s)
 and wakes on intent, pose, transfer, admission, a designation, a dynamic
 contact, or a contact-field version bump (`WorldBody.Sleep.cs`). A value write
 delivers `DeliverState`; a shape change delivers `DeliverDefinition`; the
@@ -636,7 +646,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   leg with exit 2. A `state` row may
   carry a `verdict` trait (`gate` prose plus the `status` cell key; the
   row's other cells are the values the gate saw, status 0/1/2 =
-  never-evaluated/pass/fail). `world.schedule` and `world.verdicts` are the
+  never-evaluated/pass/fail). A verdict row is kind Int, so what its gate saw of
+  a Fixed or Bool row sits in a row of that kind carrying `witness: "<verdict
+  row>"`, which the same doors refuse and which freezes with its verdict.
+  `world.schedule` and `world.verdicts` are the
   read-backs; `puck test <path>` boots each such world twice through the real
   executable, refuses one whose two exports differ, and prints one line per
   verdict. This section and that trait are what a `.puck`
@@ -882,3 +895,36 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
   1,542/2,048, and panels 10/16. A HUD or binding-surface capacity bump fails
   the `Puck.Overlays` build until the leases move with it
   ([references/hud.md](references/hud.md)).
+
+## Records, pools, and retained turns
+
+Use the current [state data model](../../../docs/reference/state/data-model.md)
+and [rule reference](../../../docs/reference/state/rules.md) when editing records,
+pools, token knowledge, or retained turns. A pool-field reference is structural:
+`StateChannelRef.PoolField` carries either binding + field or pool + slot + field;
+the `.puck` printer may show `piece.health` or `pieces[0].health`, but document code
+must not recover those parts by splitting a dotted string. A lexical reference
+holds its generation-checked handle. A static slot reference resolves the current
+live occupant and therefore follows release/reclaim.
+
+World body carriers are record enum fields plus `properties.carriers`. Map every
+enum member exactly once to one single-inhabitant placement, one local seat, or an
+explicit detached entry. Store no physical body index in a record, and do not add
+a generation-pinned attachment path beside carriers. Arena and Pong are the
+shipped examples: both author enum roles; Arena also keeps fighter health,
+respawn, and pickup state in records. Interaction geometry resolves the logical
+role to a body, while effects read or write the same instance through lexical
+bindings.
+
+Pool lifetime tests must include release/reclaim and export/reload, including a
+reclaimed nonzero generation and pair carriers. Exercise module read/action
+exports through lexical bindings and include lossless compile/decompile laws.
+For retained turns, declare the complete pool closure (domain, generation, and
+field rows), account for depth plus one pending segment, and cover claim/release,
+advancing-field clocks, checkpoint/hash continuation, outside-row invalidation,
+and atomic `rewindTurn`. A write outside the closure makes the turn unrewindable;
+it must never be silently omitted from a compact retained record.
+
+After changing this surface, regenerate schema, vocabulary, and name-registry
+outputs with their CLI owners and run the affected State, Rules, World, and
+World.Transpiler suites. A generated projection probe must cover every new arm.

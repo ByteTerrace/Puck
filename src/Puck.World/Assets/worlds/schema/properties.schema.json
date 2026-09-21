@@ -13,6 +13,74 @@
           "null"
         ]
       }
+    },
+    "carriers": {
+      "description": "Gets the immutable dynamic pool-to-body bindings.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "Maps an enum field on each live instance to a declared logical body binding. Release removes the carrier; reclaim resolves the new lifetime\u0027s field value. Stored values never encode physical body indices.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "pool": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "field": {
+            "title": "CellName",
+            "type": "string"
+          },
+          "bindings": {
+            "description": "Gets the immutable mapping, with exactly one entry for each enum member.",
+            "type": "array",
+            "items": {
+              "description": "Maps an enum member to a named inhabited placement or local seat. With neither target the member explicitly detaches the instance; specifying both targets is refused.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "member": {
+                  "title": "CellName",
+                  "type": "string"
+                },
+                "placement": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "seat": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "member"
+              ],
+              "additionalProperties": false,
+              "title": "WorldPoolBodyBinding"
+            }
+          }
+        },
+        "required": [
+          "pool",
+          "field",
+          "bindings"
+        ],
+        "additionalProperties": false,
+        "title": "WorldPoolBodyCarrier"
+      },
+      "default": null
     }
   },
   "required": [

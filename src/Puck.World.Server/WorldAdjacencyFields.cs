@@ -72,6 +72,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             ) {
                 var frame = row.Boundary.CompileFrame();
 
+                depth = ProjectionOverlapDepth(adjacency: row, derived: depth);
+
                 direct[row.Name.Value] = neighbour;
                 visuals.Add(item: new WorldAdjacencyProjection(
                     Name: row.Name.Value,
@@ -81,6 +83,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                             Source: frame,
                             OverlapDepth: depth,
                             OwnershipThreshold: OwnershipThreshold(
+                                adjacency: row,
                                 definition: definition,
                                 frame: in frame
                             )
@@ -153,6 +156,9 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 // derives from that document's own envelope, never the local one.
                 var intermediateFrame = leftEdge.Boundary.CompileFrame();
                 var localFrame = leftRow.Boundary.CompileFrame();
+                var intermediateRow = leftNeighbour.Definition.Adjacencies!.First(predicate: candidate => (candidate.Name == leftEdge.Name));
+
+                cornerDepth = ProjectionOverlapDepth(adjacency: intermediateRow, derived: cornerDepth);
 
                 visuals.Add(item: new WorldAdjacencyProjection(
                     Name: $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}",
@@ -163,6 +169,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                             Source: intermediateFrame,
                             OverlapDepth: cornerDepth,
                             OwnershipThreshold: OwnershipThreshold(
+                                adjacency: intermediateRow,
                                 definition: leftNeighbour.Definition,
                                 frame: in intermediateFrame
                             )
@@ -176,6 +183,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                                 comparisonType: StringComparison.Ordinal
                             ))).OverlapDepth,
                             OwnershipThreshold: OwnershipThreshold(
+                                adjacency: leftRow,
                                 definition: definition,
                                 frame: in localFrame
                             )
@@ -190,8 +198,10 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         return visuals.ToArray();
     }
     // The threshold the ownership scan hands a body over at, derived from the document that authors the face. A
-    // document whose envelope does not derive contributes no expansion rather than an assumed one.
-    private static FixedQ4816 OwnershipThreshold(WorldDefinition definition, in WorldFaceFrame frame) {
+    // document whose envelope does not derive still preserves the explicit authored lower bound.
+    private static FixedQ4816 OwnershipThreshold(WorldDefinition definition, WorldAdjacency adjacency, in WorldFaceFrame frame) {
+        var authored = FixedQ4816.FromDouble(value: adjacency.Hysteresis);
+
         if (
             !WorldAdjacencyPolicy.TryReciprocalHysteresis(
             definition: definition,
@@ -204,15 +214,21 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             reason: out _
         )
         ) {
-            return FixedQ4816.Zero;
+            return authored;
         }
 
-        return WorldAdjacencyPolicy.OwnershipThreshold(
+        return FixedQ4816.Max(
+            x: authored,
+            y: WorldAdjacencyPolicy.OwnershipThreshold(
             frame: in frame,
             reciprocalHysteresis: hysteresis,
             verticalOwnershipDeadband: deadband
-        );
+        ));
     }
+    private static FixedQ4816 ProjectionOverlapDepth(FixedQ4816 derived, WorldAdjacency adjacency) => FixedQ4816.Max(
+        x: derived,
+        y: FixedQ4816.FromDouble(value: adjacency.Hysteresis)
+    );
     private bool TryResolveCorner(WorldInstance source, string key, string destinationName, string counterpart, IWorldAdjacencyNeighbour intermediate, WorldAdjacencyEdgeView intermediateEdge, out IWorldAdjacencyNeighbour? handle) {
         handle = null;
         if (

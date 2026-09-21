@@ -23,7 +23,7 @@ looks {
       scale: 1
       source: creation(prototypeId: "subject")
       motion {
-        lanes ["0", "0", "0", "0"]
+        lanes [0, 0, 0, 0]
       }
     }
   ]

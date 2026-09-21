@@ -15,7 +15,6 @@ public static partial class WorldConstructs {
         separator: " or ",
         values: kinds
     )}";
-
     private static WorldConstructMember Advance(string? node = null) => new(
         AdmittedKinds: NumericKinds,
         Default: null,
@@ -58,7 +57,6 @@ public static partial class WorldConstructs {
         Required: true,
         Summary: summary
     );
-
     private static IReadOnlyList<WorldConstruct> State() => [
         new(
             DocumentMember: "state",
@@ -139,11 +137,10 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "table name[family] : Kind [capacity(n)] [bounds(minimum:, maximum:, overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }",
+            Grammar: "table name[family] [capacity(n)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }",
             Keyword: "table",
             Members: [
                 RowName(summary: "The row's name, which every rule and binding reads it by."),
-                RowKind(choices: CellKinds),
                 Capacity(summary: "The row's cell-count ceiling; smaller than its own authored cells is refused."),
                 Bounds(),
                 Advance(),
@@ -212,9 +209,9 @@ public static partial class WorldConstructs {
                 ),
             ],
             Shape: WorldConstructShape.Declaration,
-            Snippet: "table ${1:name} : ${2|Int,Fixed,Bool,Text|} {\n    ${3:key} = $0\n}",
+            Snippet: "table ${1:name} {\n    ${2:key} = $0\n}",
             Sugar: new(
-                AdmittedKeys: ["domain"],
+                AdmittedKeys: ["domain", "kind"],
                 Condition: "its name is a bare identifier, its kind is a cell kind, its `domain` is the bare `keys` shape the lowering would itself have written, every bound and cell value is a literal of the row's kind, and every `advance` rate reduces to one literal",
                 Fallback: "`row { }`, the explicit form"
             ),
@@ -223,11 +220,10 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "slot name[family] : Kind [= value] [bounds(minimum:, maximum:, overflow:)] [advance(perSecond:)] [space(name)]",
+            Grammar: "slot name[family] [= value] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [space(name)]",
             Keyword: "slot",
             Members: [
                 RowName(summary: "The row's name, which every rule and binding reads it by."),
-                RowKind(choices: CellKinds),
                 new(
                     DocumentKeys: ["value"],
                     Kind: WorldMemberKind.Value,
@@ -247,8 +243,9 @@ public static partial class WorldConstructs {
                 ),
             ],
             Shape: WorldConstructShape.Declaration,
-            Snippet: "slot ${1:name} : ${2|Int,Fixed,Bool,Text|} = $0",
+            Snippet: "slot ${1:name} = $0",
             Sugar: new(
+                AdmittedKeys: ["kind"],
                 Condition: "its name is a bare identifier, its kind is a cell kind, it carries no `domain`, and every bound and its value is a literal of that kind",
                 Fallback: "`row { }`, the explicit form"
             ),
@@ -290,11 +287,10 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "grid name[family] : Int|Bool dimensions(width:, depth:) [wrap(…)] [cellSize(n)] [origin(x, y, z)] [band(n)] [empty(v)] [positions(row)] [inverse(tokens:, codes:)] [bounds(…)] [{ \"ordinal\" = value … }]",
+            Grammar: "grid name[family] dimensions(width:, depth:) [wrap(…)] [cellSize(n)] [origin(x, y, z)] [band(n)] [empty(v)] [positions(row)] [inverse(tokens:, codes:)] [bounds(…)] [{ \"ordinal\" = value … }]",
             Keyword: "grid",
             Members: [
                 RowName(summary: "The row's name, which is also the name of the topology the declaration mints."),
-                RowKind(choices: ["Int", "Bool"]),
                 new(
                     DocumentKeys: ["width", "depth"],
                     DocumentNode: "state.lattices[]",
@@ -374,8 +370,9 @@ public static partial class WorldConstructs {
                 ),
             ],
             Shape: WorldConstructShape.Declaration,
-            Snippet: "grid ${1:name} : ${2|Int,Bool|} dimensions(width: ${3:8}, depth: ${4:8})",
+            Snippet: "grid ${1:name} dimensions(width: ${2:8}, depth: ${3:8})",
             Sugar: new(
+                AdmittedKeys: ["kind"],
                 Condition: "it is the only row over its topology, and that topology carries nothing outside what the modifiers can spell",
                 Fallback: "`row { }` beside an explicit `state.lattices` entry"
             ),

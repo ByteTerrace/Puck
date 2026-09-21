@@ -102,11 +102,12 @@ the level's own floor), its single shape rendered and collided from the same dec
 unbounded `groundTexture` checkerboard (one tile wallpaper-folded with a parity `materialStride`
 over `state.colors.groundPrimary`/`groundSecondary`, a NON-SOLID placement — a solid placement
 carrying a wallpaper fold refuses by name, so the plane stays the sole collision truth). `placements.policy` is OPTIONAL —
-authored only by a world that wants live placement authoring, and then whole (a partial block
-refuses at parse naming the missing member); unauthored it derives (`WorldPlacementPolicyDefaults.DeriveFrom`):
-no live authoring (zero headroom, no derived faces, no candidate ring, no preview deadline) and a
-scale envelope spanning exactly the rows' authored scales, so the basis's static rows need no
-policy at all. The pip prototype's shape rotations are
+authored by a world that wants editor candidates or an explicit initial reserve, and then whole (a partial block refuses
+at parse naming the missing member). Unauthored it derives
+(`WorldPlacementPolicyDefaults.DeriveFrom`): zero placement and screen headroom, no derived
+faces, no candidate ring, no preview deadline, and a scale envelope spanning exactly the rows' authored scales, so the basis's static
+rows need no policy at all. Console placement mutations can grow the renderer beyond its initial reserve without
+an authored policy. The pip prototype's shape rotations are
 `state.transforms.identity`, its palette is `state.colors.*`, the seat rig's pivot is
 `state.transforms.origin` (the `IDocumentSpatialValue` machinery: `DocumentVector2`/`DocumentVector3`/
 `DocumentQuaternion` fields accept a literal array OR a text-cell reference, resolved at the

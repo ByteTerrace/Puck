@@ -69,6 +69,17 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
+        if (volume.Kind == FixedBodyColliderKind.Sphere) {
+            return FixedSphereBoxContact.TryPush(
+                sphereCenter: (position + orientation.Rotate(vector: volume.Center)),
+                radius: (volume.Radius + skin),
+                boxCenter: Center,
+                boxRotation: FixedQuaternion.Identity,
+                halfExtents: Extent,
+                push: out push
+            );
+        }
+
         var (bodyCenter, bodyExtent) = FixedColliderBounds.WorldBounds(
             orientation: in orientation,
             position: position,
@@ -183,43 +194,17 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
                     break;
                 }
             case FixedBodyColliderKind.Box: {
-                    var boxCenter = (position + orientation.Rotate(vector: volume.Center));
-                    var boxRotation = (orientation * volume.Rotation).Normalize();
-                    var local = boxRotation.RotateInverse(vector: (Center - boxCenter));
-                    var clamped = new FixedVector3(
-                        X: FixedQ4816.Clamp(
-                            value: local.X,
-                            minimum: -volume.HalfExtents.X,
-                            maximum: volume.HalfExtents.X
-                        ),
-                        Y: FixedQ4816.Clamp(
-                            value: local.Y,
-                            minimum: -volume.HalfExtents.Y,
-                            maximum: volume.HalfExtents.Y
-                        ),
-                        Z: FixedQ4816.Clamp(
-                            value: local.Z,
-                            minimum: -volume.HalfExtents.Z,
-                            maximum: volume.HalfExtents.Z
-                        )
+                    var overlaps = FixedSphereBoxContact.TryPush(
+                        sphereCenter: Center,
+                        radius: (Extent.X + skin),
+                        boxCenter: (position + orientation.Rotate(vector: volume.Center)),
+                        boxRotation: (orientation * volume.Rotation).Normalize(),
+                        halfExtents: volume.HalfExtents,
+                        push: out push
                     );
-
-                    closest = (boxCenter + boxRotation.Rotate(vector: clamped));
-                    bodyRadius = FixedQ4816.Zero;
-
-                    if (closest == Center) {
-                        var (localNormal, _, gap) = FixedAxisMath.BoxInteriorExit(
-                            halfExtents: volume.HalfExtents,
-                            local: local
-                        );
-
-                        push = new FixedContactPush(
-                            Normal: boxRotation.Rotate(vector: localNormal),
-                            Penetration: ((Extent.X + skin) + gap)
-                        );
-                        return true;
-                    }
-                    break;
+                    // The moving body is the box; the shared query moves the sphere.
+                    push = push with { Normal = -push.Normal };
+                    return overlaps;
                 }
             default:
                 throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");

@@ -140,47 +140,47 @@ public static class BodyActionSpecFactory {
             Operation: BodyMotionOp.SetState,
             Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
                 value: set.Value,
-                fromState: set.FromState,
-                fromKey: set.FromKey,
+                fromState: set.FromState?.Spelling,
+                fromKey: set.FromKey?.Spelling,
                 valueSeconds: set.ValueSeconds,
                 expression: set.Expression,
                 actionName: actionName,
                 effectName: "setState",
-                state: set.State
+                state: set.State.Spelling
             )),
             Direction: default,
             DurationTicks: 0UL,
             StateSlot: ResolveState(
-                name: set.State,
+                name: set.State.Spelling,
                 stateSlots: stateSlots,
-                key: set.Key,
+                key: set.Key?.Spelling,
                 effect: "setState"
             ),
             Target: set.Target,
-            StateName: set.State
+            StateName: set.State.Spelling
         ),
             ActionEffect.AddState add => new CompiledBodyInstruction(
             Operation: BodyMotionOp.AddState,
             Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
                 value: add.Value,
-                fromState: add.FromState,
-                fromKey: add.FromKey,
+                fromState: add.FromState?.Spelling,
+                fromKey: add.FromKey?.Spelling,
                 valueSeconds: add.ValueSeconds,
                 expression: add.Expression,
                 actionName: actionName,
                 effectName: "addState",
-                state: add.State
+                state: add.State.Spelling
             )),
             Direction: default,
             DurationTicks: 0UL,
             StateSlot: ResolveState(
-                name: add.State,
+                name: add.State.Spelling,
                 stateSlots: stateSlots,
-                key: add.Key,
+                key: add.Key?.Spelling,
                 effect: "addState"
             ),
             Target: add.Target,
-            StateName: add.State
+            StateName: add.State.Spelling
         ),
             WorldEffect.StartTimer timer => new CompiledBodyInstruction(
             Operation: BodyMotionOp.StartTimer,
@@ -213,13 +213,12 @@ public static class BodyActionSpecFactory {
             DurationTicks: 0UL,
             StateSlot: -1,
             Target: ActionTarget.Self,
-            StateName: generate.Row
+            StateName: generate.Row.Spelling
         ),
-            // countdownState/upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD state/document
-            // rows — a per-body
+            // upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD document rows — a per-body
             // action has none of its own, so these are refused BY NAME here rather than parsed and discarded
             // (legitimate only inside a WorldRule; see WorldFactsCompiler.CompileEffect).
-            ActionEffect.CountdownState or WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement =>
+            WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect '{effect.GetType().Name}', which has no body-scope meaning — it authors a WORLD document row and is admissible only inside a world rule's own effects."),
             // A per-body action compiles to a flat CompiledBodyInstruction stream with no branch of its own.
             ActionEffect.If =>
@@ -440,7 +439,7 @@ public static class BodyActionSpecFactory {
                     Fact: default,
                     RecencySlot: 0,
                     StateSlot: ResolveState(
-                        name: compare.State,
+                        name: compare.State.Spelling,
                         stateSlots: stateSlots
                     ),
                     Value: NumericLiteral.ToFixed(value: constant),

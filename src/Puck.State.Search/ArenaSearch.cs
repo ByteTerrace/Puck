@@ -12,8 +12,11 @@ namespace Puck.State;
 /// <param name="Cells">How many cells the job has.</param>
 /// <param name="Count">How many candidates the root accepted.</param>
 /// <param name="Nodes">How many candidates the job has judged.</param>
-/// <param name="NodesPerStep">The per-step judge quota.</param>
+/// <param name="NodesPerStep">The most candidates one step judges.</param>
 /// <param name="JudgeCost">The work units one judge run costs.</param>
+/// <param name="Allowance">The work units one step may spend on the job.</param>
+/// <param name="PeakStepWork">The most work units any one step has spent on the job since it last restarted.</param>
+/// <param name="Work">The work units the job has spent since it last restarted.</param>
 /// <param name="HasScore">Whether the job compares plies by a score.</param>
 /// <param name="Depth">The authored depth cap.</param>
 /// <param name="PassDepth">The depth the current iterative-deepening pass searches to.</param>
@@ -26,6 +29,7 @@ namespace Puck.State;
 /// <param name="HasOutcome">Whether the job's method backpropagates an outcome rather than a score.</param>
 public readonly record struct ArenaSearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerStep, long JudgeCost,
+    long Allowance, long PeakStepWork, long Work,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, int Iteration, int Iterations,
     int JudgeRules = 0, bool HasOutcome = false
 );
@@ -48,19 +52,35 @@ public readonly record struct ArenaSearchStatus(
 /// its own judge, and translates a landed job's writes into whatever mutation vocabulary it owns.</para>
 /// </remarks>
 public sealed partial class ArenaSearch {
+    // One ply of the walk: the root, a move ply, or a chance ply. A chance ply enumerates outcomes through its
+    // candidate cursor and folds a weighted sum instead of a maximum; the rest of its window goes unused.
     private sealed class Level {
-        public long Alpha;
+        public long Alpha = -SearchCapacity.MateScore;
+
         public long AlphaEntry;
         public long BaseTurn;
-        public long Best;
+
+        public long Best = -SearchCapacity.MateScore;
         public int BestTarget = -1;
         public int BestToken = -1;
-        public long Beta;
+        public long Beta = SearchCapacity.MateScore;
+
+        // The outcomes folded so far, each value times its weight, and the weight they carried. The sum is exact:
+        // a baked table's whole weight fits one word, so values of MateScore magnitude under it stay inside 128 bits
+        // however many outcomes share it.
+        public Int128 ChanceSum;
+        public ulong ChanceWeight;
+
+        // The cell the candidate that opened this ply lands on, which is what the parent folds as its best move.
+        public int EntryTarget = -1;
+
         // The position's key and the window's lower edge at entry, for the transposition table's store.
         public ulong Key;
+
         // The seat vector of the best line found at this ply. A scope rewind discards what the position carried, so
         // a max-n fold remembers the vector here instead of in the position it came from.
         public long[] Seats = [];
+
         public int Shape;
         public int Target;
         public int Token;
@@ -113,7 +133,14 @@ public sealed partial class ArenaSearch {
         }
 
         public int Active { get; set; }
-        public long BaseTurn { get; set; }
+        public long Alpha { get => Root.Alpha; set => Root.Alpha = value; }
+        public long BaseTurn { get => Root.BaseTurn; set => Root.BaseTurn = value; }
+        public long Best { get => Root.Best; set => Root.Best = value; }
+        public int BestTarget { get => Root.BestTarget; set => Root.BestTarget = value; }
+        public int BestToken { get => Root.BestToken; set => Root.BestToken = value; }
+        public long Beta { get => Root.Beta; set => Root.Beta = value; }
+        // How many of the open scopes hold a chance draw rather than a move, so a ply counts moves alone.
+        public int ChanceScopes { get; set; }
 
         public CellKey[] ChanceKeys { get; set; } = [];
 
@@ -125,6 +152,9 @@ public sealed partial class ArenaSearch {
         public IArenaSearchJudge Judge { get; set; } = null!;
         // Every row a position key folds: what the plan names and what the judge reads, ascending.
         public int[] KeyRows { get; set; } = [];
+        // The judge reads the live clock directly, or one of its keyed rows has value-over-time traits. This is
+        // derived once when the job is installed, keeping an idle untimed step to its existing row-version walk.
+        public bool TimeSensitive { get; set; }
 
         public long[] Legal { get; set; }
         public Level[] Levels { get; set; }
@@ -136,6 +166,9 @@ public sealed partial class ArenaSearch {
         public int PlayCount { get; set; }
         public int PlayoutPlies { get; set; }
 
+        // Ply zero. Iterative-deepening negamax is engaged only for a scored job; the root folds candidates into
+        // its window but never cuts on it, so the root outputs never depend on whether a score is authored.
+        public Level Root { get; } = new();
         public CellKey[] ScoreKeys { get; set; } = [];
 
         // The seat vector read off the arena, reused by every max-n fold.
@@ -148,10 +181,12 @@ public sealed partial class ArenaSearch {
         public int[] ScopeShape { get; set; }
         public int[] ScopeTarget { get; set; }
         public int[] ScopeToken { get; set; }
-        public int Shape { get; set; }
+        public int Shape { get => Root.Shape; set => Root.Shape = value; }
         public ulong Stamp { get; set; }
-        public int Target { get; set; }
-        public int Token { get; set; }
+        // The most any one step has spent on the job, and what the job has spent in all, since it restarted.
+        public long PeakStepWork { get; set; }
+        public int Target { get => Root.Target; set => Root.Target = value; }
+        public int Token { get => Root.Token; set => Root.Token = value; }
         public int TokenCount { get; set; }
         public CellKey[] TokenKeys { get; set; }
         public int[]? TreeChildCount { get; set; }
@@ -179,18 +214,12 @@ public sealed partial class ArenaSearch {
         public CellKey[] ReachKeys { get; set; } = [];
 
         public long[]? Wide { get; set; }
+        public long Work { get; set; }
 
         public ulong Seed;
 
-        // Iterative-deepening negamax, engaged only for a scored job. PassDepth is the depth the current pass
-        // searches to; Active is which ply (0 = root) is being expanded. The root updates Alpha as candidates fold
-        // in but never breaks its own loop on it, so the root outputs never depend on whether a score is authored.
+        // PassDepth is the depth the current pass searches to; Active is which ply (0 = root) is being expanded.
         public int PassDepth { get; set; } = 1;
-        public long Best { get; set; } = -SearchCapacity.MateScore;
-        public int BestToken { get; set; } = -1;
-        public int BestTarget { get; set; } = -1;
-        public long Alpha { get; set; } = -SearchCapacity.MateScore;
-        public long Beta { get; set; } = SearchCapacity.MateScore;
 
         public static Level[] BuildLevels(int depth, int seatCount) {
             var levels = new Level[Math.Max(
@@ -215,8 +244,10 @@ public sealed partial class ArenaSearch {
     // never checkpointed, so it only ever says the fold may be reused; the stamp a job compares stays the fold of
     // the rows' content, which a restored arena reproduces.
     private bool m_stampFolded;
+    private ulong m_stampLedger;
     private ulong m_stampValue;
     private ulong[] m_stampVersions = [];
+    private CellKey m_bestRevisionKey;
     private CellKey m_bestScoreKey;
     private CellKey m_bestTargetKey;
     private CellKey m_bestTokenKey;
@@ -234,13 +265,15 @@ public sealed partial class ArenaSearch {
         m_arena = arena;
         m_narrate = narrate;
 
-        ResolveCatalogKeys();
+        ResolveArenaKeys();
     }
 
-    // The keys a landed job addresses its own output rows by. They are the catalog's, and a relayout replaces the
-    // catalog, so they are re-resolved on every install rather than held from construction.
-    private void ResolveCatalogKeys() {
-        var keys = m_arena.Catalog.Keys;
+    // The keys a landed job addresses its own output rows by. Relayout replaces the arena's runtime key table,
+    // so they are re-resolved on every install rather than held from construction.
+    private void ResolveArenaKeys() {
+        var keys = m_arena.Keys;
+
+        _ = keys.TryResolve(key: out m_bestRevisionKey, name: CellName.Parse(candidate: "revision"));
 
         _ = keys.TryResolve(
             key: out m_bestScoreKey,
@@ -285,7 +318,7 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
-        ResolveCatalogKeys();
+        ResolveArenaKeys();
 
         var jobs = new Job[plans.Length];
         var rows = m_arena.Layout.RowCount;
@@ -324,7 +357,7 @@ public sealed partial class ArenaSearch {
             }
             if (
                 (plan.BestOrdinal >= 0) &&
-                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid)
+                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid || ((plan.RevisionOrdinal >= 0) && !m_bestRevisionKey.IsValid))
             ) {
                 reason = $"search '{plan.Name}' writes a best-move row, and this catalog interns no 'token', 'to', and 'score' keys to address it by";
 
@@ -333,6 +366,12 @@ public sealed partial class ArenaSearch {
             if (!judge.TryAdmit(
                 plan: plan,
                 refusal: out reason
+            )) {
+                return false;
+            }
+            if (!TryCheckWork(
+                plan: plan,
+                reason: out reason
             )) {
                 return false;
             }
@@ -357,6 +396,11 @@ public sealed partial class ArenaSearch {
                 judge: judge,
                 plan: plan
             );
+            job.TimeSensitive = judge.ReadsTick;
+
+            foreach (var ordinal in job.KeyRows) {
+                job.TimeSensitive |= m_arena.Layout[ordinal].HasTraits;
+            }
             job.ScoreKeys = ResolveRowKeys(
                 count: job.Seats.Length,
                 rowOrdinal: plan.ScoresOrdinal
@@ -370,8 +414,8 @@ public sealed partial class ArenaSearch {
 
         return true;
     }
-    /// <summary>Advances every job by its node quota, landing a finished job's outputs through
-    /// <paramref name="apply"/>.</summary>
+    /// <summary>Advances every job by what its allowance and its judged-candidate quota admit, landing a finished
+    /// job's outputs through <paramref name="apply"/>.</summary>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="engineTick">The engine tick a value-over-time read answers as of.</param>
     /// <param name="apply">Installs one job's writes through the caller's own door.</param>
@@ -390,29 +434,48 @@ public sealed partial class ArenaSearch {
         var stamp = Stamp();
 
         foreach (var job in m_jobs) {
-            if (job.Stamp != stamp) {
+            if ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
+                continue;
+            }
+            var work = job.Plan.Work;
+            var spent = 0L;
+
+            // A restart and a replay are work the step does before the walk moves, so both come out of the step's
+            // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
+            var jobStamp = Stamp(
+                job: job,
+                stateStamp: stamp
+            );
+
+            if (job.Stamp != jobStamp) {
                 Restart(
                     job: job,
-                    stamp: stamp
+                    stamp: jobStamp
                 );
+                spent += work.Restart;
             }
             if (job.Running) {
                 try {
+                    spent += work.Replay(scopes: job.ScopeCount);
                     if (!Replay(job: job)) {
                         Restart(
                             job: job,
-                            stamp: stamp
+                            stamp: jobStamp
                         );
+                        spent += work.Restart;
                     }
 
-                    Walk(job: job);
+                    spent = Walk(
+                        job: job,
+                        spent: spent
+                    );
                 } catch {
                     // Rewinding first puts the arena back to what the stamp was taken over, so the restart reads
                     // the position the step started from.
                     Suspend(job: job);
                     Restart(
                         job: job,
-                        stamp: stamp
+                        stamp: jobStamp
                     );
 
                     throw;
@@ -420,6 +483,12 @@ public sealed partial class ArenaSearch {
 
                 Suspend(job: job);
             }
+
+            job.PeakStepWork = Math.Max(
+                val1: job.PeakStepWork,
+                val2: spent
+            );
+            job.Work += spent;
             if (
                 job.Running ||
                 job.Done
@@ -440,10 +509,14 @@ public sealed partial class ArenaSearch {
     /// <summary>Returns the transposition key of the position the arena holds for one job.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The key.</returns>
-    /// <remarks>The key folds the rows the job's plan addresses and the rows its judge reads, so a row outside both
-    /// moves the arena's own hash and never this.</remarks>
+    /// <remarks>The root key folds the rows the job's plan addresses and the rows its judge reads, so a row outside
+    /// both moves the arena's own hash and never this. A transposition key also folds the move ply supplied to a
+    /// judge, because a search-only rule may read it.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> addresses no installed job.</exception>
-    public ulong PositionKey(int index) => PositionKey(job: JobAt(index: index));
+    public ulong PositionKey(int index) => PositionKey(
+        job: JobAt(index: index),
+        movePly: 0
+    );
     /// <summary>Returns one job's progress.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The status.</returns>
@@ -463,7 +536,10 @@ public sealed partial class ArenaSearch {
             Count: job.Count,
             Nodes: job.Nodes,
             NodesPerStep: plan.Nodes,
-            JudgeCost: plan.JudgeCost,
+            JudgeCost: plan.Work.Judge,
+            Allowance: plan.Work.Allowance,
+            PeakStepWork: job.PeakStepWork,
+            Work: job.Work,
             HasScore: (plan.Scored || (plan.ScoresOrdinal >= 0)),
             Depth: plan.Depth,
             PassDepth: job.PassDepth,
@@ -506,6 +582,8 @@ public sealed partial class ArenaSearch {
             plan.TokensOrdinal,
             plan.TurnOrdinal,
             plan.VerdictOrdinal,
+            ((plan.EnabledOrdinal >= 0) ? plan.EnabledOrdinal : plan.TurnOrdinal),
+            ((plan.RevisionOrdinal >= 0) ? plan.RevisionOrdinal : plan.TurnOrdinal),
             ((plan.ScoresOrdinal >= 0)
                 ? plan.ScoresOrdinal
                 : plan.TurnOrdinal),
@@ -555,6 +633,20 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
+        if (
+            (node.AtDepth < 0) ||
+            (node.AtDepth >= plan.Depth)
+        ) {
+            reason = $"search '{plan.Name}' declares a chance node at ply {node.AtDepth}, outside the {plan.Depth} it searches";
+
+            return false;
+        }
+        if (plan.ScoresOrdinal >= 0) {
+            reason = $"search '{plan.Name}' declares a chance node, which averages one value, over per-seat scores, which fold a vector";
+
+            return false;
+        }
+
         var total = 0UL;
 
         foreach (var weight in weights) {
@@ -566,6 +658,31 @@ public sealed partial class ArenaSearch {
 
             total += weight;
         }
+
+        return true;
+    }
+    // A job whose allowance cannot cover a restart, a full replay, and one unit would stop making progress the
+    // first step its scopes ran that deep, so it is refused with the sum it needs rather than left to starve.
+    private static bool TryCheckWork(ArenaSearchPlan plan, out string reason) {
+        var work = plan.Work;
+
+        if (plan.Nodes < 1) {
+            reason = $"search '{plan.Name}' judges {plan.Nodes} candidates a step, and a job that judges none never lands";
+
+            return false;
+        }
+        if (
+            (work.Minimum == long.MaxValue) ||
+            (work.Allowance < work.Minimum)
+        ) {
+            reason = $"search '{plan.Name}' may spend {work.Allowance} work units a step and needs {((work.Minimum == long.MaxValue)
+                ? "more than any allowance holds"
+                : work.Minimum.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))} to make progress: a restart at {work.Restart}, a replay of {work.Scopes} scopes at {work.Candidate} each, and one unit at {work.Unit}";
+
+            return false;
+        }
+
+        reason = string.Empty;
 
         return true;
     }
@@ -648,16 +765,22 @@ public sealed partial class ArenaSearch {
     // not look like an input change and restart it.
     //
     // A row whose version has not moved holds the bytes it held, so the fold is taken again only when some input
-    // row's version has: an idle tick compares one counter per row rather than folding every cell of the arena.
+    // row's version has. The retained-key ledger and byte charge are also inputs because they limit a judge's
+    // future mints; their cached fold keeps an idle tick to one counter per row and constant extra work.
     private ulong Stamp() {
         var rows = m_arena.Layout.RowCount;
+
+        var ledger = Fnv1aHash.Create();
+
+        m_arena.AddKeyLedgerTo(hash: ref ledger);
+        ledger.Add(value: m_arena.Bytes);
 
         if (m_stampVersions.Length != rows) {
             m_stampFolded = false;
             m_stampVersions = new ulong[rows];
         }
 
-        var moved = !m_stampFolded;
+        var moved = (!m_stampFolded || (m_stampLedger != ledger.Value));
 
         for (var ordinal = 0; (ordinal < rows); ordinal++) {
             var version = m_arena.RowVersion(rowOrdinal: ordinal);
@@ -685,32 +808,56 @@ public sealed partial class ArenaSearch {
             );
         }
 
+        m_arena.AddKeyLedgerTo(hash: ref hash);
+        hash.Add(value: m_arena.Bytes);
+
         m_stampFolded = true;
+        m_stampLedger = ledger.Value;
         m_stampValue = hash.Value;
 
         return m_stampValue;
     }
-    // The transposition key of the position the arena holds for one job: its own rows alone, folded in ordinal
-    // order.
-    private ulong PositionKey(Job job) {
+    // State changes restart every job. The clock changes only restart a job that can observe it, so a world with
+    // ordinary search rules does not discard its walk on every tick.
+    private ulong Stamp(Job job, ulong stateStamp) {
+        if (!job.TimeSensitive) {
+            return stateStamp;
+        }
+
         var hash = Fnv1aHash.Create();
 
-        var timed = false;
+        hash.Add(value: stateStamp);
+        hash.Add(value: m_tick);
+        hash.Add(value: m_engineTick);
+
+        return hash.Value;
+    }
+    // The transposition key of the position the arena holds for one job: its own rows and the move ply its judge
+    // reads, folded in a stable order. A chance draw does not advance that ply, so callers pass MovePly rather than
+    // their structural level.
+    private ulong PositionKey(Job job, int movePly) {
+        var hash = Fnv1aHash.Create();
 
         foreach (var ordinal in job.KeyRows) {
             m_arena.AddRowTo(
                 hash: ref hash,
                 rowOrdinal: ordinal
             );
-            timed |= m_arena.Layout[ordinal].HasTraits;
         }
 
-        // A row carrying a value-over-time trait answers a live read from its stored epoch and the tick it is read
-        // at, so a position over such a row is the same position only at the same tick pair.
-        if (timed) {
+        // A retained orphan name and the arena byte ledger govern whether a judge can mint a later member. They
+        // therefore belong to a candidate's cache identity even when no keyed row presently holds that name.
+        m_arena.AddKeyLedgerTo(hash: ref hash);
+        hash.Add(value: m_arena.Bytes);
+
+        // A judge that reads the clock directly, or a row whose value-over-time trait reads it, sees this position
+        // only at one tick pair.
+        if (job.TimeSensitive) {
             hash.Add(value: m_tick);
             hash.Add(value: m_engineTick);
         }
+
+        hash.Add(value: movePly);
 
         return hash.Value;
     }
@@ -736,11 +883,18 @@ public sealed partial class ArenaSearch {
         job.Done = false;
         job.Iteration = 0;
         job.Nodes = 0L;
-        job.PassDepth = 1;
+        // A chance node at the root has no move to choose before the draw, so its one pass searches the plan's
+        // whole depth rather than deepening toward it.
+        job.PassDepth = ((job.Plan.Chance is { AtDepth: 0 })
+            ? job.Plan.Depth
+            : 1
+        );
         job.Running = true;
         job.Stamp = stamp;
         job.TreeActive = false;
+        job.PeakStepWork = 0L;
         job.TreeCount = 0;
+        job.Work = 0L;
         job.TtKey?.AsSpan().Clear();
         job.TtMeta?.AsSpan().Clear();
         job.TtValue?.AsSpan().Clear();
@@ -776,6 +930,8 @@ public sealed partial class ArenaSearch {
         job.BestTarget = -1;
         job.BestToken = -1;
         job.Beta = SearchCapacity.MateScore;
+        job.Root.ChanceSum = Int128.Zero;
+        job.Root.ChanceWeight = 0UL;
         job.Count = 0L;
         job.Counts.AsSpan().Clear();
         job.Legal.AsSpan().Clear();
@@ -845,6 +1001,13 @@ public sealed partial class ArenaSearch {
             }
         }
         if (plan.BestOrdinal >= 0) {
+            if (plan.RevisionOrdinal >= 0) {
+                m_outputs.Add(item: new ArenaSearchWrite.Cell(
+                    Key: m_bestRevisionKey,
+                    RowOrdinal: plan.BestOrdinal,
+                    Value: Slot(rowOrdinal: plan.RevisionOrdinal)
+                ));
+            }
             m_outputs.Add(item: new ArenaSearchWrite.Cell(
                 Key: m_bestTokenKey,
                 RowOrdinal: plan.BestOrdinal,

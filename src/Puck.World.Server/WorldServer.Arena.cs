@@ -4,14 +4,28 @@ namespace Puck.World.Server;
 
 /// <summary>The server's columnar store: the arena is the authoritative state during a tick, and the installed
 /// document is the arena's export at the end of it.</summary>
-/// <remarks>Every seeding of the arena — construction, a document install, a checkpoint restore — runs the authored
-/// rows through <see cref="StateArena.TryLoad"/>, the one import door, so a value the document could not write is
-/// refused by row and cell name rather than stored.</remarks>
+/// <remarks>Construction, document installation, and checkpoint restoration validate the complete state section.
+/// Pool storage is admitted through its typed snapshot; ordinary rows use <see cref="StateArena.TryLoad"/>.</remarks>
 public sealed partial class WorldServer {
     private StateArena m_arena = null!;
     private StateCatalog? m_arenaCatalog;
     private string[] m_drawSites = [];
-    private ulong[] m_rowVersionMarks = [];
+    // Each row's version as of the last time the installed document and the arena agreed on it: when the arena was
+    // seeded from the document, and when the row was last published. A row whose version has moved past this is
+    // what the next publication carries, whenever the write happened.
+    private ulong[] m_publishedVersions = [];
+    // A seeded arena holds the document's rows as authored, and a published row is the arena's own spelling of it:
+    // a row holding no cell carries none rather than an empty list. The first publication after a seed therefore
+    // carries every row, so the installed document is in one spelling from then on.
+    private bool m_publishEveryRow;
+    // One flag per catalog ordinal: the rows an open scope has written, as of the proposal in flight.
+    private bool[] m_openRows = [];
+    // What the last exports moved that a consumer outside the arena keeps its own copy of, until SettleStateConsumers
+    // brings them up to date.
+    private bool m_bodyScaleOwed;
+    private bool m_consumersOwed;
+    private bool m_driveGateOwed;
+    private bool m_fieldsOwed;
     private HashSet<string>? m_documentValueRows;
     // Document rows occupy the catalog's first ordinals, so this bounds every walk that only the exported document
     // depends on — a slot lane's write moves its own row's version and nothing the document carries.
@@ -62,9 +76,8 @@ public sealed partial class WorldServer {
             throw new InvalidOperationException(message: $"the world's state section does not load into the arena: {reason}");
         }
 
-        // The slot lanes belong to this host's session, not to the document being installed, so a replacement
-        // arena inherits them through the same routine a relayout carries them with. Without this a fallback build
-        // would silently re-birth every live body's registers at their authored initials.
+        // Construction normally has no earlier arena. Keeping the copy here makes an explicitly rebuilt host carry
+        // its session lanes through the same routine as a prepared replacement.
         m_arena?.CopyLanesTo(target: built);
         m_arena = built;
         AdoptLayout(definition: definition);
@@ -74,7 +87,8 @@ public sealed partial class WorldServer {
     // was installed at rather than from the origin, and recomputes every derived board from its own tokens and
     // codes rows. A clockless cell's clock and a derived board's cells are all this adopts — every other field of
     // every row stays the document's own, which is why this settles through the export rather than replacing the
-    // section with it. A load the arena refuses is left to BuildArena, which names the row and cell it is about.
+    // section with it. Construction-time callers leave a refused seed unchanged; a prepared mutation uses the
+    // refusing form below so the refusal lands before its document is installed.
     private WorldDefinition SettleInstalledRows(WorldDefinition definition) {
         var rows = definition.State;
 
@@ -95,6 +109,13 @@ public sealed partial class WorldServer {
             return definition;
         }
 
+        return SettleInstalledRows(
+            definition: definition,
+            seeded: seeded
+        );
+    }
+    private static WorldDefinition SettleInstalledRows(WorldDefinition definition, StateArena seeded) {
+        var rows = definition.AuthoredState;
         var exported = seeded.ToRows();
         List<WorldStateRow>? settled = null;
 
@@ -158,6 +179,59 @@ public sealed partial class WorldServer {
             : definition.WithWorldState(rows: settled)
         );
     }
+
+    // Builds the exact arena a prepared document install will adopt. The live arena remains untouched until the
+    // document's commit, so a capacity refusal cannot leave its catalog, rows, lanes, or retained keys half moved.
+    internal bool TryPrepareArenaReplacement(WorldDefinition definition, out StateArena prepared, out string reason, out WorldDefinition settled) {
+        var time = m_ruleHost.Time;
+
+        if (!StateArena.TryCreate(
+            arena: out var built,
+            catalog: definition.StateCatalog,
+            options: WorldSlotLanes.Options(definition: definition),
+            reason: out reason,
+            section: definition.StateRaw,
+            time: in time
+        )) {
+            prepared = null!;
+            settled = definition;
+            return false;
+        }
+
+        prepared = built;
+
+        settled = SettleInstalledRows(
+            definition: definition,
+            seeded: prepared
+        );
+        if (!prepared.TryRestoreKeys(
+            names: m_arena.Keys.Names,
+            reason: out reason
+        )) {
+            prepared = null!;
+            return false;
+        }
+
+        m_arena.CopyLanesTo(target: prepared);
+        reason = string.Empty;
+        return true;
+    }
+    internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition) {
+        m_arena = arena;
+        m_search = CreateSearch(arena: arena);
+        AdoptLayout(definition: definition);
+        m_ruleHost.InvalidateArenaScheduling();
+    }
+
+    private ArenaSearch CreateSearch(StateArena arena) => new(
+        arena: arena,
+        narrate: (channel, text) => {
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: channel, text: text);
+            }
+        }
+    );
+
     // A board is a key and a value per occupied cell; nothing else about its cells is derived, so nothing else
     // decides whether the recompute moved it.
     private static bool SameBoardCells(IReadOnlyList<StateCell>? left, IReadOnlyList<StateCell>? right) {
@@ -185,7 +259,9 @@ public sealed partial class WorldServer {
         m_arenaCatalog = definition.StateCatalog;
         m_drawSites = DrawSitesOf(catalog: m_arenaCatalog);
         m_documentRowCount = m_arenaCatalog.Lane(lane: StateLane.Document).Count;
-        m_rowVersionMarks = new ulong[m_arena.Layout.RowCount];
+        m_publishedVersions = new ulong[m_arena.Layout.RowCount];
+        MarkPublished();
+        m_publishEveryRow = true;
         m_population.BindActionStateLane(
             arena: m_arena,
             definition: definition
@@ -204,11 +280,26 @@ public sealed partial class WorldServer {
             )
         );
     }
+
     // Re-seeds the arena from an installed document. A document whose catalog is the same instance keeps its
-    // columns and reloads their values; a re-declared row set relayouts in place, which moves every column to its
-    // new ordinal and carries the participant and identity lanes across, where a fresh build would drop them.
+    // columns and reloads their values; a reconstruction-time re-declaration relayouts atomically and carries the
+    // runtime key ledger plus the participant and identity lanes. Relayout refusal leaves the arena alone; a load
+    // refusal after a successful relayout throws from the reconstruction path rather than dropping the ledger via
+    // a fresh-build fallback.
     public void SyncArena(WorldDefinition definition) {
         var time = m_ruleHost.Time;
+
+        // Generated pool rows cannot pass through ordinary row import: doing so would bypass the relationship
+        // between live slots, field domains, and lifetime generations. Reconstruct the whole section instead.
+        if ((m_arena.Catalog.Pools.Count != 0) || (definition.StateCatalog.Pools.Count != 0)) {
+            if (!TryPrepareArenaReplacement(definition: definition, prepared: out var replacement,
+                reason: out var replacementReason, settled: out var settled)) {
+                throw new InvalidOperationException(message: $"the installed state section does not load into the arena: {replacementReason}");
+            }
+
+            AdoptPreparedArena(arena: replacement, definition: settled);
+            return;
+        }
 
         if (ReferenceEquals(
             objA: m_arenaCatalog,
@@ -219,66 +310,53 @@ public sealed partial class WorldServer {
                 rows: definition.State,
                 time: in time
             )) {
-                BuildArena(definition: definition);
-
-                return;
+                throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
             }
             if (reason.Length != 0) {
                 throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
             }
 
+            MarkPublished();
+            m_publishEveryRow = true;
+
             return;
         }
-        if (
-            m_arena.TryRelayout(
+        if (!m_arena.TryRelayout(
             catalog: definition.StateCatalog,
-            reason: out _,
+            reason: out var relayoutReason,
             section: definition.StateRaw,
             time: in time
-        ) &&
-            m_arena.TryLoad(
+        )) {
+            throw new InvalidOperationException(message: $"the installed document does not relayout into the arena: {relayoutReason}");
+        }
+        if (!m_arena.TryLoad(
             reason: out var loaded,
             rows: definition.State,
             time: in time
-        ) &&
-            (loaded.Length == 0)
-        ) {
-            AdoptLayout(definition: definition);
-
-            return;
+        )) {
+            throw new InvalidOperationException(message: $"the relaid-out document does not load into the arena: {loaded}");
+        }
+        if (loaded.Length != 0) {
+            throw new InvalidOperationException(message: $"the relaid-out document only partially loads into the arena: {loaded}");
         }
 
-        BuildArena(definition: definition);
+        AdoptLayout(definition: definition);
     }
-    // Remembers every row's version before the tick's rules run, so the end-of-tick install can tell a tick that
-    // wrote nothing from one that did without rebuilding the export first.
-    public void MarkRowVersions() {
+
+    // The document and the arena agree on every row as they stand.
+    private void MarkPublished() {
         var rows = m_arena.Layout.RowCount;
 
-        if (m_rowVersionMarks.Length < rows) {
-            m_rowVersionMarks = new ulong[rows];
+        if (m_publishedVersions.Length < rows) {
+            m_publishedVersions = new ulong[rows];
         }
         for (var ordinal = 0; (ordinal < rows); ordinal++) {
-            m_rowVersionMarks[ordinal] = m_arena.RowVersion(rowOrdinal: ordinal);
+            m_publishedVersions[ordinal] = m_arena.RowVersion(rowOrdinal: ordinal);
         }
     }
-    private bool ArenaMoved() {
-        var rows = Math.Min(
-            val1: m_documentRowCount,
-            val2: m_arena.Layout.RowCount
-        );
-
-        for (var ordinal = 0; (ordinal < rows); ordinal++) {
-            if (m_rowVersionMarks[ordinal] != m_arena.RowVersion(rowOrdinal: ordinal)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // Whether any row a document value reads by name moved since the mark. The referenced set is a function of the
-    // document's own non-state sections, so it is collected once per installed document rather than per tick.
-    private bool ReferencedRowMoved() {
+    // The rows a document value reads by name. The set is a function of the document's own non-state sections, so
+    // it is collected once per installed document rather than per publication.
+    private HashSet<string> DocumentValueRows() {
         if (m_documentValueRows is null) {
             m_documentValueRows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -287,78 +365,224 @@ public sealed partial class WorldServer {
                 rows: m_documentValueRows
             );
         }
-        if (m_documentValueRows.Count == 0) {
-            return false;
-        }
 
-        var descriptors = m_arena.Catalog.Descriptors;
-        var rows = m_arena.Layout.RowCount;
-
-        for (var ordinal = 0; (ordinal < rows); ordinal++) {
-            if (
-                (m_rowVersionMarks[ordinal] != m_arena.RowVersion(rowOrdinal: ordinal)) &&
-                m_documentValueRows.Contains(item: descriptors[ordinal].Name)
-            ) {
-                return true;
-            }
-        }
-
-        return false;
+        return m_documentValueRows;
     }
-    // The document becomes the arena's export. Every exported row is the row the arena was built over with its
-    // stored columns written back, so a WorldStateRow's own traits ride across and the cast is total.
-    public bool InstallArenaExport() {
-        if (!ArenaMoved()) {
-            return false;
+
+    /// <summary>Composes what a publication would install, and installs nothing: the installed document carrying
+    /// the arena's values as they stand, an open scope's writes included.</summary>
+    /// <remarks>A proposal reads the rows whose version has moved since the document and the arena last agreed on
+    /// them, and the rows an open scope has written, and keeps every other installed row as it is, so what it costs
+    /// follows what was written and not what the document declares. Every row it reads is the row the arena was
+    /// built over with its stored columns written back, so a row's own traits ride across. The document values that
+    /// read a moved row are re-resolved in the proposal. <see cref="PublishArena"/> adopts exactly this, so what a
+    /// preflight judges is what the commit installs.</remarks>
+    /// <returns>The proposal.</returns>
+    public WorldArenaPublication ProposePublication() {
+        var before = m_document.Definition;
+        var count = m_arena.Layout.RowCount;
+
+        if (m_openRows.Length < count) {
+            m_openRows = new bool[count];
         }
 
-        var exported = m_arena.ToRows();
-        var rows = new WorldStateRow[exported.Count];
+        var open = m_openRows.AsSpan(
+            length: count,
+            start: 0
+        );
 
-        for (var index = 0; (index < exported.Count); index++) {
-            rows[index] = ((WorldStateRow)exported[index]);
+        open.Clear();
+
+        if (m_arena.Journal.Length != 0) {
+            m_arena.FlagOpenRows(rows: open);
         }
 
-        // A document value bound to a state row — a placement's spatial extent, a creation's scale — is resolved
-        // against the row's value, so a row a rule wrote re-resolves the values reading it.
-        var refresh = ReferencedRowMoved();
+        var any = false;
 
-        m_document.AdoptDefinition(definition: m_document.Definition.WithWorldState(rows: rows));
+        for (var ordinal = 0; (!any && (ordinal < m_documentRowCount)); ordinal++) {
+            any = (
+                open[ordinal] ||
+                (m_publishedVersions[ordinal] != m_arena.RowVersion(rowOrdinal: ordinal))
+            );
+        }
+        if (!any) {
+            return new WorldArenaPublication(
+                BodyScale: false,
+                Definition: before,
+                DriveGate: false,
+                Moved: false,
+                RefreshRefusal: null
+            );
+        }
+
+        var installed = before.AuthoredState;
+        var scaleRow = before.Population.ScaleRow;
+        var descriptors = m_arena.Catalog.Descriptors;
+        var bodyScale = false;
+        var driveGate = false;
+        var refresh = false;
+        var rows = new WorldStateRow[installed.Count];
+
+        // Document rows occupy the catalog's first ordinals in declaration order, which is the order the installed
+        // document lists them in. A row is kept only where that holds by name; anything else is read from the arena.
+        for (var ordinal = 0; (ordinal < rows.Length); ordinal++) {
+            var name = descriptors[ordinal].Name;
+            var moved = (
+                open[ordinal] ||
+                (m_publishedVersions[ordinal] != m_arena.RowVersion(rowOrdinal: ordinal))
+            );
+
+            if (
+                !moved &&
+                !m_publishEveryRow &&
+                (ordinal < installed.Count) &&
+                string.Equals(
+                    a: installed[ordinal].Name.Value,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                rows[ordinal] = installed[ordinal];
+
+                continue;
+            }
+
+            var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal));
+
+            rows[ordinal] = published;
+
+            if (!moved) {
+                continue;
+            }
+
+            // Which of the consumers that keep their own copy of a state value read a row this publication moves.
+            driveGate |= published.GatesDrive;
+            bodyScale |= string.Equals(
+                a: name,
+                b: scaleRow,
+                comparisonType: StringComparison.Ordinal
+            );
+            // A document value bound to a state row, a placement's spatial extent or a creation's scale, is
+            // resolved against the row's value, so a moved row re-resolves the values reading it.
+            refresh |= DocumentValueRows().Contains(item: name);
+        }
+
+        var definition = before.WithWorldState(rows: rows, pools: ((before.StateRaw?.Pools is { Count: > 0 }) ? m_arena.ToPools() : null), pairPools: ((before.StateRaw?.PairPools is { Count: > 0 }) ? m_arena.ToPairPools() : null));
+        string? refreshRefusal = null;
 
         if (refresh) {
             if (WorldStateDocumentValues.TryRehydrate(
-                definition: m_document.Definition,
+                definition: definition,
                 reason: out var refreshReason,
                 refreshed: out var refreshed
             )) {
-                m_document.AdoptDefinition(definition: refreshed);
-            } else if (m_output.HasNarrationSink) {
-                m_output.Narrate(
-                    channel: "world.state",
-                    text: $"[world.state: a document value reading a row this tick wrote did not re-resolve — {refreshReason}]"
-                );
+                definition = refreshed;
+            } else {
+                refreshRefusal = refreshReason;
             }
         }
 
+        return new WorldArenaPublication(
+            BodyScale: bodyScale,
+            Definition: definition,
+            DriveGate: driveGate,
+            Moved: true,
+            RefreshRefusal: refreshRefusal
+        );
+    }
+    /// <summary>Publishes what the arena holds into the installed document: the one boundary a state value written
+    /// in the arena crosses to reach everything outside it.</summary>
+    /// <remarks>It installs what <see cref="ProposePublication"/> composes, then does what any installed state value
+    /// owes: marks state delivery pending, and brings the consumers that keep their own copy of a value up to date
+    /// (<see cref="WorldDocument.ReconcileStateConsumers"/>), which is the routine a value mutation ends in.</remarks>
+    /// <param name="reconcile">Whether those consumers are brought up to date now. A publication taken in the
+    /// middle of a firing leaves that owed, and the publication that ends the tick settles it whether or not
+    /// anything moved in between.</param>
+    /// <returns><see langword="true"/> when a row was published.</returns>
+    public bool PublishArena(bool reconcile = true) => AdoptPublication(
+        publication: ProposePublication(),
+        reconcile: reconcile
+    );
+    /// <summary>Installs a proposal as the publication it describes.</summary>
+    /// <param name="publication">A proposal taken from the arena as it stands now. One taken inside a scope that
+    /// has since committed, with nothing written between, qualifies: the arena holds what it proposed.</param>
+    /// <param name="reconcile">Whether the consumers that keep their own copy of a value are brought up to date
+    /// now.</param>
+    /// <returns><see langword="true"/> when a row was published.</returns>
+    public bool AdoptPublication(WorldArenaPublication publication, bool reconcile = true) {
+        if (!publication.Moved) {
+            if (reconcile) {
+                SettleStateConsumers();
+            }
+
+            return false;
+        }
+
+        var before = m_document.Definition;
+
+        m_document.AdoptDefinition(definition: publication.Definition);
+
+        if (
+            (publication.RefreshRefusal is { } refreshReason) &&
+            m_output.HasNarrationSink
+        ) {
+            m_output.Narrate(
+                channel: "world.state",
+                text: $"[world.state: a document value reading a row this tick wrote did not re-resolve — {refreshReason}]"
+            );
+        }
+
+        MarkPublished();
+        m_publishEveryRow = false;
         m_arenaCatalog = m_document.Definition.StateCatalog;
         // The installed document now carries values no sink has seen: a rule's own write reaches a client through the
         // same state delivery a console write does.
         m_document.MarkStateDeliveryPending();
+        m_bodyScaleOwed |= publication.BodyScale;
+        m_driveGateOwed |= publication.DriveGate;
+        // The field section compiles from the state section and is republished only when what it reads changed, so
+        // its reference is what says whether the lattice's input moved.
+        m_fieldsOwed |= !ReferenceEquals(
+            objA: before.Fields,
+            objB: m_document.Definition.Fields
+        );
+        m_consumersOwed = true;
 
-        // The document equals the arena again, so this is where the next export's baseline sits.
-        MarkRowVersions();
+        if (reconcile) {
+            SettleStateConsumers();
+        }
 
         return true;
+    }
+
+    private void SettleStateConsumers() {
+        if (!m_consumersOwed) {
+            return;
+        }
+
+        var bodyScale = m_bodyScaleOwed;
+        var driveGate = m_driveGateOwed;
+        var fields = m_fieldsOwed;
+
+        m_bodyScaleOwed = false;
+        m_consumersOwed = false;
+        m_driveGateOwed = false;
+        m_fieldsOwed = false;
+        m_document.ReconcileStateConsumers(
+            bodyScale: bodyScale,
+            definition: m_document.Definition,
+            driveGate: driveGate,
+            fields: fields
+        );
     }
     // Every search job is one resolved plan and one judge over this server's own arena, admitted at install: a
     // judge whose rules the host cannot serve refuses the plan by name rather than at a tick.
     private void RebuildSearch(WorldDefinition definition) {
         if (!WorldSearchCompilation.TryPlanAll(
-            definition: definition,
-            judge: out var judgeRules,
+            compilation: m_ruleCompilation!,
+            judges: out var judgeRules,
             plans: out var authored,
             reason: out var planReason,
-            rules: m_ruleHost.Rules,
             scores: out var scores
         )) {
             throw new InvalidOperationException(message: $"search failed to plan after validation: {planReason}");
@@ -389,7 +613,7 @@ public sealed partial class WorldServer {
             plans[index] = resolved;
             judges[index] = new RuleArenaSearchJudge(
                 host: host,
-                rules: judgeRules,
+                rules: judgeRules[index],
                 score: scores[index]
             );
         }
@@ -445,7 +669,7 @@ public sealed partial class WorldServer {
             return FixedQ4816.Zero;
         }
 
-        var layout = m_arena.Layout[rowOrdinal];
+        ref readonly var layout = ref m_arena.Layout[rowOrdinal];
         var time = m_ruleHost.Time;
 
         if (!m_arena.TryReadLiveNumber(
@@ -471,18 +695,14 @@ public sealed partial class WorldServer {
 
         var best = -1;
         var bestValue = FixedQ4816.Zero;
-        var count = m_arena.CellCount(rowOrdinal: rowOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < count); position++) {
-            if (!m_arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            )) {
-                continue;
-            }
-
-            var name = m_arena.Catalog.Keys[key].Value;
+        while (m_arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
+            var name = m_arena.Keys[key].Value;
 
             if (
                 !int.TryParse(
@@ -525,8 +745,11 @@ public sealed partial class WorldServer {
 
         return best;
     }
-    public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null) {
-        definition = SettleInstalledRows(definition: definition);
+
+    public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
+        if (arena is null) {
+            definition = SettleInstalledRows(definition: definition);
+        }
         m_document.AdoptDefinition(definition: definition);
         // The rows a document value reads are a function of the sections this install may have replaced.
         m_documentValueRows = null;
@@ -536,7 +759,13 @@ public sealed partial class WorldServer {
             objB: definition
         )) { compilation = WorldRuleCompilation.Compile(definition: definition); }
         m_ruleHost.Install(compilation: compilation!);
-        SyncArena(definition: definition);
+        m_ruleCompilation = compilation;
+        if (arena is null) {
+            SyncArena(definition: definition);
+        } else {
+            AdoptPreparedArena(arena: arena, definition: definition);
+        }
+        m_ruleHost.ConfigureUndo(compilation!.Groups.Where(group => (group.Undo is not null)).Select(group => group.Undo!).ToArray());
         m_ruleHost.PruneLatches();
         m_tick.PruneBoardEnforcement(definition: definition);
         m_ruleHost.ReconcileDecisions();
@@ -550,6 +779,7 @@ public sealed partial class WorldServer {
 
         return definition;
     }
+
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
     // finished job's outputs are delivered with the same tick.
     private ulong m_searchTick;
@@ -567,7 +797,6 @@ public sealed partial class WorldServer {
             m_document.DeliverPending();
         }
     }
-
     /// <summary>Lists every search job's progress.</summary>
     public IReadOnlyList<ArenaSearchStatus> SearchStatus() {
         var status = new ArenaSearchStatus[m_search.Count];

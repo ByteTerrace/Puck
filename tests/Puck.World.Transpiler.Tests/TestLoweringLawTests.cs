@@ -75,10 +75,11 @@ public class TestLoweringLawTests {
         return builder.ToString();
     }
 
-    /// <summary>Returns every shipped world source that authors a test, so the byte-identity law names the source
-    /// it read.</summary>
+    /// <summary>Returns every shipped world source and asset-package source that authors a test, so the
+    /// byte-identity law names the source it read. A package source is an absolute path, which
+    /// <see cref="Path.Combine(string, string)"/> returns as written.</summary>
     /// <returns>The tested sources as xUnit theory data.</returns>
-    public static TheoryData<string> TestedSources() => new(values: ShippedWorlds.SourcePaths().Where(predicate: static relativePath => File.ReadAllText(path: Path.Combine(
+    public static TheoryData<string> TestedSources() => new(values: ShippedWorlds.SourcePaths().Concat(second: ShippedWorlds.PackageSourcePaths()).Where(predicate: static relativePath => File.ReadAllText(path: Path.Combine(
         path1: ShippedWorlds.FindDirectory(),
         path2: relativePath
     )).Contains(
@@ -162,10 +163,10 @@ public class TestLoweringLawTests {
 
         state {
           world {
-            slot speed: Fixed = 1.5
-            slot open: Bool = true
-            slot label: Text = "a"
-            slot hp: Int = 3
+            slot speed = 1.5
+            slot open = true
+            slot label = "a"
+            slot hp = 3
           }
         }
 
@@ -222,10 +223,11 @@ public class TestLoweringLawTests {
             expected: "b"
         );
     }
-    // The verdict row is an Int row, so the rule folds what its gate read of an Int row and nothing of any other:
-    // a fold out of a Fixed row is a write the validator refuses, and the world would never boot.
+    // A row holds one kind. What the gate read of an Int row is a cell of the verdict row, and what it read of a
+    // Fixed row is a cell of a Fixed witness naming that verdict: a fold across kinds is a write the validator
+    // refuses, and the world would never boot.
     [Fact]
-    public void AnExpectationFoldsOnlyWhatItReadOfAnIntRow() {
+    public void AnExpectationFoldsAnIntReadIntoItsVerdictAndAFixedReadIntoAWitnessOfThatKind() {
         var world = OneWorld(source: KindsDoc);
         var keys = Row(
             name: "kinds-1",
@@ -238,11 +240,33 @@ public class TestLoweringLawTests {
             actual: keys,
             expected: ["status", "hp"]
         );
-        Assert.DoesNotContain(
-            collection: world["rules"]!.AsArray()
-                .Single()!["effects"]!.AsArray()
-                .OfType<JsonObject>(),
-            filter: static effect => (effect["fromState"]?.GetValue<string>() == "speed")
+
+        var witness = Row(
+            name: "kinds-1-fixed",
+            world: world
+        );
+
+        Assert.Equal(
+            actual: witness["witness"]!.GetValue<string>(),
+            expected: "kinds-1"
+        );
+        Assert.Equal(
+            actual: witness["kind"]!.GetValue<string>(),
+            expected: "Fixed"
+        );
+        Assert.Equal(
+            actual: witness["cells"]!.AsArray().Single()!["key"]!.GetValue<string>(),
+            expected: "speed"
+        );
+
+        var fold = world["rules"]!.AsArray()
+            .Single()!["effects"]!.AsArray()
+            .OfType<JsonObject>()
+            .Single(predicate: static effect => (effect["fromState"]?.GetValue<string>() == "speed"));
+
+        Assert.Equal(
+            actual: fold["state"]!.GetValue<string>(),
+            expected: "kinds-1-fixed"
         );
     }
     [Fact]
@@ -317,7 +341,7 @@ public class TestLoweringLawTests {
         // fires once and a verdict that would be false before the last tick is never written as a failure.
         Assert.Equal(
             actual: rule["gate"]!.ToJsonString(),
-            expected: """{"$type":"compareState","comparison":"Equal","state":"$tick","value":9}"""
+            expected: """{"$type":"compareState","comparison":"Equal","state":{"channel":"tick"},"value":9}"""
         );
         Assert.Equal(
             actual: rule["effects"]!.AsArray()[0]!["$type"]!.GetValue<string>(),

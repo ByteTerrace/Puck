@@ -89,7 +89,7 @@ public class PrinterCommentPositionTests {
               x: int
               y: int
             }
-            slot counter: int = 0
+            slot counter = 0
             rule "branch" {
               when counter > 0
               if counter > 1 {
@@ -110,7 +110,7 @@ public class PrinterCommentPositionTests {
     public void ATransactionAndAnArgumentListKeepTheirComments() {
         RoundTrips(source: """
             schema: "puck.world.definition.v1"
-            slot counter: int = 0
+            slot counter = 0
             rule "tx" {
               when counter > 0
               transaction {

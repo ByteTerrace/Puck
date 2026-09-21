@@ -803,8 +803,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
     private void Read(InstructionPayload.State state, string path, bool wide) {
         if (state.Key is not null) {
             Element(
-                array: state.Name,
-                key: state.Key,
+                array: state.Name.Spelling,
+                key: state.Key.Spelling,
                 path: path
             );
 
@@ -812,7 +812,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
 
         if (CartridgeExpressions.TryKey(
-            name: state.Name,
+            name: state.Name.Spelling,
             button: out var button,
             mode: out var mode
         )) {
@@ -833,7 +833,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             return;
         }
 
-        if (state.Name.StartsWith(
+        if (state.Name.Spelling.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: "$"
         )) {
@@ -845,7 +845,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             return;
         }
 
-        if (!m_variables.Contains(item: state.Name)) {
+        if (!m_variables.Contains(item: state.Name.Spelling)) {
             Error(
                 path: path,
                 message: $"Unknown state variable '{state.Name}'."
@@ -857,7 +857,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         if (
             !wide &&
             m_widths.TryGetValue(
-            key: state.Name,
+            key: state.Name.Spelling,
             value: out var width
         ) &&
             (width != 1)
@@ -1115,7 +1115,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
     // The single-token forms: a bare slot read, and a bare literal. Both are what a pairing rule is stated against.
     private static string? Slot(ExpressionProgram? value) =>
         ((value?.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])
-            ? state.Name
+            ? state.Name.Spelling
             : null
         );
     private void Sounds() {

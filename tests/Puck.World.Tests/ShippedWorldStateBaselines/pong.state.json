@@ -3,10 +3,10 @@
   "tick": 2941,
   "engineTick": 4940880,
   "hashes": {
-    "authoritative": "3a583c59e0c8422e",
-    "capture": "4158f7e7e20e648b",
+    "authoritative": "4f6c9b9153f62526",
+    "capture": "891687f709193162",
     "pose": "3dde97c0aa76a91a",
-    "world": "f5e9197cf359b63b"
+    "world": "6fd5012eb624a7a6"
   },
   "state": {
     "world": [
@@ -79,83 +79,6 @@
         ]
       },
       {
-        "name": "pongBallTag",
-        "kind": "Int",
-        "capacity": 6,
-        "cells": [
-          {
-            "key": "5",
-            "value": 1
-          }
-        ]
-      },
-      {
-        "name": "pongPaddleTag",
-        "kind": "Int",
-        "capacity": 6,
-        "cells": [
-          {
-            "key": "3",
-            "value": 1
-          },
-          {
-            "key": "4",
-            "value": 1
-          }
-        ]
-      },
-      {
-        "name": "pongPaddleHits",
-        "kind": "Int",
-        "min": 0,
-        "max": 9999,
-        "capacity": 6,
-        "cells": [
-          {
-            "key": "3",
-            "value": 1
-          },
-          {
-            "key": "4",
-            "value": 1
-          }
-        ]
-      },
-      {
-        "name": "pongPaddleRally",
-        "kind": "Int",
-        "min": 0,
-        "max": 999,
-        "capacity": 6,
-        "cells": [
-          {
-            "key": "3",
-            "value": 1
-          },
-          {
-            "key": "4",
-            "value": 2
-          }
-        ]
-      },
-      {
-        "name": "pongScore",
-        "kind": "Int",
-        "min": 0,
-        "max": 99,
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 11
-          },
-          {
-            "key": "1",
-            "value": 10
-          }
-        ]
-      },
-      {
         "name": "pongRallyClock",
         "kind": "Int",
         "min": 0,
@@ -204,9 +127,7 @@
       {
         "name": "pongServeTimer",
         "kind": "Int",
-        "min": 0,
-        "max": 504000,
-        "value": 0
+        "value": 2890
       },
       {
         "name": "pongServeSerial",
@@ -306,6 +227,249 @@
         "max": 9999,
         "value": 12
       }
+    ],
+    "enums": [
+      {
+        "name": "PongBallBody",
+        "members": [
+          "Detached",
+          "Ball"
+        ]
+      },
+      {
+        "name": "PongPaddleBody",
+        "members": [
+          "Detached",
+          "East",
+          "West"
+        ]
+      }
+    ],
+    "records": [
+      {
+        "name": "PongBall",
+        "fields": [
+          {
+            "name": "body",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": "PongBallBody",
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "active",
+            "kind": "Bool",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Bool",
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "PongPaddle",
+        "fields": [
+          {
+            "name": "body",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": "PongPaddleBody",
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "hits",
+            "kind": "Int",
+            "min": 0,
+            "max": 9999,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "rally",
+            "kind": "Int",
+            "min": 0,
+            "max": 999,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "score",
+            "kind": "Int",
+            "min": 0,
+            "max": 99,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          }
+        ]
+      }
+    ],
+    "pools": [
+      {
+        "name": "pongBalls",
+        "record": "PongBall",
+        "capacity": 1,
+        "snapshot": {
+          "generations": [
+            0
+          ],
+          "live": [
+            {
+              "slot": 0,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "active",
+                  "clock": null,
+                  "value": {
+                    "kind": "Bool",
+                    "value": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "initial": null
+      },
+      {
+        "name": "pongPaddles",
+        "record": "PongPaddle",
+        "capacity": 2,
+        "snapshot": {
+          "generations": [
+            0,
+            0
+          ],
+          "live": [
+            {
+              "slot": 0,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "hits",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "rally",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "score",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 11
+                  }
+                }
+              ]
+            },
+            {
+              "slot": 1,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "hits",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "rally",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "score",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "initial": null
+      }
     ]
   },
   "resolved": [
@@ -390,76 +554,6 @@
       ]
     },
     {
-      "row": "pongBallTag",
-      "cells": [
-        {
-          "key": "5",
-          "value": 1,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "pongPaddleTag",
-      "cells": [
-        {
-          "key": "3",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "4",
-          "value": 1,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "pongPaddleHits",
-      "cells": [
-        {
-          "key": "3",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "4",
-          "value": 1,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "pongPaddleRally",
-      "cells": [
-        {
-          "key": "3",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "4",
-          "value": 2,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "pongScore",
-      "cells": [
-        {
-          "key": "0",
-          "value": 11,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 10,
-          "text": null
-        }
-      ]
-    },
-    {
       "row": "pongRallyClock",
       "cells": [
         {
@@ -514,7 +608,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 0,
+          "value": 2890,
           "text": null
         }
       ]
@@ -655,6 +749,136 @@
         {
           "key": "$value",
           "value": 12,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongBalls_live",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongBalls_generation",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongBalls_field_body",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongBalls_field_active",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongPaddles_live",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongPaddles_generation",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongPaddles_field_body",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongPaddles_field_hits",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongPaddles_field_rally",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool_pongPaddles_field_score",
+      "cells": [
+        {
+          "key": "0",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 10,
           "text": null
         }
       ]

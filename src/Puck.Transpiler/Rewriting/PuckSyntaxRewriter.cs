@@ -16,13 +16,13 @@ namespace Puck.Transpiler.Rewriting;
 /// <see cref="PuckRewriteException"/> for the three things that are defects in the rewrite itself — a node kind the
 /// descent has no arm for, a hook that answers a typed position with a node that position cannot hold, and a
 /// rewrite that replaces a value while keeping the author's own text beside it
-/// (<see cref="LiteralExpressionNode.RawText"/>, <see cref="DerivedStateNode.RawExpression"/>), which is read in
+/// (<see cref="LiteralExpressionNode.RawText"/>, <see cref="OperandExpressionNode.Text"/>), which is read in
 /// preference to the value.</para>
 /// </remarks>
-public abstract class PuckSyntaxRewriter {
+public abstract partial class PuckSyntaxRewriter {
     // Two members carry the author's own text beside the value it was parsed from, and a consumer prefers the
-    // text: the printer prints a numeric literal's RawText, and the world lowering reads a `derive`'s
-    // RawExpression. A rewrite that replaces the value and keeps the text would be discarded with no trace, or
+    // text: the printer prints a numeric literal's RawText, and operand printing reads its
+    // Text. A rewrite that replaces the value and keeps the text would be discarded with no trace, or
     // would print one thing and compile to another, so it is refused instead.
     private static void RefuseShadowedText(SyntaxNode original, SyntaxNode? rewritten) {
         if (
@@ -45,25 +45,17 @@ public abstract class PuckSyntaxRewriter {
                 text: literal.RawText
             );
         }
-        if (
-            (original is DerivedStateNode derived) &&
-            (rewritten is DerivedStateNode replacedDerive) &&
-            (derived.RawExpression is not null) &&
-            string.Equals(
-                a: derived.RawExpression,
-                b: replacedDerive.RawExpression,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-            !derived.Expression.Equals(other: replacedDerive.Expression)
-        ) {
-            throw PuckRewriteException.ShadowedText(
-                member: nameof(DerivedStateNode.RawExpression),
-                node: original,
-                text: derived.RawExpression
-            );
+        if ((original is OperandExpressionNode sourceOperand) && (rewritten is OperandExpressionNode changedOperand) &&
+            !string.Equals(sourceOperand.Text, changedOperand.Text, StringComparison.Ordinal) &&
+            ReferenceEquals(sourceOperand.Syntax, changedOperand.Syntax)) {
+            throw new PuckRewriteException("An operand rewrite changed Text but retained its parsed Syntax; rebuild the operand through PuckParser.CreateOperand or use RewriteOperandSyntax.");
+        }
+        if ((original is OperandExpressionNode operand) && (rewritten is OperandExpressionNode replacedOperand) &&
+            string.Equals(a: operand.Text, b: replacedOperand.Text, comparisonType: StringComparison.Ordinal) &&
+            !Equals(operand.Syntax, replacedOperand.Syntax)) {
+            throw PuckRewriteException.ShadowedText(member: nameof(OperandExpressionNode.Text), node: original, text: operand.Text);
         }
     }
-
     // Routes one node through the hook its kind belongs to. The hierarchies are disjoint apart from
     // EffectStatementNode, which is a StatementNode and is matched as one.
     private SyntaxNode? Dispatch(SyntaxNode node) {
@@ -161,8 +153,9 @@ public abstract class PuckSyntaxRewriter {
     protected EffectStatementNode DescendEffect(EffectStatementNode effect) => (effect switch {
         AddCellStatementNode add => (add with { Rhs = this.Rewritten(node: add.Rhs), Target = this.Rewritten(node: add.Target) }),
         BreakStatementNode leaf => leaf,
+        ClaimStatementNode claim => (claim with { Body = this.DescendStatements(statements: claim.Body) }),
+        ClaimPairStatementNode claim => (claim with { Body = this.DescendStatements(statements: claim.Body) }),
         CompoundAssignStatementNode compound => (compound with { Rhs = this.Rewritten(node: compound.Rhs), Target = this.Rewritten(node: compound.Target) }),
-        CountdownStatementNode countdown => (countdown with { Target = this.Rewritten(node: countdown.Target) }),
         DealStatementNode leaf => leaf,
         DrawStatementNode leaf => leaf,
         IfStatementNode branch => (branch with {
@@ -171,6 +164,8 @@ public abstract class PuckSyntaxRewriter {
             Then = this.DescendStatements(statements: branch.Then),
         }),
         PushStatementNode push => (push with { Rhs = this.Rewritten(node: push.Rhs) }),
+        PoolForEachStatementNode each => (each with { Body = this.DescendStatements(statements: each.Body) }),
+        ReleaseStatementNode release => release,
         RemoveCellStatementNode remove => (remove with { Target = this.Rewritten(node: remove.Target) }),
         RepeatStatementNode repeat => (repeat with { Body = this.DescendStatements(statements: repeat.Body), Count = this.Rewritten(node: repeat.Count) }),
         ScheduleStatementNode schedule => (schedule with { Target = this.Rewritten(node: schedule.Target) }),
@@ -189,6 +184,7 @@ public abstract class PuckSyntaxRewriter {
     /// <exception cref="PuckRewriteException">The descent has no arm for <paramref name="expression"/>'s kind.</exception>
     protected ExpressionNode DescendExpression(ExpressionNode expression) => (expression switch {
         ArrayExpressionNode array => (array with { Elements = this.RewrittenNodes(nodes: array.Elements) }),
+        AssetExpressionNode leaf => leaf,
         BinaryExpressionNode binary => (binary with { Left = this.Rewritten(node: binary.Left), Right = this.Rewritten(node: binary.Right) }),
         CallExpressionNode call => (call with { Arguments = this.RewrittenNodes(nodes: call.Arguments) }),
         ColorExpressionNode leaf => leaf,
@@ -199,7 +195,8 @@ public abstract class PuckSyntaxRewriter {
         LiteralExpressionNode leaf => leaf,
         MemberAccessExpressionNode member => (member with { Target = this.Rewritten(node: member.Target) }),
         ObjectExpressionNode instance => (instance with { Properties = this.RewrittenNodes(nodes: instance.Properties) }),
-        RangeExpressionNode range => (range with { End = this.Rewritten(node: range.End), Start = this.Rewritten(node: range.Start) }),
+        OperandExpressionNode operand => this.RewrittenOperand(operand: operand),
+        RangeExpressionNode range => (range with { End = this.RewrittenOrNull(node: range.End), Start = this.RewrittenOrNull(node: range.Start) }),
         UnaryExpressionNode unary => (unary with { Operand = this.Rewritten(node: unary.Operand) }),
         _ => throw PuckRewriteException.UnknownKind(node: expression),
     });
@@ -214,7 +211,10 @@ public abstract class PuckSyntaxRewriter {
         EnumMemberNode leaf => leaf,
         FamilyMemberNode family => (family with { First = this.RewrittenOrNull(node: family.First), Last = this.RewrittenOrNull(node: family.Last) }),
         PatternSymbolDeclarationNode leaf => leaf,
-        RecordFieldNode leaf => leaf,
+        RecordFieldNode field => (field with {
+            Default = this.RewrittenOrNull(node: field.Default),
+            Modifiers = this.RewrittenNodes(nodes: field.Modifiers),
+        }),
         RowRefNode leaf => leaf,
         StateCellEntryNode cell => (cell with { Modifiers = this.RewrittenNodes(nodes: cell.Modifiers), Value = this.Rewritten(node: cell.Value) }),
         StateModifierNode modifier => (modifier with { Arguments = this.RewrittenNodes(nodes: modifier.Arguments) }),
@@ -236,7 +236,7 @@ public abstract class PuckSyntaxRewriter {
     protected PredicateNode DescendPredicate(PredicateNode predicate) => (predicate switch {
         AndPredicateNode conjunction => (conjunction with { Operands = this.RewrittenNodes(nodes: conjunction.Operands) }),
         CallPredicateNode gate => (gate with { Call = this.Rewritten(node: gate.Call) }),
-        ComparisonPredicateNode leaf => leaf,
+        ComparisonPredicateNode comparison => comparison with { Left = this.Rewritten(node: comparison.Left), Right = this.Rewritten(node: comparison.Right) },
         NotPredicateNode negation => (negation with { Operand = this.Rewritten(node: negation.Operand) }),
         OrPredicateNode disjunction => (disjunction with { Operands = this.RewrittenNodes(nodes: disjunction.Operands) }),
         _ => throw PuckRewriteException.UnknownKind(node: predicate),
@@ -246,7 +246,7 @@ public abstract class PuckSyntaxRewriter {
     /// <returns>The rewritten right-hand side.</returns>
     /// <exception cref="PuckRewriteException">The descent has no arm for <paramref name="value"/>'s kind.</exception>
     protected RhsNode DescendRhs(RhsNode value) => (value switch {
-        RhsOperandNode leaf => leaf,
+        RhsOperandNode operand => operand with { Expression = this.Rewritten(node: operand.Expression) },
         RhsSecondsNode leaf => leaf,
         RhsTextNode leaf => leaf,
         _ => throw PuckRewriteException.UnknownKind(node: value),
@@ -276,12 +276,17 @@ public abstract class PuckSyntaxRewriter {
         ImportNode leaf => leaf,
         InterruptStatementNode interrupt => (interrupt with { Predicate = this.Rewritten(node: interrupt.Predicate) }),
         LetNode declaration => (declaration with { Value = this.Rewritten(node: declaration.Value) }),
-        LocalStatementNode leaf => leaf,
+        LocalStatementNode local => local with { Expression = this.Rewritten(node: local.Expression) },
         OnNoChoiceBlockNode fallback => (fallback with { Effects = this.DescendStatements(statements: fallback.Effects) }),
         OptionBlockNode option => (option with { Statements = this.DescendStatements(statements: option.Statements) }),
-        PatternDeclarationNode declaration => (declaration with { Symbols = this.RewrittenNodes(nodes: declaration.Symbols) }),
+        PatternDeclarationNode declaration => (declaration with { Symbols = this.RewrittenNodes(nodes: declaration.Symbols), Value = this.RewrittenOrNull(node: declaration.Value) }),
         PropertyNode property => (property with { Value = this.Rewritten(node: property.Value) }),
         RecordDeclarationNode declaration => (declaration with { Fields = this.RewrittenNodes(nodes: declaration.Fields) }),
+        StatePoolDeclarationNode pool => (pool with {
+            Capacity = this.RewrittenOrNull(node: pool.Capacity),
+            Initializer = this.RewrittenOrNull(node: pool.Initializer),
+        }),
+        StatePairPoolDeclarationNode pool => (pool with { MaxLive = this.Rewritten(node: pool.MaxLive) }),
         RuleBlockNode rule => (rule with {
             NameExpression = this.RewrittenOrNull(node: rule.NameExpression),
             Statements = this.DescendStatements(statements: rule.Statements),
@@ -290,8 +295,9 @@ public abstract class PuckSyntaxRewriter {
             HeaderWhen = this.RewrittenOrDropped(node: scope.HeaderWhen),
             Statements = this.DescendStatements(statements: scope.Statements),
         }),
-        ScoreStatementNode leaf => leaf,
+        ScoreStatementNode score => score with { Expression = this.Rewritten(node: score.Expression) },
         StabilizeGroupNode group => (group with {
+            Undo = this.RewrittenOrNull(node: group.Undo),
             MaxPasses = this.RewrittenOrNull(node: group.MaxPasses),
             Statements = this.DescendStatements(statements: group.Statements),
             UntilCondition = this.RewrittenOrNull(node: group.UntilCondition),
@@ -332,11 +338,17 @@ public abstract class PuckSyntaxRewriter {
             When = this.RewrittenOrNull(node: declaration.When),
         }),
         WhenStatementNode gate => (gate with { Predicate = this.Rewritten(node: gate.Predicate) }),
-        WorkflowNode workflow => (workflow with { Steps = this.RewrittenNodes(nodes: workflow.Steps) }),
+        WorkflowNode workflow => (workflow with { Steps = this.RewrittenNodes(nodes: workflow.Steps), Undo = this.RewrittenOrNull(node: workflow.Undo) }),
         WorkflowStepNode step => (step with {
             ForEachCollection = this.RewrittenOrNull(node: step.ForEachCollection),
             Statements = this.DescendStatements(statements: step.Statements),
             UntilCondition = this.RewrittenOrNull(node: step.UntilCondition),
+        }),
+        WorldDeclarationNode world => (world with { Name = this.Rewritten(node: world.Name), Module = this.Rewritten(node: world.Module) }),
+        WorldLinkNode link => (link with {
+            Left = this.Rewritten(node: link.Left),
+            Properties = this.DescendStatements(statements: link.Properties),
+            Right = this.Rewritten(node: link.Right),
         }),
         _ => throw PuckRewriteException.UnknownKind(node: statement),
     });

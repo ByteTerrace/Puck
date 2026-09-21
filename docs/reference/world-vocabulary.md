@@ -23,25 +23,33 @@ kind.
 | Keyword | Written in | Shape | Lowers to | Declares |
 |---|---|---|---|---|
 | `addon` | the document | row | `addons[]` | One WebAssembly extension, its capability requests, and its machine-memory watches. |
+| `asset` | the document | statement | `(nothing)` | Resolves a package asset wherever a document value is accepted. |
+| `border` | the document | block | `(nothing)` | Connects two world boundaries with a bidirectional border window. |
 | `cartridge` | the document | section | `cartridge` | The cartridge a hosted machine in this world runs. |
 | `derive` | the document | statement | `(nothing)` | Names an operand at compile time; the document carries the expansion, never the name. |
+| `door` | the document | statement | `(nothing)` | Connects a door face to a named arrival point in another world. |
 | `enum` | the document | block | `(nothing)` | Names a run of integers at compile time; the document carries the numbers, never the enumeration. |
+| `ground` | the document | block | `(nothing)` | Generates a solid ground prototype, its placement, and boundary geometry. |
 | `host` | the document | section | `host` | The window, its presentation mode, and the simulation tick rate. |
 | `material` | the document | row | `materials[]` | One surface material. |
+| `pairPool` | the document | declaration | `state.pairPools[]` | Declares a bounded pool of relationships between two ordinary pools. |
 | `pattern` | the document | block | `patterns[]` | One pattern over a row's tokens, compiled while it lowers so a refusal names the line that declared it. |
 | `placements` | the document | section | `placements` | Where prototypes stand in the world. |
+| `pool` | the document | declaration | `state.pools[]` | Declares a bounded typed instance pool with optional static seeds. |
 | `prototypes` | the document | section | `prototypes` | The creation documents this world places. |
-| `record` | the document | block | `(nothing)` | One field set a table expands into prefixed rows at compile time. |
+| `record` | the document | block | `(nothing)` | A typed field set instantiated by pools. |
 | `rule` | the document | block | `rules[]` | One reactive rule: a gate, its working values, and the effects it fires. |
 | `rules` | the document | block | `rules[]` | A shared header for several rules: its gate, locals and properties apply to every member. |
 | `set` | the document | statement | `sets[]` | One named set over the positions of a board, a zone, or a family. |
 | `shape` | the document | row | `shapes[]` | One signed-distance shape of a creation document. |
+| `spawn` | the document | block | `(nothing)` | Generates a named arrival point that a door can target. |
 | `sql` | the document | embedded language | `state` | A hermetic SQL spelling of rows and rules, parsed by its own dialect and lowered to the same document members the native constructs write. |
 | `stabilize` | the document | block | `ruleGroups[]` | A fixpoint group: its members re-fire until the board settles or the pass ceiling refuses. |
 | `state` | the document | section | `state` | The simulation state: the world's rows, its lattices, its embedding spaces, and the per-participant lanes. |
 | `test` | the document | block | `(nothing)` | A world's behaviour stated in the world's own language; the document carries no trace of it and each test lowers to a generated test world of its own. |
 | `views` | the document | section | `views` | Camera layouts, render pipelines, and the seat rig a participant looks through. |
 | `workflow` | the document | block | `ruleGroups[]` | A staged group: a cursor that advances one step per committed firing. |
+| `world` | the document | statement | `(nothing)` | Emits one named world document by invoking a module. |
 | `request` | `addon` | statement | `addons[].requests[]` | One capability an addon declares it needs. |
 | `watchMemory` | `addon` | statement | `addons[].memoryWatches[]` | A span of a hosted machine's memory an addon observes. |
 | `interrupt` | `decision` | statement | `rules[].decision.interrupt` | What cuts a commitment short. |
@@ -49,13 +57,16 @@ kind.
 | `option` | `decision` | block | `rules[].decision.options[]` | One candidate of a decision. |
 | `placement` | `placements` | row | `placements.rows[]` | One placed prototype. |
 | `prototype` | `prototypes` | row | `prototypes[]` | One creation document under an identity. |
-| `countdown` | `rule` | statement | `rules[].effects[][countdownState]` | Decrements a cell toward zero and stops there. |
+| `claim` | `rule` | block | `rules[].effects[][claim]` | Claims one available instance and binds its fields for nested effects. |
+| `claim pair` | `rule` | block | `rules[].effects[][claimPair]` | Claims one relationship between two bound record instances. |
 | `deal` | `rule` | statement | `rules[].effects[][transformState]` | Moves a counted run of tokens from the front of an ordered zone to another. |
 | `decision` | `rule` | block | `rules[].decision` | A reconsidered choice among scored options. |
 | `draw` | `rule` | statement | `rules[].effects[][transformState]` | Moves one token from the front of an ordered zone to another. |
+| `for each` | `rule` | block | `rules[].effects[][forEachPool]` | Visits every live instance in ascending slot order. |
 | `if` | `rule` | block | `rules[].effects[][if]` | A conditional effect. |
 | `local` | `rule` | statement | `rules[].locals[]` | One working value the rule computes before its effects. |
 | `push` | `rule` | statement | `rules[].effects[][pushState]` | Appends a value to an ordered row, minting its key. |
+| `release` | `rule` | statement | `rules[].effects[][release]` | Releases the instance named by a lexical pool binding. |
 | `remove` | `rule` | statement | `rules[].effects[][removeStateCell]` | Drops a cell, so later reads see it absent rather than zero. |
 | `schedule` | `rule` | statement | `rules[].effects[][scheduleState]` | Writes a cell a fixed time from now. |
 | `shuffle` | `rule` | statement | `rules[].effects[][transformState]` | Reorders a row's cells by one pass over a draw row. |
@@ -92,6 +103,37 @@ addon ["name"] { modulePath: … hash: … request … watchMemory … }
 
 Printed back as `addon`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
+### `asset`
+
+```puck
+asset "package-relative/path"
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `path` (required) | header | text | — | the locked content path stored in the surrounding document field | — | The source-relative asset path resolved through the package's asset lock. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
+
+### `border`
+
+```puck
+border left.endpoint, right.endpoint { [center [x, y, z]] [yaw: angle] [pitch: angle] [width: length] [height: length] [hysteresis: length] }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `left` (required) | header | reference | — | adjacency and boundary fields in the two endpoint worlds | — | The source world and its boundary endpoint. |
+| `right` (required) | header | reference | — | adjacency and boundary fields in the two endpoint worlds | — | The destination world and its boundary endpoint. |
+| `center:` | property | point | — | the border window's center | — | The optional center of the border window. |
+| `yaw:` | property | value | — | the border window's yaw | — | The optional heading of the border window. |
+| `pitch:` | property | value | — | the border window's pitch | — | The optional pitch of the border window. |
+| `width:` | property | length | — | the border window's width | — | The positive width of the border window. |
+| `height:` | property | length | — | the border window's height | — | The positive height of the border window. |
+| `hysteresis:` | property | length | — | the border transition's hysteresis | — | The nonnegative distance that stabilizes transitions across the border. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
+
 ### `cartridge`
 
 ```puck
@@ -117,6 +159,19 @@ derive name = <expression>
 
 Never printed back; the printer produces the statements its expansion produced in its place.
 
+### `door`
+
+```puck
+door left.endpoint, right.spawn
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `left` (required) | header | reference | — | door topology and travel fields in the two worlds | — | The source world and its door face. |
+| `right` (required) | header | reference | — | door topology and travel fields in the two worlds | — | The destination world and its named spawn point. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
+
 ### `enum`
 
 ```puck
@@ -127,6 +182,20 @@ enum Name { member … }
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The enumeration's name, which qualifies each member as `Name.member`. |
 | `members` (required) | body | statements | — | the literals each read of a member expands to | — | The members, each a compile-time constant equal to its own 0-based position. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
+
+### `ground`
+
+```puck
+ground name { size [width, depth] [center [x, y, z]] }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | the generated prototype and placement identities | — | The ground patch's identity and the name used by automatic border endpoints. |
+| `size:` (required) | property | value | — | the generated box scale and boundary dimensions | — | The required positive width and depth. |
+| `center:` | property | point | — | the generated placement position and boundary center | — | The optional center, defaulting to the origin. |
 
 Never printed back; the printer produces the statements its expansion produced in its place.
 
@@ -150,6 +219,24 @@ material ["name"] { … }
 
 Printed back as `material`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
+### `pairPool`
+
+```puck
+pairPool name record Record left Pool right Pool maxLive n directed flag allowSelf flag
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | `name` | — | The pair pool's stable name. |
+| `record` (required) | header | reference | — | `record` | — | The record type shared by every relationship. |
+| `left` (required) | header | reference | — | `leftPool` | — | The pool supplying each left endpoint. |
+| `right` (required) | header | reference | — | `rightPool` | — | The pool supplying each right endpoint. |
+| `maxLive` (required) | header | number | — | `maxLive` | — | The positive maximum number of live relationships. |
+| `directed` | header | flag | — | `directed` | — | Whether endpoint order distinguishes relationships. |
+| `allowSelf` | header | flag | — | `allowSelf` | — | Whether both endpoints may name the same instance. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
+
 ### `pattern`
 
 ```puck
@@ -162,7 +249,7 @@ pattern name : Kind { [attribute: … | value: …] [maxStates: n] symbols { nam
 | `kind` (required) | header | cellkind (`Int`, `Fixed`, `Bool`, `Text`, `Vector`) | — | `kind` | — | The domain every cell of the row holds a value in. |
 | `attribute:` | property | reference | — | `attribute` | — | The row supplying each token's word, in place of `value`. |
 | `value:` | property | operand | — | `value` | — | An infix expression evaluated once per token to produce its word. |
-| `maxStates:` | property | number | — | `maxStates` | — | The derivative machine's state budget, inside 1 to 256. |
+| `maxStates:` | property | number | — | `maxStates` | — | The derivative machine's state budget, inside 1 to 1,024. |
 | `symbols` (required) | body | statements | — | `symbols` | — | The alphabet, each entry a name standing for one value or a band. |
 | `match:` (required) | property | text | — | `pattern` | — | The pattern language, loosest operator first: choice, intersection, sequence, complement, repetition; it lowers to the compiled tree. |
 
@@ -179,6 +266,21 @@ placements { policy { … } placement "id" { … } }
 | `body` | body | statements | — | `rows` | — | Placement rows and the section's own properties; anything else in it is refused rather than dropped. |
 
 Printed back as `placements` when every row in it sugars as `placement`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
+
+### `pool`
+
+```puck
+pool name of Record capacity(capacity) = [{ field: value … } …]
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | `name` | — | The pool's stable name. |
+| `record` (required) | header | reference | — | `record` | — | The record type shared by every instance. |
+| `slots` (required) | header | number | — | `capacity` | — | The positive maximum number of simultaneously live instances. |
+| `initial` | body | value | — | `initial` | — | Static slot seeds, each overriding selected record fields. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
 
 ### `prototypes`
 
@@ -200,8 +302,8 @@ record Name { field: Kind … }
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `name` (required) | header | name | — | `name` | — | The record's name, which a `table name : Name` declaration expands against. |
-| `fields` (required) | body | statements | — | one `state.world[]` row per field of every table declared against the record | — | The fields, each minting one `<table>_<field>` row over the table's own keys. |
+| `name` (required) | header | name | — | `name` | — | The record's name, which a `pool name of Name` declaration instantiates. |
+| `fields` (required) | body | statements | — | one field descriptor in `state.records[]` | — | The fields that every instance of a pool using this record carries. |
 
 Never printed back; the printer produces the statements its expansion produced in its place.
 
@@ -264,6 +366,21 @@ shape Type ["name"] { … }
 
 Printed back as `shape` when the node carries `type`, and every row in the array carries its own `type`, so none of them is a basis-merge patch naming only the facets it overrides; otherwise the generic value path, for the whole `shapes` array. Every field of the node the description does not name prints as an ordinary property.
 
+### `spawn`
+
+```puck
+spawn name { at [x, y, z] [yaw: angle] }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | the generated spawn point's id | — | The arrival point's identity. |
+| `at:` (required) | property | point | — | the generated spawn point's position | — | The required arrival position. |
+| `position:` | property | point | — | the generated spawn point's position | — | An alternative spelling of `at`. |
+| `yaw:` | property | value | — | the generated spawn point's yawDegrees | — | The optional arrival heading, defaulting to zero. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
+
 ### `sql`
 
 ```puck
@@ -275,12 +392,13 @@ Never printed back; the printer produces the native constructs the block expande
 ### `stabilize`
 
 ```puck
-stabilize name [maxPasses(n)] [until Gate] { rule "name" { … } … }
+stabilize name [undo({ rows: [row], depth: n })] [maxPasses(n)] [until Gate] { rule "name" { … } … }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The group's name, prefixed onto every rule it claims. |
+| `undo(…)` | modifier | value | — | `undo` | — | The rows and bounded number of completed turns retained for rewindTurn. |
 | `maxPasses(…)` | modifier | number | — | `passes` | — | The pass ceiling whose breach is one counted refusal naming the group. |
 | `until` | header | gate | — | `trigger` | — | Arms the group while the gate reads false, so it lowers as that gate's negation. |
 | `members` (required) | body | statements | — | `steps` | — | The rules the group claims, named `<group>_<rule>`; a group with no member is refused. |
@@ -325,15 +443,29 @@ Printed back as `views`; otherwise the generic value path. Every field of the no
 ### `workflow`
 
 ```puck
-workflow name { step name [skip] { … } … }
+workflow name [undo({ rows: [row], depth: n })] { step name [skip] { … } … }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The group's name, prefixed onto every step it claims. |
+| `undo(…)` | modifier | value | — | `undo` | — | The rows and bounded number of completed turns retained for rewindTurn. |
 | `steps` (required) | body | statements | — | `steps` | — | The steps the cursor advances through, one per committed firing. |
 
 Printed back as `workflow` when the node carries `name`, `shape`, `steps`, and every rule it claims is in the document's own `rules` array and no other group claims it; otherwise the explicit `ruleGroups` array beside an unclaimed `rules` array. Every field of the node the description does not name prints as an ordinary property.
+
+### `world`
+
+```puck
+world name = module(arguments)
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | the output document's identity and file name | — | The output world's name, written as an identifier, a string, or an interpolated string evaluated in the current lexical scope. |
+| `module` (required) | header | value | — | the complete generated world document | — | The module invocation expanded with these arguments to produce this world's document. |
+
+Never printed back; the printer produces the statements its expansion produced in its place.
 
 ### `request`
 
@@ -424,17 +556,34 @@ prototype "id" { document { … } }
 
 Printed back as `prototype` when the node carries `document`, `id`, and its `document` is an object; otherwise the generic value path, for the whole `prototypes` array. Every field of the node the description does not name prints as an ordinary property.
 
-### `countdown`
+### `claim`
 
 ```puck
-countdown row[key]
+claim pool as binding { <effect>* }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `target` (required) | header | reference | — | `state`, `key` | — | The cell the effect writes, read as one state token. |
+| `pool` (required) | header | reference | — | `pool` | — | The pool to allocate from. |
+| `binding` (required) | header | reference | — | `binding` | — | The lexical name for the claimed instance. |
+| `effects` (required) | body | statements | — | `effects` | — | The effects evaluated with the claimed binding in scope. |
 
-Printed back as `countdown` when its target round-trips through `ExpressionSpelling` unchanged; otherwise the call-form escape hatch, `type(k: v, …)`. Every field of the node the description does not name prints as an ordinary property.
+Printed back as `claim` when the node carries `binding`, `effects`, `pool`; otherwise the call-form escape hatch. Every field of the node the description does not name prints as an ordinary property.
+
+### `claim pair`
+
+```puck
+claim pair pool between left, right as binding { <effect>* }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `pool` (required) | header | reference | — | `pool` | — | The pair pool to allocate from. |
+| `endpoints` (required) | header | reference | — | `left`, `right` | — | The bound instances used as relationship endpoints. |
+| `binding` (required) | header | reference | — | `binding` | — | The lexical name for the claimed relationship. |
+| `effects` (required) | body | statements | — | `effects` | — | The effects evaluated with the relationship binding in scope. |
+
+Printed back as `claim pair` when the node carries `binding`, `effects`, `pool`; otherwise the call-form escape hatch. Every field of the node the description does not name prints as an ordinary property.
 
 ### `deal`
 
@@ -480,6 +629,20 @@ Printed back as `draw` when the transform is a `transfer` selecting `First` with
 
 One statement writes `rules[].effects[][transformState]`, `rules[].effects[][transformState].transform`.
 
+### `for each`
+
+```puck
+for each binding in pool { <effect>* }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `pool` (required) | header | reference | — | `pool` | — | The pool whose live instances are visited. |
+| `binding` (required) | header | reference | — | `binding` | — | The lexical name for the current instance. |
+| `effects` (required) | body | statements | — | `effects` | — | The effects evaluated once for each live instance. |
+
+Printed back as `for each` when the node carries `binding`, `effects`, `pool`; otherwise the call-form escape hatch. Every field of the node the description does not name prints as an ordinary property.
+
 ### `if`
 
 ```puck
@@ -496,16 +659,15 @@ Printed back as `if` when the node carries `condition`, and the condition has a 
 ### `local`
 
 ```puck
-local name : Int|Fixed = <operand>
+local name = <operand>
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The local's name, read bare in every operand after it. |
-| `kind` (required) | header | cellkind (`Int`, `Fixed`) | — | `kind` | — | The local's domain; omitting it is refused rather than inferred. |
 | `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, once per firing, before any effect runs. |
 
-Printed back as `local` when the node carries `expression`, `kind`, `name`; otherwise the explicit `locals` array. Every field of the node the description does not name prints as an ordinary property.
+Printed back as `local` when the node carries `expression`, `name`; otherwise the explicit `locals` array. Every field of the node the description does not name prints as an ordinary property.
 
 ### `push`
 
@@ -519,6 +681,18 @@ push row = <rhs>
 | `value` (required) | header | operand | — | `fromState`, `expression` | — | What is appended: a bare row read lowers as `fromState`, anything else as `expression`. |
 
 Printed back as `push` when the node carries `state`, and its target round-trips through `ExpressionSpelling` unchanged; otherwise the call-form escape hatch, `type(k: v, …)`. Every field of the node the description does not name prints as an ordinary property.
+
+### `release`
+
+```puck
+release binding
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `binding` (required) | header | reference | — | `binding` | — | The lexical instance binding to release. |
+
+Printed back as `release` when the node carries `binding`; otherwise the call-form escape hatch. Every field of the node the description does not name prints as an ordinary property.
 
 ### `remove`
 
@@ -698,13 +872,12 @@ One statement writes `rules[]`, `ruleGroups[].steps[]`.
 ### `grid`
 
 ```puck
-grid name[family] : Int|Bool dimensions(width:, depth:) [wrap(…)] [cellSize(n)] [origin(x, y, z)] [band(n)] [empty(v)] [positions(row)] [inverse(tokens:, codes:)] [bounds(…)] [{ "ordinal" = value … }]
+grid name[family] dimensions(width:, depth:) [wrap(…)] [cellSize(n)] [origin(x, y, z)] [band(n)] [empty(v)] [positions(row)] [inverse(tokens:, codes:)] [bounds(…)] [{ "ordinal" = value … }]
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The row's name, which is also the name of the topology the declaration mints. |
-| `kind` (required) | header | cellkind (`Int`, `Bool`) | — | `kind` | — | The domain every cell of the row holds a value in. |
 | `dimensions(…)` (required) | modifier | value | — | `width`, `depth` | — | The topology's cell counts along +X and +Z. |
 | `wrap(…)` | modifier | enumeration (`None`, `X`, `Y`, `Both`) | — | `wrap` | `"None"` | The topology's wrapped axes. |
 | `cellSize(…)` | modifier | length | — | `cellSize` | `1` | The topology's cubic cell edge, in world units. |
@@ -716,7 +889,7 @@ grid name[family] : Int|Bool dimensions(width:, depth:) [wrap(…)] [cellSize(n)
 | `bounds(…)` | modifier | value | `Int` | `min`, `max`, `overflow` | — | The row's range and what a write past it does; only where the row's kind is Int. |
 | `cells` | body | cells | — | `cells` | — | Initial cells keyed by literal topology ordinal; refused beside `inverse`. |
 
-Printed back as `grid` when the node carries `kind`, `name`, and it carries no key outside `cells`, `domain`, `inverse`, `kind`, `max`, `min`, `name`, `overflow`, and it is the only row over its topology, and that topology carries nothing outside what the modifiers can spell; otherwise `row { }` beside an explicit `state.lattices` entry.
+Printed back as `grid` when the node carries `name`, and it carries no key outside `cells`, `domain`, `inverse`, `kind`, `max`, `min`, `name`, `overflow`, and it is the only row over its topology, and that topology carries nothing outside what the modifiers can spell; otherwise `row { }` beside an explicit `state.lattices` entry.
 
 One statement writes `state.world[]`, `state.lattices[]`.
 
@@ -746,30 +919,28 @@ Printed back as `row`; otherwise nothing — a `row { }` is what the four declar
 ### `slot`
 
 ```puck
-slot name[family] : Kind [= value] [bounds(minimum:, maximum:, overflow:)] [advance(perSecond:)] [space(name)]
+slot name[family] [= value] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [space(name)]
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The row's name, which every rule and binding reads it by. |
-| `kind` (required) | header | cellkind (`Int`, `Fixed`, `Bool`, `Text`, `Vector`) | — | `kind` | — | The domain every cell of the row holds a value in. |
 | `value` | header | value | — | `value` | — | The slot's initial value; omitted, the row gains its cell from the first write. |
 | `bounds(…)` | modifier | value | `Int`, `Fixed` | `min`, `max`, `overflow` | — | The row's range and what a write past it does; only where the row's kind is Int or Fixed. |
 | `advance(…)` | modifier | rate | `Int`, `Fixed` | `advance` | — | Per-second continuous accumulation, its sign carrying the direction; only where the row's kind is Int or Fixed. |
 | `space(…)` | modifier | reference | `Vector` | `space` | — | The declared embedding space the row's value lives in; only where the row's kind is Vector. |
 
-Printed back as `slot` when the node carries `kind`, `name`, and it carries no key outside `advance`, `kind`, `max`, `min`, `name`, `overflow`, `space`, `value`, and its name is a bare identifier, its kind is a cell kind, it carries no `domain`, and every bound and its value is a literal of that kind; otherwise `row { }`, the explicit form.
+Printed back as `slot` when the node carries `name`, and it carries no key outside `advance`, `kind`, `max`, `min`, `name`, `overflow`, `space`, `value`, and its name is a bare identifier, its kind is a cell kind, it carries no `domain`, and every bound and its value is a literal of that kind; otherwise `row { }`, the explicit form.
 
 ### `table`
 
 ```puck
-table name[family] : Kind [capacity(n)] [bounds(minimum:, maximum:, overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }
+table name[family] [capacity(n)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The row's name, which every rule and binding reads it by. |
-| `kind` (required) | header | cellkind (`Int`, `Fixed`, `Bool`, `Text`, `Vector`) | — | `kind` | — | The domain every cell of the row holds a value in. |
 | `capacity(…)` | modifier | number | — | `capacity` | — | The row's cell-count ceiling; smaller than its own authored cells is refused. |
 | `bounds(…)` | modifier | value | `Int`, `Fixed` | `min`, `max`, `overflow` | — | The row's range and what a write past it does; only where the row's kind is Int or Fixed. |
 | `advance(…)` | modifier | rate | `Int`, `Fixed` | `advance` | — | Per-second continuous accumulation, its sign carrying the direction; only where the row's kind is Int or Fixed. |
@@ -782,7 +953,7 @@ table name[family] : Kind [capacity(n)] [bounds(minimum:, maximum:, overflow:)] 
 | `advance` | cell | rate | `Int`, `Fixed` | `advance` | — | This cell's own accumulation rate, in place of the row's; only where the row's kind is Int or Fixed. |
 | `behavior` | cell | enumeration (`none`) | — | `behavior` | — | Opts the cell out of the row's accumulation; refused beside the cell's own `advance`. |
 
-Printed back as `table` when the node carries `kind`, `name`, and it carries no key outside `advance`, `capacity`, `cells`, `domain`, `evicts`, `kind`, `max`, `min`, `name`, `overflow`, `space`, and its name is a bare identifier, its kind is a cell kind, its `domain` is the bare `keys` shape the lowering would itself have written, every bound and cell value is a literal of the row's kind, and every `advance` rate reduces to one literal; otherwise `row { }`, the explicit form.
+Printed back as `table` when the node carries `name`, and it carries no key outside `advance`, `capacity`, `cells`, `domain`, `evicts`, `kind`, `max`, `min`, `name`, `overflow`, `space`, and its name is a bare identifier, its kind is a cell kind, its `domain` is the bare `keys` shape the lowering would itself have written, every bound and cell value is a literal of the row's kind, and every `advance` rate reduces to one literal; otherwise `row { }`, the explicit form.
 
 One body entry carries `advance`, `behavior`, `key`, `value` and nothing else.
 
@@ -797,8 +968,10 @@ One body entry carries `advance`, `behavior`, `key`, `value` and nothing else.
 | `for` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
 | `import` | Core grammar: the module surface, described by `Puck.Transpiler`. |
 | `let` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
+| `module` | Core grammar: a typed compile-time module, expanded before this vocabulary sees a statement. |
 | `schema` | Core grammar: a document header this vocabulary does not interpret. |
 | `template` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
+| `use` | Core grammar: a module instantiation, expanded before this vocabulary sees a statement. |
 
 ---
 

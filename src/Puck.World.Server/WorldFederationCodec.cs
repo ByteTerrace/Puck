@@ -141,7 +141,7 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x314445464B435550UL; // "PUCKFED1", the first World federation contract.
+    public const ulong WireKey = 0x324445464B435550UL; // "PUCKFED2", typed identity records in traveler projections.
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults, int ordinal) {
@@ -410,7 +410,8 @@ public static partial class WorldFederationCodec {
                 Name: reader.ReadString(field: $"traveler {(ordinal + 1)} identity name"),
                 ColorHex: reader.ReadString(field: $"traveler {(ordinal + 1)} identity color"),
                 MoveSpeed: reader.ReadNullableFixed(),
-                TurnSpeed: reader.ReadNullableFixed()
+                TurnSpeed: reader.ReadNullableFixed(),
+                Records: WorldIdentityRecordWire.Read(reader: ref reader)
             );
 
             if (!reader.Failed) {
@@ -677,6 +678,7 @@ public static partial class WorldFederationCodec {
                 writer.WriteString(value: projected.ColorHex);
                 writer.WriteNullableFixed(value: projected.MoveSpeed);
                 writer.WriteNullableFixed(value: projected.TurnSpeed);
+                WorldIdentityRecordWire.Write(writer: writer, records: projected.Records);
             }
         }
 

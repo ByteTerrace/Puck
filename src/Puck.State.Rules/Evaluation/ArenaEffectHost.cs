@@ -18,7 +18,9 @@ public interface IArenaTransformHost {
 /// envelope, overflow policy and symbolic domain decide it.</summary>
 /// <remarks>The host is the reader every operand answers from, so a caller advances it to the tick it wants
 /// (<see cref="Advance"/>) before evaluating.</remarks>
-public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
+public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost {
+    private readonly HashSet<string> m_rewoundUndoGroups = new(comparer: StringComparer.Ordinal);
+    private readonly StateInstanceHandle[] m_instanceBindings = new StateInstanceHandle[StateCapacity.MaxInstanceBindings];
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
 
     private readonly IReadOnlyList<DynamicsRow>? m_dynamics;
@@ -31,7 +33,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     private readonly ArenaDrawSite m_site;
     private readonly int m_ticksPerSecond;
 
-    private long[] m_boardScratch = new long[64];
+    private ulong m_rewoundUndoTick = ulong.MaxValue;
 
     /// <summary>Initializes a host over an arena.</summary>
     /// <param name="arena">The store every read and write addresses.</param>
@@ -59,6 +61,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     /// <inheritdoc/>
     public Span<long> Locals => m_locals;
     /// <inheritdoc/>
+    public Span<StateInstanceHandle> InstanceBindings => m_instanceBindings;
+    /// <inheritdoc/>
     public CellKey BoundEachKey { get; set; }
     /// <inheritdoc/>
     public CellKey BoundPreviousKey { get; set; }
@@ -82,6 +86,10 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="engineTick">The engine tick.</param>
     public void Advance(ulong tick, ulong engineTick) {
+        if (m_rewoundUndoTick != tick) {
+            m_rewoundUndoGroups.Clear();
+        }
+        m_rewoundUndoTick = tick;
         EngineTick = engineTick;
         Tick = tick;
     }
@@ -151,25 +159,49 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     /// <inheritdoc/>
     public virtual void Committed(int scope) { }
     /// <inheritdoc/>
+    public virtual void Preflighting() { }
+    /// <inheritdoc/>
+    public virtual bool PrepareTransactional(in EffectFiring firing, out EffectRefusal refusal) {
+        refusal = EffectRefusal.None;
+
+        return true;
+    }
+    /// <inheritdoc/>
+    public virtual void CommitTransactional(in EffectFiring firing) { }
+    /// <inheritdoc/>
     public virtual bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         refusal = IEffectHost.Unbound(effect: effect);
 
         return false;
     }
     /// <inheritdoc/>
-    public Span<long> BoardScratch(int cells) {
-        if (m_boardScratch.Length < cells) {
-            m_boardScratch = new long[cells];
+    public bool TryRewindTurn(string group, out string reason) {
+        if (!Arena.TryRewindTurn(group: group, reason: out reason)) {
+            return false;
         }
-
-        return m_boardScratch.AsSpan(
-            length: Math.Max(
-                val1: 0,
-                val2: cells
-            ),
-            start: 0
-        );
+        if (m_rewoundUndoTick != Tick) {
+            m_rewoundUndoGroups.Clear();
+            m_rewoundUndoTick = Tick;
+        }
+        _ = m_rewoundUndoGroups.Add(item: group);
+        return true;
     }
+    /// <inheritdoc/>
+    public bool UndoGroupSuppressed(string group, ulong tick) => ((m_rewoundUndoTick == tick) && m_rewoundUndoGroups.Contains(item: group));
+    /// <inheritdoc />
+    public void BeginUndoPass(string group) => Arena.BeginUndoPass(group: group);
+    /// <inheritdoc />
+    public void EndUndoPass(string group) => Arena.EndUndoPass(group: group);
+    /// <inheritdoc/>
+    public void ConfigureUndo(IReadOnlyList<ArenaUndoPlan> plans) => Arena.ConfigureUndo(plans: plans);
+    /// <inheritdoc/>
+    public bool UndoTurnPending(string group) => Arena.UndoTurnPending(group: group);
+    /// <inheritdoc/>
+    public void BeginUndoTurn(string group) => Arena.BeginUndoTurn(group: group);
+    /// <inheritdoc/>
+    public void CommitUndoTurn(string group) => Arena.CommitUndoTurn(group: group);
+    /// <inheritdoc/>
+    public void CancelUndoTurn(string group) => Arena.CancelUndoTurn(group: group);
     /// <inheritdoc/>
     public virtual int BoundIndex(BoundKey key) => -1;
 
@@ -231,7 +263,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
             return false;
         }
 
-        var key = Arena.Catalog.Keys.Intern(name: StateRow.SlotKey);
+        var key = Arena.Keys.Intern(name: StateRow.SlotKey);
         var emitted = ((fired.Text is { } text)
             ? Arena.TryWriteText(
                 key: key,
@@ -305,7 +337,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
             return Moved(
                 changed: Arena.TryMint(
                     key: out _,
-                    name: Arena.Catalog.Keys[key],
+                    name: Arena.Keys[key],
                     reason: out var mintReason,
                     rowOrdinal: ordinal,
                     value: Carry(
@@ -359,4 +391,25 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
         CellKind.Fixed => CellValue.Fixed(rawBits: raw),
         _ => CellValue.Int(value: raw),
     });
+}
+/// <summary>A rule host whose arena carries retained turn journals.</summary>
+public interface IArenaUndoHost {
+    /// <summary>Configures all compiled undo groups idempotently.</summary>
+    void ConfigureUndo(IReadOnlyList<ArenaUndoPlan> plans);
+    /// <summary>Gets whether the group has an unsettled logical turn.</summary>
+    bool UndoTurnPending(string group);
+    /// <summary>Begins a logical turn.</summary>
+    void BeginUndoTurn(string group);
+    /// <summary>Attributes ordinary arena commits to this group's current evaluation pass.</summary>
+    void BeginUndoPass(string group);
+    /// <summary>Ends this group's current evaluation-pass attribution.</summary>
+    void EndUndoPass(string group);
+    /// <summary>Commits a logical turn.</summary>
+    void CommitUndoTurn(string group);
+    /// <summary>Discards an unsettled turn record.</summary>
+    void CancelUndoTurn(string group);
+    /// <summary>Rewinds the named group's newest turn.</summary>
+    bool TryRewindTurn(string group, out string reason);
+    /// <summary>Gets whether a successful rewind suppresses this group for the rest of the named tick.</summary>
+    bool UndoGroupSuppressed(string group, ulong tick);
 }

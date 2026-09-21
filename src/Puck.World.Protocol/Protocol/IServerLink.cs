@@ -108,22 +108,28 @@ public static class ServerLinkSubmissions {
 
         return CommandResult.None;
     }
-    /// <summary>Submits a live world edit like <see cref="Submit(IServerLink, WorldMutation)"/> and registers the
-    /// submitting verb against the minted correlation id, so the composition root's <c>WorldServer.EchoTap</c>
-    /// subscriber can print a per-verb <c>[&lt;verb&gt;: …]</c> line the submitting script can account when the
-    /// tick-boundary drain settles the mutation — refused on stderr, accepted on stdout.</summary>
+    /// <summary>Submits a mutation and settles from its typed completion, including inline ingress refusals.
+    /// Publishes the per-verb result without correlating console echoes across worlds.</summary>
     /// <param name="link">The link.</param>
     /// <param name="mutation">The world mutation to apply.</param>
     /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
     /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
-    /// <returns><see cref="CommandResult.None"/>.</returns>
+    /// <returns>A result with no output of its own that settles with the tick-boundary verdict.</returns>
     public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb) {
-        echoes.Register(
-            correlationId: link.SubmitWorldMutation(mutation: mutation),
-            verb: verb
-        );
+        var settlement = new CommandSettlement();
 
-        return CommandResult.None;
+        _ = link.SubmitWorldMutation(mutation: mutation, completion: result => {
+            var verdict = result switch {
+                WorldSubmissionResult.Mutation reply when reply.Outcome.Applied => new CommandResult(Output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
+                WorldSubmissionResult.Mutation reply => CommandResult.Error(output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
+                WorldSubmissionResult.Refusal refusal => CommandResult.Error(output: $"[{verb}: {refusal.Code} {refusal.Detail}]"),
+                _ => CommandResult.Error(output: $"[{verb}: no authoritative mutation verdict; inspect state before any retry]"),
+            };
+
+            settlement.Settle(result: verdict);
+            echoes.Publish(result: verdict);
+        });
+        return CommandResult.Settling(settlement: settlement);
     }
     /// <summary>Submits a validated authority command for one entity. Applies synchronously at submit (like a grant or
     /// a session request), so a query following it in the same script observes its effect.</summary>
@@ -188,6 +194,42 @@ public static class ServerLinkSubmissions {
         payload: new WorldSubmissionPayload.Rebuild(Value: request),
         principal: principal
     );
+    /// <summary>Submits a rebuild like <see cref="SubmitRebuild(IServerLink, WorldRebuildRequest, WorldPrincipal)"/>
+    /// and registers the submitting verb against the minted correlation id for the local authority's echo.</summary>
+    /// <param name="link">The link.</param>
+    /// <param name="request">The rebuild request.</param>
+    /// <param name="principal">The acting identity.</param>
+    /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
+    /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
+    /// <returns>A result with no output of its own that settles with the tick-boundary verdict.</returns>
+    public static CommandResult SubmitRebuild(this IServerLink link, WorldRebuildRequest request, WorldPrincipal principal, WorldDeferredVerbEchoes echoes, string verb) =>
+        SubmitDeferred(link, new WorldSubmissionPayload.Rebuild(Value: request), principal, echoes, verb);
+    /// <summary>Submits an undo and waits for its local tick-boundary verdict.</summary>
+    /// <param name="link">The server link.</param>
+    /// <param name="count">The number of entries to undo.</param>
+    /// <param name="principal">The acting identity.</param>
+    /// <param name="echoes">The local authority's pending verdict table.</param>
+    /// <param name="verb">The submitting verb.</param>
+    /// <returns>A result settling with the undo verdict or a transport refusal.</returns>
+    public static CommandResult SubmitUndo(this IServerLink link, int count, WorldPrincipal principal, WorldDeferredVerbEchoes echoes, string verb) =>
+        SubmitDeferred(link, new WorldSubmissionPayload.Undo(Count: count), principal, echoes, verb);
+
+    private static CommandResult SubmitDeferred(IServerLink link, WorldSubmissionPayload payload, WorldPrincipal principal, WorldDeferredVerbEchoes echoes, string verb) {
+        var settlement = new CommandSettlement();
+        var correlation = link.SubmitEnvelope(
+            completion: result => {
+                if (result is WorldSubmissionResult.Refusal refusal) {
+                    settlement.Settle(result: CommandResult.Error(output: $"[{verb}: {refusal.Code} {refusal.Detail}]"));
+                }
+            },
+            operationId: Guid.Empty,
+            payload: payload,
+            principal: principal
+        );
+
+        return echoes.Register(correlationId: correlation, verb: verb, settlement: settlement);
+    }
+
     /// <summary>Revokes a capability from a principal — the <c>world.revoke</c> half. Applies synchronously at submit;
     /// <see cref="WorldGrant.Exclusive"/> is ignored (the subject is revoked whether or not it was exclusive).
     /// <paramref name="actor"/> is checked against the same administration rule as <see cref="SubmitGrant"/> — it must

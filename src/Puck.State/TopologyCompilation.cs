@@ -14,10 +14,9 @@ public static class TopologyCompilation {
     /// (<c>1L &lt;&lt; direction</c>), above a Box's unauthored 26 (the largest default set) so a custom vocabulary is
     /// never narrower than what every kind already carries.</summary>
     public const int MaxDirections = (sizeof(long) * 8);
-    /// <summary>The maximum named topologies in one document.</summary>
-    public const int MaxTopologies = 16;
-    /// <summary>The document-wide board storage ceiling — every declared topology at its own <see cref="MaxCells"/>.</summary>
-    public const int MaxTotalCells = (MaxTopologies * MaxCells);
+    /// <summary>The maximum named topologies in one document. A compiled topology holds one four-byte neighbour
+    /// per cell per direction and one centre per cell, at most about a mebibyte each.</summary>
+    public const int MaxTopologies = 64;
 
     /// <summary>The greatest axial hexagon radius whose cell count (<c>1 + 3r(r + 1)</c>) still fits
     /// <see cref="MaxCells"/>, computed rather than authored so the two bounds can never drift apart.</summary>
@@ -481,7 +480,7 @@ public static class TopologyCompilation {
                 );
             }
             if (!slots.TryGetValue(
-                key: (edge.Direction ?? string.Empty),
+                key: (edge.Direction.Value ?? string.Empty),
                 value: out var direction
             )) {
                 return Refuse(

@@ -48,17 +48,35 @@ needs drive scheduling.
 iteration binding, and every effect it produces lands in one journal scope
 that commits when every required effect succeeds and rewinds otherwise, with
 the rewind one counted refusal naming the effect. The edge latch records the
-crossing either way. An irreversible arm (a save, a HUD or placement upsert,
-anything a host cannot rewind) is queued during the scope and fired after it
-commits, so a rewound firing fires nothing outward; a host preflights what it
-can before commit, so a post-commit refusal is a host failure, never an
-authored one, and the arena stays committed. A `transaction` is a savepoint
+crossing either way. An arm that leaves the arena is queued during the scope
+and preflighted before it commits, in the order the arms fire, each against
+what the arms before it would leave. Such an arm is one of two kinds, and the
+atomic promise covers one. A transactional arm (a placement or HUD row) is
+committed with the firing in two phases: the host prepares the firing's
+transactional arms as one unit before the scope commits, where every gate that
+can refuse them runs and a refusal rewinds the firing, and installs the
+prepared unit after the commit through a step that cannot refuse. A delivered
+arm (a cue, a pose, a body motion, a save) fires after the commit; a delivery
+that refuses is one counted refusal that undoes nothing and stops no later
+delivery, and the promise does not cover it. One class cannot serve both:
+rollback can be promised only for an effect whose install is prepared before
+the commit and cannot refuse after it. A `transaction` is a savepoint
 inside the firing: a refusal inside it rewinds the savepoint, `onFailure` runs
 in the firing's scope, later siblings continue, and the firing commits if they
 succeed; a refusal inside `onFailure` or a later sibling rewinds the whole
 firing. There is no `attempt` group: the inventory found no shipped rule with
 a refusable transform at a non-first position, and the six candidates were
 partial firing by accident.
+
+**D4a — One publication boundary, and one proposal behind it.** A value written
+in the arena reaches everything outside it through one routine, which installs
+the rows that moved and then settles every consumer that keeps its own copy of
+a value: the routine a value mutation also ends in. A consumer is added there,
+never to one of the doors a value can arrive through. What a publication
+installs is composed by a step that installs nothing, and a preflight judges
+that same proposal, an open scope's writes included, so what a firing was
+judged against is what its commit installs. Its cost follows the rows that
+moved, by per-row versions, and not what the document declares.
 
 **D5 — Ordinal addressing at runtime.** A compiled read or write addresses a
 row ordinal and an interned cell key; a key minted at runtime is interned in
@@ -191,8 +209,39 @@ surprise both limits exist to remove.
 **K2 — A buffer sized by a document is heap, grown once.** No `stackalloc` is
 sized by a topology's cell count, a token count, or an expression's length
 times its nesting; 4,096 cells is 96 KiB on the stack and sixteen times that
-is 1.5 MiB. Scratch comes from the host's growing buffers and is covered by
-the allocation laws after warm-up.
+is 1.5 MiB. Scratch is leased from the arena's own growing buffers
+(`ArenaScratch`), returned in order so a nested evaluation never writes over its
+caller's, and is covered by the allocation laws after warm-up. It is the
+arena's own rather than `ArrayPool<T>.Shared` because leases nest by element
+type: an expression that calls a function or folds a family rents a second
+value stack while the first is open. The shared pool serves only the first
+rental of a size class from its thread-local slot and takes a per-core locked
+stack for the rest, which measures about four times a depth-indexed buffer for
+three nested 64-word leases. A single small lease is about twice the cost, and
+leases of thousands of elements cost the same either way, because clearing
+them dominates.
+
+**K2a — The memory bound is the arena's storage, in bytes.** `ArenaLayout.Bytes`
+measures every column at its full width, the change stamps a settle keeps per
+position, the row and key indexes, the vector components, and the strings its
+reference columns point at, with a reference counted as eight bytes on every
+host so a document measures the same wherever it is admitted. A string is
+counted at the length ceiling its write doors hold it to: a provenance for
+every cell slot, a text for every slot of a text row. `StateArena.Bytes` adds
+the bounded visibility payload held by declaration and live state;
+`ArenaCapacity.MaxBytes` bounds that total. Layout overflow refuses before
+column allocation, and visibility admission checks construction, imports and
+writes. See [work budgets](../reference/state/hosting.md#work-budgets).
+A count of cells
+cannot stand in for it: a cell slot costs about 250 bytes once every column a
+row may use is allocated, and lanes, draw masks and vectors are not cells. The
+undo record has its own ceiling (`ArenaCapacity.MaxJournalBytes`), which counts
+its entries, its snapshotted vector components, and the texts and other
+references it overwrote, since the record alone keeps those alive. It is read
+between effects: a write is never dropped or interrupted, because a member write spans
+several columns and a torn one would be read by whatever ran next, so the
+record may pass the ceiling by the writes of the one effect that crossed it
+before the firing is refused and rewound.
 
 **K3 — A set of cells wider than a word lives in a board row.** An expression
 value stays one 64-bit word and the bit operators stay generic Int operators.
@@ -210,6 +259,14 @@ bounded derivative machine with intersection and complement, so it gains no
 captures. A match reports the position and length it matched at, and a rule
 reads the cells at offsets from that position.
 
+**K5a — Token-set writes are pool iteration.** `for each` snapshots the pool's
+original live, generation-checked handles, and a typed field condition selects
+the noun to rewrite. The matching writes share the rule firing's atomic scope,
+so a later refusal restores them together. `writeSet` stays a board-cell
+operation; giving it a second token mode would duplicate the pool iterator and
+its lifetime rules. Separate noun rules remain separate firings in game
+authorship.
+
 **K6 — Undo is scoped and admitted.** A retained journal segment belongs to a
 declared set of rows. A turn that wrote outside the set cannot be undone, and
 a group that declares undo may hold no irreversible arm and no host-owned
@@ -220,6 +277,19 @@ undo, another requires both seats, and a third never opens the gate. Depth is
 bounded in bytes by the journal ceiling, refused at load naming both figures
 when a declared depth's worst-case turns cannot fit; there is no separate
 count of turns.
+
+A pending retained segment may span ticks; an ordinary arena journal scope never
+does. Settled passes with no retained writes consume no history. A successful
+rewind suppresses its group for the rest of that tick. Pool reservations count
+the columns their mutation doors can reach; ordinary rows also reserve their
+mutable metadata. Checkpoint imports use the same storage plan.
+
+**Pool body bindings are logical enum mappings.** One `properties.carriers`
+declaration maps every member of a pool field's enum to a named inhabited
+placement, a local seat, or detachment. It compiles to field and placement
+ordinals. The live generation supplies the current field value; a released
+instance cannot retain an attachment. Generation-pinned document attachments and
+raw physical body-index fields have no parallel runtime path.
 
 **Every ceiling is per document, counted after modules expand.** A module
 used twice counts its rows twice; a pool counts its rows once and its capacity
@@ -264,6 +334,25 @@ compiler parsed, and where authors met literal-only arguments. They become
 function forms in the source and structured nodes in the document, so nothing
 anywhere is a string with its own grammar.
 
+**P4a — A string is text.** A call argument that holds a name, a cell key, a
+value expression or an enumeration word is written bare, and one that holds
+text is a string literal; the document model says which, so no list of
+members is kept beside it. The same holds for an object literal's property
+and a block's property line: lowering carries the model type each value
+fills, so a member is classified where it stands rather than by the call
+that happens to hold it. Two spellings of one argument made every reader
+carry both and let the quoted one hold a grammar of its own (`"$local:x"`),
+which is what P4 retired everywhere else. An interpolated string computes a
+token, never a program: a loop mints `piece{i}`, which no bare word can say,
+so the string is a name's or a key's whole value, or an atom inside a bare
+expression (`pieceCell[$"piece{i}"]`). An expression built as text was a
+second spelling of every expression, read in the document's dialect, opaque
+to the tools that read a bare one, and open to whatever syntax a hole
+computed; an atom's result is one name or one number by construction. A
+compile-time binding is read by its own name inside a bare operand and
+shadows a row of the same name; an enumeration word is never shadowed, and
+one bare word that is a key is never a binding.
+
 **P5 — One door.** Every consumer that compiles a source calls the same entry
 point with the same options; three test harnesses once compiled a source
 differently from `puck compile`, unnoticed until a game used an `sql { }`
@@ -293,6 +382,29 @@ work bounded by the capacity. They compose: a module may declare a pool and
 take one as a parameter. Claim and release are effects, whether the cause is
 a join or a rule, and the firing rule's gate is the authority. An unclaimed
 instance is absent, not empty.
+
+**Pool storage uses fixed identity slots.** Each generated domain and field row
+reserves its identity universe and marks live cells with presence bits. Claim,
+release, and rewind never shift another instance or rebuild row indexes. Pair
+identity capacity remains distinct from the live-count limit. Generic positional
+reads may encounter holes; snapshots return only live handles in slot order.
+Generation checks remain mandatory on every handle read, using direct slot
+addressing. Free-slot scans and dependent-pair cascades remain bounded work.
+Checkpoint version 11 rejects the earlier compact-position undo format.
+
+**Pool generations are continuation state.** Releasing a slot advances its
+generation even while the slot is dead. The arena hash therefore includes the
+generated generation row: a reclaimed generation-one handle and a fresh
+generation-zero handle have different future stale-handle behavior and are not
+the same simulation state. Replay, checkpoint, and rewind preserve that row.
+Tests that compare logical live contents may project the live set, but the
+authoritative hash never discards allocator continuation.
+
+**Latch bindings always hash both generation lanes.** A latch distinguishes a
+released instance from its replacement even when their slot and visible values
+agree. Its canonical binding shape includes left and right generations for every
+entry; ordinary bindings use zero. Keeping one shape avoids a world-dependent
+hash format. Reordering insertion does not change the latch hash.
 
 **Nothing runs inside another world.** Worlds link by federation; modules nest
 at compile time; a link (`border`, `door`) is one declaration generating both

@@ -171,30 +171,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"host.backend '{backend}' is not a defined WorldBackendPreference.");
         }
 
-        // The honest XOR this site can afford: WorldHostDefaults is a CLASS, so a null Backend is distinguishable
-        // from an authored one and declaring both is refused BY NAME (bodies.capacityDraw's struct-typed site
-        // cannot do this — see its own remarks). Declaring NEITHER stays legitimate and reads as 'auto'.
-        if (
-            (host.Backend is not null) &&
-            (host.BackendRow is not null)
-        ) {
-            errors.Add(item: "host declares both 'backend' and 'backendRow' — the backend is an authored literal or a row read, never both.");
-        }
-
-        if (host.BackendRow is { } backendRow) {
-            if (WorldDefinitionRows.FindStateRow(
-                name: backendRow,
-                rows: stateRows
-            ) is not { } tokenRow) {
-                errors.Add(item: $"host.backendRow names state row '{backendRow}', which the document does not declare.");
-            } else if (
-                (tokenRow.Kind != CellKind.Text) ||
-                tokenRow.IsKeyed ||
-                (tokenRow.Field is not null)
-            ) {
-                errors.Add(item: $"host.backendRow names state row '{backendRow}', which must be a scalar kind=Text row.");
-            }
-        }
+        ValidateHostBackendRow(errors: errors, host: host, rows: stateRows);
 
         if (!Enum.IsDefined(value: host.PresentMode)) {
             errors.Add(item: $"host.presentMode '{host.PresentMode}' is not a defined PresentMode.");

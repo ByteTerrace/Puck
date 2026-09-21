@@ -178,6 +178,7 @@ public static partial class WorldNameRegistry {
         if (
             (leaf == typeof(CellName)) ||
             (leaf == typeof(ExpressionProgram)) ||
+            (leaf == typeof(StateChannelRef)) ||
             (leaf == typeof(BindableScalar)) ||
             (leaf == typeof(BindableColor)) ||
             (leaf == typeof(WorldLatticeScalar))

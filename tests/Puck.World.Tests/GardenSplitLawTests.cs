@@ -3,20 +3,9 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Game imports retain their current rules, state, patterns, and topology in authored order.
-/// Chess's placement keys and parent frames remain valid when composition changes body ordering.
-/// Gameplay laws separately check behavior, so authoring can evolve without reversing changes to a migration fixture.</summary>
+/// <summary>Game imports retain their current rules, state, patterns, and topology in authored order.</summary>
 [Collection(name: DocumentCompositionCollection.Name)]
 public sealed class GardenSplitLawTests {
-    private static HashSet<string> KeysAsPlacementIds(WorldDefinition definition, string rowName) {
-        var row = WorldDefinitionRows.FindStateRow(
-            definition.State,
-            rowName
-        )!;
-
-        return [.. (row.Cells ?? []).Select(selector: cell => cell.Key.Value)];
-    }
-    private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
     private static string RepoRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
 
@@ -35,103 +24,6 @@ public sealed class GardenSplitLawTests {
         return directory!.FullName;
     }
 
-    // pieceCell/pieceCode are keyed by PLACEMENT ID (piece0..piece31) — the placement-addressed re-authoring: a
-    // game's own content never keys itself by body index, which is an artefact of wherever WorldPopulation happens
-    // to seat inhabited placements today (see chess.world.json's own remarks and docs/game/design.md's module-
-    // convention entry). This checks the declared key set matches the 32 declared piece placements exactly — never
-    // where those placements land in the entity table, which the placement:$each/placement-ordinal machinery
-    // resolves at runtime rather than at authoring time.
-    [Fact]
-    public void ChessPieceBodies_MatchDeclaredPiecePlacementIds() {
-        var definition = LoadGarden();
-        var population = AuthoredGameFixtures.PopulationForIdentityChecks(definition: definition);
-
-        var fromPieceCell = KeysAsPlacementIds(
-            definition: definition,
-            rowName: "pieceCell"
-        );
-        var fromPieceCode = KeysAsPlacementIds(
-            definition: definition,
-            rowName: "pieceCode"
-        );
-        var declaredPieceIds = definition.Placements.Where(predicate: p => (p.Id.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "piece"
-        ) && (p.Inhabit is not null))).Select(selector: p => p.Id).ToHashSet();
-        var fromPopulation = new HashSet<string>();
-
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (
-                (population.InhabitantPlacementId(index: index) is { } placementId) &&
-                placementId.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "piece"
-            )
-            ) {
-                fromPopulation.Add(item: placementId);
-            }
-        }
-
-        Assert.Equal(
-            32,
-            declaredPieceIds.Count
-        );
-        Assert.Equal(
-            actual: fromPieceCode,
-            expected: fromPieceCell
-        );
-        Assert.Equal(
-            actual: fromPieceCell,
-            expected: declaredPieceIds
-        );
-        Assert.Equal(
-            actual: fromPopulation,
-            expected: declaredPieceIds
-        );
-
-        // Control: a body-index-shaped key set is NOT what pieceCell/pieceCode declare — proving this law actually
-        // discriminates a stale body-index literal rather than passing on any old set.
-        var bodyIndexShaped = Enumerable.Range(
-            count: 32,
-            start: 74
-        ).Select(selector: n => n.ToString()).ToHashSet();
-
-        Assert.NotEqual(
-            actual: fromPieceCell,
-            expected: bodyIndexShaped
-        );
-    }
-    // Every piece placement composes over 'tabletop', its position/yaw the LOCAL offset the tabletop's composed
-    // frame resolves — the placement-parent primitive chess.world.json rides so any host can restate the anchor
-    // at a different position and every piece/board-square follows, without touching a single body index.
-    [Fact]
-    public void ChessPiecesAndBoardSquares_ComposeOverTabletop() {
-        var definition = LoadGarden();
-
-        foreach (var placement in definition.Placements) {
-            if (
-                placement.Id.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "piece"
-            ) &&
-                (placement.Inhabit is not null)
-            ) {
-                Assert.Equal(
-                    "tabletop",
-                    placement.Parent
-                );
-            } else if (placement.Id.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "boardSquare-"
-            )) {
-                Assert.Equal(
-                    "tabletop",
-                    placement.Parent
-                );
-            }
-        }
-    }
-    [InlineData("chess")]
     [InlineData("poker")]
     [InlineData("dominoes")]
     [InlineData("billiards")]

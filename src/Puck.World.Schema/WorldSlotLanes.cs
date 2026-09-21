@@ -14,8 +14,8 @@ public static class WorldSlotLanes {
     public static ArenaOptions Options(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        // A document authoring no population still admits one ordinal: an arena refuses a zero-wide lane, and a
-        // world with no bodies has nothing to put in the second one anyway.
+        // A document authoring no population still admits one ordinal. The floor is this host's: the arena itself
+        // lays out a zero-wide lane, which admits none.
         var ordinals = Math.Max(
             val1: 1,
             val2: definition.Population.Capacity

@@ -558,6 +558,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // vertexCount), data0.w = lift amount; data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius). The
 // vertices live in sdfWords itself, right after every other table this program packs (see sdfPolygonVertex).
 #define SDF_SHAPE_CONVEX_POLYGON  19u
+#define SDF_SHAPE_PATH            21u
 // A quadratic Bezier curve (KEEP IN SYNC with SdfShapeType.Sweep) swept with a tapering, bulging radius, optionally
 // as helical strands. data0 = (asfloat(uint table offset), strands, twist, strandOffset); data1 = (smooth
 // [ISA-wide], reserved, reserved, reserved). The control points (A, B, C) and radius endpoints
@@ -1363,6 +1364,52 @@ float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
         ? sdfExtrudeChamfer2D(sdfConvexPolygon2D(p.xy, tableOffset, count), p.z, data0.w, data1.z)
         : sdfConvexPolygon2D(sdfRevolve2D(p, data0.w), tableOffset, count)) - data1.w);
 }
+// Path tables: two float4 words per edge, (A.xy,B.xy), (radiusA,radiusB,0,0).
+// The stroke segment is the exact convex hull of endpoint disks, including containment when one radius
+// dominates the entire segment. It does not subtract an approximation margin or move the zero surface.
+float sdfPathStrokeEdge(float2 p, float2 a, float2 b, float ra, float rb) {
+    float2 ab = b - a;
+    float len = length(ab);
+    if (abs(ra - rb) >= len) {
+        return (ra >= rb) ? length(p - a) - ra : length(p - b) - rb;
+    }
+    float2 u = ab / len;
+    float2 v = p - a;
+    float x = dot(v, u);
+    float y = abs(v.x * u.y - v.y * u.x);
+    float k = (ra - rb) / len;
+    float c = sqrt(max(0.0, 1.0 - k * k));
+    float along = x * c - y * k;
+    if (along < 0.0) return length(v) - ra;
+    if (along > len * c) return length(p - b) - rb;
+    return x * k + y * c - ra;
+}
+float sdfPathSolid(float3 p, float4 data0, float4 data1) {
+    uint offset = asuint(data0.x);
+    uint count = (uint)data0.y;
+    float distance = SDF_FAR_DISTANCE;
+    float squared = SDF_FAR_DISTANCE * SDF_FAR_DISTANCE;
+    bool inside = false;
+    bool stroke = data1.y > 0.5;
+    for (uint i = 0u; i < count; ++i) {
+        float4 edge = asfloat(sdfWords[offset + 2u * i]);
+        float2 a = edge.xy;
+        float2 b = edge.zw;
+        if (stroke) {
+            float2 radii = asfloat(sdfWords[offset + 2u * i + 1u].xy);
+            distance = min(distance, sdfPathStrokeEdge(p.xy, a, b, radii.x, radii.y));
+        } else {
+            float2 e = b - a;
+            float2 w = p.xy - a;
+            float2 d = w - e * saturate(dot(w, e) / dot(e, e));
+            squared = min(squared, dot(d, d));
+            bool3 crossing = bool3(p.y >= a.y, p.y < b.y, e.x * w.y > e.y * w.x);
+            if (all(crossing) || all(!crossing)) inside = !inside;
+        }
+    }
+    if (!stroke) distance = (inside ? -1.0 : 1.0) * sqrt(squared);
+    return sdfExtrudeChamfer2D(distance, p.z, data0.w, 0.0);
+}
 // === end 2D-primitive family =======================================================================================
 
 // === SDF_SHAPE_GLYPH: a font atlas sampled as a DISTANCE-level field =================================================
@@ -1745,6 +1792,7 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
         case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
         case SDF_SHAPE_CONVEX_POLYGON:  result = sdfConvexPolygonSolid(p, data0, data1); break;
+        case SDF_SHAPE_PATH: result = sdfPathSolid(p, data0, data1); break;
         case SDF_SHAPE_SWEEP:           result = sdfSweep(p, data0, data1); break;
 #endif
         // A glyph is the atlas-sampled letter where the atlas is bound (the world-views kernel), else the conservative

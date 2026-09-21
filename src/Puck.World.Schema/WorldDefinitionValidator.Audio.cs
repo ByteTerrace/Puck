@@ -300,7 +300,7 @@ public static partial class WorldDefinitionValidator {
 
             switch (speaker) {
                 case WorldSpeaker.Fixed fixedSpeaker:
-                    if (!IsFinite(value: fixedSpeaker.Position)) {
+                    if ((fixedSpeaker.Position is null) || !IsFinite(value: fixedSpeaker.Position)) {
                         errors.Add(item: $"{path}.position must contain finite coordinates.");
                     }
 
@@ -318,13 +318,13 @@ public static partial class WorldDefinitionValidator {
                         errors: errors
                     );
 
-                    if (!IsFinite(value: anchoredSpeaker.Offset)) {
+                    if ((anchoredSpeaker.Offset is null) || !IsFinite(value: anchoredSpeaker.Offset)) {
                         errors.Add(item: $"{path}.offset must contain finite coordinates.");
                     }
 
                     break;
                 case WorldSpeaker.Bed bed:
-                    if (!IsFinite(value: bed.Center)) {
+                    if ((bed.Center is null) || !IsFinite(value: bed.Center)) {
                         errors.Add(item: $"{path}.center must contain finite coordinates.");
                     }
 

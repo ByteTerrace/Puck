@@ -261,6 +261,7 @@ public sealed partial class WorldPersistence {
 
         return true;
     }
+
     // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
     // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
     // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
@@ -376,15 +377,15 @@ public sealed partial class WorldPersistence {
         }
     }
 
-    // A key-bound latch entry's LatchKey.Left is an ordinal this catalog interned, so it travels as the key's name
-    // and is interned again on the way back in. An unnamed entry's Left is a participant index, which the catalog
+    // A key-bound latch entry's LatchKey.Left is an ordinal this arena interned, so it travels as the key's name
+    // and is interned again on the way back in. An unnamed entry's Left is a participant index, which the arena
     // knows nothing about and which travels as itself.
     private WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named) {
         var flattened = new List<(string Rule, LatchKey Binding, bool Held)>(capacity: latch.Count);
 
         latch.Flatten(into: flattened);
 
-        var keys = Host.Document.Definition.StateCatalog.Keys;
+        var keys = Host.Arena.Keys;
         var entries = new WorldRuleLatchEntry[flattened.Count];
 
         for (var index = 0; (index < flattened.Count); index++) {
@@ -406,14 +407,16 @@ public sealed partial class WorldPersistence {
                     ? binding.Left
                     : -1),
                 Right: binding.Right,
-                Rule: rule
+                Rule: rule,
+                LeftGeneration: binding.LeftGeneration,
+                RightGeneration: binding.RightGeneration
             );
         }
 
         return entries;
     }
     private void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries) {
-        var keys = Host.Document.Definition.StateCatalog.Keys;
+        var keys = Host.Arena.Keys;
 
         latch.Clear();
         foreach (var entry in entries) {
@@ -425,7 +428,7 @@ public sealed partial class WorldPersistence {
                     name: CellName.Parse(candidate: entry.Key),
                     reason: out var reason
                 )) {
-                    throw new InvalidOperationException(message: $"the checkpoint's latch entry for rule '{entry.Rule}' names cell key '{entry.Key}', which this catalog cannot intern: {reason}");
+                    throw new InvalidOperationException(message: $"the checkpoint's latch entry for rule '{entry.Rule}' names cell key '{entry.Key}', which this arena cannot intern: {reason}");
                 }
 
                 left = key.Ordinal;
@@ -434,15 +437,15 @@ public sealed partial class WorldPersistence {
             latch.Restore(
                 binding: new LatchKey(
                     Left: left,
-                    Right: entry.Right
+                    Right: entry.Right,
+                    LeftGeneration: entry.LeftGeneration,
+                    RightGeneration: entry.RightGeneration
                 ),
                 held: entry.Held,
                 name: entry.Rule
             );
         }
     }
-
-
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
     /// against state this record graph cannot represent — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
@@ -460,16 +463,22 @@ public sealed partial class WorldPersistence {
     /// <param name="machines">A fresh machine host prepared from the captured definition. A nonempty saved machine
     /// inventory requires <see cref="IWorldMachineCheckpointHost"/> support.</param>
     /// <param name="instanceIdentity">This row's own running-instance identity.</param>
+    /// <param name="adjacencies">The restored authority's live adjacency source. When present, it is installed
+    /// before checkpoint state so contact-field observations rebase against the final effective field rather than
+    /// acquiring a host-construction-only pending wake afterward.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
+        var admission = WorldDefinitionSerialization.DeserializeForAdmission(
+            utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
+        var definition = admission.Definition;
         var population = new WorldPopulation(definition: definition);
         var server = new WorldServer(
+            admission: admission,
             definition: definition,
             envelope: new WorldRenderEnvelope(),
             instanceIdentity: instanceIdentity,
@@ -478,7 +487,9 @@ public sealed partial class WorldPersistence {
             profiles: profiles
         );
 
-        server.RestoreCheckpoint(checkpoint: checkpoint);
+        server.Adjacencies = adjacencies;
+
+        server.Persistence.RestoreCheckpointCore(checkpoint: checkpoint, admission: admission);
 
         return (server, population);
     }
@@ -499,6 +510,12 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
         lock (Host.AuthorityGate) {
+            if (Host.Arena.Journal.Scopes != 0) {
+                checkpoint = null;
+                reason = "a checkpoint cannot capture while an arena transaction is open — retry at the next master boundary";
+
+                return false;
+            }
             if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture pumped addon guests, a stepped machine without durable checkpoint support, or applied screen operations";
@@ -567,6 +584,11 @@ public sealed partial class WorldPersistence {
             }
 
             var server = new WorldServerCheckpoint(
+                Undo: (Host.RuleHost.Groups.Any(group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
+                ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
+                    keySelector: static name => name.Value,
+                    comparer: StringComparer.Ordinal
+                )],
                 DefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition),
                 BaseDefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Base),
                 BaseOrigin: Host.Document.BaseOrigin,
@@ -618,7 +640,12 @@ public sealed partial class WorldPersistence {
     /// <param name="checkpoint">The captured image to restore.</param>
     internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        var admission = WorldDefinitionSerialization.DeserializeForAdmission(
+            utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
+        RestoreCheckpointCore(checkpoint: checkpoint, admission: admission);
+    }
 
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission) {
         var server = checkpoint.Server;
 
         if ((Host.Population.Fields is null) != (checkpoint.Fields is null)) {
@@ -630,13 +657,27 @@ public sealed partial class WorldPersistence {
         // must refuse the entire restore atomically, not fail after the definition, clocks, or journal were replaced.
         Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
-        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+        var restoredDefinition = admission.Definition;
+        // Equal canonical images are the same operation-owned document. A distinct journal base still needs its
+        // own validation; do it before adopting any restored state so malformed base bytes refuse atomically.
+        var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
+            ? restoredDefinition
+            : WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson));
+
+        ValidateRetainedTurns(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
         Decisions.ValidateCheckpoint(
             checkpoint: server,
             definition: restoredDefinition
         );
+
+        if (!Host.Arena.TryRestoreKeys(
+            names: server.ArenaKeys,
+            reason: out var arenaKeyReason
+        )) {
+            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not restore: {arenaKeyReason}");
+        }
 
         var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
 
@@ -651,7 +692,7 @@ public sealed partial class WorldPersistence {
 
         Host.Document.AdoptDefinition(definition: restoredDefinition);
         Host.Document.AdoptBase(
-            definition: WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson),
+            definition: restoredBase,
             origin: server.BaseOrigin
         );
         Host.Document.Journal.Clear();
@@ -671,14 +712,6 @@ public sealed partial class WorldPersistence {
         foreach (var intent in server.Intents) {
             Host.Tick.Intents.Enqueue(item: intent);
         }
-        RestoreLatch(
-            entries: server.RuleGateHeld,
-            latch: Host.RuleHost.RuleGateHeld
-        );
-        RestoreLatch(
-            entries: server.InteractionGateHeld,
-            latch: Host.RuleHost.InteractionGateHeld
-        );
         Host.RuleHost.GroupState.Clear();
         foreach (var entry in server.RuleGroups) {
             Host.RuleHost.GroupState.Restore(
@@ -766,7 +799,27 @@ public sealed partial class WorldPersistence {
         Host.InputHold.Restore(checkpoint: checkpoint.InputHold);
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
         Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
-        Host.RecompileRules(definition: Host.Document.Definition);
+        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
+        // RecompileRules may relayout onto the installed definition's catalog. Relayout and prepared replacement
+        // preserve the ledger; the idempotent restore checks that every committed name survives installation.
+        if (!Host.Arena.TryRestoreKeys(
+            names: server.ArenaKeys,
+            reason: out arenaKeyReason
+        )) {
+            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not survive restored rule compilation: {arenaKeyReason}");
+        }
+        if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot([])), out var undoReason)) {
+            throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
+        }
+        RestoreLatch(
+            entries: server.RuleGateHeld,
+            latch: Host.RuleHost.RuleGateHeld
+        );
+        RestoreLatch(
+            entries: server.InteractionGateHeld,
+            latch: Host.RuleHost.InteractionGateHeld
+        );
+        Host.RuleHost.PruneLatches();
         Decisions.Restore(checkpoint: server.Decisions);
         if (!Host.Search.TryRestore(
             checkpoint: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty),

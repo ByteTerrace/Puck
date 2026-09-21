@@ -87,7 +87,13 @@
         {
           "$type": "setState",
           "state": "pickRing",
-          "fromState": "$symmetry:ring:pick"
+          "fromState": {
+            "channel": "symmetry",
+            "arguments": [
+              "ring",
+              "pick"
+            ]
+          }
         }
       ]
     }

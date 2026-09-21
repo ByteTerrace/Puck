@@ -14,6 +14,31 @@ namespace Puck.World.Tests;
 /// <para>Each arm pairs a denial with a control differing in exactly one authored number.</para>
 /// </summary>
 public sealed class AuthoredShapeAdmissionLawTests {
+    [Fact]
+    public void PathProfilesRenderButRefuseFieldContactAndUnsupportedFacets() {
+        var profile = new SdfPrismProfile(SdfPrismProfileKind.Path, CornerRadius: 0,
+            Path: new([new(new(-0.5f, -0.5f), [new(new(0.5f, -0.5f)), new(new(0, 0.5f))])]));
+        var shape = Shape(SdfSolidPrimitive.Prism, Vector3.One) with { Profile = profile };
+
+        AssertCanonicalizerAccepts(shape: shape);
+        AssertWorldRefusesNaming(shape, canonicalize: true, needle: "Path", requiresField: true);
+        AssertCanonicalizerRefusesNaming(shape with { Lift = SdfLift.Revolve }, "Path");
+        AssertCanonicalizerRefusesNaming(shape with { Rounding = 0.01f }, "Path");
+        AssertCanonicalizerRefusesNaming(shape with { Profile = profile with { Path = profile.Path! with { Tolerance = float.NaN } } }, "tolerance");
+    }
+    [Fact]
+    public void ATrimCannotReemitAnUnbudgetedPathTable() {
+        var source = Shape(SdfSolidPrimitive.Prism, Vector3.One) with {
+            Name = "outline",
+            Profile = new(SdfPrismProfileKind.Path, CornerRadius: 0,
+                Path: new([new(new(-0.5f, -0.5f), [new(new(0.5f, -0.5f)), new(new(0, 0.5f))])])),
+        };
+        var host = Shape(SdfSolidPrimitive.Box, Vector3.One) with { Id = 1, Name = "host", Trims = [new("outline", 0.02f, 0)] };
+        var document = Document(shape: source) with { Shapes = [source, host] };
+
+        Assert.Contains(collection: CreationCanonicalizer.Validate(document: document), filter: error => error.Message.Contains(comparisonType: StringComparison.Ordinal, value: "Path profile"));
+    }
+
     private static void AssertCanonicalizerAccepts(ShapeDocument shape) {
         var violations = CreationCanonicalizer.Validate(document: Document(shape: shape));
 
@@ -152,27 +177,34 @@ public sealed class AuthoredShapeAdmissionLawTests {
             Shape(
                 SdfSolidPrimitive.Prism,
                 scale
-            ) with { Profile = new(
+            ) with {
+                Profile = new(
                 SdfPrismProfileKind.ChamferedRectangle,
                 .5f
-            ) },
+            ),
+            },
             "chamfered-rectangle profile"
         );
         // The controls: a chamfer under the half-depth, and the same profile revolved (no cap seam).
         AssertCanonicalizerAccepts(shape: Shape(
             SdfSolidPrimitive.Prism,
             scale
-        ) with { Profile = new(
+        ) with {
+            Profile = new(
             SdfPrismProfileKind.ChamferedRectangle,
             .1f
-        ) });
+        ),
+        });
         AssertCanonicalizerAccepts(shape: Shape(
             SdfSolidPrimitive.Prism,
             scale
-        ) with { Profile = new(
+        ) with {
+            Profile = new(
             SdfPrismProfileKind.ChamferedRectangle,
             .5f
-        ), Lift = SdfLift.Revolve });
+        ),
+            Lift = SdfLift.Revolve,
+        });
     }
     [Fact]
     public void AConcaveConvexProfileIsRefusedBeforeEmission() {
@@ -197,10 +229,12 @@ public sealed class AuthoredShapeAdmissionLawTests {
             Shape(
                 SdfSolidPrimitive.Prism,
                 Vector3.One
-            ) with { Profile = new(
+            ) with {
+                Profile = new(
                 SdfPrismProfileKind.Convex,
                 Vertices: dart
-            ) },
+            ),
+            },
             "profile"
         );
     }
@@ -673,10 +707,12 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 y: .2f,
                 z: .1f
             )
-        ) with { Profile = new(
+        ) with {
+            Profile = new(
             SdfPrismProfileKind.ChamferedRectangle,
             .3f
-        ) },
+        ),
+        },
         requiresField: true
     );
     [Fact]
@@ -688,11 +724,13 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 y: .2f,
                 z: .1f
             )
-        ) with { Profile = new(
+        ) with {
+            Profile = new(
             SdfPrismProfileKind.Convex,
             .1f,
             Vertices: ConvexVertices
-        ) },
+        ),
+        },
         requiresField: true
     );
     [InlineData(SdfPrismProfileKind.Trapezoid)]
@@ -874,10 +912,12 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 y: .2f,
                 z: .1f
             )
-        ) with { Profile = new(
+        ) with {
+            Profile = new(
             SdfPrismProfileKind.RoundedRectangle,
             .3f
-        ) },
+        ),
+        },
         requiresField: true
     );
     [Fact]

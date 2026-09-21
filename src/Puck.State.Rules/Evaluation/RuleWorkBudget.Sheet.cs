@@ -67,34 +67,31 @@ public readonly record struct RulePinnedCell(int RowOrdinal, CellKey Key, long L
 /// <param name="IsInteraction">Whether the line is an interaction rather than a rule.</param>
 /// <param name="Multiplier">The evaluations per tick — one, the iterated row's capacity, or the pair count.</param>
 /// <param name="Cost">The orthogonal rule cost components: setup, check, effects.</param>
-/// <param name="CheckUnits">The check units: Setup + Multiplier x Check, saturating.</param>
-/// <param name="FiringUnits">The firing units: Multiplier x Effects, saturating.</param>
-/// <param name="WorkUnits">The line's isolated total: CheckUnits + FiringUnits, saturating.</param>
+/// <param name="CheckUnits">The check units: Setup + Multiplier x Check.</param>
+/// <param name="FiringUnits">The firing units: Multiplier x Effects.</param>
+/// <param name="WorkUnits">The line's isolated total: CheckUnits + FiringUnits.</param>
 /// <param name="Discriminators">The literal cells the gate pins, in cell order.</param>
 public readonly record struct RuleWorkContributor(
     string Name,
     bool IsInteraction,
     long Multiplier,
     RuleCost Cost,
-    long CheckUnits,
-    long FiringUnits,
-    long WorkUnits,
+    RuleWork CheckUnits,
+    RuleWork FiringUnits,
+    RuleWork WorkUnits,
     IReadOnlyList<RulePinnedCell> Discriminators
-) {
-    /// <summary>Gets the total unit cost in isolation.</summary>
-    public long UnitCost => Cost.Total;
-}
+);
 public static partial class RuleWorkBudget {
     private sealed class ExclusionNode {
         public Dictionary<(int RowOrdinal, CellKey Key), List<(RulePinnedCell Range, ExclusionNode Child)>> Children { get; } = [];
-        public long Own { get; set; }
+        public RuleWork Own { get; set; } = RuleWork.Zero;
     }
 
-    private static long Worst(ExclusionNode node, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), long> writers) {
+    private static RuleWork Worst(ExclusionNode node, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), long> writers) {
         var total = node.Own;
 
         foreach (var (cell, ranges) in node.Children) {
-            var worsts = new long[ranges.Count];
+            var worsts = new RuleWork[ranges.Count];
 
             for (var index = 0; (index < ranges.Count); index++) {
                 worsts[index] = Worst(
@@ -103,28 +100,30 @@ public static partial class RuleWorkBudget {
                 );
             }
 
-            var sums = new List<long>(capacity: ranges.Count);
+            var sums = new List<RuleWork>(capacity: ranges.Count);
 
             foreach (var (candidate, _) in ranges) {
                 if (candidate.IsEmpty) {
                     continue;
                 }
 
-                var sum = 0L;
+                var sum = RuleWork.Zero;
 
                 for (var index = 0; (index < ranges.Count); index++) {
                     if (ranges[index].Range.Contains(value: candidate.Low)) {
-                        sum = SaturatingAdd(
-                            left: sum,
-                            right: worsts[index]
-                        );
+                        sum += worsts[index];
                     }
                 }
 
                 sums.Add(item: sum);
             }
 
-            sums.Sort(comparison: static (left, right) => right.CompareTo(value: left));
+            // Costliest first, an unpriced or overflowed point ahead of every known one, so the points admitted are
+            // never the cheap ones.
+            sums.Sort(comparison: static (left, right) => RuleWork.Compare(
+                left: right,
+                right: left
+            ));
 
             var admitted = ((int)Math.Min(
                 val1: sums.Count,
@@ -135,10 +134,7 @@ public static partial class RuleWorkBudget {
             ));
 
             for (var index = 0; (index < admitted); index++) {
-                total = SaturatingAdd(
-                    left: total,
-                    right: sums[index]
-                );
+                total += sums[index];
             }
         }
 
@@ -155,17 +151,8 @@ public static partial class RuleWorkBudget {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         var cost = rule.CostBreakdown(context: context);
-        var checkUnits = SaturatingAdd(
-            left: cost.Setup,
-            right: SaturatingMultiply(
-                left: multiplier,
-                right: cost.Check
-            )
-        );
-        var firingUnits = SaturatingMultiply(
-            left: multiplier,
-            right: cost.Effects
-        );
+        var checkUnits = (cost.Setup + (multiplier * cost.Check));
+        var firingUnits = (multiplier * cost.Effects);
 
         return new RuleWorkContributor(
             CheckUnits: checkUnits,
@@ -180,10 +167,7 @@ public static partial class RuleWorkBudget {
             IsInteraction: isInteraction,
             Multiplier: multiplier,
             Name: rule.Name,
-            WorkUnits: SaturatingAdd(
-                left: checkUnits,
-                right: firingUnits
-            )
+            WorkUnits: (checkUnits + firingUnits)
         );
     }
     /// <summary>Counts, per cell, how many evaluations per tick can write it: each rule's write set times its
@@ -259,6 +243,23 @@ public static partial class RuleWorkBudget {
         }
 
         return context.RowCapacity(rowOrdinal: rule.ForEachOrdinal);
+    }
+    /// <summary>Returns what one sweep of a rule costs before its first evaluation: one unit per key the sweep
+    /// snapshots, which is the iterated row's capacity or the zone table's entry count, and nothing for a rule
+    /// evaluated once.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="context">The context the rule was resolved against.</param>
+    /// <returns>The setup work units.</returns>
+    public static RuleWork ForEachSetup(CompiledRule rule, IRuleCostContext context) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones)
+            ? RuleWork.Zero
+            : RuleWork.Known(units: ForEachCount(
+                context: context,
+                rule: rule
+            ))
+        );
     }
     /// <summary>Returns the literal cells a gate pins: a gate that is one comparison, or a top-level conjunction of
     /// comparisons, of a literal-keyed cell against a constant. Ranges on one cell intersect; <c>NotEqual</c> pins
@@ -389,11 +390,11 @@ public static partial class RuleWorkBudget {
     /// <param name="contributors">The lines.</param>
     /// <param name="writers">Per cell, how many evaluations per tick can write it.</param>
     /// <returns>The evaluation slots and the worst-case work units.</returns>
-    public static (long Slots, long Work) Tally(IReadOnlyList<RuleWorkContributor> contributors, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), long> writers) {
+    public static (long Slots, RuleWork Work) Tally(IReadOnlyList<RuleWorkContributor> contributors, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), long> writers) {
         ArgumentNullException.ThrowIfNull(argument: contributors);
         ArgumentNullException.ThrowIfNull(argument: writers);
 
-        var checks = 0L;
+        var checks = RuleWork.Zero;
         var root = new ExclusionNode();
         var slots = 0L;
 
@@ -402,10 +403,7 @@ public static partial class RuleWorkBudget {
                 left: slots,
                 right: contributor.Multiplier
             );
-            checks = SaturatingAdd(
-                left: checks,
-                right: contributor.CheckUnits
-            );
+            checks += contributor.CheckUnits;
 
             var node = root;
 
@@ -441,18 +439,21 @@ public static partial class RuleWorkBudget {
                 node = child;
             }
 
-            node.Own = SaturatingAdd(
-                left: node.Own,
-                right: contributor.FiringUnits
-            );
+            node.Own += contributor.FiringUnits;
         }
 
-        return (slots, SaturatingAdd(
-            left: checks,
-            right: Worst(
-                node: root,
-                writers: writers
-            )
-        ));
+        return (slots, (checks + Worst(
+            node: root,
+            writers: writers
+        )));
     }
+    /// <summary>Adds two evaluation counts, clamping at <see cref="long.MaxValue"/>. A clamped count is only ever
+    /// reported or compared with another count; work is priced through <see cref="RuleWork"/>, which overflows.</summary>
+    /// <param name="left">The left addend.</param>
+    /// <param name="right">The right addend.</param>
+    /// <returns>The sum.</returns>
+    public static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right))
+        ? long.MaxValue
+        : (left + right)
+    );
 }

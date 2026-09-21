@@ -108,8 +108,8 @@
         "null"
       ]
     },
-    "sleepAfterTicks": {
-      "type": "integer"
+    "sleepAfterSeconds": {
+      "type": "number"
     }
   },
   "additionalProperties": false,

@@ -67,6 +67,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         );
         }
     }
+
     private bool EvaluateDecisionRule(CompiledWorldFactsRule rule, ulong stepTicks) {
         if (!m_decisionsByName.TryGetValue(
             key: rule.Name,
@@ -97,7 +98,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         try {
             foreach (var key in runtime.Keys) {
                 BoundEachKey = (((key >= 0) && RuleReads.TryIndexKey(
-                    catalog: Host.Arena.Catalog,
+                    keys: Host.Arena.Keys,
                     index: key,
                     key: out var bound
                 ))

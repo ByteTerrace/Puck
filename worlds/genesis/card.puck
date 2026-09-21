@@ -1,0 +1,2065 @@
+schema: "puck.world.definition.v1"
+
+// The card's half extents, as card.glsl models it; the shader is the reference the native card is built against.
+let cardHalfWidth = 0.88
+let cardHalfHeight = 1.24
+let cardHalfThickness = 0.02
+
+host {
+  exitAfterSeconds: 0
+  fullscreen: false
+  height: 900
+  presentMode: Immediate
+  presentation: Windowed
+  rayQuery: true
+  surfaceFormat: r8g8b8a8
+  targetHertz: 60
+  timing: false
+  title: "Genesis card"
+  width: 1440
+}
+
+cameras [
+  {
+    name: "front"
+    renderHeight: 900
+    renderWidth: 720
+    rig {
+      name: "front"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 4.8]))
+        lookAt(subject: worldPoint(point: [0, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.5419)
+      ]
+    }
+  }
+]
+
+prototypes {
+  prototype "card" {
+    document {
+      schema: "puck.creation.v1"
+      name: "card"
+      // Linear albedos under the authored studio lighting below.
+      palette [
+        {
+          color: "#141721"
+          metal: 0.04
+          roughness: 0.4
+          specular: 0.04
+        }
+        {
+          color: "#FFD65C"
+          emissive: 0.15
+          metal: 0.98
+          roughness: 0.12
+          specular: 0.8
+        }
+        {
+          color: "#FFE06B"
+          emissive: 0.2
+          metal: 0.96
+          roughness: 0.1
+          specular: 0.8
+        }
+        {
+          color: "#12172E"
+          metal: 0.1
+          roughness: 0.3
+          specular: 0.04
+        }
+        {
+          color: "#D91726"
+          emissive: 0.2
+          metal: 0.2
+          roughness: 0.16
+          specular: 0.3
+        }
+      ]
+      // Positions negate engine X/Z. Asymmetric profiles also undo the creation's 180-degree yaw.
+      shape Prism "body" {
+        position [0,0,0]
+        scale [cardHalfWidth, cardHalfHeight, cardHalfThickness]
+        material: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.09090909090909091
+        }
+      }
+      shape Prism "court-recess" {
+        position [0,0,-0.032]
+        scale [0.59,0.925,0.02]
+        material: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.057627118644067804
+        }
+        blend: "Subtraction"
+      }
+      shape Prism "court-field" {
+        position [0,0,-0.015]
+        scale [0.59,0.925,0.0025]
+        material: 3
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.057627118644067804
+        }
+      }
+      shape Prism "outer-gilded-band" {
+        position [0,0,-0.024]
+        scale [1.3,1.3,0.0035]
+        material: 1
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            contours [
+              {
+                start [0.60923077,0.94153846]
+                segments [
+                  {
+                    end [-0.60923077,0.94153846]
+                  }
+                  {
+                    end [-0.66461538,0.88615385]
+                    arcCenter [-0.60923077,0.88615385]
+                  }
+                  {
+                    end [-0.66461538,-0.88615385]
+                  }
+                  {
+                    end [-0.60923077,-0.94153846]
+                    arcCenter [-0.60923077,-0.88615385]
+                  }
+                  {
+                    end [0.60923077,-0.94153846]
+                  }
+                  {
+                    end [0.66461538,-0.88615385]
+                    arcCenter [0.60923077,-0.88615385]
+                  }
+                  {
+                    end [0.66461538,0.88615385]
+                  }
+                  {
+                    end [0.60923077,0.94153846]
+                    arcCenter [0.60923077,0.88615385]
+                  }
+                ]
+              }
+              {
+                start [0.60153846,0.92461538]
+                segments [
+                  {
+                    end [-0.60153846,0.92461538]
+                  }
+                  {
+                    end [-0.64769231,0.87846154]
+                    arcCenter [-0.60153846,0.87846154]
+                  }
+                  {
+                    end [-0.64769231,-0.87846154]
+                  }
+                  {
+                    end [-0.60153846,-0.92461538]
+                    arcCenter [-0.60153846,-0.87846154]
+                  }
+                  {
+                    end [0.60153846,-0.92461538]
+                  }
+                  {
+                    end [0.64769231,-0.87846154]
+                    arcCenter [0.60153846,-0.87846154]
+                  }
+                  {
+                    end [0.64769231,0.87846154]
+                  }
+                  {
+                    end [0.60153846,0.92461538]
+                    arcCenter [0.60153846,0.87846154]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "perimeter-hairline" {
+        position [0,0,-0.0222]
+        scale [1.3,1.3,0.0016]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            contours [
+              {
+                start [0.59692308,0.91653846]
+                segments [
+                  {
+                    end [-0.59692308,0.91653846]
+                  }
+                  {
+                    end [-0.63961538,0.87384615]
+                    arcCenter [-0.59692308,0.87384615]
+                  }
+                  {
+                    end [-0.63961538,-0.87384615]
+                  }
+                  {
+                    end [-0.59692308,-0.91653846]
+                    arcCenter [-0.59692308,-0.87384615]
+                  }
+                  {
+                    end [0.59692308,-0.91653846]
+                  }
+                  {
+                    end [0.63961538,-0.87384615]
+                    arcCenter [0.59692308,-0.87384615]
+                  }
+                  {
+                    end [0.63961538,0.87384615]
+                  }
+                  {
+                    end [0.59692308,0.91653846]
+                    arcCenter [0.59692308,0.87384615]
+                  }
+                ]
+              }
+              {
+                start [0.59692308,0.91423077]
+                segments [
+                  {
+                    end [-0.59692308,0.91423077]
+                  }
+                  {
+                    end [-0.63730769,0.87384615]
+                    arcCenter [-0.59692308,0.87384615]
+                  }
+                  {
+                    end [-0.63730769,-0.87384615]
+                  }
+                  {
+                    end [-0.59692308,-0.91423077]
+                    arcCenter [-0.59692308,-0.87384615]
+                  }
+                  {
+                    end [0.59692308,-0.91423077]
+                  }
+                  {
+                    end [0.63730769,-0.87384615]
+                    arcCenter [0.59692308,-0.87384615]
+                  }
+                  {
+                    end [0.63730769,0.87384615]
+                  }
+                  {
+                    end [0.59692308,0.91423077]
+                    arcCenter [0.59692308,0.87384615]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "inner-pinstripe" {
+        position [0,0,-0.0228]
+        scale [1.3,1.3,0.002]
+        material: 1
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            contours [
+              {
+                start [0.58615385,0.89707692]
+                segments [
+                  {
+                    end [-0.58615385,0.89707692]
+                  }
+                  {
+                    end [-0.62015385,0.86307692]
+                    arcCenter [-0.58615385,0.86307692]
+                  }
+                  {
+                    end [-0.62015385,-0.86307692]
+                  }
+                  {
+                    end [-0.58615385,-0.89707692]
+                    arcCenter [-0.58615385,-0.86307692]
+                  }
+                  {
+                    end [0.58615385,-0.89707692]
+                  }
+                  {
+                    end [0.62015385,-0.86307692]
+                    arcCenter [0.58615385,-0.86307692]
+                  }
+                  {
+                    end [0.62015385,0.86307692]
+                  }
+                  {
+                    end [0.58615385,0.89707692]
+                    arcCenter [0.58615385,0.86307692]
+                  }
+                ]
+              }
+              {
+                start [0.58615385,0.89369231]
+                segments [
+                  {
+                    end [-0.58615385,0.89369231]
+                  }
+                  {
+                    end [-0.61676923,0.86307692]
+                    arcCenter [-0.58615385,0.86307692]
+                  }
+                  {
+                    end [-0.61676923,-0.86307692]
+                  }
+                  {
+                    end [-0.58615385,-0.89369231]
+                    arcCenter [-0.58615385,-0.86307692]
+                  }
+                  {
+                    end [0.58615385,-0.89369231]
+                  }
+                  {
+                    end [0.61676923,-0.86307692]
+                    arcCenter [0.58615385,-0.86307692]
+                  }
+                  {
+                    end [0.61676923,0.86307692]
+                  }
+                  {
+                    end [0.58615385,0.89369231]
+                    arcCenter [0.58615385,0.86307692]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "court-outer-moulding" {
+        position [0,0,-0.0252]
+        scale [1.3,1.3,0.0035]
+        material: 1
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            contours [
+              {
+                start [0.42769231,0.71153846]
+                segments [
+                  {
+                    end [-0.42769231,0.71153846]
+                  }
+                  {
+                    end [-0.45384615,0.68538462]
+                    arcCenter [-0.42769231,0.68538462]
+                  }
+                  {
+                    end [-0.45384615,-0.68538462]
+                  }
+                  {
+                    end [-0.42769231,-0.71153846]
+                    arcCenter [-0.42769231,-0.68538462]
+                  }
+                  {
+                    end [0.42769231,-0.71153846]
+                  }
+                  {
+                    end [0.45384615,-0.68538462]
+                    arcCenter [0.42769231,-0.68538462]
+                  }
+                  {
+                    end [0.45384615,0.68538462]
+                  }
+                  {
+                    end [0.42769231,0.71153846]
+                    arcCenter [0.42769231,0.68538462]
+                  }
+                ]
+              }
+              {
+                start [0.42153846,0.69923077]
+                segments [
+                  {
+                    end [-0.42153846,0.69923077]
+                  }
+                  {
+                    end [-0.44153846,0.67923077]
+                    arcCenter [-0.42153846,0.67923077]
+                  }
+                  {
+                    end [-0.44153846,-0.67923077]
+                  }
+                  {
+                    end [-0.42153846,-0.69923077]
+                    arcCenter [-0.42153846,-0.67923077]
+                  }
+                  {
+                    end [0.42153846,-0.69923077]
+                  }
+                  {
+                    end [0.44153846,-0.67923077]
+                    arcCenter [0.42153846,-0.67923077]
+                  }
+                  {
+                    end [0.44153846,0.67923077]
+                  }
+                  {
+                    end [0.42153846,0.69923077]
+                    arcCenter [0.42153846,0.67923077]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "court-inner-lip" {
+        position [0,0,-0.0242]
+        scale [1.3,1.3,0.0025]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            contours [
+              {
+                start [0.42,0.69307692]
+                segments [
+                  {
+                    end [-0.42,0.69307692]
+                  }
+                  {
+                    end [-0.43538462,0.67769231]
+                    arcCenter [-0.42,0.67769231]
+                  }
+                  {
+                    end [-0.43538462,-0.67769231]
+                  }
+                  {
+                    end [-0.42,-0.69307692]
+                    arcCenter [-0.42,-0.67769231]
+                  }
+                  {
+                    end [0.42,-0.69307692]
+                  }
+                  {
+                    end [0.43538462,-0.67769231]
+                    arcCenter [0.42,-0.67769231]
+                  }
+                  {
+                    end [0.43538462,0.67769231]
+                  }
+                  {
+                    end [0.42,0.69307692]
+                    arcCenter [0.42,0.67769231]
+                  }
+                ]
+              }
+              {
+                start [0.41692308,0.68538462]
+                segments [
+                  {
+                    end [-0.41692308,0.68538462]
+                  }
+                  {
+                    end [-0.42769231,0.67461538]
+                    arcCenter [-0.41692308,0.67461538]
+                  }
+                  {
+                    end [-0.42769231,-0.67461538]
+                  }
+                  {
+                    end [-0.41692308,-0.68538462]
+                    arcCenter [-0.41692308,-0.67461538]
+                  }
+                  {
+                    end [0.41692308,-0.68538462]
+                  }
+                  {
+                    end [0.42769231,-0.67461538]
+                    arcCenter [0.41692308,-0.67461538]
+                  }
+                  {
+                    end [0.42769231,0.67461538]
+                  }
+                  {
+                    end [0.41692308,0.68538462]
+                    arcCenter [0.41692308,0.67461538]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "rank-bowl-top-left" {
+        // Outline and counter share one profile; no shallow 3D subtraction.
+        position [0.7013,1.043,-0.0248]
+        scale [0.04,0.054,0.0024]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.004
+            contours [
+              {
+                start [1,0]
+                segments [
+                  {
+                    end [0,1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [-1,0]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [0,-1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [1,0]
+                    arcCenter [0,0]
+                  }
+                ]
+              }
+              {
+                start [0.5597480188994329,0.012442577861775977]
+                segments [
+                  {
+                    control [0.5402000712554789,0.4949631434856697]
+                    control2 [0.2737456043472108,0.8805526162414968]
+                    end [-0.03539469023894488,0.8736807702398557]
+                  }
+                  {
+                    control [-0.34453498482510053,0.8668089242382145]
+                    control2 [-0.579295966543387,0.4700779877621178]
+                    end [-0.5597480188994329,-0.012442577861775977]
+                  }
+                  {
+                    control [-0.5402000712554789,-0.4949631434856697]
+                    control2 [-0.2737456043472108,-0.8805526162414968]
+                    end [0.03539469023894488,-0.8736807702398557]
+                  }
+                  {
+                    control [0.34453498482510053,-0.8668089242382145]
+                    control2 [0.579295966543387,-0.4700779877621178]
+                    end [0.5597480188994329,0.012442577861775977]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [0,1,0,0]
+      }
+      shape Prism "rank-tail-top-left" {
+        position [0.7013,1.043,-0.0248]
+        scale [0.2,0.2,0.0024]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            stroke {
+              radiusStart: 0.038
+              radiusEnd: 0.014
+              smooth: true
+              from: 0.2
+              to: 0.95
+            }
+            contours [
+              {
+                start [0.05,-0.16]
+                segments [
+                  {
+                    control [0.16,-0.27]
+                    end [0.24,-0.21]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [0,1,0,0]
+      }
+      shape Prism "heart-rim-top-left" {
+        position [0.69,0.85495,-0.0248]
+        scale [0.1,0.135,0.0024]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [0,1,0,0]
+      }
+      shape Prism "heart-inlay-top-left" {
+        // Proportional inset for now, not constant-width erosion.
+        position [0.69,0.85495,-0.0258]
+        scale [0.096,0.1296,0.002]
+        material: 4
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [0,1,0,0]
+      }
+      shape Prism "rank-bowl-bottom-right" {
+        // Outline and counter share one profile; no shallow 3D subtraction.
+        position [-0.7013,-1.043,-0.0248]
+        scale [0.04,0.054,0.0024]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.004
+            contours [
+              {
+                start [1,0]
+                segments [
+                  {
+                    end [0,1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [-1,0]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [0,-1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [1,0]
+                    arcCenter [0,0]
+                  }
+                ]
+              }
+              {
+                start [0.5597480188994329,0.012442577861775977]
+                segments [
+                  {
+                    control [0.5402000712554789,0.4949631434856697]
+                    control2 [0.2737456043472108,0.8805526162414968]
+                    end [-0.03539469023894488,0.8736807702398557]
+                  }
+                  {
+                    control [-0.34453498482510053,0.8668089242382145]
+                    control2 [-0.579295966543387,0.4700779877621178]
+                    end [-0.5597480188994329,-0.012442577861775977]
+                  }
+                  {
+                    control [-0.5402000712554789,-0.4949631434856697]
+                    control2 [-0.2737456043472108,-0.8805526162414968]
+                    end [0.03539469023894488,-0.8736807702398557]
+                  }
+                  {
+                    control [0.34453498482510053,-0.8668089242382145]
+                    control2 [0.579295966543387,-0.4700779877621178]
+                    end [0.5597480188994329,0.012442577861775977]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [1,0,0,0]
+      }
+      shape Prism "rank-tail-bottom-right" {
+        position [-0.7013,-1.043,-0.0248]
+        scale [0.2,0.2,0.0024]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.0005
+            stroke {
+              radiusStart: 0.038
+              radiusEnd: 0.014
+              smooth: true
+              from: 0.2
+              to: 0.95
+            }
+            contours [
+              {
+                start [0.05,-0.16]
+                segments [
+                  {
+                    control [0.16,-0.27]
+                    end [0.24,-0.21]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [1,0,0,0]
+      }
+      shape Prism "heart-rim-bottom-right" {
+        position [-0.69,-0.85495,-0.0248]
+        scale [0.1,0.135,0.0024]
+        material: 2
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [1,0,0,0]
+      }
+      shape Prism "heart-inlay-bottom-right" {
+        // Proportional inset for now, not constant-width erosion.
+        position [-0.69,-0.85495,-0.0258]
+        scale [0.096,0.1296,0.002]
+        material: 4
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        rotation [1,0,0,0]
+      }
+    }
+  }
+  prototype "queen" {
+    document {
+      schema: "puck.creation.v1"
+      name: "queen"
+      // Shader-derived relief. GLSL rot2D(a) rotates points clockwise; the shape pose uses the inverse.
+      // The hood uses a rounded prism; the shoulders still omit the reference's waist-only drape.
+      palette [
+        {
+          color: "#141721"
+          metal: 0.04
+          roughness: 0.4
+          specular: 0.04
+        }
+        {
+          color: "#FFD65C"
+          emissive: 0.15
+          metal: 0.98
+          roughness: 0.12
+          specular: 0.8
+        }
+        {
+          color: "#FFE06B"
+          emissive: 0.2
+          metal: 0.96
+          roughness: 0.1
+          specular: 0.8
+        }
+        {
+          color: "#12172E"
+          metal: 0.1
+          roughness: 0.3
+          specular: 0.04
+        }
+        {
+          color: "#D91726"
+          emissive: 0.2
+          metal: 0.2
+          roughness: 0.16
+          specular: 0.3
+        }
+        {
+          color: "#F2CFA8"
+          roughness: 0.5
+          metal: 0
+          specular: 0.04
+        }
+        {
+          color: "#F5F0E6"
+          roughness: 0.22
+          metal: 0.08
+          specular: 0.04
+        }
+        {
+          color: "#9E66C7"
+          roughness: 0.22
+          metal: 0.15
+          specular: 0.04
+        }
+        {
+          color: "#7A421F"
+          roughness: 0.45
+          metal: 0.05
+          specular: 0.04
+        }
+        {
+          color: "#2ED6ED"
+          roughness: 0.04
+          metal: 0.5
+          specular: 0.04
+          emissive: 2.2
+        }
+      ]
+      shape Ellipsoid "upper-cranium" {
+        position [0,0.4712,-0.0448]
+        rotation [0,1,0,0]
+        scale [0.248,0.2356,0.1364]
+        material: 5
+        blend: "Union"
+        smooth: 0
+      }
+      shape Ellipsoid "upper-jaw" {
+        position [0,0.3472,-0.0448]
+        rotation [0,1,0,0]
+        scale [0.1612,0.1364,0.11159999999999999]
+        material: 5
+        blend: "SmoothUnion"
+        smooth: 0.062
+      }
+      shape Sphere "upper-nose" {
+        position [0,0.42779999999999996,-0.1812]
+        rotation [0,1,0,0]
+        scale [0.01984,0.01984,0.01984]
+        material: 5
+        blend: "SmoothUnion"
+        smooth: 0.01488
+      }
+      shape Prism "upper-hood" {
+        position [0,0.5084,-0.0572]
+        rotation [0,1,0,0]
+        scale [0.2728,0.26039999999999996,0.062]
+        material: 6
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35714285714285715
+        }
+        rounding: 0.062
+      }
+      shape Prism "upper-chest" {
+        position [0,0.1488,-0.051000000000000004]
+        rotation [0,1,0,0]
+        scale [0.22319999999999998,0.124,0.055799999999999995]
+        material: 6
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35000000000000003
+        }
+        rounding: 0.0434
+      }
+      shape Prism "upper-shoulder-left" {
+        position [0.3224,0.124,-0.0448]
+        rotation [0,1,0,0]
+        scale [0.124,0.11159999999999999,0.0496]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35555555555555557
+        }
+        rounding: 0.03968
+      }
+      shape Prism "upper-ear-left" {
+        position [0.2728,0.48360000000000003,-0.0448]
+        rotation [0,1,0,0]
+        scale [0.0372,0.0868,0.055799999999999995]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        rounding: 0.0186
+      }
+      shape Ellipsoid "upper-eye-left" {
+        position [0.0992,0.46499999999999997,-0.15392]
+        rotation [0.039989334187,0.999200106661,0,0]
+        scale [0.047119999999999995,0.03472,0.02728]
+        material: 6
+        blend: "Union"
+        smooth: 0
+      }
+      shape Ellipsoid "upper-iris-left" {
+        position [0.10157336,0.46356531999999995,-0.16879999999999998]
+        rotation [0,1,0,0]
+        scale [0.02728,0.02728,0.01736]
+        material: 2
+        blend: "Union"
+        smooth: 0
+      }
+      shape Sphere "upper-pupil-left" {
+        position [0.10157336,0.46356531999999995,-0.17623999999999998]
+        rotation [0,1,0,0]
+        scale [0.0124,0.0124,0.0124]
+        material: 0
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "upper-eyebrow-left" {
+        position [0.10256907999999999,0.50702484,-0.1626]
+        rotation [0.089878549198,0.995952733012,0,0]
+        scale [0.04216,0.00558,0.00992]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4444444444444445
+        }
+        rounding: 0.00248
+      }
+      shape Prism "upper-hair-left" {
+        position [0.06607982716066597,0.5721270499788416,-0.144]
+        rotation [0.124674733385,0.992197667229,0,0]
+        scale [0.0744,0.01736,0.0248]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.42857142857142855
+        }
+        rounding: 0.00744
+      }
+      shape Prism "upper-shoulder-right" {
+        position [-0.3224,0.124,-0.0448]
+        rotation [0,1,0,0]
+        scale [0.124,0.11159999999999999,0.0496]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35555555555555557
+        }
+        rounding: 0.03968
+      }
+      shape Prism "upper-ear-right" {
+        position [-0.2728,0.48360000000000003,-0.0448]
+        rotation [0,1,0,0]
+        scale [0.0372,0.0868,0.055799999999999995]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        rounding: 0.0186
+      }
+      shape Ellipsoid "upper-eye-right" {
+        position [-0.0992,0.46499999999999997,-0.15392]
+        rotation [-0.039989334187,0.999200106661,0,0]
+        scale [0.047119999999999995,0.03472,0.02728]
+        material: 6
+        blend: "Union"
+        smooth: 0
+      }
+      shape Ellipsoid "upper-iris-right" {
+        position [-0.10157336,0.46356531999999995,-0.16879999999999998]
+        rotation [0,1,0,0]
+        scale [0.02728,0.02728,0.01736]
+        material: 2
+        blend: "Union"
+        smooth: 0
+      }
+      shape Sphere "upper-pupil-right" {
+        position [-0.10157336,0.46356531999999995,-0.17623999999999998]
+        rotation [0,1,0,0]
+        scale [0.0124,0.0124,0.0124]
+        material: 0
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "upper-eyebrow-right" {
+        position [-0.10256907999999999,0.50702484,-0.1626]
+        rotation [-0.089878549198,0.995952733012,0,0]
+        scale [0.04216,0.00558,0.00992]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4444444444444445
+        }
+        rounding: 0.00248
+      }
+      shape Prism "upper-hair-right" {
+        position [-0.06607982716066597,0.5721270499788416,-0.144]
+        rotation [-0.124674733385,0.992197667229,0,0]
+        scale [0.0744,0.01736,0.0248]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.42857142857142855
+        }
+        rounding: 0.00744
+      }
+      shape Prism "upper-brow-band" {
+        position [0,0.6572,-0.1316]
+        rotation [0,1,0,0]
+        scale [0.186,0.031,0.02728]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.39999999999999997
+        }
+        rounding: 0.0124
+      }
+      shape Prism "upper-crown-band" {
+        position [0,0.7192,-0.1316]
+        rotation [0,1,0,0]
+        scale [0.1488,0.01488,0.02232]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4166666666666667
+        }
+        rounding: 0.0062
+      }
+      shape Prism "upper-crown-center" {
+        position [0,0.7564,-0.1316]
+        rotation [0,1,0,0]
+        scale [0.0372,0.05952,0.01736]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "upper-crown-left" {
+        position [0.093,0.74152,-0.1316]
+        rotation [0,1,0,0]
+        scale [0.0248,0.03968,0.01736]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "upper-crown-right" {
+        position [-0.093,0.74152,-0.1316]
+        rotation [0,1,0,0]
+        scale [0.0248,0.03968,0.01736]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Sphere "upper-crown-gem" {
+        position [0,0.744,-0.14895999999999998]
+        rotation [0,1,0,0]
+        scale [0.0186,0.0186,0.0186]
+        material: 9
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "upper-collar" {
+        position [0,0.248,-0.0696]
+        rotation [0,1,0,0]
+        scale [0.1612,0.01736,0.0248]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.42857142857142855
+        }
+        rounding: 0.00744
+      }
+      shape Prism "upper-brooch-rim" {
+        position [0,0.1736,-0.1068]
+        rotation [0,1,0,0]
+        scale [0.05084,0.05084,0.00992]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.004
+            contours [
+              {
+                start [1,0]
+                segments [
+                  {
+                    end [0,1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [-1,0]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [0,-1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [1,0]
+                    arcCenter [0,0]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Sphere "upper-brooch-gem" {
+        position [0,0.1736,-0.1068]
+        rotation [0,1,0,0]
+        scale [0.03224,0.03224,0.03224]
+        material: 9
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "upper-sceptre" {
+        position [-0.3968,0.2728,-0.0634]
+        rotation [0,1,0,0]
+        scale [0.00992,0.22319999999999998,0.00992]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        rounding: 0.00496
+      }
+      shape Prism "upper-sceptre-heart-rim" {
+        position [-0.40424,0.49736400000000003,-0.0634]
+        rotation [0,1,0,0]
+        scale [0.1194074074074074,0.1612,0.0124]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "upper-sceptre-heart-inlay" {
+        position [-0.40424,0.49736400000000003,-0.06836]
+        rotation [0,1,0,0]
+        scale [0.1146311111111111,0.154752,0.00992]
+        material: 4
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Ellipsoid "lower-cranium" {
+        position [0,-0.4712,-0.0448]
+        rotation [-1,0,0,0]
+        scale [0.248,0.2356,0.1364]
+        material: 5
+        blend: "Union"
+        smooth: 0
+      }
+      shape Ellipsoid "lower-jaw" {
+        position [0,-0.3472,-0.0448]
+        rotation [-1,0,0,0]
+        scale [0.1612,0.1364,0.11159999999999999]
+        material: 5
+        blend: "SmoothUnion"
+        smooth: 0.062
+      }
+      shape Sphere "lower-nose" {
+        position [0,-0.42779999999999996,-0.1812]
+        rotation [-1,0,0,0]
+        scale [0.01984,0.01984,0.01984]
+        material: 5
+        blend: "SmoothUnion"
+        smooth: 0.01488
+      }
+      shape Prism "lower-hood" {
+        position [0,-0.5084,-0.0572]
+        rotation [-1,0,0,0]
+        scale [0.2728,0.26039999999999996,0.062]
+        material: 6
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35714285714285715
+        }
+        rounding: 0.062
+      }
+      shape Prism "lower-chest" {
+        position [0,-0.1488,-0.051000000000000004]
+        rotation [-1,0,0,0]
+        scale [0.22319999999999998,0.124,0.055799999999999995]
+        material: 6
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35000000000000003
+        }
+        rounding: 0.0434
+      }
+      shape Prism "lower-shoulder-left" {
+        position [-0.3224,-0.124,-0.0448]
+        rotation [-1,0,0,0]
+        scale [0.124,0.11159999999999999,0.0496]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35555555555555557
+        }
+        rounding: 0.03968
+      }
+      shape Prism "lower-ear-left" {
+        position [-0.2728,-0.48360000000000003,-0.0448]
+        rotation [-1,0,0,0]
+        scale [0.0372,0.0868,0.055799999999999995]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        rounding: 0.0186
+      }
+      shape Ellipsoid "lower-eye-left" {
+        position [-0.0992,-0.46499999999999997,-0.15392]
+        rotation [-0.999200106661,0.039989334187,0,0]
+        scale [0.047119999999999995,0.03472,0.02728]
+        material: 6
+        blend: "Union"
+        smooth: 0
+      }
+      shape Ellipsoid "lower-iris-left" {
+        position [-0.10157336,-0.46356531999999995,-0.16879999999999998]
+        rotation [-1,0,0,0]
+        scale [0.02728,0.02728,0.01736]
+        material: 2
+        blend: "Union"
+        smooth: 0
+      }
+      shape Sphere "lower-pupil-left" {
+        position [-0.10157336,-0.46356531999999995,-0.17623999999999998]
+        rotation [-1,0,0,0]
+        scale [0.0124,0.0124,0.0124]
+        material: 0
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "lower-eyebrow-left" {
+        position [-0.10256907999999999,-0.50702484,-0.1626]
+        rotation [-0.995952733012,0.089878549198,0,0]
+        scale [0.04216,0.00558,0.00992]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4444444444444445
+        }
+        rounding: 0.00248
+      }
+      shape Prism "lower-hair-left" {
+        position [-0.06607982716066597,-0.5721270499788416,-0.144]
+        rotation [-0.992197667229,0.124674733385,0,0]
+        scale [0.0744,0.01736,0.0248]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.42857142857142855
+        }
+        rounding: 0.00744
+      }
+      shape Prism "lower-shoulder-right" {
+        position [0.3224,-0.124,-0.0448]
+        rotation [-1,0,0,0]
+        scale [0.124,0.11159999999999999,0.0496]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.35555555555555557
+        }
+        rounding: 0.03968
+      }
+      shape Prism "lower-ear-right" {
+        position [0.2728,-0.48360000000000003,-0.0448]
+        rotation [-1,0,0,0]
+        scale [0.0372,0.0868,0.055799999999999995]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        rounding: 0.0186
+      }
+      shape Ellipsoid "lower-eye-right" {
+        position [0.0992,-0.46499999999999997,-0.15392]
+        rotation [-0.999200106661,-0.039989334187,0,0]
+        scale [0.047119999999999995,0.03472,0.02728]
+        material: 6
+        blend: "Union"
+        smooth: 0
+      }
+      shape Ellipsoid "lower-iris-right" {
+        position [0.10157336,-0.46356531999999995,-0.16879999999999998]
+        rotation [-1,0,0,0]
+        scale [0.02728,0.02728,0.01736]
+        material: 2
+        blend: "Union"
+        smooth: 0
+      }
+      shape Sphere "lower-pupil-right" {
+        position [0.10157336,-0.46356531999999995,-0.17623999999999998]
+        rotation [-1,0,0,0]
+        scale [0.0124,0.0124,0.0124]
+        material: 0
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "lower-eyebrow-right" {
+        position [0.10256907999999999,-0.50702484,-0.1626]
+        rotation [-0.995952733012,-0.089878549198,0,0]
+        scale [0.04216,0.00558,0.00992]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4444444444444445
+        }
+        rounding: 0.00248
+      }
+      shape Prism "lower-hair-right" {
+        position [0.06607982716066597,-0.5721270499788416,-0.144]
+        rotation [-0.992197667229,-0.124674733385,0,0]
+        scale [0.0744,0.01736,0.0248]
+        material: 8
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.42857142857142855
+        }
+        rounding: 0.00744
+      }
+      shape Prism "lower-brow-band" {
+        position [0,-0.6572,-0.1316]
+        rotation [-1,0,0,0]
+        scale [0.186,0.031,0.02728]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.39999999999999997
+        }
+        rounding: 0.0124
+      }
+      shape Prism "lower-crown-band" {
+        position [0,-0.7192,-0.1316]
+        rotation [-1,0,0,0]
+        scale [0.1488,0.01488,0.02232]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4166666666666667
+        }
+        rounding: 0.0062
+      }
+      shape Prism "lower-crown-center" {
+        position [0,-0.7564,-0.1316]
+        rotation [-1,0,0,0]
+        scale [0.0372,0.05952,0.01736]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "lower-crown-left" {
+        position [-0.093,-0.74152,-0.1316]
+        rotation [-1,0,0,0]
+        scale [0.0248,0.03968,0.01736]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "lower-crown-right" {
+        position [0.093,-0.74152,-0.1316]
+        rotation [-1,0,0,0]
+        scale [0.0248,0.03968,0.01736]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Sphere "lower-crown-gem" {
+        position [0,-0.744,-0.14895999999999998]
+        rotation [-1,0,0,0]
+        scale [0.0186,0.0186,0.0186]
+        material: 9
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "lower-collar" {
+        position [0,-0.248,-0.0696]
+        rotation [-1,0,0,0]
+        scale [0.1612,0.01736,0.0248]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.42857142857142855
+        }
+        rounding: 0.00744
+      }
+      shape Prism "lower-brooch-rim" {
+        position [0,-0.1736,-0.1068]
+        rotation [-1,0,0,0]
+        scale [0.05084,0.05084,0.00992]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.004
+            contours [
+              {
+                start [1,0]
+                segments [
+                  {
+                    end [0,1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [-1,0]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [0,-1]
+                    arcCenter [0,0]
+                  }
+                  {
+                    end [1,0]
+                    arcCenter [0,0]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Sphere "lower-brooch-gem" {
+        position [0,-0.1736,-0.1068]
+        rotation [-1,0,0,0]
+        scale [0.03224,0.03224,0.03224]
+        material: 9
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "lower-sceptre" {
+        position [0.3968,-0.2728,-0.0634]
+        rotation [-1,0,0,0]
+        scale [0.00992,0.22319999999999998,0.00992]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        rounding: 0.00496
+      }
+      shape Prism "lower-sceptre-heart-rim" {
+        position [0.40424,-0.49736400000000003,-0.0634]
+        rotation [-1,0,0,0]
+        scale [0.1194074074074074,0.1612,0.0124]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "lower-sceptre-heart-inlay" {
+        position [0.40424,-0.49736400000000003,-0.06836]
+        rotation [-1,0,0,0]
+        scale [0.1146311111111111,0.154752,0.00992]
+        material: 4
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            shear {
+              linear: 0.028
+              quadratic: 0.28
+              offset: -0.0693
+              from: -0.55
+              to: 0.45
+            }
+            contours [
+              {
+                start [0,-0.55]
+                segments [
+                  {
+                    end [0.5,-0.05]
+                  }
+                  {
+                    end [0,0.45]
+                    arcCenter [0.25,0.2]
+                  }
+                  {
+                    end [-0.5,-0.05]
+                    arcCenter [-0.25,0.2]
+                  }
+                  {
+                    end [0,-0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Prism "sash-inlay" {
+        position [0,0,-0.024]
+        rotation [0,1,0,0]
+        scale [0.59,0.022,0.002]
+        material: 7
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.18181818181818182
+        }
+      }
+      shape Prism "sash-edge-upper" {
+        position [0,0.0285,-0.026]
+        rotation [0,1,0,0]
+        scale [0.582,0.0065,0.003]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.46153846153846156
+        }
+      }
+      shape Prism "sash-edge-lower" {
+        position [0,-0.0285,-0.026]
+        rotation [0,1,0,0]
+        scale [0.582,0.0065,0.003]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.46153846153846156
+        }
+      }
+      shape Prism "sash-medallion" {
+        position [0,0,-0.028]
+        rotation [0,1,0,0]
+        scale [0.04,0.04,0.004]
+        material: 1
+        blend: "Union"
+        smooth: 0
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0,1]
+                segments [
+                  {
+                    end [1,0]
+                  }
+                  {
+                    end [0,-1]
+                  }
+                  {
+                    end [-1,0]
+                  }
+                  {
+                    end [0,1]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      shape Sphere "sash-gem" {
+        position [0,0,-0.029]
+        rotation [0,1,0,0]
+        scale [0.022,0.022,0.022]
+        material: 9
+        blend: "Union"
+        smooth: 0
+      }
+      shape Prism "canvas-clip" {
+        position [0,0,-0.17]
+        rotation [0,1,0,0]
+        scale [0.7,1,0.15]
+        material: 0
+        blend: "Intersection"
+        smooth: 0
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0
+        }
+      }
+    }
+  }
+}
+
+render {
+  lighting {
+    lights [
+      directional(direction: [-0.4, 0.7, 1], color: "#FFF3DC", weight: 1.1, angularRadius: 0.15)
+      hemisphere(color: "#E5E9FF", base: 0.6, gradient: 0.05)
+    ]
+  }
+  environment {
+    softboxes [
+      { direction [0.1, 0.25, 1], size [0.45, 0.5], color: "#FFF4DE", weight: 0.8, blur: 0.2 }
+    ]
+    horizon { low: "#282C38", high: "#9AA1B8" }
+  }
+  tonemap: Filmic
+}
+
+placements {
+  placement "queen" {
+    prototype: "queen"
+    position [0, 0, 0]
+  }
+  placement "card" {
+    prototype: "card"
+    position [0, 0, 0]
+  }
+}
+
+views {
+  pipeline "card" {
+    camera: "front"
+    source: "card.glsl"
+  }
+
+  // The shader on the left and the native card on the right, through one camera.
+  layout "compare" {
+    slots [
+      { pipeline: "card", width: 0.5 }
+      { camera: "front", x: 0.5, width: 0.5 }
+    ]
+  }
+
+  layout "shader" {
+    slots [{ pipeline: "card" }]
+  }
+}

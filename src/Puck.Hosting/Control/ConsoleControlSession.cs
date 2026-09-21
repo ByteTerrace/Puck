@@ -31,7 +31,9 @@ public sealed class ConsoleControlSession : IControlSession {
             slot: slot,
             scope: scope,
             authorize: authorize,
-            onResult: (_, result) => Volatile.Read(location: ref m_result)?.TrySetResult(result: result)
+            // The settled result, never the submit-time one: a simulation-routed line answers nothing until its tick
+            // applies, and an edit answers nothing until the authority decides it.
+            onSettled: (_, result) => Volatile.Read(location: ref m_result)?.TrySetResult(result: result)
         );
     }
 

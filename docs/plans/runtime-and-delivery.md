@@ -205,6 +205,21 @@ safe cache key. Check: a desktop boot, instance start, and checkpoint restore
 each run `ValidateCore` once and compile rules once, with state hashes
 unchanged.
 
+Installed hazard and budget requests now reuse one compilation and its analysis.
+Server construction carries its validation's programs and tables into
+installation when row settlement keeps the definition unchanged, and hands the
+same operation's local admission proof to machine preparation.
+Construction settles clocks and inverse boards from the
+initial arena and installs it directly, without seeding a second arena. Checkpoint restore
+retains its deserialized admission through construction, retained-turn checks and
+installation; a distinct journal base is separately validated. File/DSL loaders now
+retain their final receipt through boot and local instance preparation; post-build
+wiring rechecks environment-dependent sections without recompiling rules. Bytes, file,
+and asynchronous loaders now prepare first-fill draws and retained document bindings
+before their one full admission; draw inputs use the existing source and row validators.
+Row settlement, receipt propagation beyond hosted asynchronous loaders, and boot
+overrides still need the once-per-load acceptance check above; the item remains open.
+
 **Container, header, `DEFN`, `ASST`.** Owns the container codec's shared home,
 `puck compile`, `WorldAssets.targets`, the runtime cache. Check: `Puck.World`
 boots every shipped world from a compiled world; a mismatched header is
@@ -213,9 +228,9 @@ ignored and a mismatched chunk re-derived, each with a law.
 **Simulation chunks** (`PLCE`, `SOLD`, `NAVB`, `TOPO`, `POPL`, `TBLS`). Owns
 the caches those derivations sit behind, which are `ConditionalWeakTable` and
 `ReferenceEquals` checks on section instances today and must be seeded by the
-loader or move to content keys; and the duplicated work beside them (tables
-compiled twice in the constructor, channels compiled per consumer,
+loader or move to content keys; and the duplicated work beside them (channels compiled per consumer,
 distribution offsets computed three times, solids built twice per mutation).
+Constructor tables now reuse validation's compiled bundle.
 Check: the byte-for-byte law over the six chunks; the duplicated work gone.
 
 **Everything else.** `RULE` after ordinal operands and closed fact tags (the

@@ -17,7 +17,7 @@ public class ConstructVocabularySeamLawTests {
     private const string Added = "freeze";
     private const string Slot = "slot";
 
-    private static string Source(string modifier) => $"schema: \"puck.world.definition.v1\"\n\nstate {{\n    world {{\n        slot hp : Int = 1 {modifier}\n    }}\n}}\n";
+    private static string Source(string modifier) => $"schema: \"puck.world.definition.v1\"\n\nstate {{\n    world {{\n        slot hp = 1 {modifier}\n    }}\n}}\n";
     // The shipped description with one extra member on `slot`, and nothing else changed.
     private static WorldDocumentVocabulary Describing(WorldConstructMember member) => new(constructs: new WorldConstructTable(
         constructs: [.. WorldConstructs.Table.Constructs.Select(selector: construct => (string.Equals(
@@ -87,7 +87,7 @@ public class ConstructVocabularySeamLawTests {
 
         // `evicts` is a described `Flag` of `table`, and the parser reads it from the description alone.
         var evicts = PuckParser.ParseDocumentWithDiagnostics(
-            source: "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        table bag : Int capacity(2) evicts\n    }\n}\n",
+            source: "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        table bag capacity(2) evicts\n    }\n}\n",
             vocabulary: WorldDocumentVocabulary.Instance
         );
 

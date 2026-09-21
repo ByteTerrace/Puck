@@ -6,14 +6,7 @@ IntelliSense for `.puck` files connects VS Code to the existing `puck lsp` langu
 
 Install the Puck CLI and make its `puck` executable available on PATH, then install this extension. IntelliSense starts automatically in trusted workspaces. Press Ctrl+Space for suggestions, hover over a variable, template, built-in function, or keyword for documentation, or use Format Document.
 
-Build the local CLI with `dotnet build src/Puck.Cli -c Release` from the repository root. For that assembly, set the following VS Code settings, replacing the path with your own absolute path:
-
-```json
-{
-    "puck.server.command": "dotnet",
-    "puck.server.args": ["D:/Source/ByteTerrace/Puck/src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll", "lsp"]
-}
-```
+From a checkout, [install its CLI as the global tool](../../docs/reference/cli.md#installing-the-checkouts-cli-on-path). Never point `puck.server.command` or `puck.server.args` at a project's build output: the running server holds every assembly in that folder, and the next build fails to replace them.
 
 The command and arguments are passed directly without a shell. Changes restart the server automatically. You can also run **Puck: Restart Language Server**. Startup failures appear as an error message; the **Puck Language Server** output channel contains server logs. Remote workspaces run the CLI on the remote host.
 

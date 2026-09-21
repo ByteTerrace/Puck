@@ -34,6 +34,17 @@ let paddleColor = "#7FD4FF"
 let goalColor = "#FF9E7F"
 let courtColor = "#1E2A33"
 
+enum PongBallBody {
+  Detached
+  Ball
+}
+
+enum PongPaddleBody {
+  Detached
+  East
+  West
+}
+
 // --- The kits: what the court is played with ------------------------------------------------
 // The ball carries a 'rigid' facet, so it is integrated by the rigid solver and takes the serve's
 // impulse through the same WorldBody.TryApplyRigidImpulse door 'body.impulse' uses. The paddles
@@ -42,14 +53,14 @@ let courtColor = "#1E2A33"
 kits {
   rows [
     {
-      bodyContact: "Solid"
+      bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: sphere(radius: 0.18)
       motion {
         facingSnap: true
         holds [
           {
-            bond: "Free"
+            bond: Free
             envelope {
               sinkSpeed: 40
             }
@@ -57,7 +68,7 @@ kits {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             name: "air"
           }
         ]
@@ -84,14 +95,14 @@ kits {
       }
     }
     {
-      bodyContact: "Solid"
+      bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: box(halfExtents: [0.125, 0.25, 0.5], rotation: [0, 0, 0, 1])
       motion {
         facingSnap: false
         holds [
           {
-            bond: "Surface"
+            bond: Surface
             cone [0, 60]
             envelope {
               sinkSpeed: 40
@@ -100,12 +111,12 @@ kits {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             name: "ground"
             reach: 1.2
           }
           {
-            bond: "Free"
+            bond: Free
             envelope {
               sinkSpeed: 40
             }
@@ -113,7 +124,7 @@ kits {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             name: "air"
           }
         ]
@@ -139,8 +150,8 @@ kits {
 // takes, so nothing but the game's own bodies ever stands on it. Its floor's top face is the
 // court's local y = 0. The two long sides carry walls and the two ends are open; a goal region sits
 // in each opening, four units out, with a paddle two units out in front of it and a backstop behind
-// it so a scored ball stays on the court. The ball is dropped half a unit above the floor and
-// settles onto it before the first serve.
+// it so a scored ball stays on the court. The ball's root starts on the floor; its sphere center
+// is one radius above that root, and contact is established before the first serve.
 
 placements {
   placement "pongCourt" {
@@ -184,7 +195,7 @@ placements {
       source: "Idle"
     }
     parent: "pongCourt"
-    position [0, 0.5, 0]
+    position [0, 0, 0]
   }
 
   placement "pongPaddleWest" {
@@ -394,75 +405,73 @@ prototypes {
 }
 
 // --- What the interaction table watches -----------------------------------------------------
-// A property is an ordinary keyed Int row whose cells are body indices; a body whose cell reads
-// nonzero is a carrier. An inhabited placement claims the highest free body slot first, in document
-// order, so the host's population of six (one local seat at body 0, the five inhabited placements
-// above) seats the ball at 5, the west paddle at 4, the east paddle at 3 and the two posts at 2 and
-// 1. Those keys and the host's own capacity are one fact: changing 'bodies.capacity' in the host
-// moves them. Only the ball and the two paddles are tagged; the posts carry nothing, so no
-// interaction ever binds one.
+// The ball and paddles are logical pool instances carried by named inhabited placements. Runtime
+// body indices may change without changing their state identity; the posts carry no role, so
+// no interaction binds one. Paddle slots retain the game's established state-key ordering: the east
+// paddle is slot 0 and the west paddle is slot 1.
 
 properties {
-  names [
-    "pongBallTag",
-    "pongPaddleTag"
+  names []
+  carriers [
+    { pool: pongBalls, field: body, bindings [{ member: Detached }, { member: Ball, placement: "pongBall" }] }
+    { pool: pongPaddles, field: body, bindings [{ member: Detached }, { member: East, placement: "pongPaddleEast" }, { member: West, placement: "pongPaddleWest" }] }
   ]
 }
 
 interactions {
   interactions [
-    // The return. Edge: one firing per approach, however many ticks the ball spends touching the
-    // blade, which is exactly what "the paddle met the ball once" means.
+    // The return. Edge: one firing per approach, however many ticks the attached ball spends
+    // touching an attached paddle, which is exactly what "the paddle met the ball once" means.
     {
-      coOccurrence: "Distance"
+      coOccurrence: Distance
       effects [
-        addState(state: "pongRally", value: 1)
-        addState(key: "$right", state: "pongPaddleHits", value: 1)
-        setState(fromState: "pongRally", key: "$right", state: "pongPaddleRally")
-        setState(state: "pongSpin", value: 0.75)
+        addState(state: pongRally, value: 1)
+        addState(state: right.hits, value: 1)
+        setState(fromState: pongRally, state: right.rally)
+        setState(state: pongSpin, value: 0.75)
       ]
-      left: "pongBallTag"
-      mode: "Edge"
+      left: pongBalls
+      mode: Edge
       name: "pong-paddle-strike"
       range: 1
-      right: "pongPaddleTag"
+      right: pongPaddles
     }
     // The pressure meter. Level: it fires again every tick the ball is still inside a paddle's
     // reach, so the cell counts ticks-under-threat rather than approaches.
     {
-      coOccurrence: "Distance"
+      coOccurrence: Distance
       effects [
-        addState(state: "pongPressure", value: 1)
+        addState(state: pongPressure, value: 1)
       ]
-      left: "pongBallTag"
-      mode: "Level"
+      left: pongBalls
+      mode: Level
       name: "pong-paddle-pressure"
       range: 1.8
-      right: "pongPaddleTag"
+      right: pongPaddles
     }
     // The two goals. A goal is an event, not a point: the rules below decide whether the ball was
     // in play when it arrived, because an interaction row carries no gate of its own.
     {
-      coOccurrence: "Region"
+      coOccurrence: Region
       effects [
-        addState(state: "pongWestGoalSerial", value: 1)
+        addState(state: pongWestGoalSerial, value: 1)
       ]
-      left: "pongBallTag"
-      mode: "Edge"
+      left: pongBalls
+      mode: Edge
       name: "pong-goal-west"
       range: 0
-      right: "pongGoalWest"
+      right: pongGoalWest
     }
     {
-      coOccurrence: "Region"
+      coOccurrence: Region
       effects [
-        addState(state: "pongEastGoalSerial", value: 1)
+        addState(state: pongEastGoalSerial, value: 1)
       ]
-      left: "pongBallTag"
-      mode: "Edge"
+      left: pongBalls
+      mode: Edge
       name: "pong-goal-east"
       range: 0
-      right: "pongGoalEast"
+      right: pongGoalEast
     }
   ]
 }
@@ -472,67 +481,67 @@ interactions {
 // request pair (pongServeSerial, pongServeApplied); the three rules below judge it.
 
 rule "pong-serve-press" {
-  when $channel:1:attack >= 1
-  mode: "Edge"
+  when channel(1, attack) >= 1
+  mode: Edge
   pongServeSerial += 1
 }
 
 // The refusal the cabinet itself enforces: there is only ever one ball, so a serve asked for while
-// the ball is live, while the between-points countdown is still draining, or after the game has
+// the ball is live, while the between-points deadline has not yet passed, or after the game has
 // been won, is turned away and counted.
 rule "pong-serve-refuse" {
-  when pongServeSerial != pongServeApplied and (pongInPlay == 1 or pongServeTimer > 0 or pongWinner != 0)
-  mode: "Level"
+  when pongServeSerial != pongServeApplied and (pongInPlay == 1 or $tick < pongServeTimer or pongWinner != 0)
+  mode: Level
   pongServeApplied = pongServeSerial
   pongRefused += 1
 }
 
 rule "pong-serve-west" {
-  when pongServeSerial != pongServeApplied and pongInPlay == 0 and pongServeTimer == 0 and pongWinner == 0 and pongServeSide == 0
-  mode: "Level"
+  when pongServeSerial != pongServeApplied and pongInPlay == 0 and $tick >= pongServeTimer and pongWinner == 0 and pongServeSide == 0
+  mode: Level
   pongServeApplied = pongServeSerial
   pongInPlay = 1
   pongRally = 0
   pongRallyClock = 0
   pongSpin = 0
   pongServes += 1
-  applyRigidImpulse(headingKey: "placement:pongPostWest", key: "placement:pongBall", magnitudeState: "pongServeSpeed")
+  applyRigidImpulse(headingKey: `placement:pongPostWest`, key: `placement:pongBall`, magnitudeState: pongServeSpeed)
 }
 
 rule "pong-serve-east" {
-  when pongServeSerial != pongServeApplied and pongInPlay == 0 and pongServeTimer == 0 and pongWinner == 0 and pongServeSide == 1
-  mode: "Level"
+  when pongServeSerial != pongServeApplied and pongInPlay == 0 and $tick >= pongServeTimer and pongWinner == 0 and pongServeSide == 1
+  mode: Level
   pongServeApplied = pongServeSerial
   pongInPlay = 1
   pongRally = 0
   pongRallyClock = 0
   pongSpin = 0
   pongServes += 1
-  applyRigidImpulse(headingKey: "placement:pongPostEast", key: "placement:pongBall", magnitudeState: "pongServeSpeed")
+  applyRigidImpulse(headingKey: `placement:pongPostEast`, key: `placement:pongBall`, magnitudeState: pongServeSpeed)
 }
 
-// --- Points, dead balls, and the countdown between them ---------------------------------------
+// --- Points, dead balls, and the deadline between them -----------------------------------------
 // The goal behind the west paddle is east's point, and the side that conceded serves next.
 
 rule "pong-point-east" {
   when pongWestGoalSerial != pongWestGoalApplied and pongInPlay == 1
-  mode: "Level"
+  mode: Level
   pongWestGoalApplied = pongWestGoalSerial
-  pongScore[1] += 1
+  pongPaddles[1].score += 1
   pongInPlay = 0
   pongServeSide = 0
-  pongServeTimer = 1s
+  schedule pongServeTimer in 1s
   pongSpin = 0
 }
 
 rule "pong-point-west" {
   when pongEastGoalSerial != pongEastGoalApplied and pongInPlay == 1
-  mode: "Level"
+  mode: Level
   pongEastGoalApplied = pongEastGoalSerial
-  pongScore[0] += 1
+  pongPaddles[0].score += 1
   pongInPlay = 0
   pongServeSide = 1
-  pongServeTimer = 1s
+  schedule pongServeTimer in 1s
   pongSpin = 0
 }
 
@@ -540,14 +549,14 @@ rule "pong-point-west" {
 // serve refusal, counted separately so the export says which kind of illegal arrival happened.
 rule "pong-dead-ball-west" {
   when pongWestGoalSerial != pongWestGoalApplied and pongInPlay == 0
-  mode: "Level"
+  mode: Level
   pongWestGoalApplied = pongWestGoalSerial
   pongDeadBalls += 1
 }
 
 rule "pong-dead-ball-east" {
   when pongEastGoalSerial != pongEastGoalApplied and pongInPlay == 0
-  mode: "Level"
+  mode: Level
   pongEastGoalApplied = pongEastGoalSerial
   pongDeadBalls += 1
 }
@@ -557,38 +566,32 @@ rule "pong-dead-ball-east" {
 // same side serves again. '$physics:quiescent' is the world's own rigid-body rest fact, and the ball
 // is the only rigid body on the court, so it reads exactly "the ball has stopped".
 rule "pong-let" {
-  when pongInPlay == 1 and pongRallyClock >= 5 and $physics:quiescent == 1
-  mode: "Edge"
+  when pongInPlay == 1 and pongRallyClock >= 5 and physics(quiescent) == 1
+  mode: Edge
   pongInPlay = 0
   pongLets += 1
-  pongServeTimer = 0.5s
+  schedule pongServeTimer in 0.5s
   pongSpin = 0
-}
-
-rule "pong-serve-countdown" {
-  when pongServeTimer > 0
-  mode: "Level"
-  countdown pongServeTimer
 }
 
 // --- The scoreboard ---------------------------------------------------------------------------
 
 rule "pong-longest-rally" {
   when pongRally > pongLongestRally
-  mode: "Level"
+  mode: Level
   pongLongestRally = pongRally
 }
 
 rule "pong-game-west" {
-  when pongWinner == 0 and pongScore[0] >= 11
-  mode: "Edge"
+  when pongWinner == 0 and pongPaddles[0].score >= 11
+  mode: Edge
   pongWinner = 1
   pongInPlay = 0
 }
 
 rule "pong-game-east" {
-  when pongWinner == 0 and pongScore[1] >= 11
-  mode: "Edge"
+  when pongWinner == 0 and pongPaddles[1].score >= 11
+  mode: Edge
   pongWinner = 2
   pongInPlay = 0
 }
@@ -598,7 +601,7 @@ rule "pong-game-east" {
 // follower glides there rather than snapping.
 rule "pong-spin-release" {
   when pongInPlay == 0 and pongSpin != 0
-  mode: "Level"
+  mode: Level
   pongSpin = 0
 }
 
@@ -612,40 +615,29 @@ dynamics [
 ]
 
 state {
+  record PongBall {
+    body: PongBallBody = PongBallBody.Detached
+    active: Bool = true
+  }
+  record PongPaddle {
+    body: PongPaddleBody = PongPaddleBody.Detached
+    hits: Int bounds(0..9999) = 0
+    rally: Int bounds(0..999) = 0
+    score: Int bounds(0..99) = 0
+  }
+  pool pongBalls of PongBall capacity(1) = [{ body: PongBallBody.Ball, active: true }]
+  pool pongPaddles of PongPaddle capacity(2) = [
+    { body: PongPaddleBody.East, hits: 0, rally: 0, "score": 0 }
+    { body: PongPaddleBody.West, hits: 0, rally: 0, "score": 0 }
+  ]
+
   world {
-    // The two property rows the interaction table reads, keyed by body index.
-    table pongBallTag: Int capacity(6) {
-      "5" = 1
-    }
-
-    table pongPaddleTag: Int capacity(6) {
-      "3" = 1
-      "4" = 1
-    }
-
-    table pongPaddleHits: Int capacity(6) bounds(minimum: 0, maximum: 9999) {
-      "3" = 0
-      "4" = 0
-    }
-
-    // The rally length each paddle's own most recent return happened at.
-    table pongPaddleRally: Int capacity(6) bounds(minimum: 0, maximum: 999) {
-      "3" = 0
-      "4" = 0
-    }
-
-    // The scoreboard: cell 0 is west's score, cell 1 is east's.
-    table pongScore: Int capacity(2) bounds(minimum: 0, maximum: 99) {
-      "0" = 0
-      "1" = 0
-    }
-
     // The rally clock accumulates one a second from the serve that started the rally; every serve
     // and every point rebases it.
-    slot pongRallyClock: Int = 0 bounds(minimum: 0, maximum: 3600) advance(perSecond: 1)
+    slot pongRallyClock = 0 bounds(0..3600) advance(perSecond: 1)
 
     // The impulse magnitude the serve rides, in the kind=Fixed row applyRigidImpulse requires.
-    slot pongServeSpeed: Fixed = 2
+    slot pongServeSpeed = 2.0
 
     // The spin a strike imparts. Presentation reads ease toward the stored target; rules and simulation
     // read stored truth. A write sets stored truth and kicks the follower from its current position toward
@@ -659,42 +651,42 @@ state {
       value: "0"
     }
 
-    slot pongInPlay: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot pongInPlay = 0 bounds(0..1)
 
-    slot pongServeSide: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot pongServeSide = 0 bounds(0..1)
 
-    slot pongServeTimer: Int = 0 bounds(minimum: 0, maximum: 504000)
+    slot pongServeTimer = 0
 
-    slot pongServeSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongServeSerial = 0 bounds(0..9999)
 
-    slot pongServeApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongServeApplied = 0 bounds(0..9999)
 
-    slot pongServes: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongServes = 0 bounds(0..9999)
 
-    slot pongRefused: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongRefused = 0 bounds(0..9999)
 
-    slot pongDeadBalls: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongDeadBalls = 0 bounds(0..9999)
 
-    slot pongLets: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongLets = 0 bounds(0..9999)
 
-    slot pongRally: Int = 0 bounds(minimum: 0, maximum: 999)
+    slot pongRally = 0 bounds(0..999)
 
-    slot pongLongestRally: Int = 0 bounds(minimum: 0, maximum: 999)
+    slot pongLongestRally = 0 bounds(0..999)
 
-    slot pongPressure: Int = 0 bounds(minimum: 0, maximum: 999999)
+    slot pongPressure = 0 bounds(0..999999)
 
-    slot pongWinner: Int = 0 bounds(minimum: 0, maximum: 2)
+    slot pongWinner = 0 bounds(0..2)
 
-    slot pongWestGoalSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongWestGoalSerial = 0 bounds(0..9999)
 
-    slot pongWestGoalApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongWestGoalApplied = 0 bounds(0..9999)
 
-    slot pongEastGoalSerial: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongEastGoalSerial = 0 bounds(0..9999)
 
-    slot pongEastGoalApplied: Int = 0 bounds(minimum: 0, maximum: 9999)
+    slot pongEastGoalApplied = 0 bounds(0..9999)
   }
 }
 
 export action pongServeSerial
 export binding pongInPlay, pongRally, pongWinner
-export read pongDeadBalls, pongInPlay, pongLets, pongLongestRally, pongPaddleHits, pongPaddleRally, pongPressure, pongRally, pongRallyClock, pongRefused, pongScore, pongServeSide, pongServeTimer, pongServes, pongSpin, pongWinner
+export read pongDeadBalls, pongInPlay, pongLets, pongLongestRally, pongPaddles, pongPressure, pongRally, pongRallyClock, pongRefused, pongServeSide, pongServeTimer, pongServes, pongSpin, pongWinner

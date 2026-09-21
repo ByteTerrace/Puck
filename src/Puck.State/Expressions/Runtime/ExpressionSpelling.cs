@@ -41,7 +41,7 @@ namespace Puck.State;
 /// The ternary colon must not be glued to a <c>$</c>-name on both sides (<c>a ? $local:x : 0</c> spaces it), which is
 /// the one place the two uses of <c>:</c> could meet.
 /// </summary>
-public static class ExpressionSpelling {
+public static partial class ExpressionSpelling {
     private const int CoalesceLevel = 2;
     // One step tighter than a relational comparison, so an operand whose own operator binds looser prints inside
     // parentheses and the joined `left cmp right` text re-parses as the program it was printed from.
@@ -50,9 +50,14 @@ public static class ExpressionSpelling {
     private const int TernaryLevel = 1;
     private const int UnaryLevel = 11;
 
-    /// <summary>The longest spelling admitted, a capacity bound on the parser's input rather than on the expression
-    /// (the 64-token ceiling still applies to what it parses to).</summary>
-    public const int MaxLength = 4096;
+    /// <summary>The longest spelling admitted, in characters: a bound on the parser's input rather than on the
+    /// expression, whose token ceiling still applies to what it parses to.</summary>
+    public const int MaxLength = 16_384;
+    /// <summary>The deepest a spelling may nest: parentheses, brackets and arguments, a chain of prefix operators, a
+    /// chain of ternaries, and the left spine a run of binary operators builds all spend it. The parser and every
+    /// walk over the tree it builds recurse once per level, so this is what keeps a spelling's depth off the
+    /// machine stack; it is as deep as the longest program is long, so it refuses nothing that could compile.</summary>
+    public const int MaxNesting = 256;
 
     private static readonly ExpressionProgram EmptyProgram = new(Instructions: []);
 
@@ -66,6 +71,136 @@ public static class ExpressionSpelling {
         "count" => ExpressionOp.Count,
         _ => ExpressionOp.Sum,
     };
+
+    // Whether the printer in flight writes the source dialect. It is set for the length of one TryPrintSource call
+    // on the calling thread and read where a state read and a key print.
+    [ThreadStatic]
+    private static bool SourceDialect;
+    // The locals of the rule whose text is being lowered on this thread; see WithLocals.
+    [ThreadStatic]
+    private static IReadOnlySet<string>? AmbientLocals;
+
+    private sealed class LocalsScope(IReadOnlySet<string>? previous) : IDisposable {
+        public void Dispose() => AmbientLocals = previous;
+    }
+
+    private static bool IsReduceSugar(string name) => (name is "count" or "sum" or "max" or "min");
+    // A channel argument prints bare when the lexer reads it back as one word or one number.
+    private static void AppendArgument(StringBuilder into, ChannelArgument argument) {
+        switch (argument) {
+            case ChannelArgument.Expression expression:
+                into.Append(value: Reprint(infix: expression.Infix));
+
+                break;
+            case ChannelArgument.Zone zone:
+                into.Append(value: RuleFacts.LiveZonePrefix).Append(value: zone.Index).Append(value: ']');
+
+                break;
+            default:
+                var text = argument.Spelling;
+
+                into.Append(value: ((IsNumberLexeme(text: text) || (text.StartsWith(value: '-') && IsNumberLexeme(text: text[1..])) || (ScanBareName(
+                    start: 0,
+                    text: text
+                ) == text.Length))
+                    ? text
+                    : $"\"{text}\""
+                ));
+
+                break;
+        }
+    }
+    private static string Reprint(string infix) => ((TryParse(
+        error: out _,
+        program: out var program,
+        text: infix
+    ) && TryPrintSource(
+        program: program,
+        text: out var printed
+    ))
+        ? printed
+        : infix
+    );
+    // The source spelling of a reserved channel: a local by its bare name, a reduction by its operation, and every
+    // other channel as a call of its name. A channel with no argument keeps its reserved word.
+    private static bool TryAppendChannel(StringBuilder into, string name, bool keyPosition = false) {
+        // A channel whose name a function already carries keeps its reserved spelling: `pair(...)` is the function.
+        if (
+            !ChannelSpelling.TryParse(
+                call: out var call,
+                text: name
+            ) ||
+            (call.Count == 0) ||
+            Calls.ContainsKey(key: call.Channel) ||
+            IsReservedCallName(name: call.Channel)
+        ) {
+            return false;
+        }
+        // Inside brackets a bare name is a literal key, so a local keying a cell is written as the call it is.
+        if (
+            !keyPosition &&
+            (call.Channel == "local") &&
+            (call.Count == 1) &&
+            IsBareName(name: call.Text(index: 0)) &&
+            !call.Text(index: 0).Contains(value: '.')
+        ) {
+            into.Append(value: call.Text(index: 0));
+
+            return true;
+        }
+
+        var reduce = (
+            (call.Channel == "reduce") &&
+            (call.Count >= 2) &&
+            IsReduceSugar(name: call.Text(index: 0))
+        );
+
+        if (reduce) {
+            var tail = call.Texts(start: 2);
+            var shaped = true;
+            var options = new StringBuilder();
+
+            for (var index = 0; (shaped && (index < tail.Length));) {
+                if ((tail[index] == "where") && ((index + 1) < tail.Length)) {
+                    options.Append(value: ", where: ").Append(value: QuoteName(name: tail[(index + 1)]));
+                    index += 2;
+                } else if ((tail[index] == "between") && ((index + 2) < tail.Length)) {
+                    options.Append(value: ", atLeast: ").Append(value: tail[(index + 1)]).Append(value: ", atMost: ").Append(value: tail[(index + 2)]);
+                    index += 3;
+                } else {
+                    shaped = false;
+                }
+            }
+
+            if (shaped) {
+                into.Append(value: call.Text(index: 0)).Append(value: '(');
+                AppendArgument(
+                    argument: call.Arguments[1],
+                    into: into
+                );
+                into.Append(value: options).Append(value: ')');
+
+                return true;
+            }
+        }
+
+        into.Append(value: call.Channel).Append(value: '(');
+
+        for (var index = 0; (index < call.Count); index++) {
+            if (index > 0) {
+                into.Append(value: ", ");
+            }
+
+            AppendArgument(
+                argument: call.Arguments[index],
+                into: into
+            );
+        }
+
+        into.Append(value: ')');
+
+        return true;
+    }
     private static bool IsFoldName(string name) => (name is "all" or "any" or "count" or "sum");
     private static string? FoldName(ExpressionOp operation) => operation switch {
         ExpressionOp.All => "all",
@@ -96,12 +231,11 @@ public static class ExpressionSpelling {
     // ":-6" inside a reserved name is a signed offset segment, never a subtraction: a name cannot end in a colon.
     private static bool IsSignedSegment(string text, int index) =>
         (((index + 1) < text.Length) && (text[index] == '-') && char.IsAsciiDigit(c: text[(index + 1)]));
-    // Dot access's one rule: an unreserved name splits at its FIRST dot into a row and a literal key, and admits no
+    // Typed lexical field access's one rule: an unreserved name splits at its FIRST dot into a binding and field, and admits no
     // second one. The reserved ($) exclusion is the caller's job (ParsePrimary checks it before calling; a public
     // caller rewriting text, not compiling it, does the same) — but that exclusion only covers a name whose ROW half
     // starts with '$' ("$each" itself never reaches here). A key half starting with '$' ("row.$each") is a dynamic
-    // key wearing dot syntax, not a literal one, and is refused the same as a trailing or repeated dot: bracket form
-    // ("row[$each]") is the only spelling for a dynamic key. False with `error` empty means "no dot to split"; false
+    // field wearing reserved syntax and is refused the same as a trailing or repeated dot. False with `error` empty means "no dot to split"; false
     // with `error` set names the fix for a dot the name carries but cannot split on (trailing, more than one, or a
     // reserved key) — the parser turns that into a diagnostic, a text rewriter leaves the name untouched.
     private static bool TrySplitDot(string name, out string row, out string key, out string? error) {
@@ -117,17 +251,17 @@ public static class ExpressionSpelling {
         var rest = name[(dot + 1)..];
 
         if (rest.Length == 0) {
-            error = $"'{name}' ends with a dot; a dotted read is 'row.key' — write the key after the dot";
+            error = $"'{name}' ends with a dot; a typed field read is 'binding.field' — write the field after the dot";
 
             return false;
         }
         if (rest.Contains(value: '.')) {
-            error = $"'{name}' carries more than one dot; a dotted read admits exactly one — write '{name[..dot]}[{rest}]' to key by the rest";
+            error = $"'{name}' carries more than one dot; a typed lexical pool-field read admits exactly one";
 
             return false;
         }
         if (rest.StartsWith(value: '$')) {
-            error = $"'{name}' keys by a reserved token, not a literal; a dynamic key needs bracket form — write '{name[..dot]}[{rest}]'";
+            error = $"'{name}' names a reserved field; a typed lexical pool field requires a plain field name";
 
             return false;
         }
@@ -187,20 +321,28 @@ public static class ExpressionSpelling {
         }
         return -1;
     }
-    private static Node? Lower(Instruction instruction, Stack<Node> stack, IReadOnlyList<Subprogram> subprograms, string? binder) {
+    private static SyntaxNode? Lower(Instruction instruction, Stack<SyntaxNode> stack, IReadOnlyList<Subprogram> subprograms, string? binder) {
         switch (instruction) {
             case { Payload: InstructionPayload.Constant constant }:
                 return new Literal(Value: constant.Value);
             case { Payload: InstructionPayload.State state }:
-                // Inside a fold a bare name equal to the binder reads the member, so a row of that name keeps its
-                // backquotes to stay a row.
+                // Inside a fold a bare name equal to the binder reads the member, and a keyless plain read whose
+                // name one of the rule's locals also carries reads the row, not the local — either way the row
+                // keeps its backquotes so a re-parse under the same binder or locals still reads the row.
                 return new StateRead(
-                    Key: state.Key,
-                    Name: state.Name,
-                    Quoted: string.Equals(
-                        a: state.Name,
-                        b: binder,
-                        comparisonType: StringComparison.Ordinal
+                    Key: state.Key?.Spelling,
+                    Name: state.Name.Spelling,
+                    TypedName: ((state.Name.PoolField is null) ? null : state.Name),
+                    Quoted: (
+                        string.Equals(
+                            a: state.Name.Spelling,
+                            b: binder,
+                            comparisonType: StringComparison.Ordinal
+                        ) ||
+                        (
+                            (state.Key is null) &&
+                            (AmbientLocals?.Contains(item: state.Name.Spelling) == true)
+                        )
                     )
                 );
             case { Payload: InstructionPayload.Vector vector }: {
@@ -313,8 +455,8 @@ public static class ExpressionSpelling {
         return null;
     }
     // A fold body is a whole program of its own, so it lowers through the same walk against a fresh stack.
-    private static Node? LowerBody(Subprogram body, string binder, IReadOnlyList<Subprogram> subprograms) {
-        var stack = new Stack<Node>();
+    private static SyntaxNode? LowerBody(Subprogram body, string binder, IReadOnlyList<Subprogram> subprograms) {
+        var stack = new Stack<SyntaxNode>();
 
         foreach (var instruction in body.Instructions) {
             var node = Lower(
@@ -333,11 +475,11 @@ public static class ExpressionSpelling {
             : null
         );
     }
-    private static Node[]? Pop(Stack<Node> stack, int count) {
+    private static SyntaxNode[]? Pop(Stack<SyntaxNode> stack, int count) {
         if (stack.Count < count) {
             return null;
         }
-        var result = new Node[count];
+        var result = new SyntaxNode[count];
 
         for (var index = (count - 1); (index >= 0); index--) {
             result[index] = stack.Pop();
@@ -403,6 +545,10 @@ public static class ExpressionSpelling {
             // of those prints parenthesized, which is the one spelling that reads back as an expression key.
             var text = key[RuleFacts.ExpressionKeyPrefix.Length..];
 
+            if (SourceDialect) {
+                text = Reprint(infix: text);
+            }
+
             into.Append(value: ((TryParseKey(
                 error: out _,
                 key: out var reparsed,
@@ -435,6 +581,17 @@ public static class ExpressionSpelling {
                 return;
             }
         }
+        if (
+            SourceDialect &&
+            TryAppendChannel(
+                into: into,
+                keyPosition: true,
+                name: key
+            )
+        ) {
+            return;
+        }
+
         into.Append(value: ((IsBareName(name: key) || IsNumberLexeme(text: key))
             ? key
             : $"`{key}`"));
@@ -560,9 +717,9 @@ public static class ExpressionSpelling {
 
         return (index - start);
     }
-    /// <summary>Splits a candidate name at dot access's exactly-one-dot rule — the same rule <see cref="TryParse"/>
-    /// applies to an unreserved, unquoted name (<c>row.key</c> becomes the state read <c>row[key]</c>). Excluding a
-    /// reserved (<c>$</c>-prefixed) or backquoted name is the caller's own job, exactly as <see cref="TryParse"/>'s
+    /// <summary>Splits a candidate name at typed lexical field access's exactly-one-dot rule — the same rule <see cref="TryParse(string?, out ExpressionProgram, out string)"/>
+    /// applies to an unreserved, unquoted name (<c>binding.field</c> becomes a typed pool-field read). Excluding a
+    /// reserved (<c>$</c>-prefixed) or backquoted name is the caller's own job, exactly as <see cref="TryParse(string?, out ExpressionProgram, out string)"/>'s
     /// own parser does it before calling this; used by <c>WorldModuleNamespace</c>'s import-alias text rewrite so it
     /// reads a dotted name on the grammar's own terms instead of a second copy of the rule.</summary>
     /// <param name="name">The candidate name.</param>
@@ -587,7 +744,172 @@ public static class ExpressionSpelling {
     /// <param name="program">The program, when the spelling parses.</param>
     /// <param name="error">Why it did not, naming the character position, or empty.</param>
     /// <returns><see langword="true"/> when <paramref name="text"/> is a well-formed expression.</returns>
-    public static bool TryParse(string? text, out ExpressionProgram program, out string error) {
+    public static bool TryParse(string? text, out ExpressionProgram program, out string error) => TryParse(
+        error: out error,
+        locals: AmbientLocals,
+        program: out program,
+        text: text
+    );
+    // Only the reserved names are respelled, each where it stands, so everything else an author wrote (a hex mask,
+    // a parenthesis, the spacing) stays as written. A name that is the whole of a bracket is a cell key, where a
+    // bare name would read as a literal key, so it is written through the key's own spelling.
+    /// <summary>Returns expression text with every reserved colon spelling respelled as an author writes it
+    /// (<see cref="TryPrintSource"/>), each where it stands, and everything else as written.</summary>
+    /// <param name="text">The expression text.</param>
+    /// <returns>The respelled text, or <paramref name="text"/> itself when it spells no colon channel.</returns>
+    public static string ToSourceDialect(string text) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+
+        if (!text.Contains(value: '$')) {
+            return text;
+        }
+
+        var into = new StringBuilder(capacity: text.Length);
+
+        for (var index = 0; (index < text.Length);) {
+            // A string literal's contents are data: a reserved spelling inside one is what the callee receives.
+            if (text[index] == '"') {
+                var literalEnd = (index + 1);
+
+                while ((literalEnd < text.Length) && (text[literalEnd] != '"')) {
+                    literalEnd += ((text[literalEnd] == '\\')
+                        ? 2
+                        : 1
+                    );
+                }
+
+                literalEnd = Math.Min(
+                    val1: (literalEnd + 1),
+                    val2: text.Length
+                );
+                into.Append(value: text[index..literalEnd]);
+                index = literalEnd;
+
+                continue;
+            }
+
+            var length = (((text[index] == '$') && ((index == 0) || !(char.IsLetterOrDigit(c: text[(index - 1)]) || (text[(index - 1)] is '_' or '.' or '`'))))
+                ? ScanBareName(
+                    start: index,
+                    text: text
+                )
+                : 0
+            );
+
+            // A backquoted reserved name (`$board:attacks:board:-5:-4:N,S,E,W`) is one read whose spelling carried
+            // characters a bare name cannot; the call form quotes the argument that needs it.
+            if (
+                (length == 0) &&
+                (text[index] == '`') &&
+                ((index + 1) < text.Length) &&
+                (text[(index + 1)] == '$') &&
+                (text.IndexOf(
+                    startIndex: (index + 1),
+                    value: '`'
+                ) is var close and > 0) &&
+                TryPrintSource(
+                    program: new ExpressionProgram(Instructions: [Instruction.Operand(name: text[(index + 1)..close])]),
+                    text: out var quoted
+                ) &&
+                !quoted.StartsWith(value: '`')
+            ) {
+                into.Append(value: quoted);
+                index = (close + 1);
+
+                continue;
+            }
+            // A `$` on its own opens an interpolated string; it names nothing.
+            if (length <= 1) {
+                into.Append(value: text[index]);
+                index++;
+
+                continue;
+            }
+
+            var name = text.Substring(
+                length: length,
+                startIndex: index
+            );
+            var before = (index - 1);
+            var after = (index + length);
+
+            while ((before >= 0) && (text[before] == ' ')) {
+                before--;
+            }
+            while ((after < text.Length) && (text[after] == ' ')) {
+                after++;
+            }
+
+            if (
+                (before >= 0) &&
+                (text[before] == '[') &&
+                (after < text.Length) &&
+                (text[after] == ']')
+            ) {
+                AppendSourceKey(
+                    into: into,
+                    key: name
+                );
+            } else if (TryPrintSource(
+                program: new ExpressionProgram(Instructions: [Instruction.Operand(name: name)]),
+                text: out var source
+            )) {
+                into.Append(value: source);
+            } else {
+                into.Append(value: name);
+            }
+
+            index += length;
+        }
+
+        return into.ToString();
+    }
+
+    /// <summary>Gets the locals in force on the calling thread (<see cref="WithLocals"/>), or
+    /// <see langword="null"/>.</summary>
+    public static IReadOnlySet<string>? CurrentLocals => AmbientLocals;
+
+    /// <summary>Writes a cell key as an author writes it: <see cref="AppendKey"/> in the source dialect
+    /// (<see cref="TryPrintSource"/>).</summary>
+    /// <param name="into">The builder to append to.</param>
+    /// <param name="key">The key spelling a document holds.</param>
+    public static void AppendSourceKey(StringBuilder into, string key) {
+        var dialect = SourceDialect;
+
+        SourceDialect = true;
+
+        try {
+            AppendKey(
+                into: into,
+                key: key
+            );
+        } finally {
+            SourceDialect = dialect;
+        }
+    }
+    /// <summary>Names the locals of the rule whose expressions the calling thread parses until the returned scope is
+    /// disposed, so every <see cref="TryParse(string?, out ExpressionProgram, out string)"/> in between reads a bare
+    /// local's name as that local. Text a document holds is never read this way: a print, and every parse inside
+    /// one, sees no locals.</summary>
+    /// <param name="locals">The rule's local names.</param>
+    /// <returns>The scope; disposing it restores what was in force.</returns>
+    public static IDisposable WithLocals(IReadOnlySet<string> locals) {
+        ArgumentNullException.ThrowIfNull(argument: locals);
+
+        var scope = new LocalsScope(previous: AmbientLocals);
+
+        AmbientLocals = locals;
+
+        return scope;
+    }
+    /// <summary>Parses an infix expression written inside a rule, where a bare name that is one of the rule's
+    /// locals reads that local.</summary>
+    /// <param name="text">The infix spelling.</param>
+    /// <param name="locals">The enclosing rule's local names, or <see langword="null"/> outside a rule.</param>
+    /// <param name="program">The postfix program, when the text parses.</param>
+    /// <param name="error">Why it did not, naming the character position, or empty.</param>
+    /// <returns><see langword="true"/> when the text is a well-formed expression.</returns>
+    public static bool TryParse(string? text, IReadOnlySet<string>? locals, out ExpressionProgram program, out string error) {
         program = EmptyProgram;
         if (string.IsNullOrWhiteSpace(value: text)) {
             error = "is empty";
@@ -597,7 +919,15 @@ public static class ExpressionSpelling {
             error = $"is {text.Length} characters long; at most {MaxLength} are admitted";
             return false;
         }
-        var parser = new Parser(text: text);
+        var parser = new Parser(
+            locals: locals,
+            text: text
+        );
+        // A parse prints the expression keys it meets, and those live in a document, so it never prints in the
+        // source dialect, whatever its caller is printing.
+        var dialect = SourceDialect;
+
+        SourceDialect = false;
 
         try {
             var root = parser.ParseExpression();
@@ -616,10 +946,32 @@ public static class ExpressionSpelling {
         } catch (SyntaxException failure) {
             error = failure.Message;
             return false;
+        } finally {
+            SourceDialect = dialect;
+        }
+    }
+    /// <summary>Renders a program as an author writes it: a reserved channel as a call
+    /// (<c>channel(1, strafe)</c>), a row reduction as its operation (<c>count(zone)</c>), and a rule local by its
+    /// bare name. <see cref="TryPrint(ExpressionProgram, out string)"/> renders the spelling a document holds.</summary>
+    /// <param name="program">The postfix program.</param>
+    /// <param name="text">The spelling, when the program is well formed.</param>
+    /// <returns><see langword="true"/> when the program is a well-formed postfix expression.</returns>
+    public static bool TryPrintSource(ExpressionProgram program, out string text) {
+        var dialect = SourceDialect;
+
+        SourceDialect = true;
+
+        try {
+            return TryPrint(
+                program: program,
+                text: out text
+            );
+        } finally {
+            SourceDialect = dialect;
         }
     }
     /// <summary>Parses the text between a name's brackets as a cell key, on the same terms as a key inside
-    /// <see cref="TryParse"/>: <c>row[key]</c> spells a <c>$cell:</c> indirection, a bare name or reserved token
+    /// <see cref="TryParse(string?, out ExpressionProgram, out string)"/>: <c>row[key]</c> spells a <c>$cell:</c> indirection, a bare name or reserved token
     /// (<c>$each</c>, <c>$local:&lt;name&gt;</c>, <c>$cell:&lt;row&gt;:&lt;key&gt;</c>) passes through, and any other
     /// expression becomes an <c>$expr:</c> key.</summary>
     /// <param name="text">The bracket contents.</param>
@@ -675,7 +1027,7 @@ public static class ExpressionSpelling {
             return false;
         }
     }
-    /// <summary>Renders a program in the infix spelling <see cref="TryParse"/> reads back to the same program, with
+    /// <summary>Renders a program in the infix spelling <see cref="TryParse(string?, out ExpressionProgram, out string)"/> reads back to the same program, with
     /// only the parentheses precedence requires.</summary>
     /// <param name="program">The program.</param>
     /// <param name="text">The spelling, when the program is well-formed.</param>
@@ -700,11 +1052,45 @@ public static class ExpressionSpelling {
             program: program,
             text: out text
         );
+    /// <summary>Renders a program as one operand of a comparison, as an author writes it
+    /// (<see cref="TryPrintSource(ExpressionProgram, out string)"/>), parenthesized on
+    /// <see cref="TryPrintComparisonOperand"/>'s terms.</summary>
+    /// <param name="program">The program.</param>
+    /// <param name="text">The spelling, when the program is well-formed.</param>
+    /// <returns><see langword="false"/> on <see cref="TryPrint(ExpressionProgram, out string)"/>'s terms.</returns>
+    public static bool TryPrintSourceComparisonOperand(ExpressionProgram program, out string text) {
+        var dialect = SourceDialect;
+
+        SourceDialect = true;
+
+        try {
+            return TryPrint(
+                parentLevel: ComparisonOperandLevel,
+                program: program,
+                text: out text
+            );
+        } finally {
+            SourceDialect = dialect;
+        }
+    }
 
     private static bool TryPrint(ExpressionProgram program, int parentLevel, out string text) {
         ArgumentNullException.ThrowIfNull(argument: program);
 
-        var stack = new Stack<Node>();
+        // The document dialect never spells a bare local, so it prints under no locals at all. The source dialect
+        // prints under whatever locals WithLocals put in force for the rule in flight — a decompiler names them
+        // before printing a rule's body, and they stay visible through every operand and nested reprint that rule
+        // prints, so a plain row read a local shadows backquotes correctly at the place it prints.
+        using var noLocals = (SourceDialect
+            ? null
+            : new LocalsScope(previous: AmbientLocals)
+        );
+
+        if (noLocals is not null) {
+            AmbientLocals = null;
+        }
+
+        var stack = new Stack<SyntaxNode>();
 
         foreach (var instruction in program.Instructions) {
             var node = Lower(
@@ -746,7 +1132,7 @@ public static class ExpressionSpelling {
         );
 
     // Collects the subprograms a fold body emits into, so one parse yields the whole program.
-    private sealed class ProgramBuilder {
+    internal sealed class ProgramBuilder {
         public List<Subprogram> Subprograms { get; } = [];
 
         public int Add(string name, int arity, List<Instruction> instructions) {
@@ -758,11 +1144,12 @@ public static class ExpressionSpelling {
             return (Subprograms.Count - 1);
         }
     }
-    private abstract record Node {
-        public abstract int Level { get; }
+    /// <summary>A parsed operand node, shared by source binding and runtime expression emission.</summary>
+    public abstract record SyntaxNode {
+        internal abstract int Level { get; }
 
-        public abstract void Emit(List<Instruction> into, ProgramBuilder builder);
-        public void Print(StringBuilder into, int parentLevel, bool rightOperand) {
+        internal abstract void Emit(List<Instruction> into, ProgramBuilder builder);
+        internal void Print(StringBuilder into, int parentLevel, bool rightOperand) {
             var parenthesize = ((Level < parentLevel) || (rightOperand && (Level == parentLevel)));
 
             if (parenthesize) {
@@ -773,22 +1160,28 @@ public static class ExpressionSpelling {
                 into.Append(value: ')');
             }
         }
-        public abstract void PrintBare(StringBuilder into);
+        internal abstract void PrintBare(StringBuilder into);
     }
-    private sealed record Literal(decimal Value) : Node {
-        public override int Level => PrimaryLevel;
+    /// <summary>An exact scalar literal.</summary>
+    /// <param name="Value">The scalar value.</param>
+    public sealed record Literal(decimal Value) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: Instruction.Constant(value: Value));
-        public override void PrintBare(StringBuilder into) => into.Append(value: Value.ToString(provider: CultureInfo.InvariantCulture));
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: Instruction.Constant(value: Value));
+        internal override void PrintBare(StringBuilder into) => into.Append(value: Value.ToString(provider: CultureInfo.InvariantCulture));
     }
-    private sealed record StateRead(string Name, string? Key, bool Quoted = false) : Node {
-        public override int Level => PrimaryLevel;
+    private sealed record StateRead(string Name, string? Key, bool Quoted = false, StateChannelRef? TypedName = null) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: Instruction.Operand(
-            key: Key,
-            name: Name
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: ((TypedName is { } typed)
+            ? Instruction.Operand(name: typed)
+            : Instruction.Operand(key: Key, name: Name)
         ));
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
+            if (TypedName is { } typed) {
+                into.Append(value: typed.Spelling);
+                return;
+            }
             var (name, key) = (((Key is null) && TrySplitTableKey(
                 Name,
                 out var table,
@@ -797,10 +1190,19 @@ public static class ExpressionSpelling {
                 ? (table, tableKey)
                 : (Name, Key)
             );
-            into.Append(value: (Quoted
-                ? $"`{name}`"
-                : QuoteName(name: name)
-            ));
+            if (
+                Quoted ||
+                !SourceDialect ||
+                !TryAppendChannel(
+                    into: into,
+                    name: name
+                )
+            ) {
+                into.Append(value: (Quoted
+                    ? $"`{name}`"
+                    : QuoteName(name: name)
+                ));
+            }
             if (key is { } spelled) {
                 into.Append(value: '[');
                 AppendKey(
@@ -811,21 +1213,21 @@ public static class ExpressionSpelling {
             }
         }
     }
-    private sealed record VectorLiteral(string Value) : Node {
-        public override int Level => PrimaryLevel;
+    private sealed record VectorLiteral(string Value) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) =>
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) =>
             throw new SyntaxException(message: "a vector literal cannot appear as a scalar expression operand");
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             into.Append(value: "vector(\"").Append(value: Value).Append(value: "\")");
         }
     }
-    private sealed record EmbedLiteral(string Text, string? Space = null) : Node {
-        public override int Level => PrimaryLevel;
+    private sealed record EmbedLiteral(string Text, string? Space = null) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) =>
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) =>
             throw new SyntaxException(message: "an embed literal cannot appear as a scalar expression operand");
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             // KEEP IN SYNC with the lexer's double-quoted string rule: it unescapes exactly \\ and \".
             into.Append(value: "embed(\"").Append(value: Text.Replace(newValue: "\\\\", oldValue: "\\").Replace(newValue: "\\\"", oldValue: "\"")).Append(value: '"');
             if (Space is not null) {
@@ -834,10 +1236,13 @@ public static class ExpressionSpelling {
             into.Append(value: ')');
         }
     }
-    private sealed record Unary(string Operator, Node Operand) : Node {
-        public override int Level => UnaryLevel;
+    /// <summary>A prefix arithmetic operation.</summary>
+    /// <param name="Operator">The operator spelling.</param>
+    /// <param name="Operand">The operand.</param>
+    public sealed record Unary(string Operator, SyntaxNode Operand) : SyntaxNode {
+        internal override int Level => UnaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) {
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             Operand.Emit(
                 builder: builder,
                 into: into
@@ -846,7 +1251,7 @@ public static class ExpressionSpelling {
                 ? ExpressionOp.Negate
                 : ExpressionOp.BitNot)));
         }
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             into.Append(value: Operator);
             // A unary or negative-literal operand is parenthesized so "- -a" never prints as "--a".
             var wrap = ((Operand is Unary) || (Operand is Literal { Value: < 0m }));
@@ -860,10 +1265,14 @@ public static class ExpressionSpelling {
             if (wrap) { into.Append(value: ')'); }
         }
     }
-    private sealed record Binary(string Operator, Node Left, Node Right) : Node {
-        public override int Level => ExpressionSpelling.Level(symbol: Operator);
+    /// <summary>A binary operation with the grammar's precedence already resolved.</summary>
+    /// <param name="Operator">The operator spelling.</param>
+    /// <param name="Left">The left operand.</param>
+    /// <param name="Right">The right operand.</param>
+    public sealed record Binary(string Operator, SyntaxNode Left, SyntaxNode Right) : SyntaxNode {
+        internal override int Level => ExpressionSpelling.Level(symbol: Operator);
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) {
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             Left.Emit(
                 builder: builder,
                 into: into
@@ -874,7 +1283,7 @@ public static class ExpressionSpelling {
             );
             into.Add(item: BinaryToken(symbol: Operator));
         }
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             Left.Print(
                 into: into,
                 parentLevel: Level,
@@ -888,10 +1297,14 @@ public static class ExpressionSpelling {
             );
         }
     }
-    private sealed record Ternary(Node Condition, Node WhenTrue, Node WhenFalse) : Node {
-        public override int Level => TernaryLevel;
+    /// <summary>A conditional expression.</summary>
+    /// <param name="Condition">The condition.</param>
+    /// <param name="WhenTrue">The value selected by a true condition.</param>
+    /// <param name="WhenFalse">The value selected by a false condition.</param>
+    public sealed record Ternary(SyntaxNode Condition, SyntaxNode WhenTrue, SyntaxNode WhenFalse) : SyntaxNode {
+        internal override int Level => TernaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) {
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             Condition.Emit(
                 builder: builder,
                 into: into
@@ -906,7 +1319,7 @@ public static class ExpressionSpelling {
             );
             into.Add(item: Instruction.Of(operation: ExpressionOp.Select));
         }
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             Condition.Print(
                 into: into,
                 parentLevel: (TernaryLevel + 1),
@@ -926,10 +1339,10 @@ public static class ExpressionSpelling {
             );
         }
     }
-    private sealed record Call(string Name, Node[] Arguments, string[] Names) : Node {
-        public override int Level => PrimaryLevel;
+    private sealed record Call(string Name, SyntaxNode[] Arguments, string[] Names) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) {
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             if (Name is "dot" or "similarity" or "identical") {
                 if ((Arguments.Length != 2) || (Names.Length != 0)) {
                     throw new SyntaxException(message: $"'{Name}' takes exactly 2 vector arguments");
@@ -971,7 +1384,7 @@ public static class ExpressionSpelling {
                 _ => Instruction.Of(operation: Calls[Name].Operation),
             }));
         }
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             into.Append(value: Name).Append(value: '(');
             for (var index = 0; (index < Arguments.Length); index++) {
                 if (index > 0) { into.Append(value: ", "); }
@@ -988,16 +1401,16 @@ public static class ExpressionSpelling {
         }
     }
     // The member a fold binds, read inside the fold's body by the binder's own name.
-    private sealed record Member(string Name) : Node {
-        public override int Level => PrimaryLevel;
+    private sealed record Member(string Name) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: Instruction.Of(operation: ExpressionOp.Member));
-        public override void PrintBare(StringBuilder into) => into.Append(value: Name);
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: Instruction.Of(operation: ExpressionOp.Member));
+        internal override void PrintBare(StringBuilder into) => into.Append(value: Name);
     }
-    private sealed record FoldCall(string Name, string Family, string Binder, Node Body) : Node {
-        public override int Level => PrimaryLevel;
+    private sealed record FoldCall(string Name, string Family, string Binder, SyntaxNode Body) : SyntaxNode {
+        internal override int Level => PrimaryLevel;
 
-        public override void Emit(List<Instruction> into, ProgramBuilder builder) {
+        internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             var body = new List<Instruction>();
 
             Body.Emit(
@@ -1015,7 +1428,7 @@ public static class ExpressionSpelling {
                 )
             ));
         }
-        public override void PrintBare(StringBuilder into) {
+        internal override void PrintBare(StringBuilder into) {
             into.Append(value: Name).Append(value: '(').Append(value: QuoteName(name: Family)).Append(value: ", ").Append(value: Binder).Append(value: " -> ");
             Body.Print(
                 into: into,
@@ -1026,28 +1439,31 @@ public static class ExpressionSpelling {
         }
     }
 
-    private static VectorOperand ConvertToVectorOperand(Node node) => node switch {
-        StateRead state => new VectorOperand.Cell(Name: state.Name, Key: state.Key),
+    private static VectorOperand ConvertToVectorOperand(SyntaxNode node) => node switch {
+        StateRead state => new VectorOperand.Cell(Name: (state.TypedName ?? StateChannelRef.Parse(spelling: state.Name)), Key: StateChannelRef.OfNullable(spelling: state.Key)),
         VectorLiteral vec => new VectorOperand.Literal(Value: vec.Value),
         EmbedLiteral embed => new VectorOperand.Embed(Text: embed.Text, Space: embed.Space),
         _ => throw new SyntaxException(message: $"argument to vector function must be a state read, vector literal, or embed literal, found '{node.GetType().Name}'")
     };
-    private static Node LowerVectorOperand(VectorOperand operand) => operand switch {
-        VectorOperand.Cell cell => new StateRead(Name: cell.Name, Key: cell.Key),
+    private static SyntaxNode LowerVectorOperand(VectorOperand operand) => operand switch {
+        VectorOperand.Cell cell => new StateRead(Name: cell.Name.Spelling, Key: cell.Key?.Spelling, TypedName: ((cell.Name.PoolField is null) ? null : cell.Name)),
         VectorOperand.Literal lit => new VectorLiteral(Value: lit.Value),
         VectorOperand.Embed embed => new EmbedLiteral(Text: embed.Text, Space: embed.Space),
         _ => throw new InvalidOperationException()
     };
 
     private sealed class SyntaxException(string message) : Exception(message: message);
-    private enum Lexeme : byte { End, Number, Name, Punctuation, String }
+    private enum Lexeme : byte { End, Number, Name, Punctuation, String, Atom }
     // A recursive-descent parser over a one-token lookahead lexer; the grammar is small enough that the two live in
     // one class and the token stream is never materialized.
-    private sealed class Parser(string text) {
+    private sealed partial class Parser(string text, IReadOnlySet<string>? locals = null, IReadOnlyList<SourceAtomSpan>? atoms = null, bool sourceSyntax = false) {
         // Longest first, so ">>>" wins over ">>" over ">".
-        private static readonly string[] Punctuations = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">", "+", "->", "-", "*", "/", "%", "&", "|", "^", "~", "??", "?", ":", "(", ")", "[", "]", ","];
+        private static readonly string[] Punctuations = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">", "+", "->", "=>", "-", "*", "/", "%", "&", "|", "^", "~", "??", "?", ":", "(", ")", "[", "]", ",", "."];
 
         private string? m_binder;
+        // Whether the read last parsed was a channel written as a call, which in key position is the key itself.
+        private bool m_calledChannel;
+        private int m_depth;
         private Lexeme m_kind;
         private int m_position;
         private bool m_primed;
@@ -1078,6 +1494,9 @@ public static class ExpressionSpelling {
             if (m_position >= text.Length) {
                 m_kind = Lexeme.End;
                 m_value = string.Empty;
+                return;
+            }
+            if (sourceSyntax && TryReadSourceAtom()) {
                 return;
             }
             var character = text[m_position];
@@ -1237,6 +1656,11 @@ public static class ExpressionSpelling {
                 throw Fail(message: $"expected '{punctuation}'{Found()}");
             }
         }
+        private void Descend() {
+            if (++m_depth > MaxNesting) {
+                throw Fail(message: $"the expression nests more than {MaxNesting} deep");
+            }
+        }
         private SyntaxException Fail(string message) => new(message: $"at character {(m_start + 1)}: {message}");
         private string Found() {
             Prime();
@@ -1247,8 +1671,9 @@ public static class ExpressionSpelling {
         }
         private bool KeyEnds() => ((m_kind == Lexeme.End) || ((m_kind == Lexeme.Punctuation) && (m_value == "]")));
         // Precedence climbing over the binary table: every operator is left-associative.
-        private Node ParseBinary(int minimumLevel) {
+        private SyntaxNode ParseBinary(int minimumLevel) {
             var left = ParseUnary();
+            var spine = 0;
 
             while (true) {
                 Prime();
@@ -1256,14 +1681,21 @@ public static class ExpressionSpelling {
                     (m_kind != Lexeme.Punctuation) ||
                     (BinaryOperator(symbol: m_value) is not { } symbol)
                 ) {
+                    m_depth -= spine;
+
                     return left;
                 }
                 var level = Level(symbol: symbol);
 
                 if (level < minimumLevel) {
+                    m_depth -= spine;
+
                     return left;
                 }
                 Advance();
+                // Each operator of a run puts what came before it one level further down the left of the tree.
+                Descend();
+                spine++;
                 var right = ParseBinary(minimumLevel: (level + 1));
 
                 left = new Binary(
@@ -1273,9 +1705,9 @@ public static class ExpressionSpelling {
                 );
             }
         }
-        private Node ParseCall(string name, int arity, int names) {
+        private SyntaxNode ParseCall(string name, int arity, int names) {
             Expect(punctuation: "(");
-            var arguments = new Node[arity];
+            var arguments = new SyntaxNode[arity];
 
             for (var index = 0; (index < arity); index++) {
                 if (index > 0) { Expect(punctuation: ","); }
@@ -1302,15 +1734,30 @@ public static class ExpressionSpelling {
                 Names: extra
             );
         }
-        private Node ParseFold(string name) {
+        private SyntaxNode ParseFold(string name) {
             Expect(punctuation: "(");
             Prime();
             if (m_kind != Lexeme.Name) {
                 throw Fail(message: $"'{name}' folds a family named here{Found()}");
             }
             var family = m_value;
+            var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
 
             Advance();
+            Prime();
+
+            // A fold names its member (`count(hand, card -> ...)`); a reduction of the row itself does not
+            // (`count(hand)`, `count(hand, where: live)`).
+            if (
+                IsReduceSugar(name: name) &&
+                (m_kind == Lexeme.Punctuation) &&
+                ((m_value == ")") || ((m_value == ",") && NextIsOption()))
+            ) {
+                (m_position, m_kind, m_value, m_quoted, m_start, m_primed) = saved;
+
+                return ParseReduce(name: name);
+            }
+
             Expect(punctuation: ",");
             Prime();
             if (
@@ -1329,7 +1776,7 @@ public static class ExpressionSpelling {
             }
             m_binder = binder;
 
-            Node body;
+            SyntaxNode body;
 
             try {
                 body = ParseExpression();
@@ -1342,6 +1789,135 @@ public static class ExpressionSpelling {
                 Body: body,
                 Family: family,
                 Name: name
+            );
+        }
+        // Whether what follows the comma in hand is a reduction's option rather than a fold's binder.
+        private bool NextIsOption() {
+            var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
+
+            Advance();
+            Prime();
+
+            var option = ((m_kind == Lexeme.Name) && (m_value is "where" or "atLeast" or "atMost"));
+
+            (m_position, m_kind, m_value, m_quoted, m_start, m_primed) = saved;
+
+            return option;
+        }
+        // One argument of a channel call, as the text the channel's colon spelling carries.
+        private string ParseArgumentText() {
+            Prime();
+
+            var negative = ((m_kind == Lexeme.Punctuation) && (m_value == "-"));
+
+            if (negative) {
+                Advance();
+                Prime();
+            }
+            if (
+                (m_kind is not (Lexeme.Name or Lexeme.Number or Lexeme.String)) ||
+                (negative && (m_kind != Lexeme.Number))
+            ) {
+                throw Fail(message: $"a channel takes names and numbers here{Found()}");
+            }
+
+            var text = (negative
+                ? $"-{m_value}"
+                : m_value
+            );
+
+            Advance();
+
+            return text;
+        }
+        // The arguments of `name(`, already opened, as the reserved channel they spell.
+        private string ParseChannel(string name) {
+            var arguments = new List<ChannelArgument>();
+
+            if (!Accept(punctuation: ")")) {
+                do {
+                    if (ChannelSpelling.TakesExpressionAt(
+                        channel: name,
+                        index: arguments.Count
+                    )) {
+                        var node = ParseExpression();
+                        var builder = new ProgramBuilder();
+                        var instructions = new List<Instruction>();
+
+                        node.Emit(
+                            builder: builder,
+                            into: instructions
+                        );
+                        arguments.Add(item: ChannelSpelling.Argument(
+                            expression: true,
+                            text: Print(program: new ExpressionProgram(Instructions: instructions) { Subprograms = builder.Subprograms })
+                        ));
+                    } else {
+                        arguments.Add(item: ChannelSpelling.Argument(text: ParseArgumentText()));
+                    }
+                } while (Accept(punctuation: ","));
+
+                Expect(punctuation: ")");
+            }
+
+            return ChannelSpelling.Print(call: new ChannelCall(
+                Arguments: arguments,
+                Channel: name
+            ));
+        }
+        // `count(row)`, `sum(row, where: filter)`, `max(row, atLeast: 1, atMost: 3)`, opened or at its name.
+        private SyntaxNode ParseReduce(string name) {
+            _ = Accept(punctuation: "(");
+
+            var spelling = new StringBuilder(value: RuleFacts.ReducePrefix).Append(value: name).Append(value: ':').Append(value: ParseArgumentText());
+            string? lower = null;
+            string? upper = null;
+
+            while (Accept(punctuation: ",")) {
+                Prime();
+
+                var option = m_value;
+
+                if (
+                    (m_kind != Lexeme.Name) ||
+                    (option is not ("where" or "atLeast" or "atMost"))
+                ) {
+                    throw Fail(message: $"'{name}' takes 'where:', 'atLeast:' and 'atMost:' here{Found()}");
+                }
+
+                Advance();
+                Expect(punctuation: ":");
+
+                var value = ParseArgumentText();
+
+                switch (option) {
+                    case "where":
+                        spelling.Append(value: ":where:").Append(value: value);
+
+                        break;
+                    case "atLeast":
+                        lower = value;
+
+                        break;
+                    default:
+                        upper = value;
+
+                        break;
+                }
+            }
+
+            Expect(punctuation: ")");
+
+            if ((lower is null) != (upper is null)) {
+                throw Fail(message: $"'{name}' bounds a reduction with both 'atLeast:' and 'atMost:'");
+            }
+            if (lower is not null) {
+                spelling.Append(value: ":between:").Append(value: lower).Append(value: ':').Append(value: upper);
+            }
+
+            return new StateRead(
+                Key: null,
+                Name: spelling.ToString()
             );
         }
         private decimal ParseNumber(string lexeme, int start) {
@@ -1372,7 +1948,10 @@ public static class ExpressionSpelling {
             }
             return value;
         }
-        private Node ParsePrimary() {
+        private SyntaxNode ParsePrimary() {
+            if (sourceSyntax) {
+                return ParseSourcePrimary();
+            }
             Prime();
             switch (m_kind) {
                 case Lexeme.Number: {
@@ -1472,10 +2051,18 @@ public static class ExpressionSpelling {
                         }
                         if (
                             !quoted &&
+                            (name is "max" or "min") &&
                             Accept(punctuation: "(")
                         ) {
-                            throw Fail(message: $"'{name}' is not a function; a state read is a bare name (or `{name}` to read a row of that name)");
+                            return ParseReduce(name: name);
                         }
+
+                        // Any other call names a reserved channel: `channel(1, strafe)` reads `$channel:1:strafe`.
+                        var channel = ((!quoted && !name.StartsWith(value: '$') && Accept(punctuation: "("))
+                            ? ParseChannel(name: name)
+                            : null
+                        );
+
                         if (
                             !quoted &&
                             string.Equals(
@@ -1486,13 +2073,17 @@ public static class ExpressionSpelling {
                         ) {
                             return new Member(Name: name);
                         }
-                        var stateName = name;
-                        string? key = null;
+                        m_calledChannel = (channel is not null);
 
-                        // An unreserved, unquoted "a.b" is the state read "a[b]" — a reserved ($) name keeps its
-                        // dotted segments unchanged, and a backquoted name is never split.
+                        var stateName = (channel ?? name);
+                        string? key = null;
+                        StateChannelRef? typedName = null;
+
+                        // An unreserved, unquoted "a.b" is a lexical pool-field read. Ordinary keyed state uses
+                        // the unambiguous bracket form "a[b]"; reserved and backquoted names keep their dots.
                         if (
                             !quoted &&
+                            (channel is null) &&
                             !name.StartsWith(value: '$')
                         ) {
                             if (
@@ -1503,18 +2094,37 @@ public static class ExpressionSpelling {
                                 row: out var dotRow
                             )
                             ) {
-                                stateName = dotRow;
-                                key = dotKey;
+                                typedName = StateChannelRef.OfBindingField(binding: dotRow, field: dotKey);
                             } else if (dotError is not null) {
                                 throw Fail(message: dotError);
                             }
                         }
                         if (Accept(punctuation: "[")) {
-                            if (key is not null) {
-                                throw Fail(message: $"'{name}' already names a key with '.'; a dotted read does not also take '[...]'");
+                            if (typedName is not null) {
+                                throw Fail(message: $"'{name}' already names a lexical pool field and does not also take '[...]'");
                             }
                             key = ParseKey();
                             Expect(punctuation: "]");
+                            if (Accept(punctuation: ".")) {
+                                Prime();
+                                if ((m_kind != Lexeme.Name) || m_quoted || m_value.Contains(value: '.')) {
+                                    throw Fail(message: "a static pool field expects one unquoted field name after '.'");
+                                }
+                                if (!int.TryParse(
+                                    s: key,
+                                    style: NumberStyles.None,
+                                    provider: CultureInfo.InvariantCulture,
+                                    result: out var slot
+                                )) {
+                                    throw Fail(message: "a static pool field expects a non-negative Int32 slot inside '[...]'");
+                                }
+                                typedName = StateChannelRef.OfStaticPoolField(field: m_value, pool: stateName, slot: slot);
+                                key = null;
+                                Advance();
+                            }
+                        }
+                        if (typedName is not null) {
+                            return new StateRead(Key: null, Name: typedName.Spelling, TypedName: typedName);
                         }
                         if (
                             (key is not null) &&
@@ -1528,6 +2138,14 @@ public static class ExpressionSpelling {
                                 Key: null,
                                 Name: $"{stateName}:{key}"
                             );
+                        }
+                        if (
+                            (key is null) &&
+                            !quoted &&
+                            (channel is null) &&
+                            (locals?.Contains(item: stateName) == true)
+                        ) {
+                            stateName = $"{RuleFacts.LocalPrefix}{stateName}";
                         }
                         return new StateRead(
                             Key: key,
@@ -1547,10 +2165,14 @@ public static class ExpressionSpelling {
                     throw Fail(message: $"expected a value but found '{m_value}'");
             }
         }
-        private Node ParseTernary() {
+        private SyntaxNode ParseTernary() {
+            Descend();
+
             var condition = ParseBinary(minimumLevel: 2);
 
             if (!Accept(punctuation: "?")) {
+                m_depth--;
+
                 return condition;
             }
             var whenTrue = ParseTernary();
@@ -1558,15 +2180,21 @@ public static class ExpressionSpelling {
             Expect(punctuation: ":");
             var whenFalse = ParseTernary();
 
+            m_depth--;
+
             return new Ternary(
                 Condition: condition,
                 WhenFalse: whenFalse,
                 WhenTrue: whenTrue
             );
         }
-        private Node ParseUnary() {
+        private SyntaxNode ParseUnary() {
             if (Accept(punctuation: "-")) {
+                Descend();
+
                 var operand = ParseUnary();
+
+                m_depth--;
 
                 return ((operand is Literal literal)
                     ? new Literal(Value: -literal.Value)
@@ -1577,9 +2205,15 @@ public static class ExpressionSpelling {
                 );
             }
             if (Accept(punctuation: "~")) {
+                Descend();
+
+                var inverted = ParseUnary();
+
+                m_depth--;
+
                 return new Unary(
-                    Operator: "~",
-                    Operand: ParseUnary()
+                    Operand: inverted,
+                    Operator: "~"
                 );
             }
             return ParsePrimary();
@@ -1597,7 +2231,7 @@ public static class ExpressionSpelling {
                 throw Fail(message: $"unexpected '{m_value}' after the expression");
             }
         }
-        public Node ParseExpression() => ParseTernary();
+        public SyntaxNode ParseExpression() => ParseTernary();
         // A key: a bare or backquoted name, a number, a name indexed once more — row[key], the "$cell:row:key"
         // indirection read live from another cell — or any other expression, which becomes an "$expr:" key the
         // compiler turns into an implicit binding. The simple forms are recognised by lookahead and the lexer rewound
@@ -1620,8 +2254,11 @@ public static class ExpressionSpelling {
                     indexable &&
                     Accept(punctuation: "[")
                 ) {
+                    Descend();
+
                     var inner = ParseKey();
 
+                    m_depth--;
                     Expect(punctuation: "]");
                     Prime();
                     if (
@@ -1636,7 +2273,19 @@ public static class ExpressionSpelling {
                 }
                 (m_position, m_kind, m_value, m_quoted, m_start, m_primed) = saved;
             }
+            m_calledChannel = false;
+
             var node = ParseExpression();
+
+            // A channel written as a call in key position is the key (`zone(deck, first)`), not an expression of it.
+            if (
+                m_calledChannel &&
+                (node is StateRead { Key: null, Quoted: false } read) &&
+                ChannelSpelling.IsChannel(text: read.Name)
+            ) {
+                return read.Name;
+            }
+
             var builder = new ProgramBuilder();
             var instructions = new List<Instruction>();
 

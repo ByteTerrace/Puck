@@ -10,6 +10,30 @@ namespace Puck.World.Transpiler.Tests;
 /// the rules it claims are one construct in source, so the decompiler writes them back as one and the source it
 /// writes compiles to the document it read.</summary>
 public class RuleGroupSugarTests {
+    [InlineData("stabilize turn undo({ rows [\"board\"] depth: 8 }) { rule move { board.unstable = 0 } }")]
+    [InlineData("workflow turn undo({ rows [\"board\"] depth: 8 }) { step move { board.unstable = 0 } }")]
+    [Theory]
+    public void UndoDeclarationAndRewindEffectRoundTrip(string group) {
+        var source = (("schema: \"puck.world.definition.v1\"\nstate { world { table board { unstable = 1 } } }\n" + group) + "\nrule undoMove { rewindTurn(turn) }");
+        var document = Compile(source: source);
+
+        Assert.Equal(8L, document["ruleGroups"]![0]!["undo"]!["depth"]!.GetValue<long>());
+        Assert.Equal("board", document["ruleGroups"]![0]!["undo"]!["rows"]![0]!.GetValue<string>());
+        var printed = WorldDecompiler.Decompile(root: document);
+
+        Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: " undo(");
+        Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: Compile(source: printed)), userMessage: printed);
+        var formatted = PuckFormat.Format(source);
+
+        Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: Compile(source: formatted)), userMessage: formatted);
+    }
+    [Fact]
+    public void DuplicateUndoModifierRefuses() {
+        var result = WorldCompiler.Compile(source: "stabilize turn undo({ rows [\"board\"] depth: 1 }) undo({ rows [\"board\"] depth: 2 }) { rule move { board.x = 1 } }", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(condition: result.Diagnostics.HasErrors);
+    }
+
     private static JsonObject Compile(string source) {
         var lowered = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
@@ -29,7 +53,7 @@ public class RuleGroupSugarTests {
 
         state {
             world {
-                table board : Int {
+                table board {
                     unstable = 1
                 }
             }

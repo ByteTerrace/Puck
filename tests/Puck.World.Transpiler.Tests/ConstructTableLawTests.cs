@@ -20,7 +20,6 @@ public class ConstructTableLawTests {
         /// <summary>A shape this vocabulary refuses; <see cref="Node.Keyword"/> says why.</summary>
         Refused,
     }
-
     private sealed record Node(Verdict Verdict, string Keyword, string? Member = null);
 
     private static readonly Dictionary<string, Node> Verdicts = new(comparer: StringComparer.Ordinal) {
@@ -30,8 +29,9 @@ public class ConstructTableLawTests {
         ["BlockNode"] = new(Keyword: "", Verdict: Verdict.Core),
         ["BreakStatementNode"] = new(Keyword: "PUCK037 — a staged rule body carries no loop to break out of", Verdict: Verdict.Refused),
         ["CellSetDeclarationNode"] = new(Keyword: "set", Verdict: Verdict.Construct),
+        ["ClaimPairStatementNode"] = new(Keyword: "claim pair", Verdict: Verdict.Construct),
+        ["ClaimStatementNode"] = new(Keyword: "claim", Verdict: Verdict.Construct),
         ["CompoundAssignStatementNode"] = new(Keyword: "PUCK039 — this vocabulary's effects carry only setState and addState", Verdict: Verdict.Refused),
-        ["CountdownStatementNode"] = new(Keyword: "countdown", Verdict: Verdict.Construct),
         ["DealStatementNode"] = new(Keyword: "deal", Verdict: Verdict.Construct),
         ["DecisionBlockNode"] = new(Keyword: "decision", Verdict: Verdict.Construct),
         ["DerivedStateNode"] = new(Keyword: "derive", Verdict: Verdict.Construct),
@@ -51,9 +51,11 @@ public class ConstructTableLawTests {
         ["OnNoChoiceBlockNode"] = new(Keyword: "onNoChoice", Verdict: Verdict.Construct),
         ["OptionBlockNode"] = new(Keyword: "option", Verdict: Verdict.Construct),
         ["PatternDeclarationNode"] = new(Keyword: "pattern", Verdict: Verdict.Construct),
+        ["PoolForEachStatementNode"] = new(Keyword: "for each", Verdict: Verdict.Construct),
         ["PropertyNode"] = new(Keyword: "", Verdict: Verdict.Core),
         ["PushStatementNode"] = new(Keyword: "push", Verdict: Verdict.Construct),
         ["RecordDeclarationNode"] = new(Keyword: "record", Verdict: Verdict.Construct),
+        ["ReleaseStatementNode"] = new(Keyword: "release", Verdict: Verdict.Construct),
         ["RemoveCellStatementNode"] = new(Keyword: "remove", Verdict: Verdict.Construct),
         ["RepeatStatementNode"] = new(Keyword: "PUCK037 — a straight-line rule body has nothing to lower a loop onto", Verdict: Verdict.Refused),
         ["RuleBlockNode"] = new(Keyword: "rule", Verdict: Verdict.Construct),
@@ -66,6 +68,8 @@ public class ConstructTableLawTests {
         ["StateGridDeclarationNode"] = new(Keyword: "grid", Verdict: Verdict.Construct),
         ["StatePileDeclarationNode"] = new(Keyword: "pile", Verdict: Verdict.Construct),
         ["StateSlotDeclarationNode"] = new(Keyword: "slot", Verdict: Verdict.Construct),
+        ["StatePoolDeclarationNode"] = new(Keyword: "pool", Verdict: Verdict.Construct),
+        ["StatePairPoolDeclarationNode"] = new(Keyword: "pairPool", Verdict: Verdict.Construct),
         ["StateTableDeclarationNode"] = new(Keyword: "table", Verdict: Verdict.Construct),
         ["TemplateNode"] = new(Keyword: "template", Verdict: Verdict.Core),
         ["TestDeclarationNode"] = new(Keyword: "test", Verdict: Verdict.Construct),
@@ -74,6 +78,8 @@ public class ConstructTableLawTests {
         ["WhenStatementNode"] = new(Keyword: "when", Verdict: Verdict.Construct),
         ["WorkflowNode"] = new(Keyword: "workflow", Verdict: Verdict.Construct),
         ["WorkflowStepNode"] = new(Keyword: "step", Verdict: Verdict.Construct),
+        ["WorldDeclarationNode"] = new(Keyword: "world", Verdict: Verdict.Construct),
+        ["WorldLinkNode"] = new(Keyword: "border", Verdict: Verdict.Construct),
     };
 
     private static IReadOnlyList<string> StatementNodeTypes() => [.. typeof(StatementNode).Assembly
@@ -83,7 +89,6 @@ public class ConstructTableLawTests {
         .Order(comparer: StringComparer.Ordinal)];
 
     public static TheoryData<string> Described() => new(values: WorldConstructs.Table.Keywords);
-
     [Fact]
     public void EveryStatementShapeHasAVerdict() {
         var shapes = StatementNodeTypes().ToHashSet(comparer: StringComparer.Ordinal);
@@ -187,8 +192,8 @@ public class ConstructTableLawTests {
         );
         if (construct.Snippet is { } snippet) {
             Assert.StartsWith(
-                comparisonType: StringComparison.Ordinal,
                 actualString: snippet,
+                comparisonType: StringComparison.Ordinal,
                 expectedStartString: keyword
             );
         }
@@ -256,7 +261,7 @@ public class ConstructTableLawTests {
             excluded: shipped.Excluded
         );
 
-        // Each resolves where it is written, and the keyword alone resolves to neither.
+        // Each resolves where it is written, and the context-free lookup prefers the root spelling.
         Assert.True(condition: table.TryGet(
             construct: out var atRoot,
             enclosing: root.Enclosing,
@@ -275,10 +280,11 @@ public class ConstructTableLawTests {
             actual: inModule!.DocumentMember,
             expected: "modules[].world"
         );
-        Assert.False(condition: table.TryGet(
-            construct: out _,
+        Assert.True(condition: table.TryGet(
+            construct: out var withoutContext,
             keyword: "world"
         ));
+        Assert.Same(actual: withoutContext, expected: root);
 
         // The pair is the identity, so the same pair twice is still refused.
         _ = Assert.Throws<ArgumentException>(testCode: () => new WorldConstructTable(constructs: [.. shipped.Constructs, root]));

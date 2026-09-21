@@ -44,5 +44,5 @@ internal readonly record struct CommandInjection(
     string? Source = null
 ) {
     internal bool DispatchWhenMapInactive { get; init; }
-    internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
+    internal TextCommandSession? Session { get; init; }
 }

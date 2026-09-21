@@ -83,7 +83,7 @@ public sealed class PuckMigrateCommandTests {
     // cartridge door rather than the world one.
     private const string Cartridge = "schema: \"puck.cartridge.v1\"\n\n// The cartridge the run rewrites.\ntarget: \"cgb\"\n\ntitle: \"MIGRATE\"\n";
     // Parses, and carries nothing the migration matches, but names a row kind the world vocabulary refuses.
-    private const string Incompatible = "schema: \"puck.world.definition.v1\"\n\nstate {\n  world {\n    slot hp : Nonesuch = 1\n  }\n}\n";
+    private const string Incompatible = "schema: \"puck.world.definition.v1\"\n\nstate {\n  world {\n    slot hp bounds(minimum: \"abc\")\n  }\n}\n";
     private const string Retitled = "migrate-verb-v2";
     private const string RetitledCartridge = "MIGRATE-ROM";
     private const string World = "schema: \"puck.world.definition.v1\"\n\ndocumentId: \"migrate-verb-v1\"\n\nhost {\n  height: 720\n}\n";

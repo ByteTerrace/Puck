@@ -208,6 +208,13 @@ public static class WorldStateDocumentValues {
                 row: out var row,
                 value: reference
             )) {
+                // A reference that names no row is still a reference the document retains: a search for any reference
+                // finds it, so its holder is resolved and refused by name rather than read as though it held a value.
+                if (walk == Walk.Find) {
+                    found = (soughtRow is null);
+                    return true;
+                }
+
                 reason = $"{path} reference '{reference}' must be state.<row>[.<key>]";
                 return false;
             }

@@ -67,7 +67,7 @@ public static partial class RuleCompiler {
         CompiledValueSource? pushValue = null;
         LiveRow? fromRow = null;
         LiveRow? toRow = null;
-        var sourceCost = 0L;
+        var sourceCost = RuleWork.Zero;
 
         resolved = null;
 
@@ -97,36 +97,42 @@ public static partial class RuleCompiler {
                     ruleName: ruleName
                 );
             case StateTransform.Observe observe:
-                if (Row(name: observe.Row).Knowledge is not { } knowledge) {
+                if (Row(name: observe.Row.Spelling).Knowledge is not { } knowledge) {
                     throw Invalid(message: "observe requires a knowledge board");
                 }
 
-                // The kernel sweeps the declared source and mask boards as well as the knowledge board, so all three
-                // are reads of the rule and the hazard picture covers a writer of either board.
-                reads.Add(item: Ordinal(name: observe.Row));
+                // The kernel sweeps the token-keyed source and positions, the mask board, and the knowledge row.
+                reads.Add(item: Ordinal(name: observe.Row.Spelling));
                 reads.Add(item: Ordinal(name: knowledge.Source));
                 reads.Add(item: Ordinal(name: knowledge.Mask));
-                writes.Add(item: Ordinal(name: observe.Row));
+                if (knowledge.Positions is { } positions) {
+                    reads.Add(item: Ordinal(name: positions));
+                }
+                writes.Add(item: Ordinal(name: observe.Row.Spelling));
                 resolved = new ArenaTransform.Observe(
                     MaskRowOrdinal: Ordinal(name: knowledge.Mask),
-                    RowOrdinal: Ordinal(name: observe.Row),
+                    PositionsRowOrdinal: ((knowledge.Positions is { } positionsName) ? Ordinal(name: positionsName) : -1),
+                    RowOrdinal: Ordinal(name: observe.Row.Spelling),
                     SourceRowOrdinal: Ordinal(name: knowledge.Source)
                 );
 
                 break;
             case StateTransform.Transfer transfer: {
+                    var transferFrom = transfer.From.Spelling;
+                    var transferTo = transfer.To.Spelling;
+
                     // A live end indexes the rule's zone table; a literal end must be an ordered zone over the same
                     // token domain as the other end (the table's, when that end is live).
                     _ = TryResolveLiveRow(
                         context: context,
-                        name: transfer.From,
+                        name: transferFrom,
                         row: out fromRow,
                         ruleName: ruleName,
                         where: "transfer 'from'"
                     );
                     _ = TryResolveLiveRow(
                         context: context,
-                        name: transfer.To,
+                        name: transferTo,
                         row: out toRow,
                         ruleName: ruleName,
                         where: "transfer 'to'"
@@ -155,16 +161,16 @@ public static partial class RuleCompiler {
                     if (fromRow is null) {
                         RequireZone(
                             label: "'from'",
-                            name: transfer.From
+                            name: transferFrom
                         );
-                        writes.Add(item: Ordinal(name: transfer.From));
+                        writes.Add(item: Ordinal(name: transferFrom));
                     }
                     if (toRow is null) {
                         RequireZone(
                             label: "'to'",
-                            name: transfer.To
+                            name: transferTo
                         );
-                        writes.Add(item: Ordinal(name: transfer.To));
+                        writes.Add(item: Ordinal(name: transferTo));
                     }
                     if (
                         !Enum.IsDefined(value: transfer.Selector) ||
@@ -176,7 +182,8 @@ public static partial class RuleCompiler {
                     ) {
                         throw Invalid(message: $"transfer requires selector arguments matching the selector and a count of 1..{StateTransferCapacity.MaxTransferCount} (exactly 1 by key or slice)");
                     }
-                    if (transfer.Draw is { } drawName) {
+                    if (transfer.Draw is { } drawChannel) {
+                        var drawName = drawChannel.Spelling;
                         var drawRow = Row(name: drawName);
 
                         if (
@@ -195,12 +202,14 @@ public static partial class RuleCompiler {
 
                         writes.Add(item: Ordinal(name: drawName));
                     }
-                    if (transfer.Key is { } key) {
+                    if (transfer.Key is { } keyChannel) {
+                        var key = keyChannel.Spelling;
+
                         if (TryResolveDynamicKey(
                             cell: out var selectedKey,
                             context: context,
-                            key: key,
                             keyFieldLabel: "key",
+                            reference: keyChannel,
                             ruleName: ruleName,
                             verb: "transfer"
                         )) {
@@ -217,28 +226,31 @@ public static partial class RuleCompiler {
                     resolved = new ArenaTransform.Transfer(
                         Count: transfer.Count,
                         DrawRowOrdinal: ((transfer.Draw is { } site)
-                        ? Ordinal(name: site)
+                        ? Ordinal(name: site.Spelling)
                         : -1),
                         FromRowOrdinal: ((fromRow is null)
-                        ? Ordinal(name: transfer.From)
+                        ? Ordinal(name: transferFrom)
                         : -1),
                         InsertFirst: transfer.InsertFirst,
                         Key: (((transfer.Key is { } literal) && (keyRef is null))
                         ? InternKey(
                             context: context,
-                            name: literal
+                            name: literal.Spelling
                         )
                         : default),
                         Selector: transfer.Selector,
                         ToRowOrdinal: ((toRow is null)
-                        ? Ordinal(name: transfer.To)
+                        ? Ordinal(name: transferTo)
                         : -1)
                     );
 
                     break;
                 }
             case StateTransform.SetRay ray: {
-                    var row = Row(name: ray.Row);
+                    var rayRow = ray.Row.Spelling;
+                    var rayFrom = ray.From.Spelling;
+                    var rayPattern = ray.Pattern.Spelling;
+                    var row = Row(name: rayRow);
 
                     if (
                         (row.EffectiveDomain is not StateDomain.CellsOf board) ||
@@ -246,7 +258,7 @@ public static partial class RuleCompiler {
                         (topology.Direction(token: ray.Direction) < 0) ||
                         (FindPatternRow(
                         context: context,
-                        name: ray.Pattern
+                        name: rayPattern
                     ) is not { } pattern) ||
                         (pattern.Kind != CellKind.Int) ||
                         !row.TryAdmitWrite(
@@ -262,7 +274,7 @@ public static partial class RuleCompiler {
                     }
 
                     if (!context.TryPattern(
-                        name: ray.Pattern,
+                        name: rayPattern,
                         pattern: out var compiledRay,
                         reason: out var rayReason
                     )) {
@@ -271,12 +283,12 @@ public static partial class RuleCompiler {
 
                     var rayOrigin = -1;
 
-                    reads.Add(item: Ordinal(name: ray.Row));
-                    writes.Add(item: Ordinal(name: ray.Row));
+                    reads.Add(item: Ordinal(name: rayRow));
+                    writes.Add(item: Ordinal(name: rayRow));
                     if (TryResolveDynamicKey(
                         cell: out var rayKey,
                         context: context,
-                        key: ray.From,
+                        reference: ray.From,
                         keyFieldLabel: "from",
                         ruleName: ruleName,
                         verb: "setRay"
@@ -284,7 +296,7 @@ public static partial class RuleCompiler {
                         keyRef = rayKey;
                     } else if (!topology.TryCell(
                         cell: out rayOrigin,
-                        key: ray.From
+                        key: rayFrom
                     )) {
                         throw Invalid(message: $"setRay 'from' names no cell of '{board.Topology}' and spells no dynamic key");
                     }
@@ -295,82 +307,117 @@ public static partial class RuleCompiler {
                         ? rayOrigin
                         : -1),
                         Pattern: compiledRay!,
-                        RowOrdinal: Ordinal(name: ray.Row),
+                        RowOrdinal: Ordinal(name: rayRow),
                         Value: ray.Value
                     );
 
                     break;
                 }
-            case StateTransform.SortZone sortZone: {
+            case StateTransform.PushRay pushRay: {
+                    if (!context.Catalog.TryGetPool(name: pushRay.Pool, pool: out var pool) || (pool is null) || pool.IsPair) {
+                        throw Invalid(message: $"pushRay names no ordinary pool '{pushRay.Pool}'");
+                    }
+                    var cellField = pool.Fields.FirstOrDefault(predicate: field => (field.Name == pushRay.Cell));
+                    var valueField = pool.Fields.FirstOrDefault(predicate: field => (field.Name == pushRay.Value));
+                    var topology = context.FindTopology(name: pushRay.Topology.Value);
+                    var direction = (topology?.Direction(token: pushRay.Direction) ?? -1);
+                    var patternName = pushRay.Pattern.Spelling;
+                    var pushName = pushRay.PushPattern.Spelling;
+                    var stopName = pushRay.StopPattern.Spelling;
+
+                    if ((cellField.Name != pushRay.Cell) || (valueField.Name != pushRay.Value) || (cellField.Kind != CellKind.Int) || (valueField.Kind != CellKind.Int) || (topology is null) || (direction < 0) || ((cellField.Declaration.Min is { } minimum) && (minimum > 0L)) || ((cellField.Declaration.Max is { } maximum) && (maximum < (topology.CellCount - 1L))) || (FindPatternRow(context: context, name: patternName) is not { Kind: CellKind.Int }) || (FindPatternRow(context: context, name: pushName) is not { Kind: CellKind.Int }) || (FindPatternRow(context: context, name: stopName) is not { Kind: CellKind.Int })) {
+                        throw Invalid(message: "pushRay requires integer cell/value fields whose cell envelope admits the whole topology, a declared direction, and integer run, push, and stop patterns");
+                    }
+                    if (!TryResolveInstanceField(reference: pushRay.From, context: context, binding: out var originBinding, field: out var originField) || (originBinding.Pool.Ordinal != pool.Ordinal) || (originField.Ordinal != cellField.Ordinal)) {
+                        throw Invalid(message: "pushRay 'from' must be the selected pool's live cell field");
+                    }
+                    if (!context.TryPattern(name: patternName, pattern: out var pattern, reason: out var patternReason)) {
+                        throw Invalid(message: patternReason);
+                    }
+                    if (!context.TryPattern(name: pushName, pattern: out var push, reason: out var pushReason)) {
+                        throw Invalid(message: pushReason);
+                    }
+                    if (!context.TryPattern(name: stopName, pattern: out var stop, reason: out var stopReason)) {
+                        throw Invalid(message: stopReason);
+                    }
+
+                    reads.Add(item: pool.DomainRowOrdinal);
+                    reads.Add(item: cellField.RowOrdinal);
+                    reads.Add(item: valueField.RowOrdinal);
+                    writes.Add(item: cellField.RowOrdinal);
+                    resolved = new ArenaTransform.PushRay(PoolOrdinal: pool.Ordinal, CellFieldOrdinal: cellField.Ordinal, ValueFieldOrdinal: valueField.Ordinal, OriginBindingSlot: originBinding.Slot, Topology: topology, Direction: direction, Pattern: pattern!, PushPattern: push!, StopPattern: stop!, Empty: pushRay.Empty);
+                    break;
+                }
+            case StateTransform.Sort sort: {
+                    var target = sort.Row.Spelling;
+                    if ((sort.By is not { Count: >= 1 }) || sort.By.Any(key => (key is null))) {
+                        throw Invalid(message: "sort requires one or more numeric attribute keys, each carrying its own direction");
+                    }
+                    var targetOrdinal = Ordinal(name: target);
+                    if ((sort.By.Count == 1) && (sort.By[0].Row.Spelling == target)) {
+                        // A board position or ring slot is an address, not an order to permute.
+                        if (Row(name: target) is not { Shape: RowShape.Keyed or RowShape.Ordered, Kind: CellKind.Int or CellKind.Fixed }) {
+                            throw Invalid(message: "sort by own values requires a keyed or ordered numeric row");
+                        }
+                        reads.Add(item: targetOrdinal);
+                        writes.Add(item: targetOrdinal);
+                        resolved = new ArenaTransform.SortKeyed(RowOrdinal: targetOrdinal, Descending: sort.By[0].Descending);
+                        break;
+                    }
+                    if (Row(name: target).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) {
+                        throw Invalid(message: "sort by attributes requires an ordered zone over a token domain");
+                    }
+                    var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+                    var keys = new ArenaSortKey[sort.By.Count];
+                    for (var index = 0; (index < keys.Length); index++) {
+                        var key = sort.By[index];
+                        var name = key.Row.Spelling;
+                        if (!names.Add(name) || (name == target) ||
+                            (Row(name: name) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } attribute) ||
+                            (attribute.EffectiveDomain is not StateDomain.KeysOf domain) || (domain.Row != zone.Row)) {
+                            throw Invalid(message: "sort requires distinct numeric attribute keys over the zone's token domain; an own-value key must stand alone");
+                        }
+                        var ordinal = Ordinal(name: name);
+                        reads.Add(item: ordinal);
+                        keys[index] = new ArenaSortKey(RowOrdinal: ordinal, Descending: key.Descending);
+                    }
+                    writes.Add(item: targetOrdinal);
+                    resolved = new ArenaTransform.SortZone(By: keys, RowOrdinal: targetOrdinal);
+                    break;
+                }
+            case StateTransform.Shuffle shuffle: {
+                    var shuffleRow = shuffle.Row.Spelling;
+                    var shuffleDrawName = shuffle.Draw.Spelling;
+
                     if (
-                        (Row(name: sortZone.Row).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) ||
-                        (sortZone.By is not { Count: >= 1 and <= StateCapacity.MaxSortKeys }) ||
-                        sortZone.By.Any(predicate: key => ((key is null) || (Row(name: key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } sortRow) || (sortRow.EffectiveDomain is not StateDomain.KeysOf sortKeysOf) || (sortKeysOf.Row != zone.Row))) ||
-                        (sortZone.By.Select(selector: key => key!.Row).Distinct(comparer: StringComparer.Ordinal).Count() != sortZone.By.Count)
+                        (Row(name: shuffleRow) is not { Shape: RowShape.Keyed or RowShape.Ordered }) ||
+                        (Row(name: shuffleDrawName).Draw is not { Timing: not DrawTiming.Boot } shuffleDraw) ||
+                        (Row(name: shuffleDrawName).Kind != CellKind.Int) ||
+                        !GeneratorEngine.TryResolveSource(
+                        draw: shuffleDraw,
+                        generator: out var shuffleSource,
+                        generators: context.Generators,
+                        reason: out _
+                    ) ||
+                        (shuffleSource.Source != GeneratorSource.StreamDraw)
                     ) {
-                        throw Invalid(message: $"sortZone requires an ordered zone with 1..{StateCapacity.MaxSortKeys} distinct numeric attribute keys over the zone's token domain, each carrying its own direction");
+                        throw Invalid(message: "shuffle requires a keyed or ordered row, and a redrawable integer streamDraw site");
                     }
 
-                    var sortKeys = new ArenaSortKey[sortZone.By.Count];
-
-                    for (var key = 0; (key < sortZone.By.Count); key++) {
-                        reads.Add(item: Ordinal(name: sortZone.By[key]!.Row));
-                        sortKeys[key] = new ArenaSortKey(
-                            Descending: sortZone.By[key]!.Descending,
-                            RowOrdinal: Ordinal(name: sortZone.By[key]!.Row)
-                        );
-                    }
-
-                    writes.Add(item: Ordinal(name: sortZone.Row));
-                    resolved = new ArenaTransform.SortZone(
-                        By: sortKeys,
-                        RowOrdinal: Ordinal(name: sortZone.Row)
+                    writes.Add(item: Ordinal(name: shuffleDrawName));
+                    writes.Add(item: Ordinal(name: shuffleRow));
+                    resolved = new ArenaTransform.Shuffle(
+                        DrawRowOrdinal: Ordinal(name: shuffleDrawName),
+                        RowOrdinal: Ordinal(name: shuffleRow)
                     );
 
                     break;
                 }
-            case StateTransform.SortKeyed sortKeyed:
-                // A permutation has meaning only where a row's order is its own: on a board or a ring the position is
-                // the address, so the arena reorders neither and an authored sort over one is refused here rather
-                // than left to fire and refuse.
-                if (Row(name: sortKeyed.Row) is not { Shape: RowShape.Keyed or RowShape.Ordered, Kind: CellKind.Int or CellKind.Fixed }) {
-                    throw Invalid(message: "sortKeyed requires a keyed or ordered numeric row");
-                }
-
-                writes.Add(item: Ordinal(name: sortKeyed.Row));
-                resolved = new ArenaTransform.SortKeyed(
-                    Descending: sortKeyed.Descending,
-                    RowOrdinal: Ordinal(name: sortKeyed.Row)
-                );
-
-                break;
-            case StateTransform.Shuffle shuffle:
-                if (
-                    (Row(name: shuffle.Row) is not { Shape: RowShape.Keyed or RowShape.Ordered }) ||
-                    (Row(name: shuffle.Draw).Draw is not { Timing: not DrawTiming.Boot } shuffleDraw) ||
-                    (Row(name: shuffle.Draw).Kind != CellKind.Int) ||
-                    !GeneratorEngine.TryResolveSource(
-                    draw: shuffleDraw,
-                    generator: out var shuffleSource,
-                    generators: context.Generators,
-                    reason: out _
-                ) ||
-                    (shuffleSource.Source != GeneratorSource.StreamDraw)
-                ) {
-                    throw Invalid(message: "shuffle requires a keyed or ordered row, and a redrawable integer streamDraw site");
-                }
-
-                writes.Add(item: Ordinal(name: shuffle.Draw));
-                writes.Add(item: Ordinal(name: shuffle.Row));
-                resolved = new ArenaTransform.Shuffle(
-                    DrawRowOrdinal: Ordinal(name: shuffle.Draw),
-                    RowOrdinal: Ordinal(name: shuffle.Row)
-                );
-
-                break;
             case StateTransform.WriteSet writeSet: {
-                    var setSource = Row(name: writeSet.Set);
-                    var written = Row(name: writeSet.Row);
+                    var writeSetSet = writeSet.Set.Spelling;
+                    var writeSetRow = writeSet.Row.Spelling;
+                    var setSource = Row(name: writeSetSet);
+                    var written = Row(name: writeSetRow);
 
                     if (
                         (written.EffectiveDomain is not StateDomain.CellsOf writtenBoard) ||
@@ -389,12 +436,14 @@ public static partial class RuleCompiler {
                         throw Invalid(message: $"writeSet requires a board of at most {BoardMask.MaxCells} cells, an integer set row, and an admitted value");
                     }
 
-                    reads.Add(item: Ordinal(name: writeSet.Set));
-                    writes.Add(item: Ordinal(name: writeSet.Row));
+                    var writeSetKey = writeSet.SetKey?.Spelling;
+
+                    reads.Add(item: Ordinal(name: writeSetSet));
+                    writes.Add(item: Ordinal(name: writeSetRow));
                     if (TryResolveDynamicKey(
                         cell: out var setKeyRef,
                         context: context,
-                        key: writeSet.SetKey,
+                        reference: writeSet.SetKey,
                         keyFieldLabel: "setKey",
                         ruleName: ruleName,
                         verb: "writeSet"
@@ -404,32 +453,33 @@ public static partial class RuleCompiler {
                         }
 
                         keyRef = setKeyRef;
-                    } else if ((writeSet.SetKey is null)
+                    } else if ((writeSetKey is null)
                         ? !setSource.IsSlot
                         : (!setSource.IsKeyed || !CellName.TryParse(
-                            candidate: writeSet.SetKey,
+                            candidate: writeSetKey,
                             name: out _,
                             reason: out _
                         ))) {
-                        throw Invalid(message: $"writeSet reads its cell set from an integer cell '{(writeSet.SetKey ?? StateRow.SlotKey.Value)}' of '{writeSet.Set}'");
+                        throw Invalid(message: $"writeSet reads its cell set from an integer cell '{(writeSetKey ?? StateRow.SlotKey.Value)}' of '{writeSetSet}'");
                     }
 
                     resolved = new ArenaTransform.WriteSet(
-                        RowOrdinal: Ordinal(name: writeSet.Row),
+                        RowOrdinal: Ordinal(name: writeSetRow),
                         SetKey: ((keyRef is null)
                         ? InternKey(
                             context: context,
-                            name: (writeSet.SetKey ?? StateRow.SlotKey.Value)
+                            name: (writeSetKey ?? StateRow.SlotKey.Value)
                         )
                         : default),
-                        SetRowOrdinal: Ordinal(name: writeSet.Set),
+                        SetRowOrdinal: Ordinal(name: writeSetSet),
                         Value: writeSet.Value
                     );
 
                     break;
                 }
             case StateTransform.BoardCombine combine: {
-                    var target = Row(name: combine.Row);
+                    var combineRow = combine.Row.Spelling;
+                    var target = Row(name: combineRow);
 
                     if (
                         (target.EffectiveDomain is not StateDomain.CellsOf targetBoard) ||
@@ -450,10 +500,13 @@ public static partial class RuleCompiler {
                         throw Invalid(message: combineReason);
                     }
 
-                    foreach (var sourceName in new[] { combine.Left, combine.Right }) {
-                        if (sourceName is null) {
+                    foreach (var sourceChannel in new[] { combine.Left, combine.Right }) {
+                        if (sourceChannel is not { } source) {
                             continue;
                         }
+
+                        var sourceName = source.Spelling;
+
                         if ((Row(name: sourceName).EffectiveDomain is not StateDomain.CellsOf sourceBoard) || (sourceBoard.Topology != targetBoard.Topology)) {
                             throw Invalid(message: $"boardCombine source '{sourceName}' must be a board over '{targetBoard.Topology}'");
                         }
@@ -471,34 +524,37 @@ public static partial class RuleCompiler {
                         topology: targetTopology,
                         value: out var combineValue
                     );
-                    writes.Add(item: Ordinal(name: combine.Row));
+                    writes.Add(item: Ordinal(name: combineRow));
                     resolved = new ArenaTransform.BoardCombine(
                         Direction: combineDirection,
                         Element: combineElement,
-                        LeftRowOrdinal: ((combine.Left is { } leftName)
-                        ? Ordinal(name: leftName)
+                        LeftRowOrdinal: ((combine.Left is { } leftChannel)
+                        ? Ordinal(name: leftChannel.Spelling)
                         : -1),
                         Operation: combine.Operation,
-                        RightRowOrdinal: ((combine.Right is { } rightName)
-                        ? Ordinal(name: rightName)
+                        RightRowOrdinal: ((combine.Right is { } rightChannel)
+                        ? Ordinal(name: rightChannel.Spelling)
                         : -1),
-                        RowOrdinal: Ordinal(name: combine.Row),
+                        RowOrdinal: Ordinal(name: combineRow),
                         Value: combineValue
                     );
 
                     break;
                 }
             case StateTransform.Arrange arrange: {
-                    var arrangedZone = Row(name: arrange.Row);
-                    var rank = Row(name: arrange.From);
+                    var arrangeRow = arrange.Row.Spelling;
+                    var arrangeFrom = arrange.From.Spelling;
+                    var arrangeFromKey = arrange.FromKey?.Spelling;
+                    var arrangedZone = Row(name: arrangeRow);
+                    var rank = Row(name: arrangeFrom);
 
                     if (
                         (arrangedZone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true }) ||
                         (rank.Kind != CellKind.Int) ||
-                        ((arrange.FromKey is null)
+                        ((arrangeFromKey is null)
                         ? !rank.IsSlot
                         : (!rank.IsKeyed || !CellName.TryParse(
-                            candidate: arrange.FromKey,
+                            candidate: arrangeFromKey,
                             name: out _,
                             reason: out _
                         )))
@@ -506,22 +562,23 @@ public static partial class RuleCompiler {
                         throw Invalid(message: "arrange requires an ordered zone and an integer rank cell");
                     }
 
-                    reads.Add(item: Ordinal(name: arrange.From));
-                    writes.Add(item: Ordinal(name: arrange.Row));
+                    reads.Add(item: Ordinal(name: arrangeFrom));
+                    writes.Add(item: Ordinal(name: arrangeRow));
                     resolved = new ArenaTransform.Arrange(
                         DomainRowOrdinal: Ordinal(name: ((StateDomain.KeysOf)arrangedZone.EffectiveDomain).Row.Value),
                         FromKey: InternKey(
                             context: context,
-                            name: (arrange.FromKey ?? StateRow.SlotKey.Value)
+                            name: (arrangeFromKey ?? StateRow.SlotKey.Value)
                         ),
-                        FromRowOrdinal: Ordinal(name: arrange.From),
-                        RowOrdinal: Ordinal(name: arrange.Row)
+                        FromRowOrdinal: Ordinal(name: arrangeFrom),
+                        RowOrdinal: Ordinal(name: arrangeRow)
                     );
 
                     break;
                 }
             case StateTransform.Push push: {
-                    var ring = Row(name: push.Row);
+                    var pushRow = push.Row.Spelling;
+                    var ring = Row(name: pushRow);
 
                     if (ring.EffectiveDomain is not StateDomain.Ring) {
                         throw Invalid(message: "push requires a history row");
@@ -539,17 +596,19 @@ public static partial class RuleCompiler {
                         context: context,
                         kind: ring.Kind
                     );
-                    writes.Add(item: Ordinal(name: push.Row));
+                    writes.Add(item: Ordinal(name: pushRow));
                     resolved = new ArenaTransform.Push(
                         Bound: !pushed.IsLiteral,
-                        RowOrdinal: Ordinal(name: push.Row),
+                        RowOrdinal: Ordinal(name: pushRow),
                         Value: pushed.RawValue
                     );
 
                     break;
                 }
             case StateTransform.ClearEnclosed enclosed: {
-                    var enclosedRow = Row(name: enclosed.Row);
+                    var enclosedRowName = enclosed.Row.Spelling;
+                    var enclosedFrom = enclosed.From.Spelling;
+                    var enclosedRow = Row(name: enclosedRowName);
 
                     if (
                         (enclosedRow.EffectiveDomain is not StateDomain.CellsOf enclosedBoard) ||
@@ -563,20 +622,20 @@ public static partial class RuleCompiler {
 
                     var enclosedOrigin = -1;
 
-                    reads.Add(item: Ordinal(name: enclosed.Row));
-                    writes.Add(item: Ordinal(name: enclosed.Row));
+                    reads.Add(item: Ordinal(name: enclosedRowName));
+                    writes.Add(item: Ordinal(name: enclosedRowName));
                     if (TryResolveDynamicKey(
                         cell: out var origin,
                         context: context,
-                        key: enclosed.From,
+                        reference: enclosed.From,
                         keyFieldLabel: "from",
                         ruleName: ruleName,
                         verb: "clearEnclosed"
                     )) {
                         keyRef = origin;
                     } else if (!enclosedTopology.TryCell(
-                        enclosed.From,
-                        out enclosedOrigin
+                        cell: out enclosedOrigin,
+                        key: enclosedFrom
                     )) {
                         throw Invalid(message: $"clearEnclosed 'from' names no cell of '{enclosedBoard.Topology}' and spells no dynamic key");
                     }
@@ -585,14 +644,14 @@ public static partial class RuleCompiler {
                         From: ((keyRef is null)
                         ? InternKey(
                             context: context,
-                            name: enclosed.From
+                            name: enclosedFrom
                         )
                         : default),
                         Lower: enclosed.Lower,
                         Origin: ((keyRef is null)
                         ? enclosedOrigin
                         : -1),
-                        RowOrdinal: Ordinal(name: enclosed.Row),
+                        RowOrdinal: Ordinal(name: enclosedRowName),
                         Upper: enclosed.Upper
                     );
 
@@ -604,14 +663,11 @@ public static partial class RuleCompiler {
 
         return new TransformStateEffect(
             arena: resolved!,
-            cost: RuleWorkBudget.SaturatingAdd(
-                left: TransformCost(
-                    context: context,
-                    fromRow: fromRow,
-                    transform: transform
-                ),
-                right: sourceCost
-            ),
+            cost: (TransformCost(
+                context: context,
+                fromRow: fromRow,
+                transform: transform
+            ) + sourceCost),
             describe: DescribeTransform(transform: transform),
             fromRow: fromRow,
             keyRef: keyRef,
@@ -666,7 +722,7 @@ public static partial class RuleCompiler {
             expression: push.Expression,
             fromKey: push.FromKey,
             fromState: push.FromState,
-            key: "0",
+            key: StateChannelRef.OfName(name: "0"),
             rowName: push.Row,
             ruleName: ruleName,
             target: ActionTarget.Self,
@@ -695,79 +751,87 @@ public static partial class RuleCompiler {
         StateTransform.Transfer transfer => $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector}",
         _ => $"transformState {transform.GetType().Name}",
     });
-    private static long TransformCost(StateTransform transform, RuleCompileContext context, LiveRow? fromRow) {
+    private static RuleWork TransformCost(StateTransform transform, RuleCompileContext context, LiveRow? fromRow) {
         var storage = 0L;
 
         foreach (var row in context.Rows) {
             storage += row.CellCeiling;
         }
 
-        var cost = (4_096L + storage);
+        var cost = RuleWork.Known(units: (4_096L + storage));
 
         switch (transform) {
             case StateTransform.SetRay ray:
                 var rayCells = BoardCells(
                     context: context,
-                    row: ray.Row
+                    row: ray.Row.Spelling
                 );
 
                 cost += (((long)rayCells) * (rayCells + 2));
 
                 break;
+            case StateTransform.PushRay pushRay:
+                var pushPool = context.Catalog.Pools.FirstOrDefault(predicate: pool => (pool.Name == pushRay.Pool));
+                // Snapshot/index leases and their population cost five pool-width passes. A ray resolves each
+                // occupant once, walks its linked occupants once, and writes each mover at most once; leave two
+                // pool widths for the journal and pattern machinery. Visited/head/tail buffers cost three board
+                // widths. The previous bound charged a complete pool scan for every board cell.
+                cost += ((pushPool is null) ? 0L : (12L * pushPool.Capacity));
+                cost += (3L * (context.FindTopology(name: pushRay.Topology.Value)?.CellCount ?? 0));
+                break;
             case StateTransform.Transfer transfer:
                 // A live source is priced at the widest row it can name.
                 cost += (((transfer.Selector == ZoneSelector.Slice)
                     ? 2L
-                    : ((long)transfer.Count)) * (fromRow?.SelectionCapacity ?? context.RowCapacity(name: transfer.From)));
+                    : ((long)transfer.Count)) * (fromRow?.SelectionCapacity ?? context.RowCapacity(name: transfer.From.Spelling)));
 
                 break;
             case StateTransform.BoardCombine combine:
                 cost += (3L * BoardCells(
                     context: context,
-                    row: combine.Row
+                    row: combine.Row.Spelling
                 ));
 
                 break;
             case StateTransform.Arrange arrange:
-                cost += (4L * context.RowCapacity(name: arrange.Row));
+                cost += (4L * context.RowCapacity(name: arrange.Row.Spelling));
 
                 break;
-            case StateTransform.SortZone sortZone:
-                cost += ((2L * context.RowCapacity(name: sortZone.Row)) * Math.Max(
-                    val1: 1,
-                    val2: sortZone.By.Count
-                ));
-
-                break;
-            case StateTransform.SortKeyed sortKeyed:
-                cost += (2L * context.RowCapacity(name: sortKeyed.Row));
+            case StateTransform.Sort sort:
+                cost += RuleWorkBudget.InsertionSortWork(
+                    count: context.RowCapacity(name: sort.Row.Spelling),
+                    keys: Math.Max(
+                        val1: 1,
+                        val2: sort.By.Count
+                    )
+                );
 
                 break;
             case StateTransform.Shuffle shuffle:
-                cost += (2L * context.RowCapacity(name: shuffle.Row));
+                cost += (2L * context.RowCapacity(name: shuffle.Row.Spelling));
 
                 break;
             case StateTransform.WriteSet writeSet:
                 var writtenCells = BoardCells(
                     context: context,
-                    row: writeSet.Row
+                    row: writeSet.Row.Spelling
                 );
 
                 cost += (((long)writtenCells) * (writtenCells + 1));
 
                 break;
             case StateTransform.Push push:
-                cost += (2L * ((context.FindRow(name: push.Row)?.EffectiveDomain as StateDomain.Ring)?.Capacity ?? 1));
+                cost += (2L * ((context.FindRow(name: push.Row.Spelling)?.EffectiveDomain as StateDomain.Ring)?.Capacity ?? 1));
 
                 break;
             case StateTransform.ClearEnclosed enclosed:
-                var directions = ((context.FindRow(name: enclosed.Row)?.EffectiveDomain is StateDomain.CellsOf enclosedBoardRow)
+                var directions = ((context.FindRow(name: enclosed.Row.Spelling)?.EffectiveDomain is StateDomain.CellsOf enclosedBoardRow)
                     ? (context.FindTopology(name: enclosedBoardRow.Topology)?.DirectionCount ?? 0)
                     : 0
                 );
                 var enclosedCells = BoardCells(
                     context: context,
-                    row: enclosed.Row
+                    row: enclosed.Row.Spelling
                 );
 
                 cost += (((long)enclosedCells) * (directions + 2));
@@ -776,7 +840,7 @@ public static partial class RuleCompiler {
             case StateTransform.Observe observe:
                 var observedCells = BoardCells(
                     context: context,
-                    row: observe.Row
+                    row: observe.Row.Spelling
                 );
 
                 cost += (((long)observedCells) * (observedCells + 3));

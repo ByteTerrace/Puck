@@ -43,7 +43,7 @@ public sealed class WorldPopulationOperand : WorldFactOperand {
     private WorldPopulationOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -60,7 +60,7 @@ public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
     private WorldPhysicsQuiescentOperand() : base(valueKind: CellKind.Bool) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => PopulationCapacity(context: context);
+    public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -76,7 +76,7 @@ public sealed class WorldClockOperand : WorldFactOperand {
     private WorldClockOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -96,7 +96,7 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
     public string PlacementId => m_operand.PlacementId;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => PopulationCapacity(context: context);
+    public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -106,7 +106,9 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
 }
 /// <summary>The influence a placement's channel carries (<see cref="WorldRuleFacts.InfluencePrefix"/>).</summary>
 public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
-    private readonly Dictionary<CellKey, PlacementInfluenceOperand> m_resolved = [];
+    // Child operands are semantic names. Caching a runtime CellKey here would retain one arena's address when the
+    // compiled rule later serves a replacement arena.
+    private readonly Dictionary<string, PlacementInfluenceOperand> m_resolved = new(comparer: StringComparer.Ordinal);
     private readonly PlacementInfluenceOperand m_operand;
 
     /// <summary>Initializes the operand.</summary>
@@ -141,7 +143,7 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
     /// is what an influence count walks.</summary>
     /// <param name="context">The compile context.</param>
     /// <returns>The work units.</returns>
-    public override long Cost(IRuleCostContext context) => Math.Max(
+    public override RuleWork Cost(IRuleCostContext context) => Math.Max(
         val1: 1L,
         val2: ((WorldFactsCompileContext)context).Definition.Placements.Sum(selector: static placement => ((long)(placement.Spatial?.Count ?? 0)))
     );
@@ -159,27 +161,31 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
             reference: in indirection
         );
 
-        if (!m_resolved.TryGetValue(
+        if (
+            !key.IsValid ||
+            !reader.Arena.Keys.TryGetName(
             key: key,
+            name: out var name
+        )) {
+            // The indirection named no cell, so no dealt child answers.
+            return RuleFact.Absent(kind: CellKind.Int);
+        }
+
+        if (!m_resolved.TryGetValue(
+            key: name.Value,
             value: out var child
         )) {
-            if (
-                !key.IsValid ||
-                !reader.Catalog.Keys.TryGetName(
-                key: key,
-                name: out var name
-            )
-            ) {
-                // The indirection named no cell, so no dealt child answers.
-                return RuleFact.Absent(kind: CellKind.Int);
+            // A speculative arena can mint and rewind arbitrarily many distinct names while retaining only the
+            // bounded live ledger. Keep this compiled-operand memo within that same bound.
+            if (m_resolved.Count >= StateCapacity.MaxCellKeys) {
+                m_resolved.Clear();
             }
-
             child = new PlacementInfluenceOperand(
                 channel: m_operand.Channel,
                 key: name.Value,
                 placementId: m_operand.PlacementId
             );
-            m_resolved[key] = child;
+            m_resolved[name.Value] = child;
         }
 
         return facet.Read(operand: child);
@@ -203,7 +209,7 @@ public sealed class WorldMachineMemoryOperand : WorldFactOperand {
     public int Screen => m_operand.Screen;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -253,7 +259,7 @@ public sealed class WorldArgBodyOperand : WorldFactOperand {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) {
+    public override RuleWork Cost(IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         return context.RowCapacity(rowOrdinal: RowOrdinal);
@@ -319,7 +325,7 @@ public sealed class WorldBodyFactOperand : WorldFactOperand {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => m_cost;
+    public override RuleWork Cost(IRuleCostContext context) => m_cost;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -334,6 +340,8 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     private readonly CompiledBodyRef m_body;
     private readonly CellKey[] m_laneKeys;
     private readonly string m_fact;
+
+    private CellKeyTable? m_laneKeyTable;
 
     /// <summary>Initializes the operand.</summary>
     /// <param name="body">The body reference, in the world reader's own form.</param>
@@ -350,23 +358,31 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     /// <summary>Gets the identity lane row's catalog ordinal.</summary>
     public int LaneOrdinal { get; }
 
-    private CellKey LaneKey(StateCatalog catalog, int bodyIndex) {
+    // Compiled operands may serve a relayout that replaces an arena's runtime table. Cached addresses also cease
+    // to resolve after a speculative mint rewinds, so validate them before reuse.
+    private CellKey LaneKey(StateArena arena, int bodyIndex) {
+        var keys = arena.Keys;
+
+        if (!ReferenceEquals(m_laneKeyTable, keys)) {
+            Array.Clear(array: m_laneKeys);
+            m_laneKeyTable = keys;
+        }
         if (((uint)bodyIndex) >= ((uint)m_laneKeys.Length)) {
             return Mint(
                 bodyIndex: bodyIndex,
-                catalog: catalog
+                keys: keys
             );
         }
-        if (!m_laneKeys[bodyIndex].IsValid) {
+        if (!keys.TryGetName(key: m_laneKeys[bodyIndex], name: out _)) {
             m_laneKeys[bodyIndex] = Mint(
                 bodyIndex: bodyIndex,
-                catalog: catalog
+                keys: keys
             );
         }
 
         return m_laneKeys[bodyIndex];
     }
-    private CellKey Mint(StateCatalog catalog, int bodyIndex) => (catalog.Keys.TryResolve(
+    private CellKey Mint(CellKeyTable keys, int bodyIndex) => (keys.TryResolve(
         key: out var key,
         name: CellName.Parse(candidate: WorldIdentityFactLane.Key(
             bodyIndex: bodyIndex,
@@ -387,7 +403,7 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -405,7 +421,7 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
 
         var key = LaneKey(
             bodyIndex: index,
-            catalog: reader.Catalog
+            arena: reader.Arena
         );
 
         return RuleFact.Finite(
@@ -421,7 +437,8 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     }
 }
 /// <summary>A <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> cell key, resolved from the two bodies' indices at
-/// evaluation and interned by the catalog.</summary>
+/// evaluation. Reads resolve only an already-admitted key; a state-writing effect admits its pair key inside the
+/// firing's journal scope.</summary>
 public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
     private readonly PairKeyFact m_key;
 
@@ -443,21 +460,54 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
     CellKey IRuleKey.Resolve(IStateReader reader, out bool named) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        var facet = ((IWorldFacts)reader);
         var key = Resolve(
-            facet: ((IWorldFacts)reader),
+            facet: facet,
             reader: reader
         );
 
-        // A host serving no pairs answers the invalid default and names no cell.
-        named = key.IsValid;
+        // An absent but addressable pair reads its state cell's default, just like any other missing keyed cell.
+        // Only a missing participant is unnamed. PairKey itself does not intern while resolving a read.
+        named = (
+            (facet.ResolveBody(bodyRef: m_key.BodyA) >= 0) &&
+            (facet.ResolveBody(bodyRef: m_key.BodyB) >= 0)
+        );
 
         return key;
+    }
+    bool IRuleKey.TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        var facet = ((IWorldFacts)reader);
+
+        key = facet.PairKey(key: m_key);
+        if (key.IsValid) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var a = facet.ResolveBody(bodyRef: m_key.BodyA);
+        var b = facet.ResolveBody(bodyRef: m_key.BodyB);
+
+        if ((a < 0) || (b < 0)) {
+            key = default;
+            reason = string.Empty;
+
+            return true;
+        }
+
+        return reader.Arena.Keys.TryIntern(
+            key: out key,
+            name: CellName.Parse(candidate: $"{a}_{b}"),
+            reason: out reason
+        );
     }
     bool IRuleKey.TryResolveIndex(IStateReader reader, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         return RuleReads.TryKeyIndex(
-            catalog: reader.Catalog,
+            keys: reader.Arena.Keys,
             index: out index,
             key: ((IRuleKey)this).Resolve(
                 named: out _,

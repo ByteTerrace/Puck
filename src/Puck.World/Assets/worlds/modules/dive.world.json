@@ -726,7 +726,12 @@
       "mode": "Level",
       "gate": {
         "$type": "compareState",
-        "state": "$region:diveDepth1",
+        "state": {
+          "channel": "region",
+          "arguments": [
+            "diveDepth1"
+          ]
+        },
         "comparison": "GreaterOrEqual",
         "value": 1
       },
@@ -746,13 +751,23 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "$region:diveDepth1",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "diveDepth1"
+              ]
+            },
             "comparison": "Equal",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "$region:diveDepth2",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "diveDepth2"
+              ]
+            },
             "comparison": "GreaterOrEqual",
             "value": 1
           }
@@ -774,13 +789,23 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "$region:diveDepth2",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "diveDepth2"
+              ]
+            },
             "comparison": "Equal",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "$region:diveDepth3",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "diveDepth3"
+              ]
+            },
             "comparison": "GreaterOrEqual",
             "value": 1
           }
@@ -799,7 +824,12 @@
       "mode": "Level",
       "gate": {
         "$type": "compareState",
-        "state": "$region:diveDepth3",
+        "state": {
+          "channel": "region",
+          "arguments": [
+            "diveDepth3"
+          ]
+        },
         "comparison": "Equal",
         "value": 0
       },

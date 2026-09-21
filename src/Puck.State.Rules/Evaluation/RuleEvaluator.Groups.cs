@@ -5,6 +5,8 @@ namespace Puck.State.Rules;
 public sealed partial class RuleEvaluator {
     private readonly List<ulong> m_groupVersions = [];
 
+    private CompiledRuleGroup[]? m_configuredUndoGroups;
+
     /// <summary>Evaluates every compiled group of a section, in document order, against the progress held beside the
     /// latch. A group's members are evaluated only through their group; a caller that also evaluates the whole rule
     /// array would run them twice.</summary>
@@ -22,12 +24,30 @@ public sealed partial class RuleEvaluator {
 
         var applied = false;
 
+        if ((m_host is IArenaUndoHost undoHost) && !ReferenceEquals(objA: m_configuredUndoGroups, objB: groups)) {
+            List<ArenaUndoPlan>? plans = null;
+
+            foreach (var group in groups) {
+                if (group.Undo is not null) {
+                    (plans ??= []).Add(group.Undo);
+                }
+            }
+            undoHost.ConfigureUndo(plans: ((plans is null) ? Array.Empty<ArenaUndoPlan>() : plans));
+            m_configuredUndoGroups = groups;
+        }
+
         foreach (var group in groups) {
+            if ((m_host is IArenaUndoHost suppressingUndo) && suppressingUndo.UndoGroupSuppressed(group: group.Name, tick: m_host.Tick)) {
+                continue;
+            }
             var armed = Armed(group: group);
 
             // A trigger that reads false re-arms the group: a breached fixpoint group runs again only after its
             // trigger has gone false and holds once more.
             if (!armed) {
+                if ((group.Undo is not null) && (m_host is IArenaUndoHost inactiveUndo) && inactiveUndo.UndoTurnPending(group: group.Name)) {
+                    inactiveUndo.CancelUndoTurn(group: group.Name);
+                }
                 state.Set(
                     name: group.Name,
                     progress: default
@@ -36,22 +56,22 @@ public sealed partial class RuleEvaluator {
                 continue;
             }
 
-            applied |= ((group.Shape == RuleGroupShape.Fixpoint)
-                ? RunFixpoint(
-                    group: group,
-                    latch: latch,
-                    rules: rules,
-                    state: state,
-                    stepTicks: stepTicks
-                )
-                : RunStaged(
-                    group: group,
-                    latch: latch,
-                    rules: rules,
-                    state: state,
-                    stepTicks: stepTicks
-                )
-            );
+            BeginUndoIfNeeded(group: group);
+            var attributed = ((group.Undo is not null) && (m_host is IArenaUndoHost));
+
+            if (attributed) {
+                ((IArenaUndoHost)m_host).BeginUndoPass(group: group.Name);
+            }
+            try {
+                applied |= ((group.Shape == RuleGroupShape.Fixpoint)
+                    ? RunFixpoint(group: group, latch: latch, rules: rules, state: state, stepTicks: stepTicks)
+                    : RunStaged(group: group, latch: latch, rules: rules, state: state, stepTicks: stepTicks)
+                );
+            } finally {
+                if (attributed) {
+                    ((IArenaUndoHost)m_host).EndUndoPass(group: group.Name);
+                }
+            }
         }
 
         return applied;
@@ -86,7 +106,6 @@ public sealed partial class RuleEvaluator {
         if (progress.Breached) {
             return false;
         }
-
         m_groupVersions.Clear();
         foreach (var row in group.WriteRows) {
             m_groupVersions.Add(item: (m_host.TryRowVersion(
@@ -125,6 +144,7 @@ public sealed partial class RuleEvaluator {
         }
 
         if (!changed) {
+            CommitUndoIfPending(group: group);
             state.Set(
                 name: group.Name,
                 progress: default
@@ -136,6 +156,7 @@ public sealed partial class RuleEvaluator {
         var passes = (progress.Step + 1);
 
         if (passes >= group.Passes) {
+            CommitUndoIfPending(group: group);
             ReportRefusal(
                 detail: $"ran its whole ceiling of {group.Passes.ToString(provider: CultureInfo.InvariantCulture)} pass(es) without a pass leaving its write set unchanged",
                 effect: $"group '{group.Name}'",
@@ -223,7 +244,21 @@ public sealed partial class RuleEvaluator {
                 ))
         );
 
+        if (next > group.TerminalStep) {
+            CommitUndoIfPending(group: group);
+        }
+
         return applied;
+    }
+    private void BeginUndoIfNeeded(CompiledRuleGroup group) {
+        if ((group.Undo is not null) && (m_host is IArenaUndoHost undo) && !undo.UndoTurnPending(group: group.Name)) {
+            undo.BeginUndoTurn(group: group.Name);
+        }
+    }
+    private void CommitUndoIfPending(CompiledRuleGroup group) {
+        if ((group.Undo is not null) && (m_host is IArenaUndoHost undo) && undo.UndoTurnPending(group: group.Name)) {
+            undo.CommitUndoTurn(group: group.Name);
+        }
     }
     // A group's trigger carries its own bindings, which its binding keys address. They are evaluated fresh every
     // tick: a trigger runs once per tick, so memoizing it would cost more than it saves.
@@ -233,7 +268,7 @@ public sealed partial class RuleEvaluator {
 
             if (!RuleExpressions.TryEvaluate(
                 fault: out var fault,
-                kind: bound.Kind,
+                kind: bound.CarrierKind,
                 program: bound.Expression,
                 reader: m_host,
                 value: out var value

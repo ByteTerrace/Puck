@@ -41,7 +41,9 @@ public interface IRuleOwner {
 /// </remarks>
 public sealed partial class RuleEvaluator {
     private readonly IEffectHost m_host;
+
     private readonly List<CellKey> m_eachKeyScratch = [];
+    private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
     private readonly List<CellAccess> m_readScratch = [];
     private readonly ConditionalWeakTable<object, RuleSchedule> m_schedules = [];
 
@@ -57,6 +59,27 @@ public sealed partial class RuleEvaluator {
     public CellKey BoundEachKey => m_host.BoundEachKey;
     /// <summary>Gets the host every read and write goes through.</summary>
     public IEffectHost Host => m_host;
+
+    /// <summary>Sets one public lexical instance register for a host-owned evaluation such as an interaction. The
+    /// caller keeps it live through <see cref="EvaluateOnce"/> and clears it in a <see langword="finally"/> block.</summary>
+    public bool TrySetInstanceBinding(int register, StateInstanceHandle handle) {
+        var bindings = m_host.InstanceBindings;
+
+        if (((uint)register) >= ((uint)bindings.Length)) {
+            return false;
+        }
+        bindings[register] = handle;
+        return true;
+    }
+    /// <summary>Clears one lexical instance register after its owner finishes evaluating.</summary>
+    public void ClearInstanceBinding(int register) {
+        var bindings = m_host.InstanceBindings;
+
+        if (((uint)register) < ((uint)bindings.Length)) {
+            bindings[register] = default;
+        }
+    }
+
     /// <summary>Gets or sets whether a rule whose gate closed last time, whose reads carry no host or tick
     /// dependency, and whose every read row's version is unchanged may keep its closed verdict without re-running
     /// its bindings and gate — and whether an unchanged binding may reuse its memoized value. Defaults to
@@ -105,7 +128,7 @@ public sealed partial class RuleEvaluator {
 
         var needs = new RuleNeedsBuilder();
 
-        RuleDataflow.CollectExpressionFacts(
+        RuleDataflow.CollectExpressionSchedulingFacts(
             into: needs,
             tokens: binding.Expression
         );
@@ -206,17 +229,23 @@ public sealed partial class RuleEvaluator {
         }
 
         var arena = m_host.Arena;
-        var count = arena.PositionCount(rowOrdinal: rule.ForEachOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < count); position++) {
-            if (arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rule.ForEachOrdinal
-            )) {
-                m_eachKeyScratch.Add(item: key);
-            }
+        while (arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rule.ForEachOrdinal
+        )) {
+            m_eachKeyScratch.Add(item: key);
         }
+    }
+    private List<StateInstanceHandle> PoolHandles(StatePoolDescriptor pool, int bindingSlot) {
+        var scratch = (m_poolHandleScratch[bindingSlot] ??= []);
+        var arena = m_host.Arena;
+
+        CollectionsMarshal.SetCount(list: scratch, count: arena.CellCount(rowOrdinal: pool.DomainRowOrdinal));
+        _ = arena.CopyPoolSnapshot(poolOrdinal: pool.Ordinal, destination: CollectionsMarshal.AsSpan(list: scratch));
+        return scratch;
     }
 
     /// <summary>Evaluates one family of compiled rules in array order, each under its own latch bindings. A rule the
@@ -292,10 +321,7 @@ public sealed partial class RuleEvaluator {
 
         var bindings = latch.Bindings(name: rule.Name);
 
-        if (
-            (rule.ForEachOrdinal < 0) &&
-            !rule.ForEachZones
-        ) {
+        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && (rule.PoolForEach is null)) {
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,
@@ -304,6 +330,36 @@ public sealed partial class RuleEvaluator {
                 rule: rule,
                 stepTicks: stepTicks
             );
+        }
+
+        if (rule.PoolForEach is { } pool) {
+            var snapshot = PoolHandles(pool: pool, bindingSlot: rule.PoolBindingSlot);
+
+            latch.BeginSweep();
+            var poolAggregate = RuleOutcome.Idle;
+            var bindingsSpan = m_host.InstanceBindings;
+
+            foreach (var handle in snapshot) {
+                if (
+                    (((uint)rule.PoolBindingSlot) >= ((uint)bindingsSpan.Length)) ||
+                    !m_host.Arena.TryResolve(handle: handle, position: out _) ||
+                    !m_host.Arena.TryPoolKey(slot: handle.Slot, key: out var slotKey)
+                ) {
+                    continue;
+                }
+                bindingsSpan[rule.PoolBindingSlot] = handle;
+                var outcome = EvaluateOnce(applied: out var moved, binding: new LatchKey(Left: slotKey.Ordinal, Right: -1, LeftGeneration: handle.Generation), bindings: bindings, latch: latch, rule: rule, stepTicks: stepTicks);
+
+                applied |= moved;
+                if ((outcome == RuleOutcome.Refused) || ((outcome == RuleOutcome.Fired) && (poolAggregate == RuleOutcome.Idle))) {
+                    poolAggregate = outcome;
+                }
+            }
+            if (((uint)rule.PoolBindingSlot) < ((uint)bindingsSpan.Length)) {
+                bindingsSpan[rule.PoolBindingSlot] = default;
+            }
+            latch.EndSweep(bindings: bindings, name: rule.Name);
+            return poolAggregate;
         }
 
         EachKeys(rule: rule);
@@ -473,6 +529,10 @@ public sealed partial class RuleEvaluator {
             tick: tick
         );
 
+        if ((outcome == RuleOutcome.Fired) && (rule.Effects is [RewindTurnEffect])) {
+            latch.InvalidateScheduler();
+        }
+
         EndTrace(entry: trace);
 
         return outcome;
@@ -559,7 +619,7 @@ public sealed partial class RuleEvaluator {
 
             if (!RuleExpressions.TryEvaluate(
                 fault: out var fault,
-                kind: bound.Kind,
+                kind: bound.CarrierKind,
                 program: bound.Expression,
                 reader: m_host,
                 value: out var value

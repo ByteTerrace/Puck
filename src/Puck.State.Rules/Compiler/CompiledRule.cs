@@ -45,13 +45,20 @@ public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string
 /// <param name="Name">The authored name, for a refusal that quotes what the author wrote.</param>
 /// <param name="Arity">How many operands the call consumes.</param>
 /// <param name="Body">The body, reading its operands through <see cref="ExpressionOp.Argument"/>.</param>
-public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressionToken[] Body);
+/// <param name="Steps">How many tokens one call evaluates, every call site and fold member inside it expanded
+/// (<see cref="RuleWorkBudget.Steps"/>). A body is shared by its call sites, so a chain that calls the level below
+/// twice at each level is short to write and doubles with its depth; this is what lets a walk know that without
+/// taking it.</param>
+public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressionToken[] Body, long Steps);
 /// <summary>One compiled <see cref="RuleLocal"/>: its ordinal is its slot in the evaluation's bound-value scratch,
 /// and its expression may read only locals with a smaller ordinal.</summary>
 /// <param name="Name">The authored name.</param>
-/// <param name="Kind">The value kind the expression was compiled in.</param>
+/// <param name="Kind">The kind of value the expression leaves and the evaluator stores in this binding.</param>
 /// <param name="Expression">The compiled postfix program.</param>
-public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpressionToken[] Expression);
+/// <param name="CarrierKind">The numeric carrier its program uses for arithmetic and literal conversion. It can be
+/// <see cref="CellKind.Fixed"/> when <paramref name="Kind"/> is <see cref="CellKind.Int"/> because comparison and
+/// sign expressions leave an integer after consuming exact fixed operands.</param>
+public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpressionToken[] Expression, CellKind CarrierKind);
 /// <summary>One compiled rule: its name, its mode, the flattened gate, the compiled effects, and the
 /// <see cref="RuleNeeds"/> the compiler read off its facts' declarations. A document project derives its own record
 /// to carry what only it compiles beside these.</summary>
@@ -67,7 +74,9 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpre
 /// <param name="Zones">The compiled <see cref="Rule.Zones"/> table, or <see langword="null"/>.</param>
 /// <param name="Describe">The rule's read-back spelling — the one place a compiled program carries authored
 /// names.</param>
-public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "") {
+/// <param name="PoolForEach">The pool a whole-rule sweep snapshots, or <see langword="null"/>.</param>
+/// <param name="PoolBindingSlot">The evaluator register carrying each whole-rule pool handle.</param>
+public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1) {
     /// <summary>Appends every state cell one evaluation reads: the gate, the locals, and the effects. A document
     /// project's rule appends the branches it alone carries.</summary>
     /// <param name="into">The read set being collected.</param>
@@ -83,6 +92,10 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
                 into: into,
                 tokens: local.Expression
             );
+        }
+        if (PoolForEach is { } pool) {
+            into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.DomainRowOrdinal));
+            into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.GenerationRowOrdinal));
         }
         foreach (var effect in Effects) {
             effect.CollectReads(into: into);
@@ -101,27 +114,21 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
     /// locals, and the effects.</summary>
     /// <param name="context">The context the rule was priced against.</param>
     /// <returns>The work units.</returns>
-    public virtual long Cost(IRuleCostContext context) => CostBreakdown(context: context).Total;
+    public virtual RuleWork Cost(IRuleCostContext context) => CostBreakdown(context: context).Total;
     /// <summary>Returns the orthogonal cost components: per-rule setup, per-evaluation check, and per-firing effects.</summary>
     /// <param name="context">The context the rule was priced against.</param>
     /// <returns>The breakdown.</returns>
     public virtual RuleCost CostBreakdown(IRuleCostContext context) {
-        var check = RuleWorkBudget.SaturatingAdd(
-            left: 1L,
-            right: RuleWorkBudget.GateCost(
-                context: context,
-                tokens: Gate
-            )
-        );
+        var check = (1L + RuleWorkBudget.GateCost(
+            context: context,
+            tokens: Gate
+        ));
 
         foreach (var local in (Locals ?? [])) {
-            check = RuleWorkBudget.SaturatingAdd(
-                left: check,
-                right: RuleWorkBudget.ExpressionCost(
-                    context: context,
-                    kind: local.Kind,
-                    tokens: local.Expression
-                )
+            check += RuleWorkBudget.ExpressionCost(
+                context: context,
+                kind: local.Kind,
+                tokens: local.Expression
             );
         }
 
@@ -131,23 +138,21 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
                 context: context,
                 effects: Effects
             ),
-            Setup: 0L
+            Setup: RuleWorkBudget.ForEachSetup(
+                context: context,
+                rule: this
+            )
         );
     }
 }
 /// <summary>The orthogonal cost components of one compiled rule.</summary>
 /// <param name="Check">What one evaluation costs before any effect fires.</param>
 /// <param name="Effects">What one firing's effects cost.</param>
-/// <param name="Setup">What installing the rule costs once.</param>
-public readonly record struct RuleCost(long Check, long Effects, long Setup) {
-    /// <summary>Gets the saturating sum of the three components.</summary>
-    public long Total => RuleWorkBudget.SaturatingAdd(
-        left: Setup,
-        right: RuleWorkBudget.SaturatingAdd(
-            left: Check,
-            right: Effects
-        )
-    );
+/// <param name="Setup">What one sweep of the rule costs before its first evaluation, whatever the evaluations
+/// number.</param>
+public readonly record struct RuleCost(RuleWork Check, RuleWork Effects, RuleWork Setup) {
+    /// <summary>Gets the sum of the three components.</summary>
+    public RuleWork Total => ((Setup + Check) + Effects);
 
     /// <summary>Reports the unresolved conversion from heuristic work units to reference cycles.</summary>
     /// <returns>The unmodeled bound.</returns>

@@ -7,6 +7,13 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary>Decompiler inverse for the `.puck` DSL sugar wave (§1-§4, §7 of the sugar wave spec): the rules-block
 /// gate/effect/decision inverse, the generalized call-form escape hatch, and shape/placement default elision.</summary>
 public class DecompilerSugarTests {
+    private static JsonObject Recompile(string source) {
+        var compilation = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(source));
+        return Assert.IsType<JsonObject>(@object: compilation.Json);
+    }
+
     private static readonly string[] LiteralTypeKeyProbes = [
         "\"$type\": \"compareState\"", "\"$type\":\"compareState\"",
         "\"$type\": \"setState\"", "\"$type\":\"setState\"",
@@ -14,7 +21,6 @@ public class DecompilerSugarTests {
         "\"$type\": \"any\"", "\"$type\":\"any\"",
         "\"$type\": \"not\"", "\"$type\":\"not\"",
         "\"$type\": \"addState\"", "\"$type\":\"addState\"",
-        "\"$type\": \"countdownState\"", "\"$type\":\"countdownState\"",
         "\"$type\": \"transaction\"", "\"$type\":\"transaction\"",
     ];
 
@@ -31,6 +37,68 @@ public class DecompilerSugarTests {
         return WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
     }
 
+    [Fact]
+    public void RecordsPoolsAndPoolEffectsDecompileToAuthoringSugar() {
+        var root = JsonNode.Parse("""
+        {
+          "schema": "puck.world.definition.v1",
+          "state": {
+            "records": [{"name":"Player","fields":[{"name":"score","kind":"Int","default":{"kind":"Int","value":0},"min":0,"max":10}]}],
+            "pools": [{"name":"players","record":"Player","capacity":1,"initial":[{"slot":0,"values":[{"field":"score","value":{"kind":"Int","value":3}}]}]}]
+          },
+          "rules": [{"name":"award","effects":[{"$type":"claim","pool":"players","binding":"player","effects":[{"$type":"setState","state":{"binding":"player","field":"score"},"value":1},{"$type":"release","binding":"player"}]}]}]
+        }
+        """);
+        var puck = WorldDecompiler.Decompile(root: Assert.IsType<JsonObject>(@object: root));
+
+        Assert.Contains(actualString: puck, expectedSubstring: "record Player");
+        Assert.Contains(actualString: puck, expectedSubstring: "pool players of Player capacity(1)");
+        Assert.Contains(actualString: puck, expectedSubstring: "claim players as player");
+        Assert.Contains(actualString: puck, expectedSubstring: "release player");
+    }
+    [Fact]
+    public void RecordTraitsAndRulePoolIterationRoundTripWithoutLoss() {
+        var root = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
+        {
+          "schema":"puck.world.definition.v1",
+          "state":{
+            "spaces":[{"name":"semantic","model":"m","revision":"r","dimensions":8}],
+            "records":[{"name":"Unit","fields":[
+              {"name":"weight","kind":"Fixed","min":65536,"max":131072,"overflow":"Saturate","advance":{"perSecondNumerator":-1,"perSecondDenominator":1},"default":{"kind":"Fixed","value":65536}},
+              {"name":"embedding","kind":"Vector","space":"semantic","default":{"kind":"Vector","value":"AQIDBAUGBwg"}}
+            ]}],
+            "pools":[{"name":"units","record":"Unit","capacity":1,"initial":[]}]
+          },
+          "rules":[{"name":"visit","poolForEach":{"pool":"units","binding":"unit"},"effects":[{"$type":"release","binding":"unit"}]}]
+        }
+        """));
+
+        var source = WorldDecompiler.Decompile(root);
+
+        Assert.Contains(actualString: source, expectedSubstring: "rule \"visit\" for each unit in units");
+        Assert.Contains(actualString: source, expectedSubstring: "overflow: Saturate");
+        Assert.Contains(actualString: source, expectedSubstring: "advance(perSecond: -1)");
+        Assert.Contains(actualString: source, expectedSubstring: "space(\"semantic\")");
+        Assert.True(condition: JsonNode.DeepEquals(node1: root, node2: Recompile(source: source)));
+    }
+    [Fact]
+    public void RuntimeSnapshotsAndPairSeedsRoundTripWithoutLosingDeadGenerations() {
+        var root = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
+        {
+          "schema": "puck.world.definition.v1",
+          "state": {
+            "records": [{"name":"Marker","fields":[{"name":"value","kind":"Int","default":{"kind":"Int","value":0}}]}],
+            "pools": [{"name":"actors","record":"Marker","capacity":3,"snapshot":{"generations":[4,9,2],"live":[{"slot":1,"values":[{"field":"value","value":{"kind":"Int","value":7}}]}]}}],
+            "pairPools": [{"name":"links","record":"Marker","leftPool":"actors","rightPool":"actors","maxLive":2,"directed":false,"allowSelf":true,"initial":[{"slot":0,"values":[{"field":"value","value":{"kind":"Int","value":5}}]}],"snapshot":{"generations":[8,3],"live":[{"slot":0,"values":[{"field":"value","value":{"kind":"Int","value":6}}]}]}}]
+          }
+        }
+        """));
+
+        var recompiled = Recompile(source: WorldDecompiler.Decompile(root));
+
+        Assert.True(condition: JsonNode.DeepEquals(node1: root["state"]?["pools"], node2: recompiled["state"]?["pools"]));
+        Assert.True(condition: JsonNode.DeepEquals(node1: root["state"]?["pairPools"], node2: recompiled["state"]?["pairPools"]));
+    }
     [Fact]
     public void AnyTypeObjectOutsideSeatRigPrintsAsCallForm() {
         var root = new JsonObject {
@@ -49,102 +117,6 @@ public class DecompilerSugarTests {
             actualString: puck,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "worldPoint(x: 1, y: 2, z: 3)"
-        );
-    }
-    [Fact]
-    public void ChessPlacementsElideDefaultYawAndScale() {
-        var puck = DecompileWorld(relativePath: "games/chess.world.json");
-
-        Assert.Contains(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "placement \"tabletop\" {"
-        );
-        var start = puck.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            value: "placement \"tabletop\" {"
-        );
-        var end = puck.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            startIndex: start,
-            value: "\n    }"
-        );
-        var row = puck[start..end];
-
-        Assert.DoesNotContain(
-            actualString: row,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "yawDegrees"
-        );
-        Assert.DoesNotContain(
-            actualString: row,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "scale"
-        );
-        Assert.Contains(
-            actualString: row,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "prototype: \"tabletop\""
-        );
-        Assert.Contains(
-            actualString: row,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "solid"
-        );
-    }
-    [Fact]
-    public void ChessRulesCarryNoLiteralTypeDiscriminators() {
-        var puck = DecompileWorld(relativePath: "games/chess.world.json");
-
-        foreach (var probe in LiteralTypeKeyProbes) {
-            Assert.DoesNotContain(
-                actualString: puck,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: probe
-            );
-        }
-    }
-    [Fact]
-    public void ChessRulesUseWhenAndCallFormSugar() {
-        var puck = DecompileWorld(relativePath: "games/chess.world.json");
-
-        Assert.Contains(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "rule \"tabletop-settle-hold-advance\" {"
-        );
-        Assert.Contains(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "when $physics:quiescent == 1 and settleHold < 60"
-        );
-        // A gate whose compareValue.left is a parenthesized expression spells as a `when` like any other: the
-        // comparator standing after the balanced span is what says the span is an operand rather than a nested
-        // gate, so no gate in this file falls back to the plain `gate:` property.
-        Assert.Contains(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "and ((absolute(move[mover]) == 1 &"
-        );
-        Assert.DoesNotContain(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "gate: all(predicates: ["
-        );
-    }
-    [Fact]
-    public void HeaderNamesTheSourceAsCanonicalAndWarnsAgainstReDecompiling() {
-        var puck = DecompileWorld(relativePath: "games/chess.world.json");
-
-        Assert.StartsWith(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedStartString: "// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and"
-        );
-        Assert.Contains(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "would OVERWRITE this file"
         );
     }
     [Fact]

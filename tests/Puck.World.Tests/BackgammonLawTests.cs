@@ -181,6 +181,46 @@ public sealed class BackgammonLawTests {
             definition.Search.Rows[0].Chance!.Row
         );
     }
+    // A chance ply divides a 128-bit weighted sum by the weight it carried, which is exact only while the baked
+    // table's whole weight fits one word. Two cells multiply their weights, so a table can pass that with two
+    // outcomes; the bake refuses it by name rather than wrapping.
+    [Fact]
+    public void AChanceTableWhoseWeightPassesOneWordIsRefusedByName() {
+        var loaded = Load();
+        var state = loaded.StateRaw!;
+        var rows = new List<WorldStateRow>(collection: (state.World ?? []));
+
+        for (var index = 0; (index < rows.Count); index++) {
+            if (rows[index].Name.Value == "dice") {
+                rows[index] = rows[index] with {
+                    Draw = rows[index].Draw! with {
+                        Generator = new StateGenerator(
+                            Source: GeneratorSource.WeightedNumeric,
+                            Weighted: [
+                                new GeneratorWeightedNumeric(
+                                    Value: 1L,
+                                    Weight: (1UL << 40)
+                                ),
+                                new GeneratorWeightedNumeric(
+                                    Value: 6L,
+                                    Weight: (1UL << 40)
+                                ),
+                            ]
+                        ),
+                    },
+                };
+            }
+        }
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: loaded with { StateRaw = state with { World = rows } },
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "passes one 64-bit word"
+        );
+    }
     // The same position with w0 already home (no bar occupant) lets w1 move normally: the discriminating half of the
     // law above — the search's own judge, not an authoring accident, is what is under test.
     [Fact]

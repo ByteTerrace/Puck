@@ -10,7 +10,7 @@ export read tttActive, tttBoard, tttCube, tttMoveApplied, tttMoveCount, tttWinne
 
 rule "ttt-place-mark" {
   when tttMoveRequest != tttMoveApplied and tttWinner == 0 and tttMoveCell >= 0 and tttMoveCell <= 63 and tttBoard[tttMoveCell[$value]] == 0
-  mode: "Edge"
+  mode: Edge
   tttBoard[tttMoveCell[$value]] = tttActive
   tttMoveCount += 1
   tttBoardVersion += 1
@@ -20,25 +20,25 @@ rule "ttt-place-mark" {
 
 rule "ttt-reject-out-of-range" {
   when tttMoveRequest != tttMoveApplied and (tttMoveCell < 0 or tttMoveCell > 63)
-  mode: "Edge"
+  mode: Edge
   tttMoveApplied = tttMoveRequest
 }
 
 rule "ttt-reject-illegal" {
   when tttMoveRequest != tttMoveApplied and tttMoveCell >= 0 and tttMoveCell <= 63 and (tttWinner != 0 or tttBoard[tttMoveCell[$value]] != 0)
-  mode: "Edge"
+  mode: Edge
   tttMoveApplied = tttMoveRequest
 }
 
 rule "ttt-check-win" {
   when tttBoardVersion != tttWinCheckVersion
-  mode: "Edge"
-  setState(state: "tttMaskX", expression: "$board:mask:tttBoard:1:1")
+  mode: Edge
+  setState(state: tttMaskX, expression: board(mask, tttBoard, 1, 1))
   tttXWin = ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)
   tttXWin = tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)
   tttXWin = tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)
   tttXWin = tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)
-  setState(state: "tttMaskO", expression: "$board:mask:tttBoard:2:2")
+  setState(state: tttMaskO, expression: board(mask, tttBoard, 2, 2))
   tttOWin = ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)
   tttOWin = tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)
   tttOWin = tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)
@@ -212,33 +212,33 @@ state {
 
   world {
     row {
-      domain: cellsOf(topology: "tttCube")
+      domain: cellsOf(topology: tttCube)
       kind: "Int"
       name: "tttBoard"
     }
 
-    slot tttActive: Int = 1 bounds(minimum: 1, maximum: 2)
+    slot tttActive = 1 bounds(1..2)
 
-    slot tttMoveCell: Int = -1 bounds(minimum: -1, maximum: 63)
+    slot tttMoveCell = -1 bounds(-1..63)
 
-    slot tttMoveRequest: Int = 0 bounds(minimum: 0)
+    slot tttMoveRequest = 0 bounds(0..)
 
-    slot tttMoveApplied: Int = 0 bounds(minimum: 0)
+    slot tttMoveApplied = 0 bounds(0..)
 
-    slot tttBoardVersion: Int = 0 bounds(minimum: 0)
+    slot tttBoardVersion = 0 bounds(0..)
 
-    slot tttWinCheckVersion: Int = 0 bounds(minimum: 0)
+    slot tttWinCheckVersion = 0 bounds(0..)
 
-    slot tttWinner: Int = 0 bounds(minimum: 0, maximum: 3)
+    slot tttWinner = 0 bounds(0..3)
 
-    slot tttMoveCount: Int = 0 bounds(minimum: 0, maximum: 64)
+    slot tttMoveCount = 0 bounds(0..64)
 
-    slot tttXWin: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot tttXWin = 0 bounds(0..1)
 
-    slot tttOWin: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot tttOWin = 0 bounds(0..1)
 
-    slot tttMaskX: Int = 0 bounds(minimum: -9223372036854775808, maximum: 9223372036854775807)
+    slot tttMaskX = 0 bounds(-9223372036854775808..9223372036854775807)
 
-    slot tttMaskO: Int = 0 bounds(minimum: -9223372036854775808, maximum: 9223372036854775807)
+    slot tttMaskO = 0 bounds(-9223372036854775808..9223372036854775807)
   }
 }

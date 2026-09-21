@@ -169,13 +169,16 @@ public sealed class AtlasPackingTests {
             again.ImageData!.RgbaPixels.ToArray()
         );
     }
-    [Fact]
-    public void PackedGlyphRectanglesMatchSingleGlyphRasterization() {
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [Theory]
+    public void PackedGlyphRectanglesMatchSingleGlyphRasterization(int columns) {
         var mixed = Generate(
             bytes: FontBytes(),
             options: Options(
                 characters: "iMW",
-                columns: 3
+                columns: columns
             )
         );
 
@@ -227,7 +230,8 @@ public sealed class AtlasPackingTests {
     private sealed class CountingGenerator : IFontAtlasGenerator {
         public int Count { get; private set; }
 
-        public FontAtlas Generate(FontAtlasGenerationRequest request) { Count++; return new FontAtlas(
+        public FontAtlas Generate(FontAtlasGenerationRequest request) {
+            Count++; return new FontAtlas(
             FontAtlasKind.Mtsdf,
             "test://cache",
             1,
@@ -248,6 +252,7 @@ public sealed class AtlasPackingTests {
                 rgbaPixels: [0, 0, 0, 0],
                 width: 1
             )
-        ); }
+        );
+        }
     }
 }

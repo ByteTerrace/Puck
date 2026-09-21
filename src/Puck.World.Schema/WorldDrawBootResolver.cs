@@ -9,10 +9,10 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// <para><b>Two site classes, two settle rules.</b> A BOOT-ONLY site — <c>bodies.capacityRow</c>
-/// and <c>host.backendRow</c> — is a document FIELD read exactly once at composition: this
-/// resolver draws it, writes the settled value into the ordinary literal field, CLEARS the facet, and NARRATES the
-/// settlement on stderr. The narration is not decoration: settling erases the only evidence the value was random, so
-/// without it nothing anywhere could say the census or the backend was drawn, or which site decided it. A STATE site
+/// and <c>host.backendRow</c> — reads a state row after its first fill and narrates the settled document field.
+/// The census retains its row reference for each fresh load. The backend clears its reference because its
+/// document contract admits either a literal backend or a row reference; the source row retains the drawn value.
+/// A STATE site
 /// (a <see cref="WorldStateRow"/>'s own <see cref="StateRow.Draw"/>) is different — the facet is NEVER cleared
 /// (it stays redrawable), the fill applies ONLY while the row carries no cell yet, and the site's cursor and drawn
 /// masks persist. That is what makes an authored <c>value</c> a deliberate override, and what keeps a save/reload from
@@ -25,6 +25,10 @@ namespace Puck.World;
 /// against that check ever going soft, not the primary door.</para>
 /// </remarks>
 public static class WorldDrawBootResolver {
+    // Shared with boot-input validation: a persisted site that will not fire needs only final admission.
+    internal static bool NeedsFirstFill(WorldStateRow row) => ((row.Draw is not null) &&
+        (row.IsKeyed ? ((row.DrawCursor == 0L) && (row.Cells is { Count: > 0 })) : (row.Cells is not { Count: > 0 })));
+
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
     // A numeric draw's own raw encoding, by the site's declared kind — Fixed carries raw FixedQ4816 bits, Bool its
@@ -172,19 +176,24 @@ public static class WorldDrawBootResolver {
             cells[selected[slot]] = cells[selected[slot]] with { Value = NumericCellValue(kind: row.Kind, raw: values[slot]) };
         }
 
-        filled = row with { Cells = cells, DrawCursor = checked((row.DrawCursor + selected.Count)), DrawnMasks = GeneratorEngine.MasksAfter(
+        filled = row with {
+            Cells = cells,
+            DrawCursor = checked((row.DrawCursor + selected.Count)),
+            DrawnMasks = GeneratorEngine.MasksAfter(
             generator: generator,
             fired: masksAfter,
             previous: row.DrawnMasks
-        ) };
+        ),
+        };
         reason = string.Empty;
 
         return true;
     }
     /// <summary>Resolves every first-fill draw site in <paramref name="definition"/>.</summary>
-    /// <param name="definition">The freshly parsed, already-validated document.</param>
+    /// <param name="definition">The freshly parsed document after validation of its boot draw inputs.</param>
     /// <param name="instanceIdentity">The running instance's own identity — the seed ladder's INSTANCE rung.</param>
-    /// <param name="resolved">The document with every first-fill site resolved, on success.</param>
+    /// <param name="resolved">The document with every first-fill site resolved, on success. The input instance
+    /// is retained when neither a draw site nor a boot-time row read changes the document.</param>
     /// <param name="reason">Why a site refused, on failure.</param>
     /// <returns><see langword="true"/> when every first-fill site resolved.</returns>
     public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason) {
@@ -201,21 +210,17 @@ public static class WorldDrawBootResolver {
 
 
 
-        var state = new List<WorldStateRow>(capacity: definition.State.Count);
+        var authored = definition.AuthoredState;
+        List<WorldStateRow>? state = null;
 
-        foreach (var row in definition.State) {
+        for (var index = 0; (index < authored.Count); index++) {
+            var row = authored[index];
             // FIRST FILL ONLY: a row already carrying a cell — authored with a literal, or loaded from a save that
             // already drew — is left exactly as it is, cursor included.
-            if (
-                (row.Draw is not { } draw) ||
-                (row.IsKeyed
-                ? ((row.DrawCursor != 0L) || (row.Cells is not { Count: > 0 }))
-                : (row.Cells is { Count: > 0 }))
-            ) {
-                state.Add(item: row);
-
+            if (!NeedsFirstFill(row: row)) {
                 continue;
             }
+            var draw = row.Draw!;
 
             if (row.IsKeyed) {
                 if (!TryFillKeyedSite(
@@ -230,7 +235,8 @@ public static class WorldDrawBootResolver {
                     return false;
                 }
 
-                state.Add(item: filledRow);
+                state ??= new List<WorldStateRow>(collection: authored);
+                state[index] = filledRow;
                 changed = true;
 
                 continue;
@@ -271,23 +277,23 @@ public static class WorldDrawBootResolver {
                 generator: out var generator,
                 reason: out _
             );
-            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(
+            state ??= new List<WorldStateRow>(collection: authored);
+            state[index] = row with {
+                Cells = [cell],
+                DrawCursor = (row.DrawCursor + fired.Samples),
+                DrawnMasks = GeneratorEngine.MasksAfter(
                 generator: generator,
                 fired: fired.Masks,
                 previous: row.DrawnMasks
-            ) }));
+            ),
+            };
             changed = true;
         }
 
         // SITE READS run AFTER row first-fills, so a Boot-drawn row is readable the same boot it draws. The value
-        // narrated here is the row's — the row itself stays the persisted evidence, so nothing is cleared.
+        // narrated here is the row's; the row itself stays the persisted evidence.
         if (population.CapacityRow is { } capacityRow) {
-            var rows = state;
-            var declared = rows.Find(match: r => string.Equals(
-                a: r.Name.Value,
-                b: capacityRow,
-                comparisonType: StringComparison.Ordinal
-            ));
+            var declared = StateRows.FindStateRow(name: capacityRow, rows: (state ?? authored));
 
             if (
                 (declared?.Cells is not [{ } censusCell, ..]) ||
@@ -320,12 +326,7 @@ public static class WorldDrawBootResolver {
         }
 
         if (host.BackendRow is { } backendRow) {
-            var rows = state;
-            var declared = rows.Find(match: r => string.Equals(
-                a: r.Name.Value,
-                b: backendRow,
-                comparisonType: StringComparison.Ordinal
-            ));
+            var declared = StateRows.FindStateRow(name: backendRow, rows: (state ?? authored));
             var token = (((declared?.Cells is [{ Value.Kind: CellKind.Text } tokenCell, ..])
                 ? tokenCell.Value.AsText
                 : null) ?? string.Empty);
@@ -342,12 +343,18 @@ public static class WorldDrawBootResolver {
                 settled: WorldHostTokens.BackendToken(backend: backend)
             );
 
-            host = (host with { Backend = backend });
+            host = (host with { Backend = backend, BackendRow = null });
             changed = true;
         }
 
         if (changed) {
-            resolved = (definition.WithWorldState(rows: state) with { PopulationRaw = population, HostRaw = host });
+            // An absent section is not an authored default row. A state-only draw must not materialize the host's
+            // absent sentinel (whose dimensions are deliberately zero) and turn a valid document into an invalid one.
+            var drawn = ((state is null) ? definition : definition.WithWorldState(rows: state));
+            resolved = drawn with {
+                PopulationRaw = ((population == definition.Population) ? definition.PopulationRaw : population),
+                HostRaw = (ReferenceEquals(objA: host, objB: definition.Host) ? definition.HostRaw : host),
+            };
         }
 
         return true;

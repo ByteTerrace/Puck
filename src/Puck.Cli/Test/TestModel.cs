@@ -39,9 +39,10 @@ internal sealed record TestEcho(bool Rejected, string Message);
 /// <param name="Detail">The refusal reason or the handler's own output, when there was one.</param>
 internal sealed record TestSubmission(ulong Tick, string Principal, string Command, string Outcome, string? Detail);
 /// <summary>One leg's whole reading of a world: the export bytes the run wrote and what they say.</summary>
-/// <param name="ExportBytes">The canonical state-export bytes, compared between the two runs of a leg.</param>
-/// <param name="ManifestBytes">The submission-manifest bytes, compared between the two runs alongside the
-/// export: a manifest that differs run to run is evidence of nothing.</param>
+/// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
+/// qualification.</param>
+/// <param name="ManifestBytes">The submission-manifest bytes, compared across runs during reproduction
+/// qualification.</param>
 /// <param name="ExportTick">The tick the export was taken at, as the manifest recorded it.</param>
 /// <param name="Truncated">Whether the run ended before the tick the document declared.</param>
 /// <param name="Verdicts">Every verdict row the export declares.</param>
@@ -73,7 +74,7 @@ internal sealed record TestScheduleRow(ulong Tick, string Principal, string Comm
 /// <summary>A test world's <c>schedule</c> section as the runner reads it out of the document's own text.</summary>
 /// <param name="ExportTick">The tick the document declares its export at — the last row's tick plus the settle
 /// margin.</param>
-/// <param name="RateHz">The document's simulation rate, which sets the leg's wall-clock net.</param>
+/// <param name="RateHz">The document's simulation rate, used to bound a failed or stalled leg.</param>
 /// <param name="Rows">Every declared row, in declaration order, reconciled against the manifest the run
 /// wrote.</param>
 internal sealed record TestSchedule(ulong ExportTick, int RateHz, IReadOnlyList<TestScheduleRow> Rows);

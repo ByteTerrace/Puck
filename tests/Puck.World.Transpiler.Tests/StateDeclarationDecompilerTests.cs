@@ -70,7 +70,7 @@ public class StateDeclarationDecompilerTests {
         Assert.Contains(
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "table vitals : Int"
+            expectedSubstring: "table vitals"
         );
         AssertRoundTrips(original: original);
     }
@@ -92,8 +92,26 @@ public class StateDeclarationDecompilerTests {
         Assert.Contains(
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "slot gold : Int"
+            expectedSubstring: "slot gold = 10 bounds(0..)"
         );
+        AssertRoundTrips(original: original);
+    }
+    [Fact]
+    public void FixedSlotWithOnlyMaximumDecompilesWithoutInventingAMinimum() {
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
+            {
+                "schema": "puck.world.definition.v1",
+                "state": {
+                    "world": [
+                        { "name": "temperature", "kind": "Fixed", "value": "0", "max": "10" }
+                    ]
+                }
+            }
+            """));
+
+        var decompiled = WorldDecompiler.Decompile(root: original);
+
+        Assert.Contains(actualString: decompiled, comparisonType: StringComparison.Ordinal, expectedSubstring: "bounds(..10.0)");
         AssertRoundTrips(original: original);
     }
     [Fact]
@@ -113,6 +131,94 @@ public class StateDeclarationDecompilerTests {
                         }
                     ]
                 }
+            }
+            """));
+
+        AssertRoundTrips(original: original);
+    }
+    [InlineData("Bool", false)]
+    [InlineData("Bool", true)]
+    [InlineData("Text", false)]
+    [InlineData("Text", true)]
+    [InlineData("Fixed", false)]
+    [InlineData("Fixed", true)]
+    [Theory]
+    public void EmptyNonIntTableKeepsItsExplicitKind(string kind, bool explicitCells) {
+        var cells = (explicitCells ? ", \"cells\": []" : "");
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse($$"""
+            {
+                "schema": "puck.world.definition.v1",
+                "state": {
+                    "world": [
+                        { "name": "empty", "kind": "{{kind}}", "capacity": 2{{cells}} }
+                    ]
+                }
+            }
+            """));
+
+        AssertRoundTrips(original: original);
+    }
+    [Fact]
+    public void ExplicitIntLocalWithFractionalConstantDoesNotSugarIntoAChangedKind() {
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
+            {
+                "schema": "puck.world.definition.v1",
+                "state": {
+                    "world": [
+                        { "name": "flag", "kind": "Int", "value": 0 }
+                    ]
+                },
+                "rules": [
+                    {
+                        "name": "r",
+                        "locals": [
+                            {
+                                "name": "k",
+                                "kind": "Int",
+                                "expression": { "instructions": [{ "op": "Constant", "value": 0.5 }] }
+                            }
+                        ],
+                        "effects": [
+                            { "$type": "setState", "state": "flag", "value": 1 }
+                        ]
+                    }
+                ]
+            }
+            """));
+
+        AssertRoundTrips(original: original);
+    }
+    [Fact]
+    public void ExplicitIntLocalWithDivisionDoesNotSugarIntoAChangedKind() {
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
+            {
+                "schema": "puck.world.definition.v1",
+                "state": {
+                    "world": [
+                        { "name": "flag", "kind": "Int", "value": 0 }
+                    ]
+                },
+                "rules": [
+                    {
+                        "name": "r",
+                        "locals": [
+                            {
+                                "name": "k",
+                                "kind": "Int",
+                                "expression": {
+                                    "instructions": [
+                                        { "op": "Constant", "value": 1 },
+                                        { "op": "Constant", "value": 2 },
+                                        { "op": "Divide" }
+                                    ]
+                                }
+                            }
+                        ],
+                        "effects": [
+                            { "$type": "setState", "state": "flag", "value": 1 }
+                        ]
+                    }
+                ]
             }
             """));
 
@@ -196,7 +302,7 @@ public class StateDeclarationDecompilerTests {
         Assert.Contains(
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "grid board : Int dimensions(width: 2, depth: 2)"
+            expectedSubstring: "grid board dimensions(width: 2, depth: 2)"
         );
         AssertRoundTrips(original: original);
     }
@@ -283,13 +389,13 @@ public class StateDeclarationDecompilerTests {
                 world {
                     row {
                         name: "cardNames"
-                        kind: "Int"
+                        kind: Int
                         capacity: 3
                         cells [ { key: "a" value: 1 } ]
                     }
                     row {
                         name: "deck"
-                        kind: "Bool"
+                        kind: Bool
                         domain { $type: "keysOf" row: "cardNames" ordered: true }
                         capacity: 3
                         cells [ ]
@@ -308,7 +414,7 @@ public class StateDeclarationDecompilerTests {
         Assert.Contains(
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "table cardNames : Int capacity(3)"
+            expectedSubstring: "table cardNames capacity(3)"
         );
         Assert.Contains(
             actualString: decompiled,
@@ -316,5 +422,30 @@ public class StateDeclarationDecompilerTests {
             expectedSubstring: "pile deck of cardNames capacity(3)"
         );
         AssertRoundTrips(original: lowered);
+    }
+    [Fact]
+    public void RecordFieldEnumsDecompileAsDeclarationsBeforeTheirRecords() {
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
+            {
+                "schema": "puck.world.definition.v1",
+                "state": {
+                    "enums": [{ "name": "Facing", "members": ["North", "South"] }],
+                    "records": [{
+                        "name": "Piece",
+                        "fields": [{
+                            "name": "facing",
+                            "kind": "Int",
+                            "enum": "Facing",
+                            "default": { "kind": "Int", "value": 0 }
+                        }]
+                    }]
+                }
+            }
+            """));
+        var decompiled = WorldDecompiler.Decompile(root: original);
+
+        Assert.Contains(actualString: decompiled, comparisonType: StringComparison.Ordinal, expectedSubstring: "enum Facing {");
+        Assert.True(condition: (decompiled.IndexOf(comparisonType: StringComparison.Ordinal, value: "enum Facing") < decompiled.IndexOf(comparisonType: StringComparison.Ordinal, value: "record Piece")));
+        AssertRoundTrips(original: original);
     }
 }

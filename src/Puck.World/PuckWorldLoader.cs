@@ -107,10 +107,10 @@ internal static class PuckWorldLoader {
             catalogFingerprint: catalogFingerprint
         );
 
-        if (!WorldDefinitionLoader.TryLoad(
+        if (!WorldDefinitionLoader.TryLoadForAdmission(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
-            definition: out var loadedDef,
+            admission: out var loaded,
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             neighbours: neighbours,
             reason: out var loadReason,
@@ -126,9 +126,9 @@ internal static class PuckWorldLoader {
             ? "--world .puck transpiled"
             : "shipped default")})");
         source = new WorldDefinitionSource(
-            Definition: loadedDef!,
+            Definition: loaded!.Definition,
             SourcePath: path
-        );
+        ) { Admission = loaded };
         failure = string.Empty;
         return true;
     }

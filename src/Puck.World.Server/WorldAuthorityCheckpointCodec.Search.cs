@@ -15,6 +15,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: level.BaseTurn);
         writer.WriteUInt64(value: level.Key);
         writer.WriteInt64(value: level.AlphaEntry);
+        writer.WriteInt32(value: level.EntryTarget);
+        writer.WriteInt64(value: level.ChanceSumHigh);
+        writer.WriteUInt64(value: level.ChanceSumLow);
+        writer.WriteUInt64(value: level.ChanceWeight);
         writer.WriteBoolean(value: (level.Seats is not null));
 
         if (level.Seats is { } seats) {
@@ -36,6 +40,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var baseTurn = reader.ReadInt64();
         var key = reader.ReadUInt64();
         var alphaEntry = reader.ReadInt64();
+        var entryTarget = reader.ReadInt32();
+        var chanceSumHigh = reader.ReadInt64();
+        var chanceSumLow = reader.ReadUInt64();
+        var chanceWeight = reader.ReadUInt64();
         long[]? seats = null;
 
         if (reader.ReadBoolean()) {
@@ -53,6 +61,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             BestTarget: bestTarget,
             BestToken: bestToken,
             Beta: beta,
+            ChanceSumHigh: chanceSumHigh,
+            ChanceSumLow: chanceSumLow,
+            ChanceWeight: chanceWeight,
+            EntryTarget: entryTarget,
             Key: key,
             Seats: seats,
             Shape: shape,
@@ -81,9 +93,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: job.Stamp);
         writer.WriteBoolean(value: job.Running);
         writer.WriteBoolean(value: job.Done);
-        writer.WriteInt32(value: job.Shape);
-        writer.WriteInt32(value: job.Token);
-        writer.WriteInt32(value: job.Target);
+        WriteSearchLevel(
+            level: job.Root,
+            writer: writer
+        );
         writer.WriteInt64(value: job.Count);
         WriteLongArray(
             values: job.Legal,
@@ -98,15 +111,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer
         );
         writer.WriteInt64(value: job.Nodes);
-        writer.WriteInt64(value: job.BaseTurn);
+        writer.WriteInt64(value: job.Work);
+        writer.WriteInt64(value: job.PeakStepWork);
         writer.WriteInt32(value: job.TokenCount);
         writer.WriteInt32(value: job.PassDepth);
         writer.WriteInt32(value: job.Active);
-        writer.WriteInt64(value: job.Best);
-        writer.WriteInt32(value: job.BestToken);
-        writer.WriteInt32(value: job.BestTarget);
-        writer.WriteInt64(value: job.Alpha);
-        writer.WriteInt64(value: job.Beta);
         WriteArray(
             items: job.Levels,
             writeItem: WriteSearchLevel,
@@ -168,9 +177,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var stamp = reader.ReadUInt64();
         var running = reader.ReadBoolean();
         var done = reader.ReadBoolean();
-        var shape = reader.ReadInt32();
-        var token = reader.ReadInt32();
-        var target = reader.ReadInt32();
+        var root = ReadSearchLevel(reader: ref reader);
         var count = reader.ReadInt64();
         var legal = ReadLongArray(
             field: "search job legal",
@@ -185,15 +192,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader
         );
         var nodes = reader.ReadInt64();
-        var baseTurn = reader.ReadInt64();
+        var work = reader.ReadInt64();
+        var peakStepWork = reader.ReadInt64();
         var tokenCount = reader.ReadInt32();
         var passDepth = reader.ReadInt32();
         var active = reader.ReadInt32();
-        var best = reader.ReadInt64();
-        var bestToken = reader.ReadInt32();
-        var bestTarget = reader.ReadInt32();
-        var alpha = reader.ReadInt64();
-        var beta = reader.ReadInt64();
         var levels = ReadArray(
             field: "search job levels",
             reader: ref reader,
@@ -277,12 +280,6 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return new ArenaSearchJobCheckpoint(
             Active: active,
-            Alpha: alpha,
-            BaseTurn: baseTurn,
-            Best: best,
-            BestTarget: bestTarget,
-            BestToken: bestToken,
-            Beta: beta,
             Count: count,
             Counts: counts,
             Done: done,
@@ -291,18 +288,18 @@ public static partial class WorldAuthorityCheckpointCodec {
             Name: name,
             Nodes: nodes,
             PassDepth: passDepth,
+            Root: root,
             Running: running,
             Scopes: scopes,
-            Shape: shape,
             Stamp: stamp,
-            Target: target,
-            Token: token,
+            PeakStepWork: peakStepWork,
             TokenCount: tokenCount,
             Tree: tree,
             TtKey: ttKey,
             TtMeta: ttMeta,
             TtValue: ttValue,
-            Wide: wide
+            Wide: wide,
+            Work: work
         );
     }
     private static byte[] EncodeSearch(ArenaSearchCheckpoint section) {

@@ -20,7 +20,7 @@
         "description": "The numeric kind of the values the word is read from: Int or Fixed."
       },
       "symbols": {
-        "description": "The alphabet, 1..32 named value ranges.",
+        "description": "The alphabet, 1..MaxSymbols named value ranges.",
         "type": "array",
         "items": {
           "description": "One symbol of a pattern\u0027s alphabet: the cell values in Min..Max (inclusive, in the pattern\u0027s kind) read as this letter. Symbols may overlap; the refined alphabet splits them.",
@@ -65,12 +65,12 @@
         "default": null
       },
       "maxStates": {
-        "description": "The machine-state budget the compile refuses past, 1..256.",
+        "description": "The machine-state budget the compile refuses past, 1..MaxStates.",
         "type": "integer",
         "default": 64
       },
       "value": {
-        "$ref": "./common.schema.json#/$defs/ExpressionProgram",
+        "$ref": "./common.schema.json#/$defs/ExpressionProgramNonNullable2",
         "description": "For a zone source, an expression in the pattern\u0027s kind evaluated once per token in pile order, where a state token keyed $token reads that token\u0027s cell of a row keyed over the zone\u0027s token domain: the word over a tuple of attributes (suit * 16 \u002B rank) rather than one. Exclusive with Attribute.",
         "default": null
       }

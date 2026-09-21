@@ -44,7 +44,7 @@ public class GateExpressionComparisonTests {
             schema: "puck.world.definition.v1"
 
             rule "r" {
-                when table[status] == 1 and (face[$zone:pile:last] ?? 1) == 0 and table[busy] == 0
+                when table[status] == 1 and (face[zone(pile, last)] ?? 1) == 0 and table[busy] == 0
                 table[busy] = 1
             }
             """;
@@ -68,8 +68,8 @@ public class GateExpressionComparisonTests {
         var middle = Assert.IsType<ComparisonPredicateNode>(@object: and.Operands[1]);
 
         Assert.Equal(
-            "(face[$zone:pile:last] ?? 1)",
-            middle.LeftText
+            "(face[zone(pile, last)] ?? 1)",
+            middle.Left.Text
         );
     }
     [Fact]
@@ -100,7 +100,7 @@ public class GateExpressionComparisonTests {
     public void ACoalescedEndpointReadLowersToCompareValue() {
         var (json, diagnostics) = Lower(body: """
             rule "r" {
-                when (face[$zone:pile:last] ?? 1) == 0
+                when (face[zone(pile, last)] ?? 1) == 0
                 table[busy] = 1
             }
             """);
@@ -129,28 +129,28 @@ public class GateExpressionComparisonTests {
     public void AnAbsenceTestIsSpellableAsAGate() {
         var gate = FirstGate(body: """
             rule "r" {
-                when isAbsent(face[$zone:pile:last]) == 1
+                when isAbsent(face[zone(pile, last)]) == 1
                 table[busy] = 1
             }
             """);
 
         Assert.Equal(
-            "isAbsent(face[$zone:pile:last])",
-            gate.LeftText
+            "isAbsent(face[zone(pile, last)])",
+            gate.Left.Text
         );
     }
     [Fact]
     public void AnExpressionOperandIsAdmittedOnTheRightToo() {
         var gate = FirstGate(body: """
             rule "r" {
-                when table[busy] == (face[$zone:pile:last] ?? 1)
+                when table[busy] == (face[zone(pile, last)] ?? 1)
                 table[busy] = 1
             }
             """);
 
         Assert.Equal(
-            "(face[$zone:pile:last] ?? 1)",
-            gate.RightText
+            "(face[zone(pile, last)] ?? 1)",
+            gate.Right.Text
         );
     }
     [Fact]

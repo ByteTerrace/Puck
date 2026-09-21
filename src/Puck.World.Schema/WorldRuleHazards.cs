@@ -14,4 +14,12 @@ public static class WorldRuleHazards {
             rules: WorldFactsCompiler.CompileAll(definition: definition)
         );
     }
+
+    /// <summary>Reads the shared hazard analysis without compiling the programs again.</summary>
+    /// <param name="compilation">The exact definition's unchanged compilation.</param>
+    /// <returns>Every hazard, earliest pair first.</returns>
+    public static IReadOnlyList<Puck.State.Rules.RuleHazard> Analyze(WorldRuleCompilation compilation) {
+        ArgumentNullException.ThrowIfNull(argument: compilation);
+        return compilation.Hazards;
+    }
 }

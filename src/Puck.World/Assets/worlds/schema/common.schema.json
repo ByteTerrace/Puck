@@ -2277,71 +2277,6 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpSelectProgramBare"
     },
-    "WorldCameraProgram": {
-      "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "The stable name a Blend op selects this program by.",
-          "type": "string"
-        },
-        "version": {
-          "description": "The instruction-set version.",
-          "type": "string"
-        },
-        "operations": {
-          "$ref": "#/$defs/WorldCameraProgramOpList",
-          "description": "The selected ops, in authored evaluation order."
-        },
-        "anchorOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpAnchorNullable",
-          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
-        },
-        "blendOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpBlendNullable",
-          "description": "Gets the program\u0027s Blend op, or null."
-        },
-        "clampPitchOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpClampPitchNullable",
-          "description": "Gets the program\u0027s ClampPitch op, or null."
-        },
-        "dynamicsOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
-          "description": "Gets the program\u0027s Dynamics op, or null."
-        },
-        "fovOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpFieldOfViewNullable",
-          "description": "Gets the program\u0027s FieldOfView op, or null."
-        },
-        "lookAtOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpLookAtNullable",
-          "description": "Gets the program\u0027s LookAt op, or null."
-        },
-        "offsetOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpOffsetNullable",
-          "description": "Gets the program\u0027s Offset op, or null."
-        },
-        "orbitOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpOrbitNullable",
-          "description": "Gets the program\u0027s Orbit op, or null."
-        },
-        "pathOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpPathNullable",
-          "description": "Gets the program\u0027s Path op, or null."
-        },
-        "selectOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpSelectProgramNullable",
-          "description": "Gets the program\u0027s SelectProgram op, or null."
-        }
-      },
-      "required": [
-        "name",
-        "version",
-        "operations"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgram"
-    },
     "WorldAnchorNonNullable": {
       "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": "object",
@@ -3112,60 +3047,6 @@
       "additionalProperties": false,
       "title": "WorldSequence"
     },
-    "ActionPredicateCompareState": {
-      "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
-      "properties": {
-        "$type": {
-          "const": "compareState"
-        },
-        "state": {
-          "description": "A declared state-section row name, or one of the reserved channels the compiler\u0027s vocabulary answers (RuleFacts and whatever a document project registers). Inside a host\u0027s per-participant action program, a named counter slot the program declares.",
-          "type": "string"
-        },
-        "comparison": {
-          "$ref": "#/$defs/ActionStateComparison",
-          "description": "The comparison to apply."
-        },
-        "value": {
-          "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "key": {
-          "description": "The cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]).",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "comparandState": {
-          "description": "Another declared state-section row name, or a reserved channel, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "comparandKey": {
-          "description": "The cell inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state",
-        "comparison"
-      ],
-      "additionalProperties": false,
-      "title": "ActionPredicateCompareState"
-    },
     "ShapeNonNullable": {
       "enum": [
         "Add",
@@ -3401,6 +3282,118 @@
       "additionalProperties": false
     },
     "ShapeNonNullable8": {
+      "type": "object",
+      "required": [
+        "zone"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "zone": {
+          "$comment": "ExpressionProgram holds itself here; its shape is the one described where it first appears."
+        }
+      }
+    },
+    "ShapeNonNullable9": {
+      "type": "object",
+      "required": [
+        "expression"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "$comment": "ExpressionProgram holds itself here; its shape is the one described where it first appears."
+        }
+      }
+    },
+    "ShapeNonNullable10": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable8"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable9"
+        }
+      ]
+    },
+    "ShapeNonNullable11": {
+      "type": "object",
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable10"
+          }
+        }
+      }
+    },
+    "ShapeNonNullable12": {
+      "type": "object",
+      "required": [
+        "binding",
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        }
+      }
+    },
+    "ShapeNonNullable13": {
+      "type": "object",
+      "required": [
+        "pool",
+        "slot",
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pool": {
+          "type": "string"
+        },
+        "slot": {
+          "type": "integer"
+        },
+        "field": {
+          "type": "string"
+        }
+      }
+    },
+    "StateChannelRef": {
+      "description": "A document\u0027s one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[\u2026]) is a call whose one argument is a Zone.",
+      "title": "StateChannelRef",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable11"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable12"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable13"
+        }
+      ]
+    },
+    "ShapeNonNullable14": {
       "properties": {
         "op": {
           "enum": [
@@ -3408,10 +3401,10 @@
           ]
         },
         "name": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRef"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRef"
         }
       },
       "required": [
@@ -3420,16 +3413,16 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable9": {
+    "ShapeNonNullable15": {
       "properties": {
         "$type": {
           "const": "cell"
         },
         "name": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRef"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRef"
         }
       },
       "required": [
@@ -3438,7 +3431,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable10": {
+    "ShapeNonNullable16": {
       "properties": {
         "$type": {
           "const": "literal"
@@ -3453,7 +3446,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable11": {
+    "ShapeNonNullable17": {
       "properties": {
         "$type": {
           "const": "embed"
@@ -3471,7 +3464,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable12": {
+    "ShapeNonNullable18": {
       "type": "object",
       "title": "ExpressionVectorOperand",
       "required": [
@@ -3479,17 +3472,17 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ShapeNonNullable9"
+          "$ref": "#/$defs/ShapeNonNullable15"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable10"
+          "$ref": "#/$defs/ShapeNonNullable16"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable11"
+          "$ref": "#/$defs/ShapeNonNullable17"
         }
       ]
     },
-    "ShapeNonNullable13": {
+    "ShapeNonNullable19": {
       "properties": {
         "op": {
           "enum": [
@@ -3499,10 +3492,10 @@
           ]
         },
         "left": {
-          "$ref": "#/$defs/ShapeNonNullable12"
+          "$ref": "#/$defs/ShapeNonNullable18"
         },
         "right": {
-          "$ref": "#/$defs/ShapeNonNullable12"
+          "$ref": "#/$defs/ShapeNonNullable18"
         }
       },
       "required": [
@@ -3512,7 +3505,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNonNullable14": {
+    "ShapeNonNullable20": {
       "type": "object",
       "title": "ExpressionInstruction",
       "required": [
@@ -3538,14 +3531,14 @@
           "$ref": "#/$defs/ShapeNonNullable7"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable8"
+          "$ref": "#/$defs/ShapeNonNullable14"
         },
         {
-          "$ref": "#/$defs/ShapeNonNullable13"
+          "$ref": "#/$defs/ShapeNonNullable19"
         }
       ]
     },
-    "ShapeNonNullable15": {
+    "ShapeNonNullable21": {
       "type": "object",
       "required": [
         "instructions"
@@ -3560,7 +3553,7 @@
         "instructions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable14",
+            "$ref": "#/$defs/ShapeNonNullable20",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         }
@@ -3568,6 +3561,519 @@
       "additionalProperties": false
     },
     "ExpressionProgram": {
+      "description": "The one expression IR: a bounded postfix program a world rule, decision, cartridge step, or flock affinity evaluates. Each instruction either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
+      "type": "object",
+      "required": [
+        "instructions"
+      ],
+      "properties": {
+        "instructions": {
+          "description": "The postfix instructions, in evaluation order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable20",
+            "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
+          }
+        },
+        "subprograms": {
+          "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable21"
+          }
+        }
+      }
+    },
+    "ShapeNonNullable22": {
+      "type": "object",
+      "required": [
+        "zone"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "zone": {
+          "$ref": "#/$defs/ExpressionProgram"
+        }
+      }
+    },
+    "ShapeNonNullable23": {
+      "type": "object",
+      "required": [
+        "expression"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgram"
+        }
+      }
+    },
+    "ShapeNonNullable24": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable22"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable23"
+        }
+      ]
+    },
+    "ShapeNonNullable25": {
+      "type": "object",
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable24"
+          }
+        }
+      }
+    },
+    "StateChannelRefNonNullable": {
+      "description": "A document\u0027s one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[\u2026]) is a call whose one argument is a Zone.",
+      "title": "StateChannelRef",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable25"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable12"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable13"
+        }
+      ]
+    },
+    "ActionPredicateCompareState": {
+      "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+      "properties": {
+        "$type": {
+          "const": "compareState"
+        },
+        "state": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A declared state-section row name, or one of the reserved channels the compiler\u0027s vocabulary answers (RuleFacts and whatever a document project registers). Inside a host\u0027s per-participant action program, a named counter slot the program declares."
+        },
+        "comparison": {
+          "$ref": "#/$defs/ActionStateComparison",
+          "description": "The comparison to apply."
+        },
+        "value": {
+          "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]).",
+          "default": null
+        },
+        "comparandState": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "Another declared state-section row name, or a reserved channel, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+          "default": null
+        },
+        "comparandKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The cell inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "comparison"
+      ],
+      "additionalProperties": false,
+      "title": "ActionPredicateCompareState"
+    },
+    "ShapeNonNullable26": {
+      "properties": {
+        "op": {
+          "enum": [
+            "Operand"
+          ]
+        },
+        "name": {
+          "$comment": "StateChannelRef holds itself here; its shape is the one described where it first appears."
+        },
+        "key": {
+          "$comment": "StateChannelRef holds itself here; its shape is the one described where it first appears."
+        }
+      },
+      "required": [
+        "op",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNonNullable27": {
+      "properties": {
+        "$type": {
+          "const": "cell"
+        },
+        "name": {
+          "$comment": "StateChannelRef holds itself here; its shape is the one described where it first appears."
+        },
+        "key": {
+          "$comment": "StateChannelRef holds itself here; its shape is the one described where it first appears."
+        }
+      },
+      "required": [
+        "$type",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNonNullable28": {
+      "type": "object",
+      "title": "ExpressionVectorOperand",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ShapeNonNullable27"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable16"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable17"
+        }
+      ]
+    },
+    "ShapeNonNullable29": {
+      "properties": {
+        "op": {
+          "enum": [
+            "Dot",
+            "Similarity",
+            "Identical"
+          ]
+        },
+        "left": {
+          "$ref": "#/$defs/ShapeNonNullable28"
+        },
+        "right": {
+          "$ref": "#/$defs/ShapeNonNullable28"
+        }
+      },
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNonNullable30": {
+      "type": "object",
+      "title": "ExpressionInstruction",
+      "required": [
+        "op"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ShapeNonNullable2"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable3"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable4"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable5"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable6"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable7"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable26"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable29"
+        }
+      ]
+    },
+    "ShapeNonNullable31": {
+      "type": "object",
+      "required": [
+        "instructions"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "arity": {
+          "type": "integer"
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable30",
+            "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExpressionProgramNonNullable": {
+      "description": "The one expression IR: a bounded postfix program a world rule, decision, cartridge step, or flock affinity evaluates. Each instruction either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
+      "type": "object",
+      "required": [
+        "instructions"
+      ],
+      "properties": {
+        "instructions": {
+          "description": "The postfix instructions, in evaluation order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable30",
+            "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
+          }
+        },
+        "subprograms": {
+          "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable31"
+          }
+        }
+      }
+    },
+    "ShapeNonNullable32": {
+      "type": "object",
+      "required": [
+        "zone"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "zone": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable"
+        }
+      }
+    },
+    "ShapeNonNullable33": {
+      "type": "object",
+      "required": [
+        "expression"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable"
+        }
+      }
+    },
+    "ShapeNonNullable34": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable32"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable33"
+        }
+      ]
+    },
+    "ShapeNonNullable35": {
+      "type": "object",
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable34"
+          }
+        }
+      }
+    },
+    "StateChannelRefNonNullable2": {
+      "description": "A document\u0027s one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[\u2026]) is a call whose one argument is a Zone.",
+      "title": "StateChannelRef",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable35"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable12"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable13"
+        }
+      ]
+    },
+    "ShapeNonNullable36": {
+      "properties": {
+        "op": {
+          "enum": [
+            "Operand"
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/StateChannelRefNonNullable2"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable2"
+        }
+      },
+      "required": [
+        "op",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNonNullable37": {
+      "properties": {
+        "$type": {
+          "const": "cell"
+        },
+        "name": {
+          "$ref": "#/$defs/StateChannelRefNonNullable2"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable2"
+        }
+      },
+      "required": [
+        "$type",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNonNullable38": {
+      "type": "object",
+      "title": "ExpressionVectorOperand",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ShapeNonNullable37"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable16"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable17"
+        }
+      ]
+    },
+    "ShapeNonNullable39": {
+      "properties": {
+        "op": {
+          "enum": [
+            "Dot",
+            "Similarity",
+            "Identical"
+          ]
+        },
+        "left": {
+          "$ref": "#/$defs/ShapeNonNullable38"
+        },
+        "right": {
+          "$ref": "#/$defs/ShapeNonNullable38"
+        }
+      },
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNonNullable40": {
+      "type": "object",
+      "title": "ExpressionInstruction",
+      "required": [
+        "op"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ShapeNonNullable2"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable3"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable4"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable5"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable6"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable7"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable36"
+        },
+        {
+          "$ref": "#/$defs/ShapeNonNullable39"
+        }
+      ]
+    },
+    "ShapeNonNullable41": {
+      "type": "object",
+      "required": [
+        "instructions"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "arity": {
+          "type": "integer"
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNonNullable40",
+            "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExpressionProgramNonNullable2": {
       "description": "The one expression IR: a bounded postfix program a world rule, decision, cartridge step, or flock affinity evaluates. Each instruction either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
       "title": "ExpressionProgram",
       "type": "object",
@@ -3579,7 +4085,7 @@
           "description": "The postfix instructions, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable14",
+            "$ref": "#/$defs/ShapeNonNullable40",
             "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload."
           }
         },
@@ -3587,7 +4093,7 @@
           "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNonNullable15"
+            "$ref": "#/$defs/ShapeNonNullable41"
           }
         }
       }
@@ -3610,7 +4116,7 @@
           "const": "compareValue"
         },
         "left": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "Left numeric expression."
         },
         "comparison": {
@@ -3618,7 +4124,7 @@
           "description": "The comparison operation."
         },
         "right": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "Right numeric expression."
         },
         "kind": {
@@ -3950,8 +4456,8 @@
           "const": "setState"
         },
         "state": {
-          "description": "The state row name (or the host\u0027s counter slot).",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The state row name (or the host\u0027s counter slot)."
         },
         "value": {
           "description": "The literal value to write, or null when FromState spells a live operand to copy instead \u2014 exactly one of the source spellings is authored (refused by name when both or neither are present, the same duality CompareState\u0027s own comparand carries).",
@@ -3967,31 +4473,22 @@
           "default": "Self"
         },
         "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell inside State \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name).",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "fromState": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "Another declared state-section row name, or a reserved channel, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "fromKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell inside FromState, on the same (row, key) terms as Key. Refused when FromState names a reserved channel or is absent.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "valueSeconds": {
-          "description": "An alternative to Value for a kind=Int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in seconds \u2014 a physical unit, not a tick count, so a document\u0027s rate can change without silently retuning every cooldown \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either.",
+          "description": "An alternative to Value for a kind=Int state row: writes the row\u0027s raw engine-tick representation of a duration rather than the duration\u0027s own numeric value. Authored in seconds \u2014 a physical unit, not a tick count, so a document\u0027s rate can change without silently retuning the written duration \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either.",
           "type": [
             "number",
             "null"
@@ -4007,7 +4504,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "A bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
           "default": null
         },
@@ -4033,8 +4530,8 @@
           "const": "addState"
         },
         "state": {
-          "description": "The state row name (or the host\u0027s counter slot).",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The state row name (or the host\u0027s counter slot)."
         },
         "value": {
           "description": "The literal addend, or null when FromState spells a live addend instead \u2014 see Value\u0027s remarks.",
@@ -4050,27 +4547,18 @@
           "default": "Self"
         },
         "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell inside State \u2014 see Key.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "fromState": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "See FromState\u0027s remarks; here the addend is read live rather than the replacement.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "fromKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell inside FromState \u2014 see FromKey.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "valueSeconds": {
@@ -4082,7 +4570,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "See Expression.",
           "default": null
         }
@@ -4100,8 +4588,8 @@
           "const": "pushState"
         },
         "state": {
-          "description": "The history row.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The history row."
         },
         "value": {
           "description": "An exact decimal literal in the row\u0027s kind.",
@@ -4112,23 +4600,17 @@
           "default": null
         },
         "fromState": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "A state row or reserved channel read live at every firing.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "fromKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell of FromState, or null for its slot.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "A bounded numeric expression evaluated in the row\u0027s kind.",
           "default": null
         }
@@ -4157,12 +4639,12 @@
           "const": "transfer"
         },
         "from": {
-          "description": "The source zone \u2014 a zone name, or in an authored rule a live zone ($zones[\u003Cindex\u003E], an entry of the rule\u0027s Zones table selected before each firing; an index selecting none refuses the transfer by name).",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The source zone \u2014 a zone name, or in an authored rule a live zone ($zones[\u003Cindex\u003E], an entry of the rule\u0027s Zones table selected before each firing; an index selecting none refuses the transfer by name)."
         },
         "to": {
-          "description": "The destination zone, on the same terms as From.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The destination zone, on the same terms as From."
         },
         "selector": {
           "$ref": "#/$defs/ZoneSelector",
@@ -4170,11 +4652,8 @@
           "default": "Key"
         },
         "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The token key for key or slice selection. In an authored rule this may be a dynamic key, resolved from the active store before each transfer; direct mutations carry the resolved literal.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "insertFirst": {
@@ -4183,11 +4662,8 @@
           "default": false
         },
         "draw": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "A streamDraw site for random selection; absent for other selectors.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "count": {
@@ -4210,20 +4686,21 @@
           "const": "setRay"
         },
         "row": {
-          "description": "The board row.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The board row."
         },
         "from": {
-          "description": "The origin key, excluded from the read word and the write.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The origin key, excluded from the read word and the write."
         },
         "direction": {
           "description": "A direction in the board\u0027s topology.",
+          "title": "CellName",
           "type": "string"
         },
         "pattern": {
-          "description": "A patterns row over the board\u0027s own raw values (kind Int).",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A patterns row over the board\u0027s own raw values (kind Int)."
         },
         "value": {
           "description": "The replacement value written to every cell of the accepted prefix.",
@@ -4240,6 +4717,73 @@
       "additionalProperties": false,
       "title": "StateTransformSetRay"
     },
+    "StateTransformPushRay": {
+      "description": "Moves one live origin token and the outward tokens selected by PushPattern one topology cell. A token selected by StopPattern blocks the whole move, including when it is also selected by PushPattern. Other occupants remain in place. The mover is the first run symbol; pushed tokens follow in ascending pool-slot order within each cell, and the first cell without a pushed token contributes its passable occupants, or Empty when physically empty, as the terminator. The whole word must match Pattern, otherwise no token moves.",
+      "properties": {
+        "$type": {
+          "const": "pushRay"
+        },
+        "pool": {
+          "description": "The sole pool whose live instances participate.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "cell": {
+          "description": "The integer field holding each token\u0027s topology cell ordinal.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "value": {
+          "description": "The scalar field supplying each token\u0027s pattern symbol.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The selected pool\u0027s live Cell field, which identifies the one mover; other tokens sharing its origin remain in place."
+        },
+        "topology": {
+          "description": "The lattice the cell ordinals address.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "direction": {
+          "description": "A direction in that topology.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "pattern": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The pattern matched against the movable run followed by the passable or empty terminator."
+        },
+        "pushPattern": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The integer pattern selecting occupants that join the moving run."
+        },
+        "stopPattern": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The integer pattern selecting occupants that block the move."
+        },
+        "empty": {
+          "description": "The explicit symbol contributed by the first unoccupied cell.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pool",
+        "cell",
+        "value",
+        "from",
+        "topology",
+        "direction",
+        "pattern",
+        "pushPattern",
+        "stopPattern",
+        "empty"
+      ],
+      "additionalProperties": false,
+      "title": "StateTransformPushRay"
+    },
     "StateTransformShuffle": {
       "description": "Reorders a row\u0027s cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
       "properties": {
@@ -4247,12 +4791,12 @@
           "const": "shuffle"
         },
         "row": {
-          "description": "Any ordered zone or keyed row.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "Any ordered zone or keyed row."
         },
         "draw": {
-          "description": "The integer streamDraw site supplying the samples.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The integer streamDraw site supplying the samples."
         }
       },
       "required": [
@@ -4263,15 +4807,15 @@
       "title": "StateTransformShuffle"
     },
     "SortKey": {
-      "description": "One key of a zone sort: a keyed numeric attribute row over the zone\u0027s token domain.",
+      "description": "One numeric key of a Sort, in its declared precedence order.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "row": {
-          "description": "The attribute row.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The target itself for own-value sorting, or an attribute row over the zone\u0027s token domain."
         },
         "descending": {
           "description": "Whether the greatest value comes first under this key.",
@@ -4285,18 +4829,18 @@
       "additionalProperties": false,
       "title": "SortKey"
     },
-    "StateTransformSortZone": {
-      "description": "Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and each later key breaks the ties before it. The canonical order a pattern reads a hand in.",
+    "StateTransformSort": {
+      "description": "Stably reorders a row by numeric keys in precedence order. Naming the target row as the sole key orders its own values; otherwise the target is an ordered zone and the keys are token attributes.",
       "properties": {
         "$type": {
-          "const": "sortZone"
+          "const": "sort"
         },
         "row": {
-          "description": "The ordered zone.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A keyed or ordered numeric row for own-value sorting, or an ordered zone for attributes."
         },
         "by": {
-          "description": "The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction.",
+          "description": "One or more distinct numeric key rows, each carrying its own direction. Attribute rows must share the zone\u0027s token domain. A sole key naming the target reads its own stored values.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/SortKey"
@@ -4308,29 +4852,7 @@
         "by"
       ],
       "additionalProperties": false,
-      "title": "StateTransformSortZone"
-    },
-    "StateTransformSortKeyed": {
-      "description": "Reorders a keyed or ordered numeric row by its own cell values, stably.",
-      "properties": {
-        "$type": {
-          "const": "sortKeyed"
-        },
-        "row": {
-          "description": "Any ordered zone or keyed numeric row.",
-          "type": "string"
-        },
-        "descending": {
-          "description": "Whether the greatest value comes first.",
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false,
-      "title": "StateTransformSortKeyed"
+      "title": "StateTransformSort"
     },
     "StateTransformWriteSet": {
       "description": "Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state cell: the way a set built from $board:mask and the and/or/xor/not/shift/image expression ops lands back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no transform of its own and composes through per-cell rules instead.",
@@ -4339,19 +4861,16 @@
           "const": "writeSet"
         },
         "row": {
-          "description": "The board row, over a topology of at most 64 cells.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The board row, over a topology of at most 64 cells."
         },
         "set": {
-          "description": "The integer row the cell-set mask is read from.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The integer row the cell-set mask is read from."
         },
         "setKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell of that row, or null for its slot cell: a literal cell key, or any dynamic key spelling a write accepts (a binding token, a registered key family, an expression key, or a $cell:\u003Crow\u003E:\u003Ckey\u003E indirection).",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "value": {
@@ -4390,27 +4909,21 @@
           "const": "boardCombine"
         },
         "row": {
-          "description": "The board written.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The board written."
         },
         "operation": {
           "$ref": "#/$defs/BoardCombineOp",
           "description": "What is written."
         },
         "left": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The first source board, over the same topology; absent for Fill and Clear.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "right": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The second source board for the two-board operations.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "direction": {
@@ -4449,19 +4962,16 @@
           "const": "arrange"
         },
         "row": {
-          "description": "The ordered zone.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The ordered zone."
         },
         "from": {
-          "description": "The integer row the rank is read from.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The integer row the rank is read from."
         },
         "fromKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell of that row, or null for its slot cell.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         }
       },
@@ -4479,8 +4989,8 @@
           "const": "push"
         },
         "row": {
-          "description": "The history row.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The history row."
         },
         "value": {
           "description": "The raw value pushed, in the row\u0027s kind; read only when neither FromState nor Expression is named, and refused as ambiguous when a live source is named beside a non-zero literal.",
@@ -4488,23 +4998,17 @@
           "default": 0
         },
         "fromState": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "A state row or reserved channel read live at every firing.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "fromKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The cell of FromState, or null for its slot.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "A bounded numeric expression evaluated in the row\u0027s kind.",
           "default": null
         }
@@ -4522,12 +5026,12 @@
           "const": "clearEnclosed"
         },
         "row": {
-          "description": "The board.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The board."
         },
         "from": {
-          "description": "The placed value\u0027s cell: a literal cell key, or any dynamic key spelling a write accepts.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The placed value\u0027s cell: a literal cell key, or any dynamic key spelling a write accepts."
         },
         "lower": {
           "description": "The enclosed range\u0027s inclusive low end; the board\u0027s empty value lies outside it.",
@@ -4554,7 +5058,8 @@
           "const": "observe"
         },
         "row": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field."
         }
       },
       "required": [
@@ -4626,11 +5131,8 @@
           "type": "string"
         },
         "where": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "Optional boolean filter row.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         }
       },
@@ -4656,8 +5158,8 @@
           "type": "string"
         },
         "into": {
-          "description": "The destination table or slot.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The destination table or slot."
         },
         "k": {
           "description": "How many nearest results to recall.",
@@ -4672,19 +5174,13 @@
           "default": null
         },
         "where": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "Optional boolean row filter.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "exclude": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "Optional key to exclude from candidates.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         },
         "farthest": {
@@ -4709,12 +5205,12 @@
           "const": "remember"
         },
         "into": {
-          "description": "The destination vector table.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The destination vector table."
         },
         "key": {
-          "description": "The key to write.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The key to write."
         },
         "from": {
           "description": "The source vector.",
@@ -4748,13 +5244,13 @@
           "$ref": "#/$defs/StateTransformSetRay"
         },
         {
+          "$ref": "#/$defs/StateTransformPushRay"
+        },
+        {
           "$ref": "#/$defs/StateTransformShuffle"
         },
         {
-          "$ref": "#/$defs/StateTransformSortZone"
-        },
-        {
-          "$ref": "#/$defs/StateTransformSortKeyed"
+          "$ref": "#/$defs/StateTransformSort"
         },
         {
           "$ref": "#/$defs/StateTransformWriteSet"
@@ -4806,31 +5302,6 @@
       "additionalProperties": false,
       "title": "ActionEffectTransformState"
     },
-    "ActionEffectCountdownState": {
-      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int min=0 row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
-      "properties": {
-        "$type": {
-          "const": "countdownState"
-        },
-        "state": {
-          "description": "The countdown state-row name.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The cell inside State; null addresses its slot.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false,
-      "title": "ActionEffectCountdownState"
-    },
     "ActionEffectGenerate": {
       "description": "Redraws a draw site (a state row declaring a Draw). A draw\u0027s moment is authored through the rule that fires this: a TickPeriod site redraws on an ordinary $tick-scheduled rule and a Event site on an event-gated one, so timing costs no mutation ordinal.",
       "properties": {
@@ -4838,8 +5309,8 @@
           "const": "generate"
         },
         "row": {
-          "description": "The draw site\u0027s row name. One name, not a (source, destination) pair: a site\u0027s source is its own facet and a site is a scalar slot, so there is nothing else to address.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The draw site\u0027s row name. One name, not a (source, destination) pair: a site\u0027s source is its own facet and a site is a scalar slot, so there is nothing else to address."
         }
       },
       "required": [
@@ -4855,15 +5326,12 @@
           "const": "removeStateCell"
         },
         "state": {
-          "description": "The row to remove from.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The row to remove from."
         },
         "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         }
       },
@@ -4880,19 +5348,16 @@
           "const": "scheduleState"
         },
         "state": {
-          "description": "The integer destination row.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The integer destination row."
         },
         "delaySeconds": {
           "description": "The non-negative delay, rounded up to simulation ticks.",
           "type": "number"
         },
         "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         }
       },
@@ -5006,6 +5471,147 @@
       ],
       "additionalProperties": false,
       "title": "ActionEffectIf"
+    },
+    "ActionEffectClaim": {
+      "description": "Claims one lowest-free instance from a declared pool and fires Effects with Binding bound to that fresh, generation-checked instance. A full pool, an initializer refusal, or any nested effect refusal rejects this effect and rewinds the enclosing firing.",
+      "properties": {
+        "$type": {
+          "const": "claim"
+        },
+        "pool": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The declared pool to claim from."
+        },
+        "binding": {
+          "description": "The lexical instance name available only inside Effects.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "effects": {
+          "description": "The ordered initializer and body effects run under the fresh binding.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          }
+        }
+      },
+      "required": [
+        "pool",
+        "binding",
+        "effects"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectClaim"
+    },
+    "ActionEffectRelease": {
+      "description": "Releases the currently bound pool instance named by Binding. A stale or already released binding refuses the enclosing firing instead of selecting a later reclaim of the same slot.",
+      "properties": {
+        "$type": {
+          "const": "release"
+        },
+        "binding": {
+          "description": "The lexical instance binding to release.",
+          "title": "CellName",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectRelease"
+    },
+    "ActionEffectForEachPool": {
+      "description": "Snapshots one pool\u0027s live generation-checked instances and fires Effects for each under Binding. A release or reclaim inside the body cannot make a replacement slot appear in the same sweep.",
+      "properties": {
+        "$type": {
+          "const": "forEachPool"
+        },
+        "pool": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The declared pool to visit."
+        },
+        "binding": {
+          "description": "The lexical binding available only inside Effects.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "effects": {
+          "description": "The ordered effects run for each snapshot instance.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          }
+        }
+      },
+      "required": [
+        "pool",
+        "binding",
+        "effects"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectForEachPool"
+    },
+    "ActionEffectClaimPair": {
+      "description": "Claims one pair-pool instance for two currently bound endpoint instances, then runs its body under the fresh pair binding. Endpoint handles remain generation-checked, so a released/reclaimed endpoint cannot be paired through a stale alias.",
+      "properties": {
+        "$type": {
+          "const": "claimPair"
+        },
+        "pool": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The declared pair pool."
+        },
+        "left": {
+          "description": "The lexical binding for the left endpoint.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "right": {
+          "description": "The lexical binding for the right endpoint.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "binding": {
+          "description": "The lexical binding for the fresh pair instance.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "effects": {
+          "description": "The ordered body under Binding.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          }
+        }
+      },
+      "required": [
+        "pool",
+        "left",
+        "right",
+        "binding",
+        "effects"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectClaimPair"
+    },
+    "ActionEffectRewindTurn": {
+      "description": "Restores and removes the newest retained turn of a named undo group.",
+      "properties": {
+        "$type": {
+          "const": "rewindTurn"
+        },
+        "group": {
+          "description": "The undo-enabled rule group.",
+          "title": "CellName",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectRewindTurn"
     },
     "WorldEffectSetVerticalVelocity": {
       "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
@@ -5140,11 +5746,8 @@
           "default": null
         },
         "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The body the cue is about \u2014 a body index, a $cell: indirection, or a bound key.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         }
       },
@@ -5161,7 +5764,8 @@
           "const": "setBodyVerticalVelocity"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field."
         },
         "velocity": {
           "type": "number"
@@ -5181,7 +5785,8 @@
           "const": "scaleBodyVerticalVelocity"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field."
         },
         "factor": {
           "type": "number"
@@ -5201,7 +5806,8 @@
           "const": "applyBodyImpulse"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field."
         },
         "bodyDirection": {
           "$ref": "#/$defs/DocumentVector3"
@@ -5237,15 +5843,12 @@
           "type": "string"
         },
         "magnitudeState": {
-          "description": "The declared kind=Fixed row naming the impulse\u0027s magnitude.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The declared kind=Fixed row naming the impulse\u0027s magnitude."
         },
         "magnitudeKey": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The row\u0027s cell key, or null for an unkeyed row.",
-          "type": [
-            "string",
-            "null"
-          ],
           "default": null
         }
       },
@@ -5272,7 +5875,8 @@
           "const": "designateBody"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field."
         },
         "register": {
           "type": "string"
@@ -5281,10 +5885,8 @@
           "$ref": "#/$defs/WorldBodyDesignationKind"
         },
         "targetKey": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field.",
           "default": null
         }
       },
@@ -6573,14 +7175,47 @@
       "additionalProperties": false,
       "title": "WorldEffectSave"
     },
+    "WorldEffectPoseCell": {
+      "description": "Places a body upright at a live cell of an anchored topology, plus an authored offset.",
+      "properties": {
+        "$type": {
+          "const": "poseCell"
+        },
+        "key": {
+          "description": "A body reference, including placement:$each.",
+          "type": "string"
+        },
+        "topology": {
+          "description": "The declared topology.",
+          "type": "string"
+        },
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The integer cell ordinal evaluated when the effect fires."
+        },
+        "offset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The displacement from the cell centre, in world units."
+        }
+      },
+      "required": [
+        "key",
+        "topology",
+        "expression",
+        "offset"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectPoseCell"
+    },
     "WorldEffectPose": {
-      "description": "Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one of SpawnPoint and Position is authored.",
+      "description": "Teleports a world-addressed body to a spawn point or a literal position.",
       "properties": {
         "$type": {
           "const": "pose"
         },
         "key": {
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "A row name or literal key as plain text, or an object identifying a reserved channel, lexical pool field, or static pool field."
         },
         "spawnPoint": {
           "type": [
@@ -6619,8 +7254,8 @@
           "const": "setIdentityFact"
         },
         "key": {
-          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
-          "type": "string"
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
         },
         "fact": {
           "description": "The fact key on the identity\u0027s row.",
@@ -6635,7 +7270,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/ExpressionProgram",
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
           "description": "A bounded integer expression evaluated at fire time.",
           "default": null
         }
@@ -6670,9 +7305,6 @@
           "$ref": "#/$defs/ActionEffectTransformState"
         },
         {
-          "$ref": "#/$defs/ActionEffectCountdownState"
-        },
-        {
           "$ref": "#/$defs/ActionEffectGenerate"
         },
         {
@@ -6686,6 +7318,21 @@
         },
         {
           "$ref": "#/$defs/ActionEffectIf"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectClaim"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectRelease"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectForEachPool"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectClaimPair"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectRewindTurn"
         },
         {
           "$ref": "#/$defs/WorldEffectSetVerticalVelocity"
@@ -6737,6 +7384,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSave"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectPoseCell"
         },
         {
           "$ref": "#/$defs/WorldEffectPose"
@@ -7169,7 +7819,75 @@
       "additionalProperties": false,
       "title": "WorldSpeakerAttenuation"
     },
-    "ShapeNonNullable16": {
+    "WorldCameraProgram": {
+      "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The stable name a Blend op selects this program by.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The instruction-set version.",
+          "type": "string"
+        },
+        "operations": {
+          "$ref": "#/$defs/WorldCameraProgramOpList",
+          "description": "The selected ops, in authored evaluation order."
+        },
+        "anchorOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpAnchorNullable",
+          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
+        },
+        "blendOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpBlendNullable",
+          "description": "Gets the program\u0027s Blend op, or null."
+        },
+        "clampPitchOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpClampPitchNullable",
+          "description": "Gets the program\u0027s ClampPitch op, or null."
+        },
+        "dynamicsOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
+        },
+        "fovOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpFieldOfViewNullable",
+          "description": "Gets the program\u0027s FieldOfView op, or null."
+        },
+        "lookAtOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpLookAtNullable",
+          "description": "Gets the program\u0027s LookAt op, or null."
+        },
+        "offsetOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpOffsetNullable",
+          "description": "Gets the program\u0027s Offset op, or null."
+        },
+        "orbitOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpOrbitNullable",
+          "description": "Gets the program\u0027s Orbit op, or null."
+        },
+        "pathOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpPathNullable",
+          "description": "Gets the program\u0027s Path op, or null."
+        },
+        "selectOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpSelectProgramNullable",
+          "description": "Gets the program\u0027s SelectProgram op, or null."
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "operations"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraProgram"
+    },
+    "ShapeNonNullable42": {
       "anyOf": [
         {
           "type": "integer"
@@ -7262,7 +7980,7 @@
       },
       "additionalProperties": false
     },
-    "ShapeNonNullable17": {
+    "ShapeNonNullable43": {
       "type": "object",
       "properties": {
         "epochTick": {
@@ -7760,6 +8478,266 @@
       ],
       "additionalProperties": false,
       "title": "TopologyElementAlias"
+    },
+    "CellValueJsonConverterIntShape": {
+      "description": "The schema-only Int wire arm.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "Int"
+          ],
+          "title": "CellValueJsonConverterIntKind"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CellValueJsonConverterFixedKind": {
+      "description": "The Fixed arm\u0027s sole kind token.",
+      "enum": [
+        "Fixed"
+      ],
+      "title": "CellValueJsonConverterFixedKind"
+    },
+    "CellValueJsonConverterFixedShape": {
+      "description": "The schema-only Fixed wire arm.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CellValueJsonConverterFixedKind"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CellValueJsonConverterBoolShape": {
+      "description": "The schema-only Bool wire arm.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "Bool"
+          ],
+          "title": "CellValueJsonConverterBoolKind"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CellValueJsonConverterTextShape": {
+      "description": "The schema-only Text wire arm.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "Text"
+          ],
+          "title": "CellValueJsonConverterTextKind"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CellValueJsonConverterVectorKind": {
+      "description": "The Vector arm\u0027s sole kind token.",
+      "enum": [
+        "Vector"
+      ],
+      "title": "CellValueJsonConverterVectorKind"
+    },
+    "CellValueJsonConverterVectorShape": {
+      "description": "The schema-only Vector wire arm.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CellValueJsonConverterVectorKind"
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "Int64List": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "StateCellClock": {
+      "description": "A cell\u0027s own value-over-time timing state \u2014 the epoch(s), the second-order follower\u0027s sampled position and velocity, and a rotation\u0027s carried substep remainder \u2014 moved off the trait records (StateAdvance/StateDynamics/StateCycle, which keep only their authored parameters) onto the cell they time, so a key a write mints later starts its own clock from the tick it was created rather than sharing one baked into a trait every cell of the row would otherwise repeat.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "epochTick": {
+          "description": "The simulation tick this clock\u0027s rotation is measured from \u2014 the tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateCycle. A negative value is refused; in practice this can only be violated by an authored boot document, since every live settle rebases to the applying tick before validation sees it.",
+          "type": "integer",
+          "default": 0
+        },
+        "epochEngineTick": {
+          "description": "The engine tick (TicksPerSecond per second) this clock\u0027s accumulation is measured from \u2014 the engine tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateAdvance alone; never derived from EpochTick at a simulation rate, since a live rate change must move neither. A negative value is refused, for the same reason EpochTick is.",
+          "type": "integer",
+          "default": 0
+        },
+        "y0": {
+          "description": "A StateDynamics follower\u0027s position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row\u0027s stored-value kind.",
+          "type": "integer",
+          "default": 0
+        },
+        "v0": {
+          "description": "A StateDynamics follower\u0027s velocity at EpochTick, per second, as raw FixedQ4816 bits.",
+          "type": "integer",
+          "default": 0
+        },
+        "substepTicks": {
+          "description": "Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle\u0027s own ticksPerStep.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "additionalProperties": false,
+      "title": "StateCellClock"
+    },
+    "StatePoolValue": {
+      "description": "One field override in a statically seeded pool instance.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "field": {
+          "title": "CellName",
+          "type": "string"
+        },
+        "clock": {
+          "$ref": "#/$defs/StateCellClock",
+          "default": null
+        },
+        "value": {
+          "description": "Gets an immutable snapshot of the field value.",
+          "title": "CellValue",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/CellValueJsonConverterIntShape"
+            },
+            {
+              "$ref": "#/$defs/CellValueJsonConverterFixedShape"
+            },
+            {
+              "$ref": "#/$defs/CellValueJsonConverterBoolShape"
+            },
+            {
+              "$ref": "#/$defs/CellValueJsonConverterTextShape"
+            },
+            {
+              "$ref": "#/$defs/CellValueJsonConverterVectorShape"
+            }
+          ]
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "additionalProperties": false,
+      "title": "StatePoolValue"
+    },
+    "StatePoolSeed": {
+      "description": "One statically live pool slot and its field overrides.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "slot": {
+          "type": "integer"
+        },
+        "values": {
+          "description": "Gets the immutable field overrides.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/StatePoolValue"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "slot"
+      ],
+      "additionalProperties": false,
+      "title": "StatePoolSeed"
+    },
+    "StatePoolSeedList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/StatePoolSeed"
+      }
+    },
+    "StatePoolSnapshot": {
+      "description": "The complete persistent allocator continuation of one pool: every slot generation, including dead slots, plus the currently live instances and their field values.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "generations": {
+          "$ref": "#/$defs/Int64List",
+          "description": "Gets one generation per pool slot."
+        },
+        "live": {
+          "$ref": "#/$defs/StatePoolSeedList",
+          "description": "Gets the immutable live instances in ascending slot order.",
+          "default": null
+        }
+      },
+      "required": [
+        "generations"
+      ],
+      "additionalProperties": false,
+      "title": "StatePoolSnapshot"
     },
     "WorldThemeScrim": {
       "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator\u0027s theme validation for the literal-authoring floor).",
@@ -8303,7 +9281,7 @@
       "title": "CellSetExpressionComplement"
     },
     "CellSetExpression": {
-      "description": "The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one ClosedBitset256.",
+      "description": "The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one CellSet whose width is the carrier\u0027s own.",
       "type": "object",
       "required": [
         "$type"
@@ -8350,7 +9328,7 @@
       "title": "CellSetExpression"
     },
     "CellSetExpressionNullable": {
-      "description": "The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one ClosedBitset256.",
+      "description": "The boolean-closed cell-set vocabulary: the same operators a pattern spells over a word, spelled over the positions of a family, a board, or a zone. Every expression lowers to one CellSet whose width is the carrier\u0027s own.",
       "type": [
         "object",
         "null"

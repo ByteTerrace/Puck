@@ -33,7 +33,7 @@ public static partial class ArenaTransforms {
 
         if (
             (binding.BindsKey &&
-            (!arena.Catalog.Keys.TryGetName(
+            (!arena.Keys.TryGetName(
                 key: binding.Key,
                 name: out var name
             ) ||
@@ -63,7 +63,9 @@ public static partial class ArenaTransforms {
             );
         }
 
-        Span<long> values = stackalloc long[topology.CellCount];
+        using var valuesLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
+
+        var values = valuesLease.Span;
 
         if (!arena.TryReadBoard(
             rowOrdinal: enclosed.RowOrdinal,

@@ -106,6 +106,26 @@ public sealed class WorldStateDocumentValuesLawTests {
         );
     }
     [Fact]
+    public void AReferenceThatNamesNoRowIsStillFoundAndRefusedByName() {
+        var graph = new List<object> { JsonSerializer.Deserialize<DocumentVector3>(json: "\"elsewhere\"")! };
+
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        Assert.False(condition: WorldStateDocumentValues.ReferencesRow(
+            definition: Source(),
+            graph: graph,
+            rowName: "label"
+        ));
+        Assert.False(condition: WorldStateDocumentValues.TryResolveGraph(
+            graph: graph,
+            reason: out var reason,
+            source: Source()
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "reference 'elsewhere' must be state.<row>[.<key>]"
+        );
+    }
+    [Fact]
     public void PolymorphicMembersCollectionsAndBoxedValuesRetainReferences() {
         var bound = Bound();
         object[] graphs = [

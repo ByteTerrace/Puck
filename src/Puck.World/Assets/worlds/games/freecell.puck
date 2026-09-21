@@ -10,7 +10,7 @@ export read solitaireFreecell, solitaireFreecellCards, solitaireFreecellFace, so
 
 state {
   world {
-    table solitaireFreecellCards: Int capacity(52) {
+    table solitaireFreecellCards capacity(52) {
       "0" = 0
       "1" = 1
       "2" = 2
@@ -68,7 +68,7 @@ state {
     row {
       name: "solitaireFreecellRank"
       kind: "Int"
-      domain: keysOf(row: "solitaireFreecellCards")
+      domain: keysOf(row: solitaireFreecellCards)
       capacity: 52
       cells: map(range(0, 52), i => { key: $"{i}", value: i % 13 + 1 })
     }
@@ -76,7 +76,7 @@ state {
     row {
       name: "solitaireFreecellSuit"
       kind: "Int"
-      domain: keysOf(row: "solitaireFreecellCards")
+      domain: keysOf(row: solitaireFreecellCards)
       capacity: 52
       cells: map(range(0, 52), i => { key: $"{i}", value: floor(i / 13) })
     }
@@ -84,7 +84,7 @@ state {
     row {
       name: "solitaireFreecellFace"
       kind: "Int"
-      domain: keysOf(row: "solitaireFreecellCards")
+      domain: keysOf(row: solitaireFreecellCards)
       capacity: 52
       cells: map(range(0, 52), i => { key: $"{i}", value: 0 })
     }
@@ -175,7 +175,7 @@ state {
 
     pile solitaireFreecellPile17 of solitaireFreecellCards capacity(1)
 
-    table solitaireFreecell: Int capacity(27) {
+    table solitaireFreecell capacity(27) {
       request = 0
       applied = 0
       action = 0
@@ -221,8 +221,8 @@ state {
 patterns [
   {
     name: "solitaireFreecellLength"
-    kind: "Int"
-    value: "1"
+    kind: Int
+    value: 1
     symbols [
       {
         name: "any"
@@ -234,8 +234,8 @@ patterns [
   }
   {
     name: "solitaireFreecellSingle"
-    kind: "Int"
-    value: "1"
+    kind: Int
+    value: 1
     symbols [
       {
         name: "any"
@@ -247,8 +247,8 @@ patterns [
   }
   {
     name: "solitaireFreecellRun"
-    kind: "Int"
-    value: "solitaireFreecellFace[$token] * (1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2))"
+    kind: Int
+    value: solitaireFreecellFace[$token] * (1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2))
     symbols [
       {
         name: "face"
@@ -269,8 +269,8 @@ patterns [
   }
   {
     name: "solitaireFreecellLanding"
-    kind: "Int"
-    value: "(solitaireFreecellRank[$token] == solitaireFreecellRank[solitaireFreecell[card]] + 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[solitaireFreecell[card]] % 2)"
+    kind: Int
+    value: (solitaireFreecellRank[$token] == solitaireFreecellRank[solitaireFreecell[card]] + 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[solitaireFreecell[card]] % 2)
     symbols [
       {
         name: "yes"
@@ -288,13 +288,13 @@ patterns [
 
 rule "solitaireFreecell-new-deal" {
   gate: all(predicates: [
-    compareState(state: "solitaire", key: "table", comparison: "Equal", value: 3)
-    compareState(state: "solitaireFreecell", key: "request", comparison: "NotEqual", comparandState: "solitaireFreecell", comparandKey: "applied")
-    compareState(state: "solitaireFreecell", key: "stage", comparison: "Equal", value: 0)
-    compareState(state: "solitaireFreecell", key: "busy", comparison: "Equal", value: 0)
-    compareState(state: "solitaireFreecell", key: "action", comparison: "Equal", value: 1)
+    compareState(state: solitaire, key: table, comparison: Equal, value: 3)
+    compareState(state: solitaireFreecell, key: request, comparison: NotEqual, comparandState: solitaireFreecell, comparandKey: applied)
+    compareState(state: solitaireFreecell, key: stage, comparison: Equal, value: 0)
+    compareState(state: solitaireFreecell, key: busy, comparison: Equal, value: 0)
+    compareState(state: solitaireFreecell, key: action, comparison: Equal, value: 1)
     any(predicates: [
-      compareState(state: "solitaireFreecell", key: "option", comparison: "Equal", value: 1)
+      compareState(state: solitaireFreecell, key: option, comparison: Equal, value: 1)
     ]
     )
   ]
@@ -307,30 +307,30 @@ rule "solitaireFreecell-new-deal" {
 }
 
 rule "solitaireFreecell-gather" {
-  when solitaire[table] == 3 and solitaireFreecell[stage] == 1 and $reduce:count:$zones[solitaireFreecell[gatherStep]] > 0
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 1 and count($zones[solitaireFreecell[gatherStep]]) > 0
   zones [
-    "solitaireFreecellPile2"
-    "solitaireFreecellPile3"
-    "solitaireFreecellPile4"
-    "solitaireFreecellPile5"
-    "solitaireFreecellPile6"
-    "solitaireFreecellPile7"
-    "solitaireFreecellPile8"
-    "solitaireFreecellPile9"
-    "solitaireFreecellPile10"
-    "solitaireFreecellPile11"
-    "solitaireFreecellPile12"
-    "solitaireFreecellPile13"
-    "solitaireFreecellPile14"
-    "solitaireFreecellPile15"
-    "solitaireFreecellPile16"
-    "solitaireFreecellPile17"
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    solitaireFreecellPile4
+    solitaireFreecellPile5
+    solitaireFreecellPile6
+    solitaireFreecellPile7
+    solitaireFreecellPile8
+    solitaireFreecellPile9
+    solitaireFreecellPile10
+    solitaireFreecellPile11
+    solitaireFreecellPile12
+    solitaireFreecellPile13
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+    solitaireFreecellPile16
+    solitaireFreecellPile17
   ]
-  transform transfer(from: "$zones[solitaireFreecell[gatherStep]]", to: "solitaireFreecellPile0", selector: "Slice", key: "$zone:$zones[solitaireFreecell[gatherStep]]:first")
+  transform transfer(from: $zones[solitaireFreecell[gatherStep]], to: solitaireFreecellPile0, selector: Slice, key: zone($zones[solitaireFreecell[gatherStep]], first))
 }
 
 rule "solitaireFreecell-attributes-start" {
-  when solitaire[table] == 3 and solitaireFreecell[stage] == 1 and solitaireFreecell[gatherStep] == 15 and $reduce:count:solitaireFreecellPile0 == 52
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 1 and solitaireFreecell[gatherStep] == 15 and count(solitaireFreecellPile0) == 52
   solitaireFreecell[stage] = 5
 }
 
@@ -350,24 +350,24 @@ rule "solitaireFreecell-shuffle" {
 rule "solitaireFreecell-deal" {
   when solitaire[table] == 3 and solitaireFreecell[stage] == 3 and solitaireFreecell[dealStep] <= 51
   zones [
-    "solitaireFreecellPile0"
+    solitaireFreecellPile0
     ""
-    "solitaireFreecellPile2"
-    "solitaireFreecellPile3"
-    "solitaireFreecellPile4"
-    "solitaireFreecellPile5"
-    "solitaireFreecellPile6"
-    "solitaireFreecellPile7"
-    "solitaireFreecellPile8"
-    "solitaireFreecellPile9"
-    "solitaireFreecellPile10"
-    "solitaireFreecellPile11"
-    "solitaireFreecellPile12"
-    "solitaireFreecellPile13"
-    "solitaireFreecellPile14"
-    "solitaireFreecellPile15"
-    "solitaireFreecellPile16"
-    "solitaireFreecellPile17"
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    solitaireFreecellPile4
+    solitaireFreecellPile5
+    solitaireFreecellPile6
+    solitaireFreecellPile7
+    solitaireFreecellPile8
+    solitaireFreecellPile9
+    solitaireFreecellPile10
+    solitaireFreecellPile11
+    solitaireFreecellPile12
+    solitaireFreecellPile13
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+    solitaireFreecellPile16
+    solitaireFreecellPile17
   ]
   draw solitaireFreecellPile0 to $zones[2 + (solitaireFreecell[dealStep] % 8)]
 }
@@ -395,8 +395,8 @@ rule "solitaireFreecell-prepare-move" {
 
 rule "solitaireFreecell-count-workspace" {
   when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2
-  solitaireFreecell[emptyCells] = ($reduce:count:solitaireFreecellPile14 == 0) + ($reduce:count:solitaireFreecellPile15 == 0) + ($reduce:count:solitaireFreecellPile16 == 0) + ($reduce:count:solitaireFreecellPile17 == 0)
-  solitaireFreecell[emptyColumns] = ($reduce:count:solitaireFreecellPile2 == 0) + ($reduce:count:solitaireFreecellPile3 == 0) + ($reduce:count:solitaireFreecellPile4 == 0) + ($reduce:count:solitaireFreecellPile5 == 0) + ($reduce:count:solitaireFreecellPile6 == 0) + ($reduce:count:solitaireFreecellPile7 == 0) + ($reduce:count:solitaireFreecellPile8 == 0) + ($reduce:count:solitaireFreecellPile9 == 0)
+  solitaireFreecell[emptyCells] = (count(solitaireFreecellPile14) == 0) + (count(solitaireFreecellPile15) == 0) + (count(solitaireFreecellPile16) == 0) + (count(solitaireFreecellPile17) == 0)
+  solitaireFreecell[emptyColumns] = (count(solitaireFreecellPile2) == 0) + (count(solitaireFreecellPile3) == 0) + (count(solitaireFreecellPile4) == 0) + (count(solitaireFreecellPile5) == 0) + (count(solitaireFreecellPile6) == 0) + (count(solitaireFreecellPile7) == 0) + (count(solitaireFreecellPile8) == 0) + (count(solitaireFreecellPile9) == 0)
 }
 
 rule "solitaireFreecell-source" {
@@ -404,17 +404,17 @@ rule "solitaireFreecell-source" {
   zones [
     ""
     ""
-    "solitaireFreecellPile2"
-    "solitaireFreecellPile3"
-    "solitaireFreecellPile4"
-    "solitaireFreecellPile5"
-    "solitaireFreecellPile6"
-    "solitaireFreecellPile7"
-    "solitaireFreecellPile8"
-    "solitaireFreecellPile9"
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    solitaireFreecellPile4
+    solitaireFreecellPile5
+    solitaireFreecellPile6
+    solitaireFreecellPile7
+    solitaireFreecellPile8
+    solitaireFreecellPile9
   ]
-  solitaireFreecell[sourceOk] = $match:solitaireFreecellRun:$zones[solitaireFreecell[from]][solitaireFreecell[card]]
-  solitaireFreecell[runLength] = $match:solitaireFreecellLength:$zones[solitaireFreecell[from]]:prefix[solitaireFreecell[card]]
+  solitaireFreecell[sourceOk] = match(solitaireFreecellRun, $zones[solitaireFreecell[from]])[solitaireFreecell[card]]
+  solitaireFreecell[runLength] = match(solitaireFreecellLength, $zones[solitaireFreecell[from]], prefix)[solitaireFreecell[card]]
 }
 
 rule "solitaireFreecell-source-14" {
@@ -434,13 +434,13 @@ rule "solitaireFreecell-source-14" {
     ""
     ""
     ""
-    "solitaireFreecellPile14"
-    "solitaireFreecellPile15"
-    "solitaireFreecellPile16"
-    "solitaireFreecellPile17"
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+    solitaireFreecellPile16
+    solitaireFreecellPile17
   ]
-  solitaireFreecell[sourceOk] = $match:solitaireFreecellSingle:$zones[solitaireFreecell[from]][solitaireFreecell[card]]
-  solitaireFreecell[runLength] = $match:solitaireFreecellLength:$zones[solitaireFreecell[from]]:prefix[solitaireFreecell[card]]
+  solitaireFreecell[sourceOk] = match(solitaireFreecellSingle, $zones[solitaireFreecell[from]])[solitaireFreecell[card]]
+  solitaireFreecell[runLength] = match(solitaireFreecellLength, $zones[solitaireFreecell[from]], prefix)[solitaireFreecell[card]]
 }
 
 rule "solitaireFreecell-target" {
@@ -448,16 +448,16 @@ rule "solitaireFreecell-target" {
   zones [
     ""
     ""
-    "solitaireFreecellPile2"
-    "solitaireFreecellPile3"
-    "solitaireFreecellPile4"
-    "solitaireFreecellPile5"
-    "solitaireFreecellPile6"
-    "solitaireFreecellPile7"
-    "solitaireFreecellPile8"
-    "solitaireFreecellPile9"
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    solitaireFreecellPile4
+    solitaireFreecellPile5
+    solitaireFreecellPile6
+    solitaireFreecellPile7
+    solitaireFreecellPile8
+    solitaireFreecellPile9
   ]
-  solitaireFreecell[targetOk] = ($reduce:count:$zones[solitaireFreecell[to]] == 0 ? 1 : $match:solitaireFreecellLanding:$zones[solitaireFreecell[to]]) * (solitaireFreecell[runLength] <= ((solitaireFreecell[emptyCells] + 1) << maximum(0, solitaireFreecell[emptyColumns] - ($reduce:count:$zones[solitaireFreecell[to]] == 0))))
+  solitaireFreecell[targetOk] = (count($zones[solitaireFreecell[to]]) == 0 ? 1 : match(solitaireFreecellLanding, $zones[solitaireFreecell[to]])) * (solitaireFreecell[runLength] <= ((solitaireFreecell[emptyCells] + 1) << maximum(0, solitaireFreecell[emptyColumns] - (count($zones[solitaireFreecell[to]]) == 0))))
 }
 
 rule "solitaireFreecell-target-10" {
@@ -473,12 +473,12 @@ rule "solitaireFreecell-target-10" {
     ""
     ""
     ""
-    "solitaireFreecellPile10"
-    "solitaireFreecellPile11"
-    "solitaireFreecellPile12"
-    "solitaireFreecellPile13"
+    solitaireFreecellPile10
+    solitaireFreecellPile11
+    solitaireFreecellPile12
+    solitaireFreecellPile13
   ]
-  solitaireFreecell[targetOk] = (solitaireFreecell[runLength] == 1) * (solitaireFreecellSuit[solitaireFreecell[card]] == solitaireFreecell[to] - 10) * (solitaireFreecellRank[solitaireFreecell[card]] == $reduce:count:$zones[solitaireFreecell[to]] + 1)
+  solitaireFreecell[targetOk] = (solitaireFreecell[runLength] == 1) * (solitaireFreecellSuit[solitaireFreecell[card]] == solitaireFreecell[to] - 10) * (solitaireFreecellRank[solitaireFreecell[card]] == count($zones[solitaireFreecell[to]]) + 1)
 }
 
 rule "solitaireFreecell-target-14" {
@@ -498,38 +498,38 @@ rule "solitaireFreecell-target-14" {
     ""
     ""
     ""
-    "solitaireFreecellPile14"
-    "solitaireFreecellPile15"
-    "solitaireFreecellPile16"
-    "solitaireFreecellPile17"
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+    solitaireFreecellPile16
+    solitaireFreecellPile17
   ]
-  solitaireFreecell[targetOk] = ($reduce:count:$zones[solitaireFreecell[to]] == 0) * (solitaireFreecell[runLength] == 1)
+  solitaireFreecell[targetOk] = (count($zones[solitaireFreecell[to]]) == 0) * (solitaireFreecell[runLength] == 1)
 }
 
 rule "solitaireFreecell-move" {
   when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and solitaireFreecell[sourceOk] == 1 and solitaireFreecell[targetOk] == 1 and (solitaireFreecell[from] != solitaireFreecell[to] : Int)
   zones [
-    "solitaireFreecellPile0"
+    solitaireFreecellPile0
     ""
-    "solitaireFreecellPile2"
-    "solitaireFreecellPile3"
-    "solitaireFreecellPile4"
-    "solitaireFreecellPile5"
-    "solitaireFreecellPile6"
-    "solitaireFreecellPile7"
-    "solitaireFreecellPile8"
-    "solitaireFreecellPile9"
-    "solitaireFreecellPile10"
-    "solitaireFreecellPile11"
-    "solitaireFreecellPile12"
-    "solitaireFreecellPile13"
-    "solitaireFreecellPile14"
-    "solitaireFreecellPile15"
-    "solitaireFreecellPile16"
-    "solitaireFreecellPile17"
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    solitaireFreecellPile4
+    solitaireFreecellPile5
+    solitaireFreecellPile6
+    solitaireFreecellPile7
+    solitaireFreecellPile8
+    solitaireFreecellPile9
+    solitaireFreecellPile10
+    solitaireFreecellPile11
+    solitaireFreecellPile12
+    solitaireFreecellPile13
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+    solitaireFreecellPile16
+    solitaireFreecellPile17
   ]
   transaction {
-    transform transfer(from: "$zones[solitaireFreecell[from]]", to: "$zones[solitaireFreecell[to]]", selector: "Slice", key: "$cell:solitaireFreecell:card")
+    transform transfer(from: $zones[solitaireFreecell[from]], to: $zones[solitaireFreecell[to]], selector: Slice, key: solitaireFreecell[card])
     solitaireFreecell[moves] = solitaireFreecell[moves] + 1
     solitaireFreecell[busy] = 1
     solitaireFreecell[score] = maximum(0, solitaireFreecell[score] + (((solitaireFreecell[to] >= 10) & (solitaireFreecell[to] <= 13)) ? 10 : 0))
@@ -568,5 +568,5 @@ rule "solitaireFreecell-attribute-advance" {
 
 rule "solitaireFreecell-win" {
   when solitaire[table] == 3 and solitaireFreecell[status] == 1 and solitaireFreecell[busy] == 0
-  solitaireFreecell[status] = ($reduce:count:solitaireFreecellPile10 + $reduce:count:solitaireFreecellPile11 + $reduce:count:solitaireFreecellPile12 + $reduce:count:solitaireFreecellPile13) == 52 ? 2 : 1
+  solitaireFreecell[status] = (count(solitaireFreecellPile10) + count(solitaireFreecellPile11) + count(solitaireFreecellPile12) + count(solitaireFreecellPile13)) == 52 ? 2 : 1
 }

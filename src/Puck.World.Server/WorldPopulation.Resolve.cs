@@ -25,10 +25,11 @@ public sealed partial class WorldPopulation {
         m_seatVariation = definition.Population.SeatVariation;
         m_peerColors = definition.Population.PeerColors;
         m_reconnectGraceTicks = definition.PopulationReconnectGraceTicks;
-        m_sleepAfterTicks = ((ulong)Math.Max(
-            val1: 0,
-            val2: definition.Population.SleepAfterTicks
-        ));
+        // The validator admits only a floor that lands on a whole engine tick.
+        _ = FixedTickConversion.TryDurationEngineTicksExact(
+            seconds: definition.Population.SleepAfterSeconds,
+            ticks: out m_sleepAfterTicks
+        );
         m_kitRows = definition.Kits;
         var programs = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
         var programRows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);

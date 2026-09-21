@@ -7,6 +7,23 @@ namespace Puck.World.Transpiler.Tests;
 
 public class LinterTests {
     [Fact]
+    public void CompositionReferencesCountAsUses() {
+        var source = """
+            let seed = 7
+            let island = "island"
+            let endpoint = "gate"
+            let width = 4
+            module terrain(value: Int) { host { width: value } }
+            world island = terrain(value: seed)
+            border island.arch(1), neighbour.under(endpoint) { width: width }
+            """;
+        var diagnostics = new DiagnosticBag();
+
+        PuckLinter.Lint(PuckParser.ParseDocument(source), diagnostics);
+
+        Assert.DoesNotContain(collection: diagnostics, filter: diagnostic => (diagnostic.Code == "PUCK_LINT_001"));
+    }
+    [Fact]
     public void TestLinterPassesWhenConstantUsed() {
         var source = @"puck: 1
 let USED_VAL = ""alpha""

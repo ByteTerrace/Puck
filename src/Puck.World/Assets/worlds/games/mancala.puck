@@ -22,59 +22,86 @@ placements {
   }
 }
 
+prototypes {
+  prototype "tabletop" {
+    document {
+      name: "tabletop"
+      palette [
+        {
+          color: "#8A6A45"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top" {
+        material: 0
+        position [0, 1.25, 0]
+        rotation: "state.transforms.identity"
+        scale [1, 0.05, 1]
+      }
+
+      shape Cylinder "leg" {
+        material: 0
+        position [0, 0.6, 0]
+        rotation: "state.transforms.identity"
+        scale [0.08, 0.6, 0.08]
+      }
+    }
+  }
+}
+
 rule "mancala-reject-out-of-range" {
   when mancalaMoveRequest != mancalaMoveApplied and (mancalaSelectedPit < 0 or mancalaSelectedPit > 12 or mancalaSelectedPit == 6)
-  mode: "Level"
+  mode: Level
   mancalaMoveApplied = mancalaMoveRequest
 }
 
 rule "mancala-reject-illegal" {
   when mancalaMoveRequest != mancalaMoveApplied and mancalaSelectedPit >= 0 and mancalaSelectedPit <= 12 and mancalaSelectedPit != 6 and (mancalaStatus != 0 or (mancalaTurn == 0 and mancalaSelectedPit > 5) or (mancalaTurn == 1 and mancalaSelectedPit < 7) or mancalaBoard[mancalaSelectedPit[$value]] == 0)
-  mode: "Level"
+  mode: Level
   mancalaMoveApplied = mancalaMoveRequest
 }
 
 rule "mancala-stage-move" {
   when mancalaMoveRequest != mancalaMoveApplied and mancalaStatus == 0 and ((mancalaTurn == 0 and mancalaSelectedPit >= 0 and mancalaSelectedPit <= 5) or (mancalaTurn == 1 and mancalaSelectedPit >= 7 and mancalaSelectedPit <= 12)) and mancalaBoard[mancalaSelectedPit[$value]] > 0
-  local cStart: Int = (mancalaSelectedPit + 7 * mancalaTurn) % 14
-  local cLast: Int = ($local:cStart + mancalaBoard[(mancalaSelectedPit)]) % 13
-  local pLast: Int = ($local:cLast + 7 * mancalaTurn) % 14
-  local extra: Int = $local:cLast == 6 ? 1 : 0
-  mode: "Level"
-  setState(fromKey: "$cell:mancalaSelectedPit:$value", fromState: "mancalaBoard", state: "mancalaPitSeeds")
-  setState(expression: "$local:pLast", state: "mancalaLastPit")
-  setState(expression: "$local:extra", state: "mancalaExtraTurn")
+  local cStart = (mancalaSelectedPit + 7 * mancalaTurn) % 14
+  local cLast = (cStart + mancalaBoard[(mancalaSelectedPit)]) % 13
+  local pLast = (cLast + 7 * mancalaTurn) % 14
+  local extra = cLast == 6 ? 1 : 0
+  mode: Level
+  setState(fromKey: mancalaSelectedPit[$value], fromState: mancalaBoard, state: mancalaPitSeeds)
+  setState(expression: pLast, state: mancalaLastPit)
+  setState(expression: extra, state: mancalaExtraTurn)
   mancalaMoveApplied = mancalaMoveRequest
   mancalaStage = 1
 }
 
 rule "mancala-sow-board" {
   when mancalaStage == 1
-  local p: Int = mancalaPitIndex[$each]
-  local cStart: Int = (mancalaSelectedPit + 7 * mancalaTurn) % 14
-  local cp: Int = ($local:p + 7 * mancalaTurn) % 14
-  local dRaw: Int = ($local:cp - $local:cStart + 26) % 13
-  local dist: Int = $local:dRaw == 0 ? 13 : $local:dRaw
-  local added: Int = (($local:cp == 13) | (mancalaPitSeeds < $local:dist)) ? 0 : (1 + (mancalaPitSeeds - $local:dist) / 13)
-  mode: "Level"
-  forEach: "mancalaBoard"
-  mancalaBoard[$each] = ($local:p == mancalaSelectedPit ? 0 : mancalaBoard[$each]) + $local:added
+  local p = mancalaPitIndex[$each]
+  local cStart = (mancalaSelectedPit + 7 * mancalaTurn) % 14
+  local cp = (p + 7 * mancalaTurn) % 14
+  local dRaw = (cp - cStart + 26) % 13
+  local dist = dRaw == 0 ? 13 : dRaw
+  local added = ((cp == 13) | (mancalaPitSeeds < dist)) ? 0 : (1 + (mancalaPitSeeds - dist) / 13)
+  mode: Level
+  forEach: mancalaBoard
+  mancalaBoard[$each] = (p == mancalaSelectedPit ? 0 : mancalaBoard[$each]) + added
 }
 
 rule "mancala-advance-to-capture" {
   when mancalaStage == 1
-  mode: "Level"
+  mode: Level
   mancalaStage = 2
 }
 
 rule "mancala-apply-capture" {
-  when mancalaStage == 2 and $local:canCapture == 1
-  local isOwnSide: Int = ((mancalaLastPit + 7 * mancalaTurn) % 14 <= 5) ? 1 : 0
-  local isNotSelected: Int = mancalaLastPit != mancalaSelectedPit ? 1 : 0
-  local wasEmpty: Int = mancalaBoard[(mancalaLastPit)] == (1 + (mancalaPitSeeds - 1) / 13) ? 1 : 0
-  local oppositeHasSeeds: Int = mancalaBoard[(12 - mancalaLastPit)] > 0 ? 1 : 0
-  local canCapture: Int = $local:isOwnSide & $local:isNotSelected & $local:wasEmpty & $local:oppositeHasSeeds
-  mode: "Level"
+  when mancalaStage == 2 and canCapture == 1
+  local isOwnSide = ((mancalaLastPit + 7 * mancalaTurn) % 14 <= 5) ? 1 : 0
+  local isNotSelected = mancalaLastPit != mancalaSelectedPit ? 1 : 0
+  local wasEmpty = mancalaBoard[(mancalaLastPit)] == (1 + (mancalaPitSeeds - 1) / 13) ? 1 : 0
+  local oppositeHasSeeds = mancalaBoard[(12 - mancalaLastPit)] > 0 ? 1 : 0
+  local canCapture = isOwnSide & isNotSelected & wasEmpty & oppositeHasSeeds
+  mode: Level
   mancalaBoard[6 + 7 * mancalaTurn] = mancalaBoard[(6 + 7 * mancalaTurn)] + mancalaBoard[(mancalaLastPit)] + mancalaBoard[(12 - mancalaLastPit)]
   mancalaBoard[mancalaLastPit[$value]] = 0
   mancalaBoard[12 - mancalaLastPit] = 0
@@ -83,28 +110,28 @@ rule "mancala-apply-capture" {
 
 rule "mancala-skip-capture" {
   when mancalaStage == 2
-  mode: "Level"
+  mode: Level
   mancalaStage = 3
 }
 
 rule "mancala-update-turn" {
   when mancalaStage == 3
-  mode: "Level"
+  mode: Level
   mancalaTurn = mancalaExtraTurn == 1 ? mancalaTurn : (1 - mancalaTurn)
   mancalaStage = 4
 }
 
 rule "mancala-check-game-over" {
-  when mancalaStage == 4 and $local:isGameOver == 1
-  local p0Sum: Int = mancalaBoard[0] + mancalaBoard[1] + mancalaBoard[2] + mancalaBoard[3] + mancalaBoard[4] + mancalaBoard[5]
-  local p1Sum: Int = mancalaBoard[7] + mancalaBoard[8] + mancalaBoard[9] + mancalaBoard[10] + mancalaBoard[11] + mancalaBoard[12]
-  local isGameOver: Int = ($local:p0Sum == 0) | ($local:p1Sum == 0) ? 1 : 0
-  local final0: Int = mancalaBoard[6] + $local:p0Sum
-  local final1: Int = mancalaBoard[13] + $local:p1Sum
-  local winner: Int = $local:final0 > $local:final1 ? 1 : ($local:final1 > $local:final0 ? 2 : 3)
-  mode: "Level"
-  setState(expression: "$local:final0", key: "6", state: "mancalaBoard")
-  setState(expression: "$local:final1", key: "13", state: "mancalaBoard")
+  when mancalaStage == 4 and isGameOver == 1
+  local p0Sum = mancalaBoard[0] + mancalaBoard[1] + mancalaBoard[2] + mancalaBoard[3] + mancalaBoard[4] + mancalaBoard[5]
+  local p1Sum = mancalaBoard[7] + mancalaBoard[8] + mancalaBoard[9] + mancalaBoard[10] + mancalaBoard[11] + mancalaBoard[12]
+  local isGameOver = (p0Sum == 0) | (p1Sum == 0) ? 1 : 0
+  local final0 = mancalaBoard[6] + p0Sum
+  local final1 = mancalaBoard[13] + p1Sum
+  local winner = final0 > final1 ? 1 : (final1 > final0 ? 2 : 3)
+  mode: Level
+  setState(expression: final0, key: 6, state: mancalaBoard)
+  setState(expression: final1, key: 13, state: mancalaBoard)
   mancalaBoard[0] = 0
   mancalaBoard[1] = 0
   mancalaBoard[2] = 0
@@ -117,13 +144,13 @@ rule "mancala-check-game-over" {
   mancalaBoard[10] = 0
   mancalaBoard[11] = 0
   mancalaBoard[12] = 0
-  setState(expression: "$local:winner", state: "mancalaStatus")
+  setState(expression: winner, state: mancalaStatus)
   mancalaStage = 0
 }
 
 rule "mancala-game-continues" {
   when mancalaStage == 4
-  mode: "Level"
+  mode: Level
   mancalaStage = 0
 }
 
@@ -201,102 +228,102 @@ state {
       }
     ], edges: [
       {
-        direction: "forward"
+        direction: forward
         from: "0"
         to: "1"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "1"
         to: "2"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "2"
         to: "3"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "3"
         to: "4"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "4"
         to: "5"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "5"
         to: "6"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "6"
         to: "7"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "7"
         to: "8"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "8"
         to: "9"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "9"
         to: "10"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "10"
         to: "11"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "11"
         to: "12"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "12"
         to: "13"
       }
       {
-        direction: "forward"
+        direction: forward
         from: "13"
         to: "0"
       }
       {
-        direction: "across"
+        direction: across
         from: "0"
         to: "12"
       }
       {
-        direction: "across"
+        direction: across
         from: "1"
         to: "11"
       }
       {
-        direction: "across"
+        direction: across
         from: "2"
         to: "10"
       }
       {
-        direction: "across"
+        direction: across
         from: "3"
         to: "9"
       }
       {
-        direction: "across"
+        direction: across
         from: "4"
         to: "8"
       }
       {
-        direction: "across"
+        direction: across
         from: "5"
         to: "7"
       }
@@ -365,7 +392,7 @@ state {
         }
       ]
       capacity: 14
-      domain: cellsOf(topology: "mancalaBoard")
+      domain: cellsOf(topology: mancalaBoard)
       kind: "Int"
       name: "mancalaBoard"
     }
@@ -429,27 +456,27 @@ state {
           value: 13
         }
       ]
-      domain: cellsOf(topology: "mancalaBoard")
+      domain: cellsOf(topology: mancalaBoard)
       kind: "Int"
       name: "mancalaPitIndex"
     }
 
-    slot mancalaTurn: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot mancalaTurn = 0 bounds(0..1)
 
-    slot mancalaSelectedPit: Int = -1 bounds(minimum: -1, maximum: 13)
+    slot mancalaSelectedPit = -1 bounds(-1..13)
 
-    slot mancalaMoveRequest: Int = 0 bounds(minimum: 0)
+    slot mancalaMoveRequest = 0 bounds(0..)
 
-    slot mancalaMoveApplied: Int = 0 bounds(minimum: 0)
+    slot mancalaMoveApplied = 0 bounds(0..)
 
-    slot mancalaStatus: Int = 0 bounds(minimum: 0, maximum: 3)
+    slot mancalaStatus = 0 bounds(0..3)
 
-    slot mancalaPitSeeds: Int = 0 bounds(minimum: 0)
+    slot mancalaPitSeeds = 0 bounds(0..)
 
-    slot mancalaLastPit: Int = -1 bounds(minimum: -1, maximum: 13)
+    slot mancalaLastPit = -1 bounds(-1..13)
 
-    slot mancalaExtraTurn: Int = 0 bounds(minimum: 0, maximum: 1)
+    slot mancalaExtraTurn = 0 bounds(0..1)
 
-    slot mancalaStage: Int = 0 bounds(minimum: 0, maximum: 5)
+    slot mancalaStage = 0 bounds(0..5)
   }
 }

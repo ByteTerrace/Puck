@@ -188,7 +188,7 @@ public class EmbeddingDeclarationDecompilerTests {
             """));
 
         var decompiled = WorldDecompiler.Decompile(root: original, embeddings: lockFile);
-        Assert.Contains("table loreLog : Text embeds(companionVectors)", decompiled);
+        Assert.Contains("table loreLog embeds(companionVectors)", decompiled);
         AssertRoundTrips(original: original, lockFile: lockFile);
     }
 }

@@ -9,11 +9,15 @@ namespace Puck.State.Rules;
 /// <see cref="None"/> for a rule evaluated once.</summary>
 /// <param name="Left">The left index, or -1.</param>
 /// <param name="Right">The right index, or -1.</param>
-public readonly record struct LatchKey(int Left, int Right) {
+/// <param name="LeftGeneration">The left pool lifetime generation, or 0 for ordinary bindings.</param>
+/// <param name="RightGeneration">The right pool lifetime generation, or 0 for ordinary bindings.</param>
+public readonly record struct LatchKey(int Left, int Right, long LeftGeneration = 0L, long RightGeneration = 0L) {
     /// <summary>The binding of a rule evaluated once per tick.</summary>
     public static readonly LatchKey None = new(
         Left: -1,
-        Right: -1
+        LeftGeneration: 0L,
+        Right: -1,
+        RightGeneration: 0L
     );
 }
 /// <summary>One rule family's edge latch — per rule name and per binding, whether the gate held at the last
@@ -103,16 +107,23 @@ public sealed class RuleLatch {
             ordered.Sort(comparison: static (left, right) => {
                 var result = left.Key.Left.CompareTo(value: right.Key.Left);
 
-                return ((result != 0)
-                    ? result
-                    : left.Key.Right.CompareTo(value: right.Key.Right)
-                );
+                if (result != 0) {
+                    return result;
+                }
+                result = left.Key.Right.CompareTo(value: right.Key.Right);
+                if (result != 0) {
+                    return result;
+                }
+                result = left.Key.LeftGeneration.CompareTo(value: right.Key.LeftGeneration);
+                return ((result != 0) ? result : left.Key.RightGeneration.CompareTo(value: right.Key.RightGeneration));
             });
             hash.Add(value: ((uint)ordered.Length));
 
             foreach (var (binding, held) in ordered) {
-                hash.Add(value: ((uint)binding.Left));
-                hash.Add(value: ((uint)binding.Right));
+                hash.Add(value: binding.Left);
+                hash.Add(value: binding.Right);
+                hash.Add(value: binding.LeftGeneration);
+                hash.Add(value: binding.RightGeneration);
                 hash.Add(value: ((byte)(held
                     ? 1
                     : 0)));
@@ -186,6 +197,26 @@ public sealed class RuleLatch {
         m_bindingMemos.Clear();
         m_byRule.Clear();
         m_gateVersions.Clear();
+    }
+    /// <summary>Forgets scheduler observations while preserving every edge-held binding.</summary>
+    /// <remarks>Use this when the backing arena is replaced by an equivalent layout whose row-version counters
+    /// begin again. The held bits describe rule semantics and survive; cached versions and lexical values belong
+    /// to the retired arena.</remarks>
+    public void InvalidateScheduler() {
+        foreach (var bindings in m_gateVersions.Values) {
+            foreach (var entry in bindings.Values) {
+                entry.Owner = null;
+            }
+        }
+        foreach (var bindings in m_bindingMemos.Values) {
+            foreach (var slots in bindings.Values) {
+                foreach (var memo in slots) {
+                    if (memo is not null) {
+                        memo.Owner = null;
+                    }
+                }
+            }
+        }
     }
     /// <summary>Closes the sweep: every binding not touched since <see cref="BeginSweep"/> is removed.</summary>
     /// <param name="bindings">The swept rule's bindings.</param>

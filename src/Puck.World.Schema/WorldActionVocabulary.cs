@@ -51,15 +51,15 @@ public static class WorldEffect {
     public sealed record EmitCue(
         string Name,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Payload = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
     /// <summary>Writes a world-addressed body's vertical velocity.</summary>
-    public sealed record SetBodyVerticalVelocity(string Key, decimal Velocity) : ActionEffect;
+    public sealed record SetBodyVerticalVelocity(StateChannelRef Key, decimal Velocity) : ActionEffect;
     /// <summary>Scales a world-addressed body's vertical velocity.</summary>
-    public sealed record ScaleBodyVerticalVelocity(string Key, decimal Factor) : ActionEffect;
+    public sealed record ScaleBodyVerticalVelocity(StateChannelRef Key, decimal Factor) : ActionEffect;
     /// <summary>Rides a unit <paramref name="BodyDirection"/> at <paramref name="Speed"/> on a world-addressed body
     /// for an exact whole-engine-tick duration.</summary>
-    public sealed record ApplyBodyImpulse(string Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : ActionEffect;
+    public sealed record ApplyBodyImpulse(StateChannelRef Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : ActionEffect;
     /// <summary>Applies the same instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
     /// mass, through the server's rigid-body solver — never a second impulse mechanism) to a
     /// <paramref name="Key"/>-addressed body, along <paramref name="HeadingKey"/>'s own body's forward facing,
@@ -78,15 +78,15 @@ public static class WorldEffect {
     public sealed record ApplyRigidImpulse(
         string Key,
         string HeadingKey,
-        string MagnitudeState,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MagnitudeKey = null
+        StateChannelRef MagnitudeState,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? MagnitudeKey = null
     ) : ActionEffect;
     /// <summary>Designates or clears a world-addressed body's target register.</summary>
     public sealed record DesignateBody(
-        string Key,
+        StateChannelRef Key,
         string Register,
         WorldBodyDesignationKind Kind,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TargetKey = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? TargetKey = null
     ) : ActionEffect;
     /// <summary>Paints one lattice field cell, or the cube of <paramref name="Radius"/> around it.</summary>
     public sealed record PaintField(
@@ -117,15 +117,20 @@ public static class WorldEffect {
     /// <param name="Value">The integer literal.</param>
     /// <param name="Expression">A bounded integer expression evaluated at fire time.</param>
     public sealed record SetIdentityFact(
-        string Key,
+        StateChannelRef Key,
         string Fact,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
-    /// <summary>Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one
-    /// of <paramref name="SpawnPoint"/> and <paramref name="Position"/> is authored.</summary>
+    /// <summary>Places a body upright at a live cell of an anchored topology, plus an authored offset.</summary>
+    /// <param name="Key">A body reference, including placement:$each.</param>
+    /// <param name="Topology">The declared topology.</param>
+    /// <param name="Expression">The integer cell ordinal evaluated when the effect fires.</param>
+    /// <param name="Offset">The displacement from the cell centre, in world units.</param>
+    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset) : ActionEffect;
+    /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
-        string Key,
+        StateChannelRef Key,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,

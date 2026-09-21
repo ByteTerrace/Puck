@@ -26,10 +26,10 @@ never a Vulkan or DirectX type by name.
   `Puck.SignedDistance`) prepasses each tile's instance mask before the beam
   ever cone-marches, so beam cost tracks instances near the tile's cone
   rather than the total instance count.
-- *A frozen capacity envelope, sized once:* program word count, instance
-  count, and dynamic-transform slots are declared at construction
-  (`SdfWorldEngineOptions`); `UploadProgram` rejects anything exceeding them
-  loudly rather than silently truncating.
+- *Live program growth:* construction options reserve program words and instances.
+  `UploadProgram` grows those buffers after draining in-flight frames, retaining
+  images, pipelines, and baked data. Dynamic-transform slots remain reserved by
+  the host; engine hard limits still refuse invalid content.
 - *Composable content:* `ISdfSceneEmitter`/`SdfCompositionFrameSource` let a
   scene be assembled from independent emitters—fixed geometry, an authoring
   pool, a debug takeover—as one list instead of one hand-written
@@ -160,7 +160,7 @@ outcomes within the probe's ceilings cannot overrun the program allocation.
 device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
 also records the last uploaded program's word/instance count and Lipschitz
 step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
-against the frozen `ProgramWordCapacity`)—the live half of `Puck.World`'s
+against the current `ProgramWordCapacity`, including live growth)—the live half of `Puck.World`'s
 `world.budget` cost sheet.
 `LiveVolumes` reports the submitted bounded-media count against the shared
 64-volume ceiling. Flow and cloud media use eleven `float4` rows per entry:

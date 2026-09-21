@@ -97,6 +97,22 @@ public sealed class CellKeyLawTests {
         );
     }
     [Fact]
+    public void SpanResolutionFindsAnInternedNameWithoutMintingAnAbsentOne() {
+        var table = new CellKeyTable();
+        var expected = table.Intern(name: Name(candidate: "alpha"));
+
+        Assert.True(condition: table.TryResolve(
+            name: "alpha".AsSpan(),
+            key: out var resolved
+        ));
+        Assert.Equal(actual: resolved, expected: expected);
+        Assert.False(condition: table.TryResolve(
+            name: "absent".AsSpan(),
+            key: out _
+        ));
+        Assert.Equal(expected: 1, actual: table.Count);
+    }
+    [Fact]
     public void MintingPastTheCeilingRefusesByName() {
         var table = new CellKeyTable();
 

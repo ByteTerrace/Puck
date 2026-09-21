@@ -127,11 +127,11 @@ public sealed class WorldTableLawTests {
                         FromState: "$table:chart:$local:pair"
                     )],
                 Locals: [new RuleLocal(
-                        CellName.Parse(candidate: "pair"),
-                        CellKind.Int,
-                        new ExpressionProgram(Instructions: [
+                        Expression: new ExpressionProgram(Instructions: [
                         Instruction.Operand(name: "attack"), Instruction.Constant(value: 100m), Instruction.Of(operation: ExpressionOp.Multiply), Instruction.Operand(name: "defend"), Instruction.Of(operation: ExpressionOp.Add),
-                    ])
+                    ]),
+                        Kind: CellKind.Int,
+                        Name: CellName.Parse(candidate: "pair")
                     )]
             ),
             ],

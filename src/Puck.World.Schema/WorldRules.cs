@@ -16,6 +16,7 @@ namespace Puck.World;
 /// <param name="Locals">The values computed once per evaluation, in declared order, read as <c>$local:&lt;name&gt;</c>.</param>
 /// <param name="Zones">The rule's zone table (<see cref="Rule.Zones"/>), which every <c>$zones[&lt;index&gt;]</c> in
 /// the rule selects from, or <see langword="null"/>.</param>
+/// <param name="PoolForEach">A generation-aware lexical pool iteration, or none.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 [method: JsonConstructor]
 public sealed record WorldRule(
@@ -23,10 +24,11 @@ public sealed record WorldRule(
     IReadOnlyList<ActionEffect> Effects,
     ActionPredicate? Gate = null,
     ActionTriggerMode Mode = ActionTriggerMode.Level,
-    string? ForEach = null,
+    StateChannelRef? ForEach = null,
     [property: JsonPropertyOrder(5)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null,
     IReadOnlyList<RuleLocal>? Locals = null,
-    IReadOnlyList<string>? Zones = null
+    IReadOnlyList<string>? Zones = null,
+    RulePoolIteration? PoolForEach = null
 ) : Rule(
     Name: Name,
     Effects: Effects,
@@ -34,7 +36,8 @@ public sealed record WorldRule(
     Mode: Mode,
     ForEach: ForEach,
     Locals: Locals,
-    Zones: Zones
+    Zones: Zones,
+    PoolForEach: PoolForEach
 ) {
     /// <summary>Initializes a world rule over an engine rule, adding the optional choice policy.</summary>
     /// <param name="rule">The engine rule.</param>
@@ -47,7 +50,8 @@ public sealed record WorldRule(
         ForEach: rule.ForEach,
         Decision: decision,
         Locals: rule.Locals,
-        Zones: rule.Zones
+        Zones: rule.Zones,
+        PoolForEach: rule.PoolForEach
     ) {
     }
 }
@@ -80,7 +84,15 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// <param name="CoOccurrence">Distance or region.</param>
 /// <param name="Range">The distance range.</param>
 /// <param name="Neighbours">At most this many right carriers per left carrier for a distance interaction, the nearest first; 0 for every carrier in range.</param>
-public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range, int Neighbours = 0);
+/// <param name="LeftPool">The logical left pool, or null for a keyed property row.</param>
+/// <param name="RightPool">The logical right pool, or null for a keyed property row or region.</param>
+/// <param name="LeftBinding">The left instance register, or -1.</param>
+/// <param name="RightBinding">The right instance register, or -1.</param>
+/// <param name="LeftCarrier">The compiled logical body mapping for the left pool.</param>
+/// <param name="RightCarrier">The compiled logical body mapping for the right pool.</param>
+public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range, int Neighbours = 0,
+    StatePoolDescriptor? LeftPool = null, StatePoolDescriptor? RightPool = null, int LeftBinding = -1, int RightBinding = -1,
+    CompiledPoolBodyCarrier? LeftCarrier = null, CompiledPoolBodyCarrier? RightCarrier = null);
 /// <summary>A compiled lattice field paint.</summary>
 public readonly record struct CompiledWorldFieldPaint(string Field, int X, int Y, int Z, FixedQ4816 Value, WorldFieldWriteOp Operation, int Radius);
 /// <summary>A compiled literal pose.</summary>
@@ -98,6 +110,9 @@ public static class WorldRuleCapacity {
     public const int MaxDecisionOptions = 32;
     /// <summary>The largest cube radius a field paint covers.</summary>
     public const int MaxFieldPaintRadius = 8;
+    /// <summary>The work units one line-of-sight test costs. The march behind it walks the baked field's cells along
+    /// the segment, a count the document does not carry, so this is a flat weight rather than a traversal bound.</summary>
+    public const long SightTestWork = 64L;
 }
 /// <summary>The compile-time refusals only a world's own arms raise; the rule compiler's own are
 /// <see cref="Puck.State.Rules.RuleRefusal"/>. Both travel in a <see cref="RuleException"/>.</summary>

@@ -1,8 +1,8 @@
 namespace Puck.World.Server;
 
 /// <summary>
-/// The verdict rows of one installed document, addressed by the catalog ordinal the arena writes through, and the
-/// stamp the effect door leaves on each one.
+/// The verdict rows of one installed document and their witnesses, addressed by the catalog ordinal the arena
+/// writes through, and the stamp the effect door leaves on each verdict.
 /// </summary>
 /// <remarks>
 /// <para>Built once per arena layout and shared by every <see cref="WorldArenaHost"/> over that layout, so the stamp
@@ -13,9 +13,15 @@ namespace Puck.World.Server;
 /// document, the state hash folds it, and a checkpoint restores it.</para>
 /// </remarks>
 public sealed class WorldVerdictStamp {
+    // Indexed by catalog ordinal. A verdict row holds its own ordinal; a witness holds its verdict's, so a write to
+    // either is judged and stamped on the one row that carries a status.
+    private readonly int[] m_verdict;
     private readonly CellName[] m_status;
 
-    private WorldVerdictStamp(CellName[] status) => m_status = status;
+    private WorldVerdictStamp(CellName[] status, int[] verdict) {
+        m_status = status;
+        m_verdict = verdict;
+    }
 
     /// <summary>Returns the verdict rows of an installed document, or <see langword="null"/> when it declares
     /// none.</summary>
@@ -29,45 +35,63 @@ public sealed class WorldVerdictStamp {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         CellName[]? status = null;
+        int[]? verdicts = null;
 
         foreach (var row in definition.State) {
             if (
                 (row is null) ||
-                (row.Verdict is not { } verdict) ||
+                !row.IsRuleWritten ||
+                (WorldDefinitionRows.FindStateRow(
+                    name: (row.Witness?.Value ?? row.Name.Value),
+                    rows: definition.State
+                ) is not { Verdict: { } verdict } judged) ||
                 !catalog.TryResolve(
-                handle: out var handle,
-                lane: StateLane.Document,
-                name: row.Name
-            )
+                    handle: out var handle,
+                    lane: StateLane.Document,
+                    name: row.Name
+                ) ||
+                !catalog.TryResolve(
+                    handle: out var judgedHandle,
+                    lane: StateLane.Document,
+                    name: judged.Name
+                )
             ) {
                 continue;
             }
 
             status ??= new CellName[catalog.Count];
+            verdicts ??= new int[catalog.Count];
 
             if (((uint)handle.Ordinal) < ((uint)status.Length)) {
                 status[handle.Ordinal] = verdict.Status;
+                verdicts[handle.Ordinal] = judgedHandle.Ordinal;
             }
         }
 
-        return ((status is null)
+        return (((status is null) || (verdicts is null))
             ? null
-            : new WorldVerdictStamp(status: status)
+            : new WorldVerdictStamp(
+                status: status,
+                verdict: verdicts
+            )
         );
     }
-
-    /// <summary>Determines whether a catalog ordinal addresses a verdict row.</summary>
+    /// <summary>Determines whether a catalog ordinal addresses a verdict row or a witness of one.</summary>
     /// <param name="rowOrdinal">The catalog ordinal a mutation names.</param>
-    /// <param name="status">The row's status cell key, on success.</param>
-    /// <returns><see langword="true"/> when the ordinal addresses a verdict row.</returns>
-    public bool TryResolve(int rowOrdinal, out CellName status) {
+    /// <param name="verdictOrdinal">The ordinal of the verdict row that judges the write: the row itself, or the
+    /// verdict a witness names.</param>
+    /// <param name="status">That verdict row's status cell key, on success.</param>
+    /// <returns><see langword="true"/> when the ordinal addresses either.</returns>
+    public bool TryResolve(int rowOrdinal, out int verdictOrdinal, out CellName status) {
         if (((uint)rowOrdinal) >= ((uint)m_status.Length)) {
             status = default;
+            verdictOrdinal = -1;
 
             return false;
         }
 
         status = m_status[rowOrdinal];
+        verdictOrdinal = m_verdict[rowOrdinal];
 
         return (status.Value is { Length: > 0 });
     }
@@ -85,15 +109,21 @@ public sealed class WorldVerdictStamp {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         return (
-            arena.TryRead(
-            key: arena.Catalog.Keys.Intern(name: status),
+            arena.Keys.TryResolve(
+            key: out var statusKey,
+            name: status
+        ) && arena.TryRead(
+            key: statusKey,
             rowOrdinal: rowOrdinal,
             value: out var stored
         ) &&
             (stored.Kind == CellKind.Int) &&
             (stored.AsInt == WorldVerdict.Fail) &&
-            arena.TryRead(
-            key: arena.Catalog.Keys.Intern(name: WorldVerdict.FiredTickKey),
+            arena.Keys.TryResolve(
+            key: out var stampKey,
+            name: WorldVerdict.FiredTickKey
+        ) && arena.TryRead(
+            key: stampKey,
             rowOrdinal: rowOrdinal,
             value: out var stamp
         ) &&
@@ -109,7 +139,7 @@ public sealed class WorldVerdictStamp {
     public static bool Stamp(StateArena arena, int rowOrdinal, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        var key = arena.Catalog.Keys.Intern(name: WorldVerdict.FiredTickKey);
+        var key = arena.Keys.Intern(name: WorldVerdict.FiredTickKey);
 
         return (arena.TryCellSlot(
             key: key,

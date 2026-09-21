@@ -11,6 +11,10 @@ public sealed class LauncherOptions {
     /// <summary>Gets a value indicating whether to periodically log the measured present interval / genlock phase
     /// error. Off by default so a shipped run is not noisy.</summary>
     public bool LogPresentTiming { get; init; }
+    /// <summary>Gets a value indicating whether the headless host advances one fixed simulation step per loop
+    /// without waiting for wall clock. Intended for authored schedules and other offline runs whose inputs are
+    /// already pinned to simulation ticks.</summary>
+    public bool Unpaced { get; init; }
     /// <summary>Gets the delay, in seconds, before a one-shot synthetic device-loss is injected to exercise recovery,
     /// or <see langword="null"/> to leave it off.</summary>
     public double? SyntheticDeviceLossSeconds { get; init; }

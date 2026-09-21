@@ -126,7 +126,7 @@ public static class CartridgeCost {
     }
     // A key on a read is an element index, which is the one read that carries its own inner expression.
     private static CostBound Read(InstructionPayload.State state, CartridgeCostProfile profile) =>
-        ((CartridgeExpressions.Index(key: state.Key) is { } index)
+        ((CartridgeExpressions.Index(key: state.Key?.Spelling) is { } index)
             ? CostBound.Add(
                 left: CostBound.Known(cycles: profile.OperandArray),
                 right: Operand(
@@ -135,7 +135,7 @@ public static class CartridgeCost {
                 )
             )
             : CostBound.Known(cycles: (CartridgeExpressions.TryKey(
-                name: state.Name,
+                name: state.Name.Spelling,
                 button: out _,
                 mode: out _
             )
@@ -145,7 +145,7 @@ public static class CartridgeCost {
     // The one-token forms a guard is recognised by: a bare slot read on the left, a bare literal on the right.
     private static string? Slot(ExpressionProgram expression) =>
         ((expression.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])
-            ? state.Name
+            ? state.Name.Spelling
             : null
         );
     // A branch costs its conditions plus its costlier arm; a loop multiplies its body by the literal count, which is

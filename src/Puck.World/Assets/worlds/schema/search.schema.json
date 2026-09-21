@@ -305,6 +305,22 @@
               "null"
             ],
             "default": null
+          },
+          "enabled": {
+            "description": "Optional integer slot; zero suspends candidate work.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "revision": {
+            "description": "Optional integer slot copied to best.revision with the completed answer.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

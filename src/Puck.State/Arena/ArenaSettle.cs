@@ -34,28 +34,11 @@ public sealed partial class StateArena {
         }
 
         var row = DocumentRow(rowOrdinal: rowOrdinal);
-        var positions = PositionCount(rowOrdinal: rowOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < positions); position++) {
-            var slot = (layout.CellStart + position);
-
-            if (
-                !Bit(
-                index: slot,
-                words: m_presence
-            ) ||
-                !TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            ) ||
-                !m_catalog.Keys.TryGetName(
-                key: key,
-                name: out var name
-            )
-            ) {
-                continue;
-            }
+        while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+            var slot = ((layout.CellStart + cursor) - 1);
+            var name = m_keys[key];
 
             SettleSlot(
                 name: name,

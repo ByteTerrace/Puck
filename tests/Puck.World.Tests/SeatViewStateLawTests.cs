@@ -49,7 +49,7 @@ public sealed class SeatViewStateLawTests {
     public void Recenter_BodyRelativeYaw_DoesNotDoubleBodyHeading() {
         var document = Fixtures.BuildDocument();
         var views = document.Views with {
-            SeatControl = document.Views.SeatControl with { YawReference = WorldSeatYawReference.Body, },
+            SeatControlRaw = document.Views.SeatControl with { YawReference = WorldSeatYawReference.Body, },
         };
         var bodyOrientation = Quaternion.CreateFromAxisAngle(
             axis: Vector3.UnitY,

@@ -9,10 +9,10 @@ namespace Puck.World.Transpiler.Tests;
 /// name and no reader that would take one.</remarks>
 public class TransformResultLabelRefusalLawTests {
     private const string Labelled = """
-        transform wipe = boardCombine(row: "deck", operation: Copy)
+        transform wipe = boardCombine(row: deck, operation: Copy)
         """;
     private const string Unlabelled = """
-        transform boardCombine(row: "deck", operation: Copy)
+        transform boardCombine(row: deck, operation: Copy)
         """;
 
     private static DiagnosticBag Compile(string statement) => WorldCompiler.Compile(
@@ -41,7 +41,7 @@ public class TransformResultLabelRefusalLawTests {
 
         state {
             world {
-                table deck : Int {
+                table deck {
                     a = 1
                     b = 2
                 }

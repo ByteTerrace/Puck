@@ -274,16 +274,50 @@ returns to the source, retaining its history and recovery points.
 `WorldServer` is the rule evaluator's host: it implements `IStateReader`,
 `IEffectHost`, `IArenaTransformHost`, `IRuleOwner` and `IRuleRefusalSink`, and
 every state read and write of a tick addresses one `StateArena` (`Puck.State`).
-The arena is the authoritative state during a tick; the installed document is
-its export at the end of the tick's rule evaluation (`InstallArenaExport`), so a
-reader outside the rule loop sees the state as of the previous export.
+The arena is the authoritative state during a tick, and a value written there
+reaches everything outside it through one boundary, `WorldServer.PublishArena`,
+at the end of the tick's rule evaluation. A reader outside the rule loop sees
+the state as of the previous publication.
 
-One rule firing is one arena journal scope: every effect it produces lands in
-that scope, which commits when each required effect succeeds and rewinds
-otherwise, recording one counted refusal naming the effect that refused. An
-effect arm the host cannot rewind — a cue, a pose, a body motion, a document
-row upsert — declares `EffectNeeds.Irreversible`, is validated with
-`EffectFiring.Preflight` set before the commit, and fires after it.
+A publication installs what `WorldServer.ProposePublication` composes. A
+proposal reads the rows whose version moved since the document and the arena
+last agreed on them, and the rows an open scope has written, and keeps every
+other installed row as it is, so its cost follows what was written, not what
+the document declares. A preflight judges the same proposal the commit then
+adopts (`AdoptPublication`), so what was judged is what is installed. The first
+publication after the arena is seeded from a document carries every row, which
+puts the installed document in the arena's own spelling. It then does what any
+installed state value owes: it re-resolves document values that read a moved
+row, marks state delivery pending, and calls
+`WorldDocument.ReconcileStateConsumers`, the routine a value mutation also ends
+in. That routine brings the consumers that keep their own copy of a value up to
+date: the grant table's drive gates, the field lattice's input, each body's
+scale, and the cell-driven inhabit counts. A consumer added later belongs
+there, so it cannot depend on which door a value came through.
+
+One rule firing is one arena journal scope. What a firing promises depends on
+the kind of effect:
+
+| Kind | Examples | Promise |
+|---|---|---|
+| Arena write | `setState`, a transform, a transfer | Inside the scope: lands with the commit or rewinds with it. |
+| Transactional arm (`EffectNeeds.Transactional`) | a placement or HUD panel upsert or removal | Inside the promise. The firing's rows compose in order into one `WorldMutation.Batch`; each is preflighted against the document the firing proposes with the rows before it applied, so a row that cannot follow them refuses by name. The whole batch is then prepared (`IEffectHost.PrepareTransactional`): every gate of the mutation door that can refuse it runs while the firing can still rewind. The commit installs the prepared batch, which cannot refuse. |
+| Delivered arm (`EffectNeeds.Irreversible` alone) | a cue, a pose, a body motion, a rigid impulse, a field paint, a save | Outside the promise. It is preflighted before the commit, against what the earlier arms of the firing would leave where the host models that (a rigid impulse lands on the velocity the earlier impulses leave), and fired after the commit in authored order. A delivery that refuses is one counted refusal (`IrreversibleArmFailed`); it undoes nothing and stops no later delivery. |
+
+A preflight installs nothing: the scope is still open, so the document it
+judges against is a proposal and the installed document never carries a write
+that may rewind.
+
+The mutation door is two steps for the same reason.
+`WorldDocument.TryPrepareMutation` runs every gate that can refuse a mutation,
+against a document the caller names, and moves nothing: admission, composition,
+whole-document validation, the render envelope and field capacities, the solid
+field build, the replacement state arena when the install needs one, and the
+addon and machine staging. `WorldDocument.InstallPrepared` installs what it
+produced and refuses nothing. `TryApplyMutation` is the two in sequence; a rule
+firing prepares before its arena scope commits and installs after.
+Value-only installs reuse the arena and preflight their import against its
+live key and visibility budgets, including names retained after cell removal.
 
 A submitted operation takes the same kernels. `WorldArenaTransforms.TryApply`
 resolves one authored `StateTransform` to ordinals and interned keys through the
@@ -296,8 +330,9 @@ is refused by name, and a phase guard admits against the arena's own
 phase-sequence column before advancing it.
 
 A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
-relayouts the arena in place rather than replacing it, so the participant and
-identity lanes ride across and everything holding the store keeps holding it.
+prepares its replacement arena before the mutation commits. The replacement
+carries the runtime key ledger plus the participant and identity lanes; a
+capacity refusal therefore leaves both the installed document and arena alone.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
@@ -319,11 +354,10 @@ hands a body its address only; a restore marks the slot occupied before writing
 the registers it captured. A binding reconciles the roster against the live
 table, so a fresh arena re-joins every active ordinal.
 
-Replacing the arena does not lose what the lanes hold. `SyncArena`'s relayout
-carries them across, and its `BuildArena` fallback — reached when a re-declared
-row set refuses to lay out or load — inherits them through the same
-`StateArena.CopyLanesTo`, so the fallback is a document rebuild rather than a
-silent re-birth of every live body's registers.
+Replacing the arena does not lose what the lanes hold. A prepared mutation
+copies them before commit; reconstruction paths use `SyncArena`'s relayout and
+refuse without falling back to a fresh store. Replacement therefore cannot
+silently re-birth every live body's registers.
 
 The values therefore fold into the `Arena` hash component with the rest of the
 store; `BodyActionState` folds the declaration and the per-lane trigger runtime
@@ -534,6 +568,27 @@ name, naming the depth, rather than silently undoing fewer than asked).
 World-rule failures accumulate in the evaluator's ledger, one entry per
 category. The first occurrence is narrated; repeated Level-rule failures only
 increment their counter. `world.rule.failures` reports the count and latest tick/rule/effect/reason.
+The installed rule compilation retains one lazily computed `WorldCostReport` and
+hazard list. Console reads and search planning reuse its work sheet;
+`world.rule.hazards` uses the installed programs without compiling them again.
+Installing a replacement definition replaces these results. Construction reuses
+its validation's programs and pinned tables while row settlement leaves the
+exact definition unchanged. Reference-cycle evidence remains incomplete,
+so unresolved bounds stay explicit and the current heuristic admission policy
+remains active. See [abstract-machine costing](../../docs/plans/abstract-machine-costing.md).
+
+File/DSL boot, local instance construction and checkpoint restore carry an operation-owned local admission
+result into machine preparation and rule installation. The receipt's ownership
+and validity requirements are documented in [World.Schema](../Puck.World.Schema/README.md#the-rules-documentthe-per-body-action-primitive-one-level-up).
+Post-build wiring completes the loader's environment checks after command services
+and neighbour transports compose. A changed boot document takes fresh validation.
+Construction settles clocks and inverse boards from its initial arena, then installs
+that arena directly. Replacement arenas use the same search-narration wiring, so a
+finished job whose output mutation refuses remains visible after a document change.
+Construction settles clocks and inverse boards from its initial arena, then installs
+that arena directly. Replacement arenas use the same search-narration wiring, so a
+finished job whose output mutation refuses remains visible after a document change.
+
 Rule/interaction installation is also guarded by a static aggregate work budget,
 reported beside evaluation slots in `world.budget`; dynamic body-index keys use
 a prebuilt string cache on the evaluation path.
@@ -739,7 +794,7 @@ mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 
 A non-seat body sleeps once its program has produced no motion and it has
-received no intent for `bodies.sleepAfterTicks` engine ticks (`WorldBody.Sleep.cs`;
+received no intent for `bodies.sleepAfterSeconds` (`WorldBody.Sleep.cs`;
 0, the default, never sleeps). `WorldPopulation.AdvanceSimulated` skips a
 sleeping body outright—no producer staging, no motion program, no contact
 solve—until something wakes it: an adopted intent (tape, submitted, or
@@ -754,6 +809,13 @@ none of them moved since a sleeping body last observed it. `body.where` trails
 the population-wide `sleeping` count. A rigid kit's own rest latch
 (`WorldBody.Resting`) is a distinct, older mechanism—a rigid body never
 reaches this one at all (`Advance` returns before it).
+
+Checkpoint restoration preserves the sleep tick, any partially accumulated
+idle floor, and a pending contact-field wake. It records whether the body's
+field observation was current, rather than depending on a process-local
+counter surviving reconstruction. Ordinary transfers still wake the body.
+The version 9 checkpoint codec carries this continuation state, identity-owned
+record snapshots, and generation-qualified rule latches. It refuses older envelopes.
 
 Body-frame policy is compiled separately from that provider seam. Every body
 uses opposed solved gravity (or the contact field's ambient up fallback) as its
@@ -781,9 +843,9 @@ vertical lane carries the scalar counterpart. Cross-world motion continuity
 round-trips their values through `TransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
 frame/reseat/turn fractions, and complete hold/tether state through
-`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development—
-`SupportedVersion` stays fixed and the fail-closed wire shape changes directly,
-with no compatibility reader).
+`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development;
+an incompatible wire or restored-authority contract moves `SupportedVersion`,
+and older versions have no compatibility reader).
 
 `kit.autonomy` independently batches non-human motion and producer steering in
 engine-tick time. Bodies are deterministically phased across each interval;
@@ -828,6 +890,10 @@ authored travel fraction (`collision.bodyContacts.rigidSubstepTravelFraction`,
 floored by `collision.bodyContacts.rigidSubstepMinimumTravel`), capped by
 `collision.bodyContacts.rigidSubstepCeiling`; the derived count is echoed in
 `world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
+
+Rigid integration publishes `Grounded` and the contact count from its own
+measured walkable contacts. `Rising` and `Falling` read rigid vertical velocity;
+they do not reuse the dormant locomotion velocity or spawn-time grounded flag.
 
 `WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
 from the body's own live `Scale` (`WorldBody.Scale.cs`) on every read:

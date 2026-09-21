@@ -152,18 +152,144 @@ public sealed class RuleCompilerLawTests {
             Name: RulesFixture.Name(value: "crowded")
         );
 
-        // One declared value, the one key every later binding reads through, and fourteen declared bindings fill the
-        // buffer exactly.
+        // One declared value, the one key every later binding reads through, and two fewer declared bindings than
+        // the ceiling fill the buffer exactly.
         Assert.Equal(
-            actual: RulesFixture.Compile(rule: Declaring(computed: 14)).Locals!.Length,
+            actual: RulesFixture.Compile(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 2))).Locals!.Length,
             expected: RuleCapacity.MaxLocalsPerRule
         );
-        // Sixteen declared bindings pass the authored count, and the shared key makes seventeen.
+        // One more declared binding still passes the authored count, and the shared key puts it one past the ceiling.
         Assert.Equal(
-            actual: RulesFixture.Refusal(rule: Declaring(computed: 15)),
+            actual: RulesFixture.Refusal(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 1))),
             expected: RuleRefusal.EffectKindInadmissible
         );
     }
+    // A local that declares no kind takes the one its expression compiles under: Int where it does, Fixed otherwise.
+    // A fractional literal compared against an Int row is an Int expression, which a reading of the literals alone
+    // would call Fixed.
+    [InlineData("score + 1", CellKind.Int)]
+    [InlineData("3", CellKind.Int)]
+    [InlineData("score < 2.5 ? 1 : 0", CellKind.Int)]
+    [InlineData("ratio * 2", CellKind.Fixed)]
+    [InlineData("ratio + 0.5", CellKind.Fixed)]
+    [InlineData("1.5 + 1", CellKind.Fixed)]
+    [InlineData("1.5 == 1.5", CellKind.Int)]
+    [InlineData("sign(0.5)", CellKind.Int)]
+    [Theory]
+    public void ALocalThatDeclaresNoKindTakesTheKindItsExpressionCompilesUnder(string expression, CellKind kind) => Assert.Equal(
+        actual: RulesFixture.Compile(rule: new Rule(
+            Effects: [new ActionEffect.SetState(
+                Expression: RulesFixture.Program(text: "1"),
+                State: "score"
+            )],
+            Locals: [new RuleLocal(
+                Expression: RulesFixture.Program(text: expression),
+                Name: RulesFixture.Name(value: "value")
+            )],
+            Name: RulesFixture.Name(value: "inferred")
+        )).Locals![0].Kind,
+        expected: kind
+    );
+    // The local's numeric carrier is Fixed for the fractional literal, while comparison and sign are Int results.
+    // Both therefore retain the literal's exact value before leaving the integer a later effect reads.
+    [Theory]
+    [InlineData("1.5 == 1.5")]
+    [InlineData("sign(0.5)")]
+    public void AnInferredLocalRetainsFractionalOperandsWhenItLeavesAnIntResult(string text) {
+        var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(
+            rules: [new Rule(
+                Effects: [new ActionEffect.SetState(
+                    Expression: RulesFixture.Program(text: "$local:value"),
+                    State: "score"
+                )],
+                Locals: [new RuleLocal(
+                    Expression: RulesFixture.Program(text: text),
+                    Name: RulesFixture.Name(value: "value")
+                )],
+                Name: RulesFixture.Name(value: "inferred")
+            )]
+        );
+        var local = Assert.Single(collection: rules[0].Locals!);
+
+        Assert.Equal(
+            expected: CellKind.Int,
+            actual: local.Kind
+        );
+        Assert.Equal(
+            expected: CellKind.Fixed,
+            actual: local.CarrierKind
+        );
+        Assert.True(condition: evaluator.Evaluate(
+            latch: latch,
+            rules: rules,
+            stepTicks: 1UL
+        ));
+        Assert.Equal(
+            expected: 1L,
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            )
+        );
+    }
+    [Fact]
+    public void AnIntResultFromAFixedCarrierFeedsALaterLocalAndGate() {
+        var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(
+            rules: [new Rule(
+                Effects: [new ActionEffect.SetState(
+                    Expression: RulesFixture.Program(text: "$local:next"),
+                    State: "score"
+                )],
+                Gate: new ActionPredicate.CompareValue(
+                    Kind: CellKind.Int,
+                    Comparison: ActionStateComparison.Equal,
+                    Left: RulesFixture.Program(text: "$local:next"),
+                    Right: RulesFixture.Program(text: "2")
+                ),
+                Locals: [
+                    new RuleLocal(
+                        Expression: RulesFixture.Program(text: "sign(0.5)"),
+                        Name: RulesFixture.Name(value: "sign")
+                    ),
+                    new RuleLocal(
+                        Expression: RulesFixture.Program(text: "$local:sign + 1"),
+                        Name: RulesFixture.Name(value: "next")
+                    ),
+                ],
+                Name: RulesFixture.Name(value: "chained")
+            )]
+        );
+
+        var (sign, next) = (rules[0].Locals![0], rules[0].Locals![1]);
+
+        Assert.Equal(expected: CellKind.Fixed, actual: sign.CarrierKind);
+        Assert.Equal(expected: CellKind.Int, actual: sign.Kind);
+        Assert.Equal(expected: CellKind.Int, actual: next.CarrierKind);
+        Assert.True(condition: evaluator.Evaluate(
+            latch: latch,
+            rules: rules,
+            stepTicks: 1UL
+        ));
+        Assert.Equal(
+            expected: 2L,
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            )
+        );
+    }
+    [Fact]
+    public void ALocalThatMixesAnIntRowAndAFixedRowIsRefusedForItsIntReading() => Assert.Equal(
+        actual: RulesFixture.Refusal(rule: new Rule(
+            Effects: [],
+            Locals: [new RuleLocal(
+                Expression: RulesFixture.Program(text: "score + ratio"),
+                Name: RulesFixture.Name(value: "value")
+            )],
+            Name: RulesFixture.Name(value: "mixed")
+        )),
+        expected: RuleRefusal.EffectSourceKindMismatch
+    );
     [Fact]
     public void ABindingIsReadBackByItsOrdinal() {
         var compiled = RulesFixture.Compile(rule: new Rule(

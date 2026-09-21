@@ -26,6 +26,13 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
         ArgumentNullException.ThrowIfNull(diagnostics);
         m_diagnostics.AddRange(collection: diagnostics);
     }
+    /// <summary>Attributes diagnostics added at or after <paramref name="startIndex"/> to an imported source.</summary>
+    public void AttributeFrom(int startIndex, string? sourcePath) {
+        if (sourcePath is null) { return; }
+        for (var index = startIndex; (index < m_diagnostics.Count); index++) {
+            m_diagnostics[index] = m_diagnostics[index] with { SourcePath = sourcePath };
+        }
+    }
     /// <summary>Renders all diagnostics into a formatted multi-line string with source context excerpts.</summary>
     /// <param name="sourceText">Optional full source text for extracting context lines and squiggles.</param>
     /// <param name="filePath">Optional file path to display in diagnostic headings.</param>

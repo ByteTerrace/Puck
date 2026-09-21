@@ -15,7 +15,7 @@ namespace Puck.World;
 /// share, so a live read and a re-drive's later re-read of the same path compute the hash the same way.
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
-public static class WorldDefinitionFileSource {
+public static partial class WorldDefinitionFileSource {
     // A composed image, held per resolved document path and catalog fingerprint, so a second reach for the same document merges nothing.
     // One quilt shard names the island as its own basis and again as an adjacency neighbour, and each derived
     // corner reaches it once more, so a single boot used to ask for the same twenty-one-document merge scores of
@@ -147,6 +147,36 @@ public static class WorldDefinitionFileSource {
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
     private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+        // Typed channel nodes are interpreted by alias/export walks before strict deserialization. Their malformed
+        // shapes are document refusals here too, including for in-memory composition callers with no file wrapper.
+        try {
+            return TryComposeLayersCore(
+                ancestors: ancestors,
+                bytes: bytes,
+                catalog: catalog,
+                catalogFingerprint: catalogFingerprint,
+                composed: out composed,
+                reach: out reach,
+                reason: out reason,
+                resolvedPath: resolvedPath,
+                serveHeldImage: serveHeldImage,
+                source: source,
+                stack: out stack,
+                touched: out touched,
+                touchedPaths: out touchedPaths
+            );
+        } catch (JsonException exception) {
+            stack = null;
+            composed = null;
+            touched = [];
+            touchedPaths = [];
+            reach = 0;
+            reason = $"{resolvedPath} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+    }
+    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         stack = null;
         composed = null;
         touched = [bytes];
@@ -677,7 +707,35 @@ public static class WorldDefinitionFileSource {
 
         return true;
     }
-    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents) {
+    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents) =>
+        TryLoadCore(admission: out _, catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out contentHash, definition: out definition, documents: documents,
+            neighbours: neighbours, path: path, reason: out reason, validateAdjacencyClaims: validateAdjacencyClaims);
+
+    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents, out WorldDefinitionAdmission? admission) {
+        definition = null;
+        admission = null;
+        contentHash = string.Empty;
+        if (!TryLoadParsed(catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out var parsedHash, definition: out var parsed, documents: documents, path: path, reason: out reason)) {
+            return false;
+        }
+        try {
+            if (!WorldDefinitionValidator.TryAdmitCore(admission: out admission, definition: parsed!, machines: catalog, neighbours: neighbours, proveNeighbours: validateAdjacencyClaims, reason: out var refusal)) {
+                reason = $"{path} document validation refused: {refusal}";
+                return false;
+            }
+            definition = admission!.Definition;
+            contentHash = parsedHash;
+            return true;
+        } catch (Exception exception) {
+            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            return false;
+        }
+    }
+
+    // Composition and content pins are shared by ordinary validated loads and boot preparation. This internal
+    // seam returns no admission: the caller must validate after any boot values have settled.
+    internal static bool TryLoadParsed(string path, out WorldDefinition? definition, out string contentHash, out string reason,
+        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null) {
         definition = null;
         contentHash = string.Empty;
 
@@ -783,23 +841,20 @@ public static class WorldDefinitionFileSource {
         }
 
         try {
-            if (!TryParseComposed(
-                catalog: catalog,
+            if (!TryParseDocument(
                 definition: out var parsed,
                 json: json,
-                neighbours: neighbours,
                 reason: out reason,
-                sourceName: path,
-                validateAdjacencyClaims: validateAdjacencyClaims
+                sourceName: path
             )) {
                 return false;
             }
 
-            definition = parsed;
             contentHash = ((chain.Count == 1)
                 ? ComputeContentHash(content: bytes)
                 : ComputeChainContentHash(chain: chain)
             );
+            definition = parsed;
 
             return true;
         } catch (Exception exception) {
@@ -1680,36 +1735,10 @@ public static class WorldDefinitionFileSource {
     /// <param name="catalog">The selected host machine catalog used for provider validation, or null for structural parsing.</param>
     /// <returns><see langword="true"/> when the document parsed, migrated, and validated.</returns>
     public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason, IMachineValidationCatalog? catalog = null) {
-        definition = null;
-        if (!TryParseDocument(
-            definition: out var parsed,
-            json: json,
-            reason: out reason,
-            sourceName: sourceName
-        )) { return false; }
-        var validated = (validateAdjacencyClaims
-            ? WorldDefinitionValidator.TryValidate(
-                definition: parsed!,
-                machines: catalog,
-                neighbours: neighbours,
-                reason: out var refusal
-            )
-            : WorldDefinitionValidator.TryValidateLocally(
-                definition: parsed!,
-                reason: out refusal
-            )
-        );
-
-        if (!validated) {
-            reason = $"{sourceName} document validation refused: {refusal.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        definition = parsed;
-        reason = "";
-
-        return true;
+        var accepted = TryParseComposedForAdmission(admission: out var admission, catalog: catalog, json: json, neighbours: neighbours,
+            reason: out reason, sourceName: sourceName, validateAdjacencyClaims: validateAdjacencyClaims);
+        definition = admission?.Definition;
+        return accepted;
     }
     /// <summary>Parses an already composed document, binds authored state expressions and applies migrations.</summary>
     /// <param name="json">The composed JSON text.</param>

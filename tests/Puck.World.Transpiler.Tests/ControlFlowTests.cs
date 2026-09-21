@@ -42,7 +42,7 @@ public class ControlFlowTests {
         );
         Assert.Equal(
             "minimum(a, b)",
-            comparison.LeftText
+            comparison.Left.Text
         );
     }
     [Fact]

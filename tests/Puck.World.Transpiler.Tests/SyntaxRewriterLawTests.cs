@@ -245,7 +245,7 @@ public class SyntaxRewriterLawTests {
     public void AnOptionalStatementPositionCanBeDropped() {
         var printed = Print(document: new DropTheHeaderGate().Rewrite(document: Parse(
             label: "scope",
-            source: "schema: \"puck.world.definition.v1\"\n\nstate {\n  world {\n    slot hp : Int = 1\n  }\n}\n\nrules group when hp > 0 {\n  rule \"one\" {\n    hp = 1\n  }\n}\n"
+            source: "schema: \"puck.world.definition.v1\"\n\nstate {\n  world {\n    slot hp = 1\n  }\n}\n\nrules group when hp > 0 {\n  rule \"one\" {\n    hp = 1\n  }\n}\n"
         )));
 
         Assert.Contains(

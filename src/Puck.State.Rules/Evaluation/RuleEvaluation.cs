@@ -82,7 +82,9 @@ public static class RuleEvaluation {
 
         var raised = ExpressionFault.None;
 
-        Span<bool> stack = stackalloc bool[RuleCapacity.MaxPredicateTokens];
+        using var stackLease = reader.Scratch.Rent<bool>(length: gate.Length);
+
+        var stack = stackLease.Span;
         var top = 0;
 
         foreach (var predicate in gate) {

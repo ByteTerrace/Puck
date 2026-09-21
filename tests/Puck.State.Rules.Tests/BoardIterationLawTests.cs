@@ -20,24 +20,19 @@ public sealed class BoardIterationLawTests {
         );
 
         Assert.Equal(
-            actual: arena.PositionCount(rowOrdinal: ordinal),
-            expected: 4
-        );
-        Assert.Equal(
             actual: arena.CellCount(rowOrdinal: ordinal),
             expected: 2
         );
 
         var keys = new List<string>();
+        var cursor = 0;
 
-        for (var position = 0; (position < arena.PositionCount(rowOrdinal: ordinal)); position++) {
-            if (arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: ordinal
-            )) {
-                keys.Add(item: arena.Catalog.Keys[key].Value);
-            }
+        while (arena.TryNextCell(
+            key: out var key,
+            cursor: ref cursor,
+            rowOrdinal: ordinal
+        )) {
+            keys.Add(item: arena.Catalog.Keys[key].Value);
         }
 
         Assert.Equal(

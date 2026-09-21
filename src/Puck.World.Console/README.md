@@ -4,6 +4,11 @@ Puck.World.Console provides the command modules that operate on authoritative
 world state. It resolves the target world for each invocation and uses the
 server's ordinary mutation and authority paths.
 
+`world.budget.rules` reads the installed compilation's shared cost report. Its
+existing heuristic lines remain labelled as work units; a separate reference
+line names the model, evidence digest, unresolved or known cycle bound, and
+certification status. Incomplete calibration never turns work units into cycles.
+
 ## Command modules
 
 This project owns `IWorldConsoleAuthority` (resolves the `WorldInstance` a

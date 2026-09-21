@@ -13,6 +13,7 @@ public class TestConstructLawTests {
         cancellationToken: TestContext.Current.CancellationToken,
         source: source
     );
+
     internal static string Doc(string body) => $"schema: \"puck.world.definition.v1\"\ndocumentId: \"probe\"\n\n{TestWorldFixtures.Grants}\n\n{TestWorldFixtures.Rows}\n\n{body}\n";
     internal static string Refusal(string source, string code) {
         var compilation = WorldCompiler.Compile(
@@ -33,7 +34,6 @@ public class TestConstructLawTests {
         { "when {\n        seat1:\n    }\n    expect {\n        hp == 1\n    }", "carries no command line" },
         { "when {\n        ticks 2s\n    }\n    expect {\n        hp == 1\n    }", "and no unit" },
     };
-
     [Fact]
     public void TheConstructTableDescribesTheTestKeywordOnce() {
         Assert.True(condition: WorldConstructs.Table.TryGet(
@@ -131,12 +131,12 @@ internal static class TestWorldFixtures {
     public const string Grants = """
         grants [
             {
-                capability: "Edit"
+                capability: Edit
                 principal: "seat1"
                 subject: "all"
             }
             {
-                capability: "Mutate"
+                capability: Mutate
                 principal: "seat1"
                 subject: "section:state"
             }
@@ -145,8 +145,8 @@ internal static class TestWorldFixtures {
     public const string Rows = """
         state {
             world {
-                slot hp : Int = 1
-                slot armour : Int = 0
+                slot hp = 1
+                slot armour = 0
             }
         }
         """;

@@ -170,7 +170,7 @@ public sealed partial class WorldBody {
     /// relationship. <c>tether=</c>/<c>anchor=</c> trail only while <see cref="TetherLength"/> is set — absent for
     /// every body carrying no tether facet, or one that authors the facet but is not currently attached.
     /// <c>asleep=</c> trails only while <see cref="Asleep"/> is set, naming the simulation tick it fell asleep at
-    /// (<see cref="AsleepSinceTick"/>) — absent for every body under a world authoring no <c>bodies.sleepAfterTicks</c>.
+    /// (<see cref="AsleepSinceTick"/>) — absent for every body under a world authoring no <c>bodies.sleepAfterSeconds</c>.
     /// The bare planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>

@@ -54,7 +54,9 @@ can substitute another backend.
 1. **Resolve**—`IFontAtlasSourceResolver.Resolve(fontPath, generationOptions, basePath)`
    reads the font and produces (or returns a cached) `FontAtlas`.
 2. **Generate**—on a cache miss the resolver calls `ManagedFontAtlasGenerator`
-   by default. The interface preserves a clean backend/oracle seam.
+   by default. Parsing, budget checks, and packing run in order; up to four
+   workers then rasterize separate glyph rectangles with identical pixel
+   arithmetic. The interface preserves a clean backend/oracle seam.
 3. **Lay out**—`TextLayout.Layout(atlas, text, scale, maxLineWidth?)` walks
    the string and emits a `TextLayoutResult` of `TextGlyphPlacement`s.
 4. **Sample**—`TextGlyphSampling.Create(...)` / `MtsdfSampling` translate the

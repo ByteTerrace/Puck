@@ -7,6 +7,10 @@ namespace Puck.World;
 
 /// <summary>The namespace a document name belongs to — which declaration a name-bearing field resolves against.</summary>
 public enum WorldNameKind : byte {
+    /// <summary>A record type in the state section.</summary>
+    Record,
+    /// <summary>A bounded pool in the state section.</summary>
+    Pool,
     /// <summary>A <c>state.world</c> row.</summary>
     State,
     /// <summary>An ordered zone: a <c>state.world</c> row a rule's zone table, a transfer, or a search job names as a pile.</summary>
@@ -77,9 +81,9 @@ public sealed record WorldNameExclusion(Type Owner, string Member, string Reason
 /// <c>puck registry</c> verb renders it to <c>docs/world-name-registry.md</c> and checks the rendering against the
 /// model (<see cref="Render"/>, <see cref="Uncovered"/>), and <see cref="WorldModuleNamespace"/> prefixes an aliased
 /// import's names at compose time. A member typed <see cref="CellName"/>, <see cref="ExpressionProgram"/>,
-/// <see cref="BindableScalar"/>, <see cref="BindableColor"/>, or <see cref="WorldLatticeScalar"/>, or a string
-/// member whose C# name reads like a name position, must be registered or excluded with a reason; the check names
-/// every member that is neither.
+/// <see cref="StateChannelRef"/>, <see cref="BindableScalar"/>, <see cref="BindableColor"/>, or
+/// <see cref="WorldLatticeScalar"/>, or a string member whose C# name reads like a name position, must be
+/// registered or excluded with a reason; the check names every member that is neither.
 /// </summary>
 public static partial class WorldNameRegistry {
     /// <summary>The separator between an import alias and the name it prefixes: the one character a
@@ -88,6 +92,19 @@ public static partial class WorldNameRegistry {
     public const char AliasSeparator = '_';
 
     private static readonly WorldNameField[] Fields = [
+        new(typeof(StateRecord), nameof(StateRecord.Name), WorldNameKind.Record, WorldNameRole.Declares),
+        new(typeof(StatePool), nameof(StatePool.Name), WorldNameKind.Pool, WorldNameRole.Declares),
+        new(typeof(StatePool), nameof(StatePool.Record), WorldNameKind.Record, WorldNameRole.Names),
+        new(typeof(StatePairPool), nameof(StatePairPool.Name), WorldNameKind.Pool, WorldNameRole.Declares),
+        new(typeof(StatePairPool), nameof(StatePairPool.Record), WorldNameKind.Record, WorldNameRole.Names),
+        new(typeof(StatePairPool), nameof(StatePairPool.LeftPool), WorldNameKind.Pool, WorldNameRole.Names),
+        new(typeof(StatePairPool), nameof(StatePairPool.RightPool), WorldNameKind.Pool, WorldNameRole.Names),
+        new(typeof(ActionEffect.ClaimPair), nameof(ActionEffect.ClaimPair.Pool), WorldNameKind.Pool, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(WorldIdentityDefinition), nameof(WorldIdentityDefinition.Records), WorldNameKind.Pool, WorldNameRole.Names),
+        new(typeof(WorldPoolBodyCarrier), nameof(WorldPoolBodyCarrier.Pool), WorldNameKind.Pool, WorldNameRole.Names),
+        new(typeof(ActionEffect.Claim), nameof(ActionEffect.Claim.Pool), WorldNameKind.Pool, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(ActionEffect.ForEachPool), nameof(ActionEffect.ForEachPool.Pool), WorldNameKind.Pool, WorldNameRole.Names),
+        new(typeof(RulePoolIteration), nameof(RulePoolIteration.Pool), WorldNameKind.Pool, WorldNameRole.Names),
         // Declarations.
         new(
             typeof(WorldMachine),
@@ -232,6 +249,12 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
+            typeof(WorldStateRow),
+            nameof(WorldStateRow.Witness),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
             typeof(StateDomain.KeysOf),
             nameof(StateDomain.KeysOf.Row),
             WorldNameKind.State,
@@ -292,6 +315,8 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         // Rules.
+        new(typeof(ActionEffect.RewindTurn), nameof(ActionEffect.RewindTurn.Group), WorldNameKind.RuleGroup, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(Puck.State.Rules.RuleGroupUndo), nameof(Puck.State.Rules.RuleGroupUndo.Rows), WorldNameKind.Any, WorldNameRole.Names, WorldExportFacet.Action),
         new(
             typeof(Puck.State.Rules.RuleGroupDeclaration),
             nameof(Puck.State.Rules.RuleGroupDeclaration.Name),
@@ -444,19 +469,6 @@ public static partial class WorldNameRegistry {
             nameof(ActionEffect.PushState.Expression),
             WorldNameKind.State,
             WorldNameRole.Expression
-        ),
-        new(
-            typeof(ActionEffect.CountdownState),
-            nameof(ActionEffect.CountdownState.State),
-            WorldNameKind.State,
-            WorldNameRole.Names,
-            WorldExportFacet.Action
-        ),
-        new(
-            typeof(ActionEffect.CountdownState),
-            nameof(ActionEffect.CountdownState.Key),
-            WorldNameKind.State,
-            WorldNameRole.Key
         ),
         new(
             typeof(ActionEffect.RemoveStateCell),
@@ -643,6 +655,37 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
+            typeof(StateTransform.PushRay),
+            nameof(StateTransform.PushRay.Pool),
+            WorldNameKind.Pool,
+            WorldNameRole.Names,
+            WorldExportFacet.Action
+        ),
+        new(
+            typeof(StateTransform.PushRay),
+            nameof(StateTransform.PushRay.Topology),
+            WorldNameKind.Topology,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.PushRay),
+            nameof(StateTransform.PushRay.Pattern),
+            WorldNameKind.Pattern,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.PushRay),
+            nameof(StateTransform.PushRay.PushPattern),
+            WorldNameKind.Pattern,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(StateTransform.PushRay),
+            nameof(StateTransform.PushRay.StopPattern),
+            WorldNameKind.Pattern,
+            WorldNameRole.Names
+        ),
+        new(
             typeof(StateTransform.Shuffle),
             nameof(StateTransform.Shuffle.Row),
             WorldNameKind.State,
@@ -656,9 +699,9 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
-            typeof(StateTransform.SortZone),
-            nameof(StateTransform.SortZone.Row),
-            WorldNameKind.Zone,
+            typeof(StateTransform.Sort),
+            nameof(StateTransform.Sort.Row),
+            WorldNameKind.State,
             WorldNameRole.Names,
             WorldExportFacet.Action
         ),
@@ -667,13 +710,6 @@ public static partial class WorldNameRegistry {
             nameof(SortKey.Row),
             WorldNameKind.State,
             WorldNameRole.Names
-        ),
-        new(
-            typeof(StateTransform.SortKeyed),
-            nameof(StateTransform.SortKeyed.Row),
-            WorldNameKind.State,
-            WorldNameRole.Names,
-            WorldExportFacet.Action
         ),
         new(
             typeof(StateTransform.WriteSet),
@@ -965,6 +1001,11 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Names
         ),
+        new(typeof(WorldSearchRow), nameof(WorldSearchRow.Enabled), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldSearchRow), nameof(WorldSearchRow.Revision), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldEffect.PoseCell), nameof(WorldEffect.PoseCell.Key), WorldNameKind.State, WorldNameRole.Key),
+        new(typeof(WorldEffect.PoseCell), nameof(WorldEffect.PoseCell.Topology), WorldNameKind.Topology, WorldNameRole.Names),
+        new(typeof(WorldEffect.PoseCell), nameof(WorldEffect.PoseCell.Expression), WorldNameKind.State, WorldNameRole.Expression),
         new(
             typeof(WorldSearchRow),
             nameof(WorldSearchRow.Best),
@@ -1300,6 +1341,26 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),
+        new(typeof(StatePoolField), nameof(StatePoolField.Enum), "an enum name is local to the document"),
+        new(typeof(WorldPoolBodyCarrier), nameof(WorldPoolBodyCarrier.Field), "a field local to its pool record"),
+        new(typeof(WorldPoolBodyBinding), nameof(WorldPoolBodyBinding.Member), "an enum member local to the carrier field"),
+        new(typeof(WorldPoolBodyBinding), nameof(WorldPoolBodyBinding.Placement), "an inhabited placement id"),
+        new(typeof(GraphEdge), nameof(GraphEdge.Direction), "a direction local to its own topology"),
+        new(typeof(StateTransform.SetRay), nameof(StateTransform.SetRay.Direction), "a direction local to the row's topology"),
+        new(typeof(StateTransform.PushRay), nameof(StateTransform.PushRay.Direction), "a direction local to its topology"),
+        new(typeof(StateTransform.PushRay), nameof(StateTransform.PushRay.Cell), "a field local to its pool record"),
+        new(typeof(StateTransform.PushRay), nameof(StateTransform.PushRay.Value), "a field local to its pool record"),
+        new(typeof(StateTransform.PushRay), nameof(StateTransform.PushRay.From), "a lexical instance field selected by the enclosing pool iteration"),
+        new(typeof(StatePoolField), nameof(StatePoolField.Space), "a vector-space identifier, not a module declaration"),
+        new(typeof(StatePoolValue), nameof(StatePoolValue.Field), "a field local to its record"),
+        new(typeof(ActionEffect.Claim), nameof(ActionEffect.Claim.Binding), "a lexical instance binding"),
+        new(typeof(ActionEffect.Release), nameof(ActionEffect.Release.Binding), "a lexical instance binding"),
+        new(typeof(ActionEffect.ForEachPool), nameof(ActionEffect.ForEachPool.Binding), "a lexical instance binding"),
+        new(typeof(ActionEffect.ClaimPair), nameof(ActionEffect.ClaimPair.Binding), "a lexical pair binding"),
+        new(typeof(ActionEffect.ClaimPair), nameof(ActionEffect.ClaimPair.Left), "a lexical endpoint binding"),
+        new(typeof(ActionEffect.ClaimPair), nameof(ActionEffect.ClaimPair.Right), "a lexical endpoint binding"),
+        new(typeof(RulePoolIteration), nameof(RulePoolIteration.Binding), "a lexical instance binding"),
         new(
             typeof(StateSpace),
             nameof(StateSpace.Name),

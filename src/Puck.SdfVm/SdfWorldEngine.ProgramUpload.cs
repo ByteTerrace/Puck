@@ -5,36 +5,14 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
     /// <summary>Re-uploads the scene program (the host's <c>ProgramChanged</c> path — e.g. a rebuilt overworld scene).
-    /// The program must fit the buffers sized at construction (including its screen-surface table and its per-tile
-    /// instance-mask width).</summary>
+    /// Program and instance buffers grow on demand after draining the frame ring. Persistent images, baked bricks,
+    /// screen bindings and pipelines remain in place.</summary>
     /// <param name="program">The scene program to upload.</param>
     /// <exception cref="ArgumentException">The program contains an opcode not declared by <see cref="SdfOp"/>, or its
-    /// instance count derives a wider per-tile mask than the construction program's (the mask buffer cannot grow after
-    /// construction).</exception>
+    /// dynamic-transform requirements exceed the host's reserved transform slots.</exception>
     public void UploadProgram(SdfProgram program) {
         ArgumentNullException.ThrowIfNull(program);
         program.ValidateIsa();
-
-        if (program.Words.Length > m_programWordCapacity) {
-            throw new ArgumentException(
-                message: $"The uploaded program has {program.Words.Length} packed words; the engine was constructed for {m_programWordCapacity} (construct the engine with the larger program).",
-                paramName: nameof(program)
-            );
-        }
-
-        if (program.InstanceMaskWordCount > m_instanceMaskWordCount) {
-            throw new ArgumentException(
-                message: $"The uploaded program's instance count derives {program.InstanceMaskWordCount} mask words per tile; the engine was constructed for {m_instanceMaskWordCount} (construct the engine with the wider program).",
-                paramName: nameof(program)
-            );
-        }
-
-        if (program.Instances.Count > m_instanceCapacity) {
-            throw new ArgumentException(
-                message: $"The uploaded program has {program.Instances.Count} instances; the engine was constructed for {m_instanceCapacity} frame-grid entries (increase InstanceCapacity or construct the engine with the larger program).",
-                paramName: nameof(program)
-            );
-        }
 
         if (program.RequiredDynamicTransformCapacity > m_dynamicTransformCapacity) {
             throw new ArgumentException(
@@ -53,6 +31,7 @@ public sealed partial class SdfWorldEngine {
         // state), so rewriting it must first drain every in-flight frame still reading the current words. A no-op when
         // nothing is outstanding (construction, or a waited harness).
         WaitForFrameRing();
+        EnsureProgramCapacity(program: program);
 
         // A program whose grid contains no active maskable dynamic instance has one invariant ring-local table. Build
         // it against the engine's actual capacity envelope and seed every now-idle slot once. Programs with moving

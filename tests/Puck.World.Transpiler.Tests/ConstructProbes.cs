@@ -1,3 +1,5 @@
+using Puck.World.Transpiler.Embeddings;
+
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>One authored <c>.puck</c> source per described construct, with the JSON pointer of the node that
@@ -15,7 +17,6 @@ internal sealed record ConstructProbe(
     IReadOnlyDictionary<string, string>? Elsewhere = null,
     string? GeneratedWorld = null
 );
-
 /// <summary>The probes each described construct is exercised through. Every member of every construct is spelled by
 /// at least one of its probes, which is what <c>ConstructLoweringLawTests</c> refuses when it is not.</summary>
 /// <remarks>KEEP IN SYNC with <see cref="Puck.World.Transpiler.Vocabulary.WorldConstructs"/>: the law refuses a
@@ -34,20 +35,39 @@ internal static class ConstructProbes {
             }
         """;
 
+    // Locks the one text an `embeds` probe writes ("one"), so a probe compiles without a live embedding call.
+    internal static EmbeddingLock Lock { get; } = CreateLock();
+
+    private static EmbeddingLock CreateLock() {
+        var lockFile = new EmbeddingLock();
+        var space = new EmbeddingLockSpace(
+            dimensions: 8,
+            model: "puck-fixture",
+            revision: "1"
+        );
+        var hash = EmbeddingLock.ComputeTextHash(text: "one");
+
+        space.Entries[hash] = new EmbeddingLockEntry(
+            Text: "one",
+            Vector: "fwAAAAAAAAA"
+        );
+        lockFile.Spaces["lore"] = space;
+
+        return lockFile;
+    }
+
     private const string RuleRows = """
-                slot hp : Int = 1
-                slot flag : Int = 0
-                slot timer : Int = 3
-                table deck : Int {
+                slot hp = 1
+                slot flag = 0
+                table deck {
                     a = 1
                     b = 2
                 }
-                table bag : Int
+                table bag
         """;
-
     // The ordered zones and the draw row the token-moving statements read.
     private const string ZoneRows = """
-                table deck : Int {
+                table deck {
                     a = 1
                     b = 2
                 }
@@ -59,7 +79,7 @@ internal static class ConstructProbes {
                 }
                 row {
                     name: "stream"
-                    kind: "Int"
+                    kind: Int
                     draw {
                         generator {
                             source: "StreamDraw"
@@ -178,11 +198,11 @@ internal static class ConstructProbes {
         )],
         ["state"] = [new(
             Pointer: "/state",
-            Source: Rows(body: "        slot hp : Int = 1")
+            Source: Rows(body: "        slot hp = 1")
         )],
         ["world"] = [new(
             Pointer: "/state/world",
-            Source: Rows(body: "        slot hp : Int = 1")
+            Source: Rows(body: "        slot hp = 1")
         )],
         ["spaces"] = [new(
             Pointer: "/state/spaces",
@@ -196,7 +216,7 @@ internal static class ConstructProbes {
             new(
                 Pointer: "/state/world/0",
                 Source: Rows(body: """
-                            table vitals : Int capacity(4) bounds(minimum: 0, maximum: 9, overflow: Saturate) advance(perSecond: 1) evicts {
+                            table vitals capacity(4) bounds(0..9, overflow: Saturate) advance(perSecond: 1) evicts {
                                 a = 1 advance(perSecond: 2)
                                 b = 2 behavior(none)
                             }
@@ -204,27 +224,51 @@ internal static class ConstructProbes {
             ),
             new(
                 Pointer: "/state/world/0",
-                Source: Doc(body: $"state {{\n{Space}\n    world {{\n        table vecs : Vector space(lore)\n    }}\n}}")
+                Source: Doc(body: $"state {{\n{Space}\n    world {{\n        table vecs space(lore)\n    }}\n}}")
             ),
             new(
                 Pointer: "/state/world/0",
-                Source: Doc(body: $"state {{\n{Space}\n    world {{\n        table lines : Text embeds(lineVectors, space: lore)\n    }}\n}}")
+                Source: Doc(body: $"state {{\n{Space}\n    world {{\n        table lines embeds(lineVectors, space: lore) {{\n            a = \"one\"\n        }}\n    }}\n}}")
             ),
         ],
         ["slot"] = [
             new(
                 Pointer: "/state/world/0",
-                Source: Rows(body: "        slot hp : Int = 1 bounds(minimum: 0, maximum: 9, overflow: Saturate) advance(perSecond: 1)")
+                Source: Rows(body: "        slot hp = 1 bounds(0..9, overflow: Saturate) advance(perSecond: 1)")
             ),
             new(
                 Pointer: "/state/world/0",
-                Source: Doc(body: $"state {{\n{Space}\n    world {{\n        slot situation : Vector space(lore)\n    }}\n}}")
+                Source: Doc(body: $"state {{\n{Space}\n    world {{\n        slot situation space(lore)\n    }}\n}}")
             ),
         ],
+        ["pool"] = [new(
+            Pointer: "/state/pools/0",
+            Source: Doc(body: "let capacity = 2\nstate {\n    record Item { value: Int }\n    pool items of Item capacity(capacity) = [{ value: 1 }]\n}")
+        )],
+        ["pairPool"] = [new(
+            Pointer: "/state/pairPools/0",
+            Source: Doc(body: "state {\n    record Item { value: Int }\n    pool items of Item capacity(2)\n    pairPool links record Item left items right items maxLive 2 directed false allowSelf true\n}")
+        )],
+        ["claim"] = [new(
+            Pointer: "/rules/0/effects/0",
+            Source: Doc(body: "state {\n    record Item { value: Int }\n    pool items of Item capacity(1)\n}\nrule \"r\" {\n    claim items as item { item.value = 1 }\n}")
+        )],
+        ["claim pair"] = [new(
+            Pointer: "/rules/0/effects/0/effects/0/effects/0",
+            Source: Doc(body: "state {\n    record Item { value: Int }\n    pool items of Item capacity(2)\n    pairPool links record Item left items right items maxLive 1 directed false allowSelf true\n}\nrule \"r\" {\n    claim items as left {\n        claim items as right {\n            claim pair links between left, right as link { link.value = 1 }\n        }\n    }\n}")
+        )],
+        ["for each"] = [new(
+            Pointer: "/rules/0/effects/0",
+            Source: Doc(body: "state {\n    record Item { value: Int }\n    pool items of Item capacity(1)\n}\nrule \"r\" {\n    for each item in items { item.value = 1 }\n}")
+        )],
+        ["release"] = [new(
+            Pointer: "/rules/0/effects/0/effects/0",
+            Source: Doc(body: "state {\n    record Item { value: Int }\n    pool items of Item capacity(1)\n}\nrule \"r\" {\n    claim items as item { release item }\n}")
+        )],
         ["pile"] = [new(
             Pointer: "/state/world/1",
             Source: Rows(body: """
-                        table deck : Int {
+                        table deck {
                             a = 1
                             b = 2
                         }
@@ -242,16 +286,16 @@ internal static class ConstructProbes {
                 },
                 Pointer: "/state/world/0",
                 Source: Rows(body: """
-                            grid board : Int dimensions(width: 2, depth: 2) wrap(Both) cellSize(2) origin(1, 0, 1) band(0.5) empty(-1) bounds(minimum: -1, maximum: 9, overflow: Saturate) positions(ordinals) {
+                            grid board dimensions(width: 2, depth: 2) wrap(Both) cellSize(2) origin(1, 0, 1) band(0.5) empty(-1) bounds(-1..9, overflow: Saturate) positions(ordinals) {
                                 "0" = 1
                             }
-                            table deck : Int {
+                            table deck {
                                 a = 1
                             }
                             row {
                                 name: "ordinals"
-                                kind: "Int"
-                                domain: keysOf(row: "deck")
+                                kind: Int
+                                domain: keysOf(row: deck)
                             }
                     """)
             ),
@@ -261,11 +305,11 @@ internal static class ConstructProbes {
                 },
                 Pointer: "/state/world/0",
                 Source: Rows(body: """
-                            grid board : Int dimensions(width: 1, depth: 1) inverse(tokens: tokensRow, codes: codesRow)
-                            table tokensRow : Int {
+                            grid board dimensions(width: 1, depth: 1) inverse(tokens: tokensRow, codes: codesRow)
+                            table tokensRow {
                                 a = 1
                             }
-                            table codesRow : Int {
+                            table codesRow {
                                 a = 1
                             }
                     """)
@@ -276,7 +320,7 @@ internal static class ConstructProbes {
             Source: Rows(body: """
                         row {
                             name: "hp"
-                            kind: "Int"
+                            kind: Int
                             domain: slot()
                         }
                 """)
@@ -303,8 +347,8 @@ internal static class ConstructProbes {
             Source: Doc(body: """
                 state {
                     world {
-                        slot hp : Int = 1
-                        slot flag : Int = 0
+                        slot hp = 1
+                        slot flag = 0
                     }
                 }
 
@@ -320,12 +364,12 @@ internal static class ConstructProbes {
             Source: Doc(body: """
                 state {
                     world {
-                        slot hp : Int = 1
-                        slot flag : Int = 0
+                        slot hp = 1
+                        slot flag = 0
                     }
                 }
 
-                stabilize grp maxPasses(4) until hp > 0 {
+                stabilize grp undo({ rows ["hp"] depth: 2 }) maxPasses(4) until hp > 0 {
                     rule "m" {
                         flag = 1
                     }
@@ -337,11 +381,11 @@ internal static class ConstructProbes {
             Source: Doc(body: """
                 state {
                     world {
-                        slot flag : Int = 0
+                        slot flag = 0
                     }
                 }
 
-                workflow wf {
+                workflow wf undo({ rows ["flag"] depth: 2 }) {
                     step first {
                         flag = 1
                     }
@@ -356,7 +400,7 @@ internal static class ConstructProbes {
             Source: Doc(body: """
                 state {
                     world {
-                        slot flag : Int = 0
+                        slot flag = 0
                     }
                 }
 
@@ -373,7 +417,7 @@ internal static class ConstructProbes {
         )],
         ["local"] = [new(
             Pointer: "/rules/0/locals/0",
-            Source: Rule(body: "    local acc : Int = hp + 1\n    flag = acc")
+            Source: Rule(body: "    local acc = hp + 1\n    flag = acc")
         )],
         ["decision"] = [new(
             Pointer: "/rules/0/decision",
@@ -434,10 +478,9 @@ internal static class ConstructProbes {
             Effect(body: "    push bag = hp"),
             Effect(body: "    push bag = hp + 1"),
         ],
-        ["countdown"] = [Effect(body: "    countdown deck[a]")],
         ["remove"] = [Effect(body: "    remove deck[a]")],
         ["schedule"] = [Effect(body: "    schedule deck[a] in 5s")],
-        ["transform"] = [Effect(body: "    transform observe(row: \"deck\")")],
+        ["transform"] = [Effect(body: "    transform observe(row: deck)")],
         ["draw"] = [TransformEffect(body: "    draw stock to waste")],
         ["deal"] = [TransformEffect(body: "    deal 1 from stock to waste")],
         ["shuffle"] = [TransformEffect(body: "    shuffle stock with stream")],
@@ -457,7 +500,7 @@ internal static class ConstructProbes {
 
                     state {
                         world {
-                            table deck : Int {
+                            table deck {
                                 a = 1
                             }
                         }
@@ -477,7 +520,7 @@ internal static class ConstructProbes {
 
                     state {
                         world {
-                            slot hp : Int = 1
+                            slot hp = 1
                         }
                     }
                     """)
@@ -489,12 +532,12 @@ internal static class ConstructProbes {
             Source: Doc(body: """
                 grants [
                     {
-                        capability: "Edit"
+                        capability: Edit
                         principal: "seat1"
                         subject: "all"
                     }
                     {
-                        capability: "Mutate"
+                        capability: Mutate
                         principal: "seat1"
                         subject: "section:state"
                     }
@@ -502,7 +545,7 @@ internal static class ConstructProbes {
 
                 state {
                     world {
-                        slot hp : Int = 1
+                        slot hp = 1
                     }
                 }
 
@@ -525,7 +568,7 @@ internal static class ConstructProbes {
             Source: Doc(body: """
                 state {
                     world {
-                        table deck : Int {
+                        table deck {
                             a = 1
                         }
                     }

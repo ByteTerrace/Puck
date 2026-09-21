@@ -115,8 +115,8 @@ public class DecompilerTests {
             recompOps[0]?["$type"]?.ToString()
         );
         Assert.Equal(
-            origOps[0]?["distance"]?.GetValue<double>(),
-            recompOps[0]?["distance"]?.GetValue<double>()
+            origOps[0]?["distance"].AsNumber(),
+            recompOps[0]?["distance"].AsNumber()
         );
     }
     [Fact]

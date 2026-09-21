@@ -48,9 +48,61 @@ async function composeTicTacToeText(engine) {
   return result.composed;
 }
 
+function overBudgetDraftText() {
+  const effects = Array.from({ length: 256 }, () => ({ $type: 'addState', state: 'count', value: 1 }));
+  return JSON.stringify({
+    schema: 'puck.world.definition.v1',
+    state: { world: [
+      { name: 'items', kind: 'Int', capacity: 4096 },
+      { name: 'count', kind: 'Int', value: 0 },
+    ] },
+    rules: [
+      { name: 'many-a', forEach: 'items', effects },
+      { name: 'many-b', forEach: 'items', effects },
+    ],
+  });
+}
+
 if (!fs.existsSync(mainMjs)) {
-  test(`native (SKIPPED: no AppBundle at ${appBundleDir} — run 'dotnet publish src/Puck.World.Browser -c Release -r browser-wasm')`, { skip: true }, () => {});
+  test(`native (SKIPPED: no AppBundle at ${appBundleDir} — run 'dotnet publish src/Puck.World.Browser -c Release')`, { skip: true }, () => {});
 } else {
+  test('costs reads the shared report through the real WASM export', async () => {
+    const engine = await bootEngineFromLocalBundle(appBundleDir);
+    const compiled = await engine.compile('{"schema":"puck.world.definition.v1"}');
+    assert.equal(compiled.ok, true, JSON.stringify(compiled.errors));
+    try {
+      const report = await engine.costs(compiled.handle);
+      assert.equal(report.modelId, 'puck.cost.portable-model.v1');
+      assert.match(report.evidenceDigest, /^[a-f0-9]{64}$/i);
+      assert.equal(typeof report.stepAllowanceCycles, 'bigint');
+      assert.equal(report.totalBound.kind, 'Unmodeled');
+      assert.equal(report.totalBound.cycles, null);
+      assert.equal(report.admitted, false);
+    } finally {
+      await engine.release(compiled.handle);
+      await engine.dispose();
+    }
+  });
+
+  test('analyzeCosts reports a structurally valid over-budget draft while compile refuses it', async () => {
+    const engine = await bootEngineFromLocalBundle(appBundleDir);
+    try {
+      const draft = overBudgetDraftText();
+      const analysis = await engine.analyzeCosts(draft);
+      assert.equal(analysis.ok, true, JSON.stringify(analysis.errors));
+      assert.equal(analysis.validated, false);
+      assert.ok(analysis.validationErrors.some((error) => error.message.includes('the maximum of')));
+      assert.equal(analysis.report.modelId, 'puck.cost.portable-model.v1');
+      assert.equal(typeof analysis.report.resources.journalAllowanceBytes, 'bigint');
+      assert.ok(BigInt(analysis.report.heuristicWorkUnitsPerTick) > 4000000n);
+
+      const compiled = await engine.compile(draft);
+      assert.equal(compiled.ok, false);
+      assert.ok(compiled.errors.some((error) => error.message.includes('the maximum of')));
+    } finally {
+      await engine.dispose();
+    }
+  });
   test('bootEngineFromLocalBundle: version() decodes to a plain object, no bigints yet', async () => {
     const engine = await bootEngineFromLocalBundle(appBundleDir);
     try {

@@ -83,6 +83,7 @@ public static partial class RuleCompiler {
         var ordinal = bindings.Count;
 
         bindings.Add(item: new CompiledRuleLocal(
+            CarrierKind: CellKind.Int,
             Expression: program,
             Kind: CellKind.Int,
             Name: $"$key{ordinal}"
@@ -242,15 +243,19 @@ public static partial class RuleCompiler {
     /// <summary>Resolves a dynamic key spelling — a binding token, a registered key family's spelling, a
     /// <c>$zone:</c> endpoint, an <c>$expr:</c> expression, a <c>$local:</c> binding, or a <c>$cell:</c> indirection.
     /// A literal key returns <see langword="false"/>.</summary>
-    /// <param name="key">The authored key.</param>
+    /// <param name="reference">The authored key: a literal key, or a reserved channel as a call.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     /// <param name="verb">The authored verb, for refusal text.</param>
     /// <param name="keyFieldLabel">The field the key was spelled in, for refusal text.</param>
     /// <param name="cell">The compiled indirection, when dynamic.</param>
     /// <returns><see langword="true"/> when the key is dynamic.</returns>
-    public static bool TryResolveDynamicKey(string? key, string ruleName, RuleCompileContext context, string verb, string keyFieldLabel, out CompiledCellRef cell) {
+    public static bool TryResolveDynamicKey(StateChannelRef? reference, string ruleName, RuleCompileContext context, string verb, string keyFieldLabel, out CompiledCellRef cell) {
         ArgumentNullException.ThrowIfNull(argument: context);
+
+        // The call is what the walk dispatches on; the spelling is what a binding token and a refusal read.
+        var call = reference?.Call;
+        var key = reference?.Spelling;
 
         if (
             (RuleBindingTokens.OfKeyToken(key: key) is var bound) &&
@@ -280,12 +285,12 @@ public static partial class RuleCompiler {
             return true;
         }
 
-        if (key is not null) {
+        if (reference is not null) {
             foreach (var family in context.Vocabulary.Keys) {
                 if (family.TryCompile(
                     cell: out cell,
                     context: context,
-                    key: key,
+                    reference: reference,
                     keyFieldLabel: keyFieldLabel,
                     ruleName: ruleName,
                     verb: verb
@@ -295,11 +300,8 @@ public static partial class RuleCompiler {
                     return true;
                 }
             }
-            if (key.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: RuleFacts.ZoneKeyPrefix
-            )) {
-                var parts = RuleFacts.SplitChannel(name: key);
+            if (call?.Channel == "zone") {
+                var parts = call.Tokens();
 
                 if (
                     (parts.Length != 3) ||
@@ -357,15 +359,12 @@ public static partial class RuleCompiler {
                 return true;
             }
             // A rule's own binding as a key — the same implicit-binding carrier an expression key reads back through.
-            if (key.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: RuleFacts.LocalPrefix
-            )) {
+            if (call?.Channel == "local") {
                 var binding = ResolveLocalOperand(
                     context: context,
                     key: null,
                     keyFieldLabel: keyFieldLabel,
-                    name: key,
+                    name: key!,
                     ruleName: ruleName
                 );
 
@@ -388,14 +387,11 @@ public static partial class RuleCompiler {
 
                 return true;
             }
-            if (key.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: RuleFacts.ExpressionKeyPrefix
-            )) {
+            if (call?.Channel == "expr") {
                 cell = CompileKeyExpression(
                     context: context,
                     ruleName: ruleName,
-                    text: key[RuleFacts.ExpressionKeyPrefix.Length..],
+                    text: key![RuleFacts.ExpressionKeyPrefix.Length..],
                     where: $"'{verb}' {keyFieldLabel}"
                 );
 
@@ -403,19 +399,13 @@ public static partial class RuleCompiler {
             }
         }
 
-        if (
-            (key is null) ||
-            !key.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.CellKeyPrefix
-        )
-        ) {
+        if (call?.Channel != "cell") {
             cell = default;
 
             return false;
         }
 
-        var segments = key[RuleFacts.CellKeyPrefix.Length..].Split(separator: ':');
+        var segments = call.Texts();
 
         if (segments.Length != 2) {
             throw new RuleException(
@@ -512,7 +502,7 @@ public static partial class RuleCompiler {
         if (!TryResolveDynamicKey(
             cell: out var index,
             context: context,
-            key: key,
+            reference: StateChannelRef.OfNullable(spelling: key),
             keyFieldLabel: "index",
             ruleName: ruleName,
             verb: where
@@ -566,9 +556,9 @@ public static partial class RuleCompiler {
         return false;
     }
     private static void FlattenPredicate(ActionPredicate? predicate, List<GateToken> gate, string ruleName, RuleCompileContext context, int depth = 0) {
-        if (depth >= RuleCapacity.MaxPredicateTokens) {
+        if (depth >= RuleCapacity.MaxPredicateNesting) {
             throw new RuleException(
-                detail: $"a gate is nested past the {RuleCapacity.MaxPredicateTokens}-token ceiling",
+                detail: $"a gate nests more than {RuleCapacity.MaxPredicateNesting} predicates deep; name the inner condition as a local and test that",
                 refusal: RuleRefusal.PredicateKindInadmissible,
                 ruleName: ruleName
             );
@@ -777,7 +767,7 @@ public static partial class RuleCompiler {
         var comparison = compare.Comparison;
         var hasComparand = (compare.ComparandState is not null);
         var hasValue = (compare.Value is not null);
-        var name = (compare.State ?? string.Empty);
+        var name = compare.State.Spelling;
 
         // 'comparandKey' is an appendage of 'comparandState'; on its own it is a parsed-and-discarded field, refused
         // by name rather than silently ignored under the constant spelling.
@@ -803,8 +793,8 @@ public static partial class RuleCompiler {
 
         var lhs = ResolveOperand(
             context: context,
-            key: compare.Key,
-            name: name,
+            cell: compare.Key,
+            operand: compare.State,
             site: new OperandSite(
                 FieldLabel: "state",
                 KeyFieldLabel: "key",
@@ -832,8 +822,8 @@ public static partial class RuleCompiler {
 
         var rhs = ResolveOperand(
             context: context,
-            key: compare.ComparandKey,
-            name: compare.ComparandState!,
+            cell: compare.ComparandKey,
+            operand: compare.ComparandState!,
             site: new OperandSite(
                 FieldLabel: "comparandState",
                 KeyFieldLabel: "comparandKey",

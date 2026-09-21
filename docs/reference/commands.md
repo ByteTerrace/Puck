@@ -627,6 +627,21 @@ member-by-member surface.
   still holding a replaced router learns it is stale instead of quietly
   re-populating tables nothing will read.
 
+Text sessions can supply `onSettled` to receive the final result of each command.
+A simulation command answers when its snapshot applies; a handler that returns
+`CommandResult.Settling` answers when its authority supplies the verdict. Such a
+session holds every subsequent command and host operation until that verdict,
+while other sessions keep draining. Sessions using only `onResult` retain their
+submit-time batching. Quiet acknowledgements suppress text without discarding
+pending settlements. Result callback failures are isolated and counted by
+`TextCommandSession.ResultCallbackFaults`.
+
+A command abandoned by tick cancellation, input overflow, or router disposal
+receives a refusal and releases its session barrier. Cancellation of a command
+that has already started does not prove it made no changes; inspect state before
+retrying. World mutation commands use their typed authority completion, including
+ingress refusals, rather than correlating console echoes across worlds.
+
 ## Deployment and verification
 
 Native AOT and trimming are worth checking before a publish.

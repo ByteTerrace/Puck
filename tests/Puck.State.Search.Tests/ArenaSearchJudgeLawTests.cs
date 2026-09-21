@@ -9,6 +9,26 @@ namespace Puck.State.Search.Tests;
 /// fired, because the candidate it belongs to is rewound; a plan whose rules need a facet the judge's host does not
 /// serve is refused by name when the job set is installed, and never again.</summary>
 public sealed class ArenaSearchJudgeLawTests {
+    [Fact]
+    public void RewindTurnIsRefusedAtSearchAdmission() {
+        var position = new Position(rows: Rows());
+        var judge = new RuleArenaSearchJudge(
+            host: new ArenaSearchEffectHost(arena: position.Arena),
+            rules: [new Puck.State.Rules.CompiledRule(
+                Name: "undo",
+                Mode: ActionTriggerMode.Level,
+                Gate: [],
+                Effects: [new Puck.State.Rules.RewindTurnEffect(group: "play")],
+                Needs: RuleNeeds.None
+            )]
+        );
+
+        Assert.True(condition: ArenaSearchPlan.TryResolve(catalog: position.Catalog, plan: Plan(), reason: out var reason, resolved: out var resolved), userMessage: reason);
+        Assert.False(condition: judge.TryAdmit(plan: resolved, refusal: out var refusal));
+        Assert.Contains(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedSubstring: "rewindTurn");
+        Assert.Contains(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedSubstring: "settled authoritative turn boundary");
+    }
+
     /// <summary>A capability no search host serves.</summary>
     public interface ICardFacts : IFacet {
         /// <summary>Returns the top card the host is holding.</summary>
@@ -49,13 +69,14 @@ public sealed class ArenaSearchJudgeLawTests {
     private sealed class StampEffect() : Puck.State.Rules.RuleEffect(describe: "stamp") {
         public override EffectNeeds Needs => EffectNeeds.Irreversible;
 
-        public override long Cost(IRuleCostContext context) => 1L;
+        public override RuleWork Cost(IRuleCostContext context) => 1L;
     }
     // Counts how often the search asks whether it may run at all.
     private sealed class CountingJudge(IArenaSearchJudge inner) : IArenaSearchJudge {
         public int Admissions { get; private set; }
         public StateArena Arena => inner.Arena;
         public IReadOnlyList<int> KeyRows => inner.KeyRows;
+        public bool ReadsTick => inner.ReadsTick;
         public bool Scores => inner.Scores;
 
         public bool Judge(in ArenaSearchView view) => inner.Judge(view: in view);
@@ -106,7 +127,7 @@ public sealed class ArenaSearchJudgeLawTests {
             Verdict: "verdict",
             Off: -1L,
             Nodes: 256,
-            JudgeCost: 1L,
+            Work: SearchWork.NodeBounded(judge: 1L),
             Depth: 1,
             Best: "best",
             Shapes: [new SearchShapePlan(

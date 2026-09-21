@@ -503,7 +503,12 @@
           },
           {
             "$type": "compareState",
-            "state": "$region:gate0",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "gate0"
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -522,7 +527,9 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$tick"
+                "name": {
+                  "channel": "tick"
+                }
               }
             ]
           }
@@ -543,7 +550,12 @@
           },
           {
             "$type": "compareState",
-            "state": "$region:gate1",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "gate1"
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -571,7 +583,12 @@
           },
           {
             "$type": "compareState",
-            "state": "$region:gate2",
+            "state": {
+              "channel": "region",
+              "arguments": [
+                "gate2"
+              ]
+            },
             "comparison": "Greater",
             "value": 0
           }
@@ -585,7 +602,9 @@
             "instructions": [
               {
                 "op": "Operand",
-                "name": "$tick"
+                "name": {
+                  "channel": "tick"
+                }
               },
               {
                 "op": "Operand",

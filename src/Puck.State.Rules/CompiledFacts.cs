@@ -16,7 +16,7 @@ public interface IRuleOperand : ICompiledFact {
     /// <summary>Returns the conservative work units one read costs.</summary>
     /// <param name="context">The context the operand was priced against.</param>
     /// <returns>The work units.</returns>
-    long Cost(IRuleCostContext context);
+    RuleWork Cost(IRuleCostContext context);
     /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
     /// <param name="reader">The evaluation in flight, which is also the host serving every facet it advertises.</param>
     /// <returns>The fact.</returns>
@@ -38,7 +38,7 @@ public abstract class RuleOperand : IRuleOperand {
     /// <inheritdoc/>
     public virtual void CollectReads(List<CellAccess> into) { }
     /// <inheritdoc/>
-    public abstract long Cost(IRuleCostContext context);
+    public abstract RuleWork Cost(IRuleCostContext context);
     /// <inheritdoc/>
     public abstract RuleFact Read(IStateReader reader);
 }
@@ -63,6 +63,19 @@ public interface IRuleKey : ICompiledFact {
     /// nothing — an empty zone's endpoint — answers <see langword="false"/>, and reads absent.</param>
     /// <returns>The interned key.</returns>
     CellKey Resolve(IStateReader reader, out bool named);
+    /// <summary>Attempts to resolve a key for a state-writing effect. A dynamic key family may explicitly admit a
+    /// runtime key here; ordinary reads never do so.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="key">The resolved key, or the invalid default when the fact names no cell.</param>
+    /// <param name="reason">Why a required runtime-key admission failed, or empty on success.</param>
+    /// <returns><see langword="true"/> when evaluation may continue; <see langword="false"/> makes the enclosing
+    /// firing refuse and rewind.</returns>
+    bool TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
+        key = Resolve(named: out _, reader: reader);
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Resolves the key as an integer index — a live zone's table index, a static table's key.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="index">The index on success.</param>
@@ -90,7 +103,7 @@ public abstract class RuleKeyFact : IRuleKey {
             reader: reader
         );
 
-        if (reader.Catalog.Keys.TryGetName(
+        if (reader.Arena.Keys.TryGetName(
             key: key,
             name: out var name
         )) {
@@ -131,7 +144,7 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
     /// <summary>Returns the conservative work units one firing costs.</summary>
     /// <param name="context">The context the effect was priced against.</param>
     /// <returns>The work units.</returns>
-    long Cost(IRuleCostContext context);
+    RuleWork Cost(IRuleCostContext context);
     /// <summary>Fires an arm the evaluator does not apply itself. The evaluator owns the mutation door for the
     /// library's own cases and never calls this for one; what reaches here is a document project's registered
     /// effect, which bridges to its own facet-typed firing, or a library case whose kernel lives outside this
@@ -165,7 +178,7 @@ public abstract class RuleEffect : IRuleEffect {
     /// <inheritdoc/>
     public virtual void CollectWrites(List<CellAccess> into) { }
     /// <inheritdoc/>
-    public abstract long Cost(IRuleCostContext context);
+    public abstract RuleWork Cost(IRuleCostContext context);
     /// <summary>Fires an arm the evaluator does not apply itself. The default hands the effect to the host, which
     /// refuses by name unless it serves that arm.</summary>
     /// <param name="host">The mutation door.</param>
@@ -244,5 +257,26 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
             : default),
             RowOrdinal: cell.RowOrdinal
         ));
+    }
+    /// <summary>Appends every semantic fact a key indirection carries, including the expression behind a local or
+    /// computed key. A local memo schedule uses this beside its row reach, so a clock or facet behind the key is not
+    /// mistaken for a stable lookup.</summary>
+    /// <param name="reference">The indirection.</param>
+    /// <param name="into">The needs being built.</param>
+    public static void CollectFacts(CompiledCellRef? reference, RuleNeedsBuilder into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        if (reference is not { Custom: { } custom }) {
+            return;
+        }
+
+        into.AddFact(fact: custom);
+
+        if (custom is LocalKeyFact { Source: { } source }) {
+            RuleDataflow.CollectExpressionSchedulingFacts(
+                into: into,
+                tokens: source
+            );
+        }
     }
 }

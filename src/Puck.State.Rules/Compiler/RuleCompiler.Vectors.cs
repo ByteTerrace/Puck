@@ -177,8 +177,8 @@ public static partial class RuleCompiler {
             valueKind: operandKind
         );
     }
-    private static CompiledVector ResolveVectorCellOperand(string rowName, string? key, RuleCompileContext context, string ruleName, string where, StateSpace? expectedSpace) {
-        var row = (context.FindRow(name: rowName)
+    private static CompiledVector ResolveVectorCellOperand(StateChannelRef rowName, StateChannelRef? key, RuleCompileContext context, string ruleName, string where, StateSpace? expectedSpace) {
+        var row = (context.FindRow(name: rowName.Spelling)
             ?? throw new RuleException(
             detail: $"{where} addresses unknown row '{rowName}'",
             refusal: RuleRefusal.StateRowUnknown,
@@ -217,14 +217,14 @@ public static partial class RuleCompiler {
 
         var rowOrdinal = ResolveRowOrdinal(
             context: context,
-            name: rowName
+            name: rowName.Spelling
         );
 
         if (row.IsSlot) {
             if (
                 (key is not null) &&
                 !string.Equals(
-                a: key,
+                a: key?.Spelling,
                 b: StateRow.SlotKey.Value,
                 comparisonType: StringComparison.Ordinal
             )
@@ -237,7 +237,7 @@ public static partial class RuleCompiler {
             }
 
             return new CompiledVector(
-                describe: rowName,
+                describe: rowName.Spelling,
                 key: InternKey(
                     context: context,
                     name: StateRow.SlotKey.Value
@@ -257,7 +257,7 @@ public static partial class RuleCompiler {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: key,
+            reference: key,
             keyFieldLabel: "key",
             ruleName: ruleName,
             verb: where
@@ -271,7 +271,7 @@ public static partial class RuleCompiler {
             );
         }
         if (!CellName.TryParse(
-            candidate: key,
+            candidate: key?.Spelling,
             name: out var parsed,
             reason: out var reason
         )) {
@@ -359,7 +359,7 @@ public static partial class RuleCompiler {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: key,
+            reference: StateChannelRef.OfNullable(spelling: key),
             keyFieldLabel: "key",
             ruleName: ruleName,
             verb: where
@@ -473,7 +473,7 @@ public static partial class RuleCompiler {
             rowOrdinal: into.RowOrdinal,
             whereRowOrdinal: ResolveVectorFilter(
                 context: context,
-                filter: mean.Where,
+                filter: mean.Where?.Spelling,
                 ruleName: ruleName,
                 verb: "mean"
             )
@@ -566,7 +566,7 @@ public static partial class RuleCompiler {
             ruleName: ruleName,
             where: "nearest query"
         );
-        var intoRow = (context.FindRow(name: nearest.Into)
+        var intoRow = (context.FindRow(name: nearest.Into.Spelling)
             ?? throw new RuleException(
             detail: $"nearest into row '{nearest.Into}' is unknown",
             refusal: RuleRefusal.StateRowUnknown,
@@ -666,11 +666,13 @@ public static partial class RuleCompiler {
         var excludeKey = default(CellKey);
         CompiledCellRef? excludeKeyFrom = null;
 
-        if (nearest.Exclude is { } spelledExclude) {
+        if (nearest.Exclude is { } excludeChannel) {
+            var spelledExclude = excludeChannel.Spelling;
+
             if (TryResolveDynamicKey(
                 cell: out var dynamicExclude,
                 context: context,
-                key: spelledExclude,
+                reference: excludeChannel,
                 keyFieldLabel: "exclude",
                 ruleName: ruleName,
                 verb: "nearest"
@@ -713,14 +715,14 @@ public static partial class RuleCompiler {
             threshold: threshold,
             whereRowOrdinal: ResolveVectorFilter(
                 context: context,
-                filter: nearest.Where,
+                filter: nearest.Where?.Spelling,
                 ruleName: ruleName,
                 verb: "nearest"
             )
         );
     }
     private static VectorRememberEffect ResolveVectorRememberTransform(StateTransform.Remember remember, string ruleName, RuleCompileContext context) {
-        var intoRow = (context.FindRow(name: remember.Into)
+        var intoRow = (context.FindRow(name: remember.Into.Spelling)
             ?? throw new RuleException(
             detail: $"remember into row '{remember.Into}' is unknown",
             refusal: RuleRefusal.StateRowUnknown,
@@ -771,18 +773,19 @@ public static partial class RuleCompiler {
 
         var key = default(CellKey);
         CompiledCellRef? keyFrom = null;
+        var rememberKey = remember.Key.Spelling;
 
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: remember.Key,
+            reference: remember.Key,
             keyFieldLabel: "key",
             ruleName: ruleName,
             verb: "remember"
         )) {
             keyFrom = dynamicKey;
         } else if (CellName.TryParse(
-            candidate: remember.Key,
+            candidate: rememberKey,
             name: out var parsedKey,
             reason: out var reason
         )) {

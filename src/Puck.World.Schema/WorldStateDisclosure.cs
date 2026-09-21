@@ -36,7 +36,7 @@ public static class WorldStateDisclosure {
             ordinal: out var ordinal,
             row: row
         ) || observer.CanRead(
-            key: (arena.Catalog.Keys.TryResolve(
+            key: (arena.Keys.TryResolve(
                 key: out var interned,
                 name: key
             )
@@ -70,12 +70,9 @@ public static class WorldStateDisclosure {
                 continue;
             }
 
-            var positions = arena.PositionCount(rowOrdinal: rowOrdinal);
-
             if (
                 (row.Visibility is null) &&
                 !observer.AnyCellRestricted(
-                positions: positions,
                 rowOrdinal: rowOrdinal
             )
             ) {
@@ -91,15 +88,13 @@ public static class WorldStateDisclosure {
             var cells = new List<WorldObservedCell>();
             var hidden = 0;
             var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
+            var cursor = 0;
 
-            for (var position = 0; (position < positions); position++) {
-                if (!arena.TryKeyAt(
-                    key: out var key,
-                    position: position,
-                    rowOrdinal: rowOrdinal
-                )) {
-                    continue;
-                }
+            while (arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: rowOrdinal
+            )) {
                 if (!arena.TryReadLive(
                     key: key,
                     rowOrdinal: rowOrdinal,
@@ -114,7 +109,7 @@ public static class WorldStateDisclosure {
                     rowOrdinal: rowOrdinal
                 )) {
                     cells.Add(item: new(
-                        arena.Catalog.Keys[key: key].Value,
+                        arena.Keys[key: key].Value,
                         (value.Kind switch {
                             CellKind.Bool => (value.AsBool
                                 ? 1L
@@ -188,11 +183,7 @@ public static class WorldStateDisclosure {
                 continue;
             }
             if (
-                !observer.AnyCellWithheld(
-                positions: arena.PositionCount(rowOrdinal: rowOrdinal),
-                row: row,
-                rowOrdinal: rowOrdinal
-            ) &&
+                !observer.AnyCellWithheld(row: row, rowOrdinal: rowOrdinal) &&
                 ((row.Visibility is null) || observer.Allows(policy: row.Visibility))
             ) {
                 continue;
@@ -288,12 +279,16 @@ public static class WorldStateDisclosure {
             }
 
             var readers = handle.Ordinal;
-            var positions = m_arena.PositionCount(rowOrdinal: readers);
+            var cursor = 0;
 
-            for (var position = 0; (position < positions); position++) {
+            while (m_arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: readers
+            )) {
                 if (
-                    m_arena.TryReadAt(
-                    position: position,
+                    m_arena.TryRead(
+                    key: key,
                     rowOrdinal: readers,
                     value: out var value
                 ) &&
@@ -310,39 +305,37 @@ public static class WorldStateDisclosure {
 
             return false;
         }
-        public bool AnyCellRestricted(int rowOrdinal, int positions) {
-            for (var position = 0; (position < positions); position++) {
-                if (
-                    m_arena.TryKeyAt(
-                    key: out var key,
-                    position: position,
-                    rowOrdinal: rowOrdinal
-                ) &&
-                    (m_arena.Visibility(
+        public bool AnyCellRestricted(int rowOrdinal) {
+            var cursor = 0;
+
+            while (m_arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: rowOrdinal
+            )) {
+                if (m_arena.Visibility(
                     key: key,
                     rowOrdinal: rowOrdinal
-                ) is not null)
-                ) {
+                ) is not null) {
                     return true;
                 }
             }
 
             return false;
         }
-        public bool AnyCellWithheld(WorldStateRow row, int rowOrdinal, int positions) {
-            for (var position = 0; (position < positions); position++) {
-                if (
-                    m_arena.TryKeyAt(
-                    key: out var key,
-                    position: position,
-                    rowOrdinal: rowOrdinal
-                ) &&
-                    !CanRead(
+        public bool AnyCellWithheld(WorldStateRow row, int rowOrdinal) {
+            var cursor = 0;
+
+            while (m_arena.TryNextCell(
+                cursor: ref cursor,
+                key: out var key,
+                rowOrdinal: rowOrdinal
+            )) {
+                if (!CanRead(
                     key: key,
                     row: row,
                     rowOrdinal: rowOrdinal
-                )
-                ) {
+                )) {
                     return true;
                 }
             }

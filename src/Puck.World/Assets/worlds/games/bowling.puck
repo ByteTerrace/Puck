@@ -7,14 +7,14 @@
 kits {
   rows [
     {
-      bodyContact: "Solid"
+      bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: sphere(radius: 0.28)
       motion {
         facingSnap: true
         holds [
           {
-            bond: "Free"
+            bond: Free
             envelope {
               sinkSpeed: 40
             }
@@ -22,7 +22,7 @@ kits {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             name: "air"
           }
         ]
@@ -49,14 +49,14 @@ kits {
       }
     }
     {
-      bodyContact: "Solid"
+      bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: box(halfExtents: [0.075, 0.245, 0.075], rotation: [0, 0, 0, 1])
       motion {
         facingSnap: true
         holds [
           {
-            bond: "Free"
+            bond: Free
             envelope {
               sinkSpeed: 40
             }
@@ -64,7 +64,7 @@ kits {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             name: "air"
           }
         ]

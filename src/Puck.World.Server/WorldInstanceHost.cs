@@ -884,7 +884,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="reason">The refusal reason, naming which rule fired — a running count belongs in neither this
     /// sentence nor the verb's description, since one of them always goes stale first.</param>
     /// <returns><see langword="true"/> when the instance started and was admitted.</returns>
-    public bool TryStart(string name, string path, out WorldInstance? instance, out string reason) {
+    public bool TryStart(string name, string path, out WorldInstance? instance, out string reason) =>
+        TryStartCore(name: name, path: path, instance: out instance, reason: out reason);
+
+    // A private, exclusively owned load from this observation call, already validated and drawn for this exact
+    // instance name and origin. It has not been published to a server or a remote observer.
+    private sealed record PreparedInstanceDocument(string Name, string Path, WorldDefinitionAdmission Admission, bool Shared);
+
+    private bool TryStartCore(string name, string path, out WorldInstance? instance, out string reason, PreparedInstanceDocument? prepared = null) {
         instance = null;
 
         if (!m_admitsSpawn) {
@@ -969,17 +976,27 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         // Asked before the load, which is when the answer is still a prediction of what the load will do rather
         // than a trace of what it did: a held image standing for this path is what the load is about to compose from.
-        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(
+        if ((prepared is not null) && (
+            !string.Equals(a: prepared.Name, b: name, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(a: prepared.Path, b: resolvedPath, comparisonType: PathComparison)
+        )) {
+            reason = "the prepared document belongs to a different instance or origin";
+            return false;
+        }
+
+        var documentShared = (prepared?.Shared ?? WorldDefinitionFileSource.HoldsComposedDocument(
             catalogFingerprint: m_catalogFingerprint,
             resolvedPath: resolvedPath
-        );
+        ));
 
         // The instance's own NAME is the seed ladder's instance rung, so two instances of one document draw
         // independently while each stays reproducible from (document, instance name, draw history).
-        if (!WorldDefinitionLoader.TryLoadFile(
+        var admission = prepared?.Admission;
+
+        if ((admission is null) && !WorldDefinitionLoader.TryLoadFileForAdmission(
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
-            definition: out var definition,
+            admission: out admission,
             instanceIdentity: name,
             neighbours: instanceNeighbours,
             path: resolvedPath,
@@ -987,6 +1004,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         )) {
             return false;
         }
+        var definition = admission!.Definition;
 
         m_documentShared[name] = documentShared;
 
@@ -1023,7 +1041,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 ),
                 envelope: new WorldRenderEnvelope(),
                 machines: machines,
-                instanceIdentity: name
+                instanceIdentity: name,
+                // A loader with no selected catalog deferred provider admission. The concrete host must prove it.
+                admission: ((m_machineCatalog is null) ? null : admission)
             );
             var adjacencies = new WorldAdjacencyFields(
                 instances: this,
@@ -1065,6 +1085,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return true;
     }
+
     /// <summary>Retires a running instance and disposes what it owned. The boot instance is refused: retiring it
     /// would leave the container's client, seats, tape and console verbs holding a server nothing steps.</summary>
     /// <param name="name">The console-facing instance name.</param>

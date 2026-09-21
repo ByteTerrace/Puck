@@ -10,7 +10,8 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the packed-word reservation including worst-case part-program metadata at this program's
     /// instruction and instance ceilings. Unlike <see cref="Words"/> length, this does not depend on which parts
     /// qualify for compilation or share geometry. Composition capacity probes reserve this value; their existing
-    /// source-table and instance ceilings still govern other changes to the program.</summary>
+    /// source-table and instance ceilings still govern other changes to the program. Includes auxiliary path-table
+    /// reservations requested by SdfProgramBuilder.ReservePathTables without allocating dummy tables.</summary>
     public int PartCompilationWordCapacity { get; }
 
     // A part is one complete hard-union field scope. Its direct leaf program is shared by geometry identity;
@@ -150,6 +151,9 @@ public sealed partial class SdfProgram {
                 : ShapeNoSecondaryFlag));
             signature.Add(item: shape.Blend);
             var data0 = shape.Data0;
+
+            // Path tables are not part of the shared leaf key yet. Keep their instruction-local table ownership.
+            if (((SdfShapeType)shape.Shape) == SdfShapeType.Path) { return false; }
 
             if (((SdfShapeType)shape.Shape) == SdfShapeType.ConvexPolygon) {
                 // A profile's packed pointer differs between otherwise identical placements. Key the actual

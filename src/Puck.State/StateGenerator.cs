@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Maths;
 
 namespace Puck.State;
 
@@ -246,18 +247,21 @@ public sealed record GeneratorRow(CellName Name, StateGenerator Generator);
 public static class GeneratorCapacity {
     /// <summary>A context's alternative-count ceiling — one bit per alternative in its drawn mask.</summary>
     public const int MaxAlternativesPerContext = 256;
-    /// <summary>A source's context-count ceiling.</summary>
-    public const int MaxContexts = 32;
-    /// <summary>The document's declared-source count ceiling.</summary>
-    public const int MaxDeclaredSources = 64;
-    /// <summary>The declared <see cref="StateGenerator.Bound"/> ceiling.</summary>
-    public const int MaxEmissionBound = 64;
+    /// <summary>A source's context-count ceiling. An exhausting source persists one 32-byte drawn mask per context
+    /// at every site that draws from it, so this stays inside <see cref="ArenaCapacity.MaxDrawnMasks"/>.</summary>
+    public const int MaxContexts = 64;
+    /// <summary>The document's declared-source count ceiling: each source compiles to entry sets of at most
+    /// <see cref="MaxEntriesPerSet"/> units, held once for the document.</summary>
+    public const int MaxDeclaredSources = 256;
+    /// <summary>The declared <see cref="StateGenerator.Bound"/> ceiling: the most tokens one emission walks, each a
+    /// priced draw. The joined text is bounded separately, by <see cref="StateCapacity.MaxTextValueLength"/>.</summary>
+    public const int MaxEmissionBound = 256;
     /// <summary>The most units one drawn set may hold — a context's alternatives or a weighted source's outcomes,
     /// each counted <c>Multiplicity</c> times — since a drawn mask is one 256-bit set with one bit per unit.</summary>
     public const int MaxEntriesPerSet = 256;
-    /// <summary>The greatest <see cref="GeneratorExtended.K"/> a source may declare — <c>Pcg32Extended</c>'s own
-    /// ceiling.</summary>
-    public const int MaxExtendedTableSize = 1024;
+    /// <summary>The greatest <see cref="GeneratorExtended.K"/> a source may declare, which is
+    /// <c>Pcg32Extended</c>'s own ceiling: four bytes a word, sixteen kibibytes at the ceiling.</summary>
+    public const int MaxExtendedTableSize = Pcg32Extended.MaxTableSize;
     /// <summary>The greatest value a <see cref="GeneratorSource.UniformRange"/> bound may hold. The draw is a
     /// single fixed-cost multiply-high map whose span must fit a <c>uint</c> without truncation; this bound is what
     /// keeps it there.</summary>

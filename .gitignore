@@ -40,6 +40,7 @@ coverage.cobertura.xml
 .vscode/*
 !.vscode/extensions.json
 !.vscode/launch.json
+!.vscode/mcp.json
 !.vscode/settings.json
 
 # NuGet
@@ -72,7 +73,6 @@ roms/
 # Runtime authoring saves (the player's own documents/store — never repo content; checked-in examples live under docs/examples/)
 /creations/
 /store/
-worlds/
 # The checked-in world documents are repo content, not runtime saves — exempt them from the bare worlds/ pattern.
 !/src/Puck.World/Assets/worlds/
 # Generated world documents with verified .puck parents. Keep these rules after the
@@ -124,3 +124,4 @@ docs/.obsidian
 *.dxil
 *.spv.hash
 *.dxil.hash
+scratch

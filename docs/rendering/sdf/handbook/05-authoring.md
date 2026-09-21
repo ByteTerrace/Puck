@@ -260,12 +260,12 @@ of these automatically.
 
 ## Capacity probes define the envelope
 
-The engine's GPU buffers are sized once, at construction, and never grow —
-`UploadProgram` rejects a program that exceeds them rather than silently
-truncating it. That's a deliberate trade: a fixed envelope is one an editor
-can hot-swap content inside of, all session long, without ever
-re-allocating a GPU buffer mid-frame. The price is that the envelope has to
-be *right* before the session starts.
+The construction probe reserves GPU space for expected content. A live edit
+can exceed that reserve: `UploadProgram` grows the program buffer, instance
+masks, culling bounds, and frame-grid buffers together after waiting for
+in-flight frames. It allocates replacements before changing descriptors and
+keeps persistent images, pipelines, screen bindings, and baked bricks intact.
+Growth is geometric and happens only on a program change, not on ordinary frames.
 
 > **Rule: declare your worst case up front.** Every emitter's `Emit` needs a
 > branch—selected by `context.Probe`—that takes its single largest
@@ -273,17 +273,18 @@ be *right* before the session starts.
 > magnitude, every dynamic slot in use. One construction-time call with
 > `Probe: true` runs every registered emitter's worst-case branch into one
 > combined program, and *that* program's word count, instance count, and
-> dynamic-transform count become the frozen ceiling every live rebuild for
-> the rest of the session is measured against.
+> dynamic-transform count establish the initial buffer reserves and the fixed
+> transform-slot layout. Program and instance buffers may grow later.
 
 The probe program itself is never rendered—it exists purely to be
 measured. The rule this creates for you as an author: when you add a new
 *optional* piece of content to an emitter (a toggleable decoration, an
 occasionally-present dynamic entity), you must grow that emitter's probe
 branch to match, in the same change. Skip it, and the first live session
-that actually uses the new content can outgrow the buffers the probe
-promised—caught loudly (`UploadProgram` throws), but only at the moment
-someone hits it, not at build time.
+that uses the new content may pay an avoidable allocation and GPU wait.
+The World admission check still measures the entire composed candidate before
+accepting it. Growable renderers enforce engine limits; a fixed-capacity
+consumer can still register a smaller ceiling and refuse the edit.
 
 ## Authoring rules
 

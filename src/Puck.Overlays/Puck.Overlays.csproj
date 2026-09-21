@@ -22,9 +22,9 @@
     </ItemGroup>
     <ItemGroup>
         <!-- Puck.Text owns and propagates the shared pre-baked MTSDF image and layout JSON. -->
-        <!-- The prepacked overlay glyph artifact (OverlayGlyphSdfPack) — committed so every consumer's FIRST run
-             takes the ~19 ms warm path instead of the ~2 s full-atlas decode. Keyed to the PNG+JSON hashes: a rebake
-             invalidates it and the next run rebuilds+rewrites it in place (commit the refreshed file with the bake). -->
+        <!-- The ASCII overlay glyph artifact (OverlayGlyphSdfPack) avoids full-atlas decoding at first use.
+             Keyed to the PNG+JSON hashes; rebakes invalidate it. Regenerate it through LoadOverlayPack with no
+             extra codepoints and commit it with the atlas. Runtime icon repertoires use separate cached packs. -->
         <Content Include="Assets\Fonts\**\*.pack" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>

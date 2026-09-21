@@ -5,13 +5,16 @@ is about. A `test` block names a claim, sets the world up, drives it for a few
 ticks, and says what must be true at the end. `puck test` runs it.
 
 ```puck
-test "one piece home is not a win" {
+test "all marbles settle into the star" {
   when {
-    seat1: world.state.cell.set pieceCell s0p1 14
-    ticks 1
+    ticks 500
   }
   expect {
-    home0 == 1
+    missingCount == 0
+    boardCollisions == 0
+    movedCount == 0
+    verdict == 1
+    turn == 0
     winner == -1
   }
 }
@@ -20,15 +23,20 @@ test "one piece home is not a win" {
 Run it:
 
 ```bash
-puck test src/Puck.World/Assets/worlds/games/chinese-checkers.puck
+puck test worlds/parlor/chinese-checkers.puck
 ```
 
+Independent test worlds run concurrently and their reports remain in authored
+order. Use `--jobs 1` when debugging a single shared resource, or `--jobs <n>`
+to choose the worker limit explicitly. The headless host advances on the
+world's fixed tick grid without waiting for wall clock.
+
 ```text
-test: chinese-checkers--one-piece-home-is-not-a-win <- .../chinese-checkers.puck test "one piece home is not a win"
-  one-piece-home-is-not-a-win-1: pass gate="home0 == 1" saw=[home0=1] firedTick=7
-  one-piece-home-is-not-a-win-2: pass gate="winner == -1" saw=[winner=-1] firedTick=7
-  2/2 verdict(s) passed at export tick 7.
-PASS: every verdict in 2 test world(s) passed, and each world's two runs exported identical bytes.
+test: chinese-checkers--all-marbles-settle-into-the-star <- .../chinese-checkers.puck test "all marbles settle into the star"
+  all-marbles-settle-into-the-star-1: pass gate="missingCount == 0" saw=[missingCount=0] firedTick=501
+  ...
+  6/6 verdict(s) passed at export tick 501.
+PASS: every verdict in 2 test world(s) passed.
 ```
 
 ## A test is a world
@@ -64,7 +72,7 @@ One cell per line, written the way an effect writes one:
 ```puck
 given {
   hp = 4
-  pieceCell[s0p1] = 14
+  aiSide = 0
 }
 ```
 
@@ -118,6 +126,10 @@ grants [
 A step whose seat lacks a grant is not granted one: the run records the refusal
 and the test fails on it.
 
+A step is submitted when its tick completes and takes effect in the next one,
+on every run and on any machine: a scheduled step does not wait on the wall
+clock the way a line typed at a console does.
+
 A step's command must open with a verb a schedule admits — the state, transform,
 body and session verbs a seat can submit at an exact tick. Every verb that
 touches the process, the clock, the file system or the grant table is refused
@@ -129,7 +141,7 @@ One gate expression per line, in the grammar a rule's `when` already uses:
 
 ```puck
 expect {
-  home0 == 2
+  home[0] == 10
   winner == 0
 }
 ```
@@ -142,7 +154,7 @@ a test never reports a failure the world had not finished producing yet.
 The report names the gate as written and the values it read:
 
 ```text
-  the-win-condition-fires-when-the-last-piece-lands-1: fail gate="home0 == 2" saw=[home0=1] firedTick=8
+  the-win-condition-fires-when-the-last-piece-lands-1: fail gate="home[0] == 10" saw=[home-0=9] firedTick=8
 ```
 
 The values listed are the ones read from `Int` rows. A gate may read a row of
@@ -169,13 +181,14 @@ recorded in holds whole numbers.
 
 | Code | Meaning |
 |---|---|
-| 0 | every verdict passed, and each world's two runs exported identical bytes |
+| 0 | every verdict passed; with `--reproduce`, both runs also exported identical bytes |
 | 1 | a verdict failed, or a step's recorded outcome was not the one it declared |
-| 2 | usage: a source that does not compile, a source with no test, a world that did not reproduce, a build or boot refusal |
+| 2 | usage: a source that does not compile, a source with no test, a `--reproduce` mismatch, a build or boot refusal |
 
-Every world runs **twice**, into sibling directories, and a world whose two runs
-export different bytes is refused rather than reported: a verdict read off a
-world that does not reproduce says nothing.
+Ordinary authoring runs each isolated test world once. `--reproduce` is the
+determinism qualification tier: it runs every world twice into sibling
+directories and refuses a world whose state export or schedule manifest differs
+byte for byte.
 
 ---
 

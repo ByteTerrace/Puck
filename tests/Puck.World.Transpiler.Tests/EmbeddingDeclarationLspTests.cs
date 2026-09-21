@@ -272,7 +272,7 @@ public class EmbeddingDeclarationLspTests {
                         }
                     }
                     world {
-                        slot current : Vector space("lore")
+                        slot current space("lore")
                     }
                 }
                 rule "r" {
@@ -313,7 +313,7 @@ public class EmbeddingDeclarationLspTests {
                     }
                 }
                 world {
-                    slot current : Vector space("lore")
+                    slot current space("lore")
                 }
             }
             rule "r" {

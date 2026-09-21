@@ -150,7 +150,14 @@
       "gate": {
         "$type": "compareState",
         "comparison": "GreaterOrEqual",
-        "state": "$identity:body:0:awakened",
+        "state": {
+          "channel": "identity",
+          "arguments": [
+            "body",
+            0,
+            "awakened"
+          ]
+        },
         "value": 1
       },
       "mode": "Edge",

@@ -145,10 +145,10 @@ machines [
     memory [
       {
         name: "ax"
-        direction: "Write"
+        direction: Write
         space: "bus"
         format: "u8"
-        row: "ax"
+        row: ax
         address: busAx
         access: "patch"
         update: "onChange"
@@ -156,10 +156,10 @@ machines [
       }
       {
         name: "ay"
-        direction: "Write"
+        direction: Write
         space: "bus"
         format: "u8"
-        row: "ay"
+        row: ay
         address: busAy
         access: "patch"
         update: "onChange"
@@ -167,10 +167,10 @@ machines [
       }
       {
         name: "wp"
-        direction: "Write"
+        direction: Write
         space: "bus"
         format: "u8"
-        row: "wp"
+        row: wp
         address: busWp
         access: "patch"
         update: "onChange"
@@ -178,10 +178,10 @@ machines [
       }
       {
         name: "lp"
-        direction: "Write"
+        direction: Write
         space: "bus"
         format: "u8"
-        row: "lp"
+        row: lp
         address: busLp
         access: "patch"
         update: "onChange"
@@ -189,10 +189,10 @@ machines [
       }
       {
         name: "af"
-        direction: "Write"
+        direction: Write
         space: "bus"
         format: "u8"
-        row: "af"
+        row: af
         address: busAf
         access: "patch"
         update: "onChange"
@@ -200,10 +200,10 @@ machines [
       }
       {
         name: "wtEcho"
-        direction: "Read"
+        direction: Read
         space: "bus"
         format: "u8"
-        row: "wtEcho"
+        row: wtEcho
         address: busWt
         access: "inspect"
         update: "onChange"
@@ -215,17 +215,17 @@ machines [
 
 host {
   authority: null
-  backend: "auto"
+  backend: auto
   exitAfterSeconds: 0
   fullscreen: false
   genlock: null
   height: viewHeight
   journalDepth: 2000
   listen: null
-  presentMode: "Immediate"
-  presentation: "Windowed"
+  presentMode: Immediate
+  presentation: Windowed
   rayQuery: true
-  surfaceFormat: "r8g8b8a8"
+  surfaceFormat: r8g8b8a8
   targetHertz: 60
   timing: false
   width: viewWidth
@@ -253,14 +253,14 @@ spawnPoints [
 // speed, turn and gravity values are the validator's positive-and-finite floor, not a
 // policy this world has any use for.
 bodyMotionPrograms [
-  { version: "puck.body.program.v1", name: "display", kind: "Motion", operations ["CommitPose"] }
+  { version: "puck.body.program.v1", name: "display", kind: Motion, operations [CommitPose] }
 ]
 
 kits {
   rows [
     {
       name: "display"
-      bodyContact: "Overlap"
+      bodyContact: Overlap
       bodyMotionProgram: "display"
       collider: null
       mass: 0
@@ -269,13 +269,13 @@ kits {
         holds [
           {
             name: "still"
-            bond: "Free"
-            hold: "Lift"
+            bond: Free
+            hold: Lift
             lift: 0
             gravity { fall: 46, rise: 28 }
             envelope { sinkSpeed: 40 }
             thrust: 0
-            forward: "Heading"
+            forward: Heading
           }
         ]
         speed { value: 2.4 }
@@ -300,7 +300,7 @@ gravity {
   gravitationalConstant: 0
   isActive: true
   softeningLength: 0.5
-  solver: "Pairwise"
+  solver: Pairwise
   uniform [0, -18, 0]
 }
 
@@ -566,7 +566,7 @@ screens [
     halfHeight: panelHalfHeight
     halfDepth: 0.01
     round: 0
-    source: machine(instance: "mirror", output: "video")
+    source: machine(instance: mirror, output: "video")
     route { engageable: false, engageRadius: 0 }
   }
   {
@@ -601,29 +601,29 @@ state {
 // channels — no float ever reaches it, so both renderings read the same whole number.
 // The bounds are the sprite's own 8 px inset from the picture, named once above.
 rule "hero-east" {
-  when $channel:1:strafe >= 0.5 and ax < axMax
-  mode: "Level"
+  when channel(1, strafe) >= 0.5 and ax < axMax
+  mode: Level
   ax += 1
   af = 3
 }
 
 rule "hero-west" {
-  when $channel:1:strafe <= -0.5 and ax > 0
-  mode: "Level"
+  when channel(1, strafe) <= -0.5 and ax > 0
+  mode: Level
   ax += -1
   af = 2
 }
 
 rule "hero-north" {
-  when $channel:1:forward >= 0.5 and ay > 0
-  mode: "Level"
+  when channel(1, forward) >= 0.5 and ay > 0
+  mode: Level
   ay += -1
   af = 1
 }
 
 rule "hero-south" {
-  when $channel:1:forward <= -0.5 and ay < ayMax
-  mode: "Level"
+  when channel(1, forward) <= -0.5 and ay < ayMax
+  mode: Level
   ay += 1
   af = 0
 }
@@ -633,39 +633,39 @@ rule "hero-south" {
 // division. Both arms gate on hy already differing, so neither writes every tick.
 rule "tier-plateau" {
   gate: all(predicates: [
-    compareValue(kind: "Int", comparison: "LessOrEqual", left: "(ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136", right: "2822400")
-    compareState(state: "hy", comparison: "NotEqual", value: 1)
+    compareValue(kind: Int, comparison: LessOrEqual, left: (ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136, right: 2822400)
+    compareState(state: hy, comparison: NotEqual, value: 1)
   ]
   )
-  mode: "Level"
+  mode: Level
   hy = 1
 }
 
 rule "tier-lowland" {
   gate: all(predicates: [
-    compareValue(kind: "Int", comparison: "Greater", left: "(ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136", right: "2822400")
-    compareState(state: "hy", comparison: "NotEqual", value: 0)
+    compareValue(kind: Int, comparison: Greater, left: (ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136, right: 2822400)
+    compareState(state: hy, comparison: NotEqual, value: 0)
   ]
   )
-  mode: "Level"
+  mode: Level
   hy = 0
 }
 
 rule "fall-phase" {
   when (wp != wclock % 4 : Int)
-  mode: "Level"
+  mode: Level
   wp = wclock % 4
 }
 
 rule "ripple-phase" {
   when (lp != lclock % 2 : Int)
-  mode: "Level"
+  mode: Level
   lp = lclock % 2
 }
 
 channels [
-  { name: "forward", role: "MoveAdvance", shape: "Bipolar", frame: "Heading" }
-  { name: "strafe", role: "MoveStrafe", shape: "Bipolar", frame: "Heading" }
+  { name: "forward", role: MoveAdvance, shape: Bipolar, frame: Heading }
+  { name: "strafe", role: MoveStrafe, shape: Bipolar, frame: Heading }
 ]
 
 bindingOverlays [
@@ -756,7 +756,7 @@ views {
 
 render {
   farDistance: 120
-  tonemap: "Filmic"
+  tonemap: Filmic
   lighting {
     lights [
       directional(direction: [3, 5, 4], color: "#FFF0D8", weight: 0.72, shadows: true, angularRadius: 0.2)

@@ -51,15 +51,20 @@ public static partial class ArenaVectorTransforms {
         }
 
         var count = into.Count;
-        var existing = new NearestCandidate[count];
+
+        using var existingLease = arena.Scratch.Rent<NearestCandidate>(length: count);
+
+        var existing = existingLease.Span;
         var gathered = 0;
 
-        for (var position = 0; (position < count); position++) {
+        var cursor = 0;
+
+        while (arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: into.RowOrdinal
+        )) {
             if (
-                into.TryKeyAt(
-                key: out var key,
-                position: position
-            ) &&
                 into.TryReadMemory(
                 components: out var stored,
                 key: key
@@ -67,16 +72,13 @@ public static partial class ArenaVectorTransforms {
             ) {
                 existing[gathered++] = new NearestCandidate(
                     Components: stored,
-                    Key: arena.Catalog.Keys[key: key]
+                    Key: arena.Keys[key: key]
                 );
             }
         }
 
         if (!VectorTransforms.TryRemember(
-            existingCells: existing.AsSpan(
-                length: gathered,
-                start: 0
-            ),
+            existingCells: existing[..gathered],
             key: request.Key,
             matchingKey: out _,
             unlessWithinQ16: request.UnlessWithinQ16,
@@ -111,7 +113,7 @@ public static partial class ArenaVectorTransforms {
         var arena = into.Arena;
 
         if (
-            arena.Catalog.Keys.TryResolve(
+            arena.Keys.TryResolve(
             key: out var key,
             name: name
         ) &&

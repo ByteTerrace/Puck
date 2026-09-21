@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 
 namespace Puck.State;
 
@@ -86,6 +87,8 @@ public readonly record struct StateDescriptor(
 public sealed class StateCatalog {
     private static long ShapeWalkCountValue;
 
+    private static readonly ConditionalWeakTable<IStateSection, Lazy<IReadOnlyList<StateRow>>> ExpandedRows = new();
+
     private readonly StateDescriptor[] m_descriptors;
     private readonly Dictionary<string, StateEnum> m_enumsByName;
     private readonly Dictionary<string, RowFamily> m_familiesByName;
@@ -96,6 +99,14 @@ public sealed class StateCatalog {
     private readonly ReadOnlyCollection<StateDescriptor> m_readOnlyDescriptors;
     private readonly ReadOnlyCollection<RowFamily> m_readOnlyFamilies;
     private readonly StateEnum?[] m_rowEnums;
+    private readonly ReadOnlyCollection<StateRow> m_rows;
+    private readonly ReadOnlyCollection<StatePoolDescriptor> m_pools;
+    private readonly Dictionary<string, StatePoolDescriptor> m_poolsByName;
+    private readonly bool[] m_poolRows;
+    private readonly bool[] m_poolFieldRows;
+    private readonly CellKey[] m_poolKeys;
+    private readonly CellKey[] m_ringKeys;
+    private readonly int[] m_poolSlotsByKeyOrdinal;
 
     private StateCatalog(
         object identity,
@@ -106,7 +117,9 @@ public sealed class StateCatalog {
         Dictionary<string, StateEnum> enumsByName,
         StateEnum?[] rowEnums,
         Dictionary<string, RowFamily> familiesByName,
-        RowFamily[] families
+        RowFamily[] families,
+        StateRow[] rows,
+        StatePoolDescriptor[] pools
     ) {
         m_descriptors = descriptors;
         m_enumsByName = enumsByName;
@@ -114,10 +127,44 @@ public sealed class StateCatalog {
         m_handlesByLane = handlesByLane;
         m_identity = identity;
         m_keys = keys;
+        m_keys.SealSeed();
+        // Ring addresses are compiler symbols, not retained runtime names. Prebind them after sealing the
+        // declaration seed so iteration neither mints keys nor changes the arena's resource ledger.
+        var ringCapacity = rows.Where(predicate: static row => (!row.HostOwned && (row.EffectiveDomain is StateDomain.Ring)))
+            .Select(selector: static row => row.CellCeiling).DefaultIfEmpty().Max();
+
+        m_ringKeys = new CellKey[ringCapacity];
+        for (var position = 0; (position < ringCapacity); position++) {
+            m_ringKeys[position] = m_keys.Intern(name: CellName.Parse(candidate: IndexKeyCache.Get(index: position)));
+        }
         m_lanes = lanes;
         m_readOnlyDescriptors = Array.AsReadOnly(array: descriptors);
         m_readOnlyFamilies = Array.AsReadOnly(array: families);
         m_rowEnums = rowEnums;
+        m_rows = Array.AsReadOnly(array: rows);
+        m_pools = Array.AsReadOnly(array: pools);
+        m_poolsByName = pools.ToDictionary(keySelector: static pool => pool.Name.Value, comparer: StringComparer.Ordinal);
+        m_poolRows = ((pools.Length == 0) ? [] : new bool[rows.Length]);
+        m_poolFieldRows = ((pools.Length == 0) ? [] : new bool[rows.Length]);
+        foreach (var pool in pools) {
+            m_poolRows[pool.DomainRowOrdinal] = true;
+            m_poolRows[pool.GenerationRowOrdinal] = true;
+            foreach (var field in pool.Fields) {
+                m_poolRows[field.RowOrdinal] = true;
+                m_poolFieldRows[field.RowOrdinal] = true;
+            }
+        }
+        m_poolKeys = new CellKey[((pools.Length == 0) ? 0 : pools.Max(selector: static pool => pool.Capacity))];
+        for (var slot = 0; (slot < m_poolKeys.Length); slot++) {
+            if (!m_keys.TryResolve(name: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), key: out m_poolKeys[slot])) {
+                throw new InvalidOperationException(message: $"State pool slot {slot} has no compiled key.");
+            }
+        }
+        m_poolSlotsByKeyOrdinal = ((m_poolKeys.Length == 0) ? [] : new int[(m_poolKeys.Max(selector: static key => key.Ordinal) + 1)]);
+        Array.Fill(array: m_poolSlotsByKeyOrdinal, value: -1);
+        for (var slot = 0; (slot < m_poolKeys.Length); slot++) {
+            m_poolSlotsByKeyOrdinal[m_poolKeys[slot].Ordinal] = slot;
+        }
     }
 
     /// <summary>Gets the number of compiled state declarations.</summary>
@@ -126,12 +173,50 @@ public sealed class StateCatalog {
     public IReadOnlyList<StateDescriptor> Descriptors => m_readOnlyDescriptors;
     /// <summary>Gets the compiled row families in declaration order.</summary>
     public IReadOnlyList<RowFamily> Families => m_readOnlyFamilies;
-    /// <summary>Gets the intern table every cell key of this catalog resolves through.</summary>
+    /// <summary>Gets the complete document lane, including catalog-generated pool storage rows.</summary>
+    public IReadOnlyList<StateRow> Rows => m_rows;
+    /// <summary>Gets the compiled pools in declaration order.</summary>
+    public IReadOnlyList<StatePoolDescriptor> Pools => m_pools;
+    /// <summary>Gets the compiled key symbols. Runtime names are owned by <see cref="StateArena.Keys"/>.</summary>
     public CellKeyTable Keys => m_keys;
     /// <summary>Gets the running count of calls to <see cref="MatchesShape"/> across every catalog. A
     /// recompilation site calls it once per candidate section; nothing on a warm read of an already-keyed catalog
     /// may call it, so a law reads this to prove that contract without a wall-clock measurement.</summary>
     public static long ShapeWalkCount => Interlocked.Read(location: ref ShapeWalkCountValue);
+
+    /// <summary>Looks up a compiled pool by stable name.</summary>
+    public bool TryGetPool(CellName name, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StatePoolDescriptor? pool) => m_poolsByName.TryGetValue(key: name.Value, value: out pool);
+    /// <summary>Mints a runtime handle bound to this catalog's identity.</summary>
+    public StateInstanceHandle CreateInstanceHandle(int poolOrdinal, int slot, long generation) => new(
+        Generation: generation,
+        PoolOrdinal: poolOrdinal,
+        Slot: slot,
+        catalogIdentity: m_identity
+    );
+
+    internal object Identity => m_identity;
+
+    internal CellKey RingKey(int position) => m_ringKeys[position];
+    internal bool TryGetPoolKey(int slot, out CellKey key) {
+        if (((uint)slot) < ((uint)m_poolKeys.Length)) {
+            key = m_poolKeys[slot];
+            return true;
+        }
+        key = default;
+        return false;
+    }
+    internal bool TryGetPoolSlot(int keyOrdinal, out int slot) {
+        if ((((uint)keyOrdinal) < ((uint)m_poolSlotsByKeyOrdinal.Length)) && ((slot = m_poolSlotsByKeyOrdinal[keyOrdinal]) >= 0)) {
+            return true;
+        }
+        slot = -1;
+        return false;
+    }
+
+    /// <summary>Gets whether a document row is generated storage owned by a pool.</summary>
+    public bool IsPoolRow(int rowOrdinal) => ((((uint)rowOrdinal) < ((uint)m_poolRows.Length)) && m_poolRows[rowOrdinal]);
+
+    internal bool IsPoolFieldRow(int rowOrdinal) => ((((uint)rowOrdinal) < ((uint)m_poolFieldRows.Length)) && m_poolFieldRows[rowOrdinal]);
 
     /// <summary>Gets the descriptor addressed by <paramref name="handle"/>.</summary>
     /// <param name="handle">A handle minted by this catalog.</param>
@@ -292,6 +377,403 @@ public sealed class StateCatalog {
             Slots: slots
         );
     }
+    private static CellName PoolRowName(StatePool pool, string suffix) {
+        try {
+            return CellName.Parse(candidate: $"$pool_{pool.Name.Value}_{suffix}");
+        } catch (FormatException exception) {
+            throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' cannot generate its '{suffix}' row: {exception.Message}", innerException: exception);
+        }
+    }
+    private static CellName PairPoolRowName(StatePairPool pool, string suffix) {
+        try {
+            return CellName.Parse(candidate: $"$pool_{pool.Name.Value}_{suffix}");
+        } catch (FormatException exception) {
+            throw new InvalidOperationException(message: $"State pair pool '{pool.Name.Value}' cannot generate its '{suffix}' row: {exception.Message}", innerException: exception);
+        }
+    }
+    private static CellValue DefaultValue(StatePoolField field) {
+        if (field.Default.HasValue) {
+            return field.Default;
+        }
+
+        return (field.Kind switch {
+            CellKind.Bool => CellValue.Bool(value: false),
+            CellKind.Fixed => CellValue.Fixed(rawBits: 0L),
+            CellKind.Int => CellValue.Int(value: 0L),
+            CellKind.Text => CellValue.Text(value: string.Empty),
+            CellKind.Vector => CellValue.Vector(components: new sbyte[(field.Dimensions ?? 0)]),
+            _ => throw new InvalidOperationException(message: $"State pool field '{field.Name.Value}' carries unknown kind '{field.Kind}'."),
+        });
+    }
+    private static void ValidateRecordField(StateRecord record, StatePoolField field, IStateSection? section) {
+        if (!Enum.IsDefined(value: field.Kind)) {
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' carries unknown kind '{field.Kind}'.");
+        }
+        if (
+            (field.Kind == CellKind.Vector) &&
+            ((field.Dimensions.GetValueOrDefault() < 0) || (field.Dimensions.GetValueOrDefault() > StateCapacity.MaxVectorDimensions))
+        ) {
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' declares {field.Dimensions.GetValueOrDefault()} vector dimensions, outside 0..{StateCapacity.MaxVectorDimensions}.");
+        }
+
+        var value = DefaultValue(field: field);
+
+        if (field.Enum is { } enumName) {
+            var domain = section?.Enums?.FirstOrDefault(predicate: candidate => (candidate.Name == enumName));
+
+            if ((field.Kind != CellKind.Int) || (domain is null)) {
+                throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' requires an Int field and declared enum '{enumName.Value}'.");
+            }
+            if (!domain.TryValidate(reason: out var enumReason)) {
+                throw new InvalidOperationException(message: enumReason);
+            }
+            if (!domain.Admits(value: value.Raw)) {
+                throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' default {value.Raw} is outside enum '{enumName.Value}'.");
+            }
+        }
+
+        if (!value.HasValue || (value.Kind != field.Kind)) {
+            var carried = (value.HasValue ? value.Kind.ToString() : "no value case");
+
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' declares kind {field.Kind}, which its {carried} default does not satisfy.");
+        }
+        if ((field.Kind == CellKind.Text) && (value.AsText.Length > StateCapacity.MaxTextValueLength)) {
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' default holds {value.AsText.Length} characters, past the {StateCapacity.MaxTextValueLength}-character limit.");
+        }
+        if ((field.Kind == CellKind.Vector) && (value.AsVector.Length != field.Dimensions.GetValueOrDefault())) {
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' declares {field.Dimensions.GetValueOrDefault()} dimensions, which its {value.AsVector.Length}-component default does not satisfy.");
+        }
+        if (
+            (field.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool) &&
+            ((field.Min.HasValue && (value.Raw < field.Min.Value)) || (field.Max.HasValue && (value.Raw > field.Max.Value)))
+        ) {
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' default {value.Raw} is outside its declared {(field.Min?.ToString() ?? "unbounded")}..{(field.Max?.ToString() ?? "unbounded")} envelope.");
+        }
+        if ((field.Advance is { } advance) && ((field.Kind is not (CellKind.Int or CellKind.Fixed)) || (advance.PerSecondDenominator <= 0L))) {
+            throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' advance requires an Int or Fixed field and a positive denominator.");
+        }
+    }
+
+    /// <summary>Expands the current authored rows and pool declarations into the complete document lane the arena
+    /// stores. Generated pool rows are synthesized once per immutable section identity; caller-supplied generated
+    /// flags are never trusted. A replacement section receives its own population, even when it reuses a catalog.</summary>
+    public static IReadOnlyList<StateRow> ExpandRows(IStateSection? section) => ((section is null)
+        ? []
+        : ExpandedRows.GetValue(key: section, createValueCallback: static source => new Lazy<IReadOnlyList<StateRow>>(
+            valueFactory: () => ExpandRowsCore(section: source)
+        )).Value);
+
+    private static IReadOnlyList<StateRow> ExpandRowsCore(IStateSection section) {
+        var rows = new List<StateRow>(collection: (section?.Rows ?? []));
+
+        for (var index = 0; (index < rows.Count); index++) {
+            if (rows[index] is null) {
+                throw new InvalidOperationException(message: $"State lane 'Document' contains a null declaration at ordinal {index}.");
+            }
+            if (rows[index].Generated) {
+                throw new InvalidOperationException(message: "Authored state rows cannot carry the runtime-generated mark.");
+            }
+        }
+        var names = rows.Select(selector: static row => row.Name.Value).ToHashSet(comparer: StringComparer.Ordinal);
+        var records = new Dictionary<string, StateRecord>(comparer: StringComparer.Ordinal);
+
+        foreach (var record in (section?.Records ?? [])) {
+            if (record is null) {
+                throw new InvalidOperationException(message: "The state section contains a null record declaration.");
+            }
+            if (!records.TryAdd(key: record.Name.Value, value: record)) {
+                throw new InvalidOperationException(message: $"The state section declares duplicate record '{record.Name.Value}'.");
+            }
+
+            var fieldNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var field in (record.Fields ?? [])) {
+                if ((field is null) || !fieldNames.Add(item: field.Name.Value)) {
+                    throw new InvalidOperationException(message: $"State record '{record.Name.Value}' contains a null or duplicate field declaration.");
+                }
+                ValidateRecordField(field: field, record: record, section: section);
+            }
+        }
+
+        long expandedRowCount = rows.Count;
+
+        foreach (var pool in (section?.Pools ?? [])) {
+            if (pool is null) {
+                throw new InvalidOperationException(message: "The state section contains a null pool declaration.");
+            }
+            expandedRowCount += (2L + (records.TryGetValue(key: pool.Record.Value, value: out var record) ? (record.Fields?.Count ?? 0) : 0));
+        }
+        foreach (var pool in (section?.PairPools ?? [])) {
+            if (pool is null) {
+                throw new InvalidOperationException(message: "The state section contains a null pair pool declaration.");
+            }
+            expandedRowCount += (2L + (records.TryGetValue(key: pool.Record.Value, value: out var record) ? (record.Fields?.Count ?? 0) : 0));
+        }
+        if (expandedRowCount > StateCapacity.MaxRows) {
+            throw new InvalidOperationException(message: $"The expanded state section declares {expandedRowCount} rows, past the {StateCapacity.MaxRows}-row limit.");
+        }
+
+        var poolNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var pool in (section?.Pools ?? [])) {
+            if (pool is null) {
+                throw new InvalidOperationException(message: "The state section contains a null pool declaration.");
+            }
+            if (!poolNames.Add(item: pool.Name.Value)) {
+                throw new InvalidOperationException(message: $"The state section declares duplicate pool '{pool.Name.Value}'.");
+            }
+            if (names.Contains(item: pool.Name.Value)) {
+                throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' collides with a state row of the same name.");
+            }
+            if ((pool.Capacity < 1) || (pool.Capacity > StateCapacity.MaxCellsPerRow)) {
+                throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' declares capacity {pool.Capacity}, outside 1..{StateCapacity.MaxCellsPerRow}.");
+            }
+            if (!records.TryGetValue(key: pool.Record.Value, value: out var record)) {
+                throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' names undeclared record '{pool.Record.Value}'.");
+            }
+            if ((pool.Initial is not null) && (pool.Snapshot is not null)) {
+                throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' carries both an initial population and a runtime snapshot.");
+            }
+
+            var generations = (pool.Snapshot?.Generations ?? Enumerable.Repeat(element: 0L, count: pool.Capacity).ToArray());
+
+            if (generations.Count != pool.Capacity) {
+                throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' snapshot carries {generations.Count} generations for capacity {pool.Capacity}.");
+            }
+            if (generations.Any(predicate: static generation => (generation < 0L))) {
+                throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' snapshot carries a negative generation.");
+            }
+
+            var live = (pool.Snapshot?.Live ?? (pool.Initial ?? []));
+            var liveBySlot = new SortedDictionary<int, StatePoolSeed>();
+
+            foreach (var seed in live) {
+                if ((seed is null) || (seed.Slot < 0) || (seed.Slot >= pool.Capacity) || !liveBySlot.TryAdd(key: seed.Slot, value: seed)) {
+                    throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' carries a null, duplicate, or out-of-range live slot.");
+                }
+                var seededFields = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                foreach (var value in (seed.Values ?? [])) {
+                    if (
+                        (value is null) ||
+                        !seededFields.Add(item: value.Field.Value) ||
+                        !(record.Fields ?? []).Any(predicate: field => string.Equals(a: field.Name.Value, b: value.Field.Value, comparisonType: StringComparison.Ordinal))
+                    ) {
+                        throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' slot {seed.Slot} carries a null, duplicate, or undeclared field value.");
+                    }
+                }
+                if ((pool.Snapshot is not null) && (seededFields.Count != (record.Fields?.Count ?? 0))) {
+                    throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' snapshot slot {seed.Slot} does not carry every record field.");
+                }
+            }
+
+            var privateVisibility = new StateVisibility(Readers: []);
+            var domainName = PoolRowName(pool: pool, suffix: "live");
+            var generationName = PoolRowName(pool: pool, suffix: "generation");
+            var domainCells = liveBySlot.Select(selector: pair => new StateCell(
+                Key: CellName.Parse(candidate: pair.Key.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+                Value: CellValue.Int(value: generations[pair.Key])
+            )).ToArray();
+            var generationCells = Enumerable.Range(start: 0, count: pool.Capacity).Select(selector: slot => new StateCell(
+                Key: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+                Value: CellValue.Int(value: generations[slot])
+            )).ToArray();
+
+            foreach (var generatedName in new[] { domainName.Value, generationName.Value }) {
+                if (!names.Add(item: generatedName)) {
+                    throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' generated duplicate row '{generatedName}'.");
+                }
+            }
+
+            rows.Add(item: new StateRow(Name: domainName, Kind: CellKind.Int, Capacity: pool.Capacity, Cells: domainCells, Visibility: privateVisibility) { Generated = true });
+            rows.Add(item: new StateRow(Name: generationName, Kind: CellKind.Int, Capacity: pool.Capacity, Cells: generationCells, Min: 0L, Visibility: privateVisibility) { Generated = true });
+
+            foreach (var field in (record.Fields ?? [])) {
+                var fieldName = PoolRowName(pool: pool, suffix: $"field_{field.Name.Value}");
+
+                if (!names.Add(item: fieldName.Value)) {
+                    throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' generated duplicate row '{fieldName.Value}'.");
+                }
+
+                var overrides = liveBySlot.ToDictionary(
+                    keySelector: static pair => pair.Key,
+                    elementSelector: pair => (pair.Value.Values ?? []).ToDictionary(keySelector: static value => value.Field.Value, comparer: StringComparer.Ordinal)
+                );
+                var cells = liveBySlot.Select(selector: pair => {
+                    var hasOverride = overrides[pair.Key].TryGetValue(key: field.Name.Value, value: out var value);
+
+                    return new StateCell(
+                        Key: CellName.Parse(candidate: pair.Key.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+                        Value: (hasOverride ? value!.Value : DefaultValue(field: field)),
+                        Clock: (hasOverride ? value!.Clock : null));
+                }).ToArray();
+
+                rows.Add(item: new StateRow(
+                    Name: fieldName,
+                    Kind: field.Kind,
+                    Min: field.Min,
+                    Max: field.Max,
+                    Capacity: pool.Capacity,
+                    Overflow: field.Overflow,
+                    Advance: field.Advance,
+                    Cells: cells,
+                    Space: field.Space?.Value,
+                    Enum: field.Enum,
+                    Visibility: privateVisibility
+                ) { Generated = true });
+            }
+        }
+
+        var ordinaryPools = (section?.Pools ?? []).ToDictionary(keySelector: static pool => pool.Name.Value, comparer: StringComparer.Ordinal);
+        var pairPools = (section?.PairPools ?? []);
+        var pairDeclarations = new Dictionary<string, StatePairPool>(comparer: StringComparer.Ordinal);
+
+        foreach (var declaration in pairPools) {
+            if ((declaration is null) || !pairDeclarations.TryAdd(key: declaration.Name.Value, value: declaration)) {
+                throw new InvalidOperationException(message: "The state section contains a null or duplicate pair pool declaration.");
+            }
+        }
+        var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        void VisitPair(string name) {
+            if (visited.Contains(item: name) || !pairDeclarations.TryGetValue(key: name, value: out var declaration)) {
+                return;
+            }
+            if (!visiting.Add(item: name)) {
+                throw new InvalidOperationException(message: $"State pair pool endpoint dependency graph contains a cycle through '{name}'.");
+            }
+            VisitPair(name: declaration.LeftPool.Value);
+            VisitPair(name: declaration.RightPool.Value);
+            _ = visiting.Remove(item: name);
+            _ = visited.Add(item: name);
+        }
+        foreach (var pair in pairPools) {
+            VisitPair(name: pair.Name.Value);
+        }
+        var capacities = ordinaryPools.ToDictionary(keySelector: static item => item.Key, elementSelector: static item => item.Value.Capacity, comparer: StringComparer.Ordinal);
+
+        int PoolCapacity(string name) {
+            if (capacities.TryGetValue(key: name, value: out var known)) {
+                return known;
+            }
+            if (!pairDeclarations.TryGetValue(key: name, value: out var declaration)) {
+                throw new InvalidOperationException(message: $"State pool endpoint '{name}' is undeclared.");
+            }
+            var computed = checked((((long)PoolCapacity(name: declaration.LeftPool.Value)) * PoolCapacity(name: declaration.RightPool.Value)));
+
+            if (computed > StateCapacity.MaxCellsPerRow) {
+                throw new InvalidOperationException(message: $"State pair pool '{name}' identity universe {computed} exceeds {StateCapacity.MaxCellsPerRow} cells per row.");
+            }
+            capacities[name] = ((int)computed);
+            return ((int)computed);
+        }
+        IReadOnlyList<StatePoolSeed> LiveSeeds(string name) => (ordinaryPools.TryGetValue(key: name, value: out var ordinary)
+            ? (ordinary.Snapshot?.Live ?? (ordinary.Initial ?? []))
+            : (pairDeclarations[name].Snapshot?.Live ?? (pairDeclarations[name].Initial ?? [])));
+        var pairNames = new HashSet<string>(poolNames, comparer: StringComparer.Ordinal);
+
+        foreach (var pair in pairPools) {
+            if ((pair is null) || !pairNames.Add(item: pair.Name.Value)) {
+                throw new InvalidOperationException(message: "The state section contains a null or duplicate pair pool declaration.");
+            }
+            if (names.Contains(item: pair.Name.Value)) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' collides with a state row of the same name.");
+            }
+            if (!records.TryGetValue(key: pair.Record.Value, value: out var record)) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' names undeclared record '{pair.Record.Value}'.");
+            }
+            var leftCapacity = PoolCapacity(name: pair.LeftPool.Value);
+            var rightCapacity = PoolCapacity(name: pair.RightPool.Value);
+
+            if (!pair.Directed && (pair.LeftPool != pair.RightPool)) {
+                throw new InvalidOperationException(message: $"Undirected state pair pool '{pair.Name.Value}' must use the same endpoint pool on both sides.");
+            }
+            var universe = checked((((long)leftCapacity) * rightCapacity));
+
+            if (universe > StateCapacity.MaxCellsPerRow) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' identity universe {universe} exceeds {StateCapacity.MaxCellsPerRow} cells per row.");
+            }
+            if ((pair.MaxLive < 1) || (pair.MaxLive > universe)) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' declares max-live {pair.MaxLive}, outside 1..{universe}.");
+            }
+            if ((pair.Initial is not null) && (pair.Snapshot is not null)) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' carries both an initial population and a runtime snapshot.");
+            }
+
+            var capacity = ((int)universe);
+            var generations = (pair.Snapshot?.Generations ?? Enumerable.Repeat(count: capacity, element: 0L).ToArray());
+
+            if ((generations.Count != capacity) || generations.Any(predicate: static generation => (generation < 0L))) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' snapshot generations do not match its identity universe.");
+            }
+            var liveBySlot = new SortedDictionary<int, StatePoolSeed>();
+
+            foreach (var seed in (pair.Snapshot?.Live ?? (pair.Initial ?? []))) {
+                if ((seed is null) || (seed.Slot < 0) || (seed.Slot >= capacity) || !liveBySlot.TryAdd(key: seed.Slot, value: seed)) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' carries a null, duplicate, or out-of-range live slot.");
+                }
+                var leftSlot = (seed.Slot / rightCapacity);
+                var rightSlot = (seed.Slot % rightCapacity);
+
+                if ((!pair.AllowSelf && (pair.LeftPool == pair.RightPool) && (leftSlot == rightSlot)) || (!pair.Directed && (leftSlot > rightSlot))) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' carries a forbidden or noncanonical pair slot {seed.Slot}.");
+                }
+                var seededFields = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                foreach (var value in (seed.Values ?? [])) {
+                    if ((value is null) || !seededFields.Add(item: value.Field.Value) || !(record.Fields ?? []).Any(predicate: field => (field.Name == value.Field))) {
+                        throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' slot {seed.Slot} carries a null, duplicate, or undeclared field value.");
+                    }
+                }
+                if ((pair.Snapshot is not null) && (seededFields.Count != (record.Fields?.Count ?? 0))) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' snapshot slot {seed.Slot} does not carry every record field.");
+                }
+                var leftSeed = LiveSeeds(name: pair.LeftPool.Value);
+                var rightSeed = LiveSeeds(name: pair.RightPool.Value);
+
+                if (!leftSeed.Any(predicate: item => (item.Slot == leftSlot)) || !rightSeed.Any(predicate: item => (item.Slot == rightSlot))) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' live slot {seed.Slot} names a dead endpoint.");
+                }
+            }
+            if (liveBySlot.Count > pair.MaxLive) {
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' snapshot exceeds max-live {pair.MaxLive}.");
+            }
+
+            var visibility = new StateVisibility(Readers: []);
+            var domainName = PairPoolRowName(pool: pair, suffix: "live");
+            var generationName = PairPoolRowName(pool: pair, suffix: "generation");
+
+            foreach (var generatedName in new[] { domainName.Value, generationName.Value }) {
+                if (!names.Add(item: generatedName)) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' generated duplicate row '{generatedName}'.");
+                }
+            }
+            StateCell[] Cells(Func<int, CellValue> value) => liveBySlot.Keys.Select(selector: slot => new StateCell(Key: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), Value: value(slot))).ToArray();
+            rows.Add(item: new StateRow(Name: domainName, Kind: CellKind.Int, Capacity: capacity, Cells: Cells(value: slot => CellValue.Int(value: generations[slot])), Visibility: visibility) { Generated = true });
+            rows.Add(item: new StateRow(Name: generationName, Kind: CellKind.Int, Capacity: capacity, Cells: Enumerable.Range(count: capacity, start: 0).Select(selector: slot => new StateCell(Key: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), Value: CellValue.Int(value: generations[slot]))).ToArray(), Min: 0L, Visibility: visibility) { Generated = true });
+            foreach (var field in (record.Fields ?? [])) {
+                var fieldName = PairPoolRowName(pool: pair, suffix: $"field_{field.Name.Value}");
+
+                if (!names.Add(item: fieldName.Value)) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' generated duplicate row '{fieldName.Value}'.");
+                }
+                var overrides = liveBySlot.ToDictionary(keySelector: static item => item.Key, elementSelector: item => (item.Value.Values ?? []).ToDictionary(keySelector: static value => value.Field.Value, comparer: StringComparer.Ordinal));
+
+                rows.Add(item: new StateRow(Name: fieldName, Kind: field.Kind, Min: field.Min, Max: field.Max, Capacity: capacity, Overflow: field.Overflow, Advance: field.Advance, Cells: liveBySlot.Values.Select(selector: seed => {
+                    var hasOverride = overrides[seed.Slot].TryGetValue(key: field.Name.Value, value: out var stored);
+
+                    return new StateCell(Key: CellName.Parse(candidate: seed.Slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), Value: (hasOverride ? stored!.Value : DefaultValue(field: field)), Clock: (hasOverride ? stored!.Clock : null));
+                }).ToArray(), Space: field.Space?.Value, Enum: field.Enum, Visibility: visibility) { Generated = true });
+            }
+        }
+
+        if (rows.Count > StateCapacity.MaxRows) {
+            throw new InvalidOperationException(message: $"The expanded state section declares {rows.Count} rows, past the {StateCapacity.MaxRows}-row limit.");
+        }
+
+        return rows.AsReadOnly();
+    }
 
     /// <summary>Compiles an authored state section into its typed runtime catalog.</summary>
     /// <param name="section">The authored state section, or <see langword="null"/> for an empty catalog.</param>
@@ -347,7 +829,7 @@ public sealed class StateCatalog {
         }
 
         var enumsByName = CompileEnums(section: section);
-        var rows = (section?.Rows ?? []);
+        var rows = ExpandRows(section: section);
         var ordinalsByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var rowEnums = new StateEnum?[rows.Count];
 
@@ -380,7 +862,9 @@ public sealed class StateCatalog {
             );
 
             foreach (var cell in (row.Cells ?? [])) {
-                if (cell is not null) {
+                // Ring addresses are compiled slot symbols, independent of which slots an export holds.
+                // Seeding them here would make export/rebuild spend additional retained-key budget.
+                if ((cell is not null) && (shape != RowShape.Ring)) {
                     keys.Intern(name: cell.Key);
                 }
             }
@@ -453,6 +937,66 @@ public sealed class StateCatalog {
             );
         }
 
+        var recordsByName = (section?.Records ?? []).ToDictionary(keySelector: static record => record.Name.Value, comparer: StringComparer.Ordinal);
+        var pools = new List<StatePoolDescriptor>();
+        var allPoolOrdinals = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < (section?.Pools?.Count ?? 0)); index++) {
+            allPoolOrdinals[section!.Pools![index].Name.Value] = index;
+        }
+        for (var index = 0; (index < (section?.PairPools?.Count ?? 0)); index++) {
+            allPoolOrdinals[section!.PairPools![index].Name.Value] = ((section.Pools?.Count ?? 0) + index);
+        }
+        foreach (var declaredPool in (section?.Pools ?? [])) {
+            var record = recordsByName[declaredPool.Record.Value];
+            var fields = new List<StatePoolFieldDescriptor>();
+
+            for (var fieldOrdinal = 0; (fieldOrdinal < (record.Fields?.Count ?? 0)); fieldOrdinal++) {
+                var field = record.Fields![fieldOrdinal];
+                var rowName = PoolRowName(pool: declaredPool, suffix: $"field_{field.Name.Value}");
+
+                fields.Add(item: new StatePoolFieldDescriptor(
+                    Default: DefaultValue(field: field),
+                    Kind: field.Kind,
+                    Name: field.Name,
+                    Ordinal: fieldOrdinal,
+                    RowOrdinal: ordinalsByName[rowName.Value],
+                    Declaration: field
+                ));
+            }
+
+            pools.Add(item: new StatePoolDescriptor(
+                Capacity: declaredPool.Capacity,
+                DomainRowOrdinal: ordinalsByName[PoolRowName(pool: declaredPool, suffix: "live").Value],
+                Fields: fields.AsReadOnly(),
+                GenerationRowOrdinal: ordinalsByName[PoolRowName(pool: declaredPool, suffix: "generation").Value],
+                Name: declaredPool.Name,
+                Ordinal: pools.Count,
+                Record: declaredPool.Record
+            ));
+        }
+        foreach (var declaredPool in (section?.PairPools ?? [])) {
+            var record = recordsByName[declaredPool.Record.Value];
+            var leftOrdinal = allPoolOrdinals[declaredPool.LeftPool.Value];
+            var rightOrdinal = allPoolOrdinals[declaredPool.RightPool.Value];
+            var capacity = (rows[ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: "generation").Value]].Capacity ?? throw new InvalidOperationException(message: "Generated pair generation row has no capacity."));
+            var fields = new List<StatePoolFieldDescriptor>();
+
+            for (var fieldOrdinal = 0; (fieldOrdinal < (record.Fields?.Count ?? 0)); fieldOrdinal++) {
+                var field = record.Fields![fieldOrdinal];
+
+                fields.Add(item: new StatePoolFieldDescriptor(
+                    Default: DefaultValue(field: field), Kind: field.Kind, Name: field.Name, Ordinal: fieldOrdinal,
+                    RowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: $"field_{field.Name.Value}").Value], Declaration: field));
+            }
+            pools.Add(item: new StatePoolDescriptor(
+                Ordinal: pools.Count, Name: declaredPool.Name, Record: declaredPool.Record, Capacity: capacity,
+                DomainRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: "live").Value],
+                GenerationRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: "generation").Value],
+                Fields: fields.AsReadOnly(), IsPair: true, LeftPoolOrdinal: leftOrdinal, RightPoolOrdinal: rightOrdinal,
+                MaxLive: declaredPool.MaxLive, Directed: declaredPool.Directed, AllowSelf: declaredPool.AllowSelf));
+        }
+
         return new StateCatalog(
             descriptors: descriptors.ToArray(),
             enumsByName: enumsByName,
@@ -462,7 +1006,9 @@ public sealed class StateCatalog {
             identity: identity,
             keys: keys,
             lanes: lanes,
-            rowEnums: rowEnums
+            rowEnums: rowEnums,
+            rows: [.. rows],
+            pools: [.. pools]
         );
     }
     /// <summary>Determines whether another catalog carries the same declaration shape, ignoring instance branding.</summary>
@@ -473,7 +1019,8 @@ public sealed class StateCatalog {
 
         if (
             (m_descriptors.Length != other.m_descriptors.Length) ||
-            (m_readOnlyFamilies.Count != other.m_readOnlyFamilies.Count)
+            (m_readOnlyFamilies.Count != other.m_readOnlyFamilies.Count) ||
+            (m_pools.Count != other.m_pools.Count)
         ) {
             return false;
         }
@@ -503,6 +1050,20 @@ public sealed class StateCatalog {
         for (var index = 0; (index < m_readOnlyFamilies.Count); index++) {
             if (m_readOnlyFamilies[index] != other.m_readOnlyFamilies[index]) {
                 return false;
+            }
+        }
+
+        for (var index = 0; (index < m_pools.Count); index++) {
+            var left = m_pools[index];
+            var right = other.m_pools[index];
+
+            if ((left.Name != right.Name) || (left.Record != right.Record) || (left.Capacity != right.Capacity) || (left.Fields.Count != right.Fields.Count) || (left.IsPair != right.IsPair) || (left.LeftPoolOrdinal != right.LeftPoolOrdinal) || (left.RightPoolOrdinal != right.RightPoolOrdinal) || (left.MaxLive != right.MaxLive) || (left.Directed != right.Directed) || (left.AllowSelf != right.AllowSelf)) {
+                return false;
+            }
+            for (var field = 0; (field < left.Fields.Count); field++) {
+                if (left.Fields[field].Declaration != right.Fields[field].Declaration) {
+                    return false;
+                }
             }
         }
 
@@ -551,11 +1112,18 @@ public sealed class StateCatalog {
             );
         }
 
+        // Compare declarations, never their expanded populations. A value-only replacement may have entirely
+        // different seeds while retaining these handles; population admission belongs to the load path.
         var rows = (section?.Rows ?? []);
+        var authoredRowCount = ((m_pools.Count == 0) ? m_rows.Count : m_pools[0].DomainRowOrdinal);
+
+        if (rows.Count != authoredRowCount) {
+            return false;
+        }
 
         for (var index = 0; (index < rows.Count); index++) {
             if (
-                (rows[index] is not { } row) ||
+                (rows[index] is not { } row) || row.Generated ||
                 !Match(
                 name: row.Name,
                 lane: StateLane.Document,
@@ -574,6 +1142,8 @@ public sealed class StateCatalog {
             return false;
         }
 
+        descriptorIndex = m_lanes[((int)StateLane.Document)].Count;
+
         if (!MatchesSlotLane(
             declarations: (section?.ParticipantSlots ?? []),
             lane: StateLane.Participant,
@@ -583,7 +1153,7 @@ public sealed class StateCatalog {
             return false;
         }
 
-        return (
+        if (!(
             MatchesSlotLane(
             declarations: (section?.IdentitySlots ?? []),
             lane: StateLane.Identity,
@@ -591,7 +1161,74 @@ public sealed class StateCatalog {
             descriptorIndex: ref descriptorIndex
         ) &&
             (descriptorIndex == m_descriptors.Length)
-        );
+        )) {
+            return false;
+        }
+
+        var declaredPools = (section?.Pools ?? []);
+        var declaredPairPools = (section?.PairPools ?? []);
+
+        if ((declaredPools.Count + declaredPairPools.Count) != m_pools.Count) {
+            return false;
+        }
+        var records = (section?.Records ?? []);
+
+        for (var index = 0; (index < records.Count); index++) {
+            if (records[index] is not { } record) {
+                return false;
+            }
+            for (var prior = 0; (prior < index); prior++) {
+                if (records[prior].Name == record.Name) {
+                    return false;
+                }
+            }
+        }
+
+        static StateRecord? FindRecord(IReadOnlyList<StateRecord> declarations, CellName name) {
+            for (var index = 0; (index < declarations.Count); index++) {
+                if (declarations[index].Name == name) {
+                    return declarations[index];
+                }
+            }
+            return null;
+        }
+
+        for (var index = 0; (index < declaredPools.Count); index++) {
+            var compiled = m_pools[index];
+            var declared = declaredPools[index];
+            var record = ((declared is null) ? null : FindRecord(declarations: records, name: declared.Record));
+
+            if (
+                (declared is null) || compiled.IsPair ||
+                (declared.Name != compiled.Name) ||
+                (declared.Record != compiled.Record) ||
+                (declared.Capacity != compiled.Capacity) ||
+                (record is null) ||
+                ((record.Fields?.Count ?? 0) != compiled.Fields.Count)
+            ) {
+                return false;
+            }
+            for (var field = 0; (field < compiled.Fields.Count); field++) {
+                if (record.Fields![field] != compiled.Fields[field].Declaration) {
+                    return false;
+                }
+            }
+        }
+        for (var pairIndex = 0; (pairIndex < declaredPairPools.Count); pairIndex++) {
+            var compiled = m_pools[(declaredPools.Count + pairIndex)];
+            var declared = declaredPairPools[pairIndex];
+            var record = ((declared is null) ? null : FindRecord(declarations: records, name: declared.Record));
+
+            if ((declared is null) || !compiled.IsPair || (declared.Name != compiled.Name) || (declared.Record != compiled.Record) || (declared.MaxLive != compiled.MaxLive) || (declared.Directed != compiled.Directed) || (declared.AllowSelf != compiled.AllowSelf) || (m_pools[compiled.LeftPoolOrdinal].Name != declared.LeftPool) || (m_pools[compiled.RightPoolOrdinal].Name != declared.RightPool) || (record is null) || ((record.Fields?.Count ?? 0) != compiled.Fields.Count)) {
+                return false;
+            }
+            for (var field = 0; (field < compiled.Fields.Count); field++) {
+                if (record.Fields![field] != compiled.Fields[field].Declaration) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
     /// <summary>Attempts to read a descriptor by its catalog-instance-relative handle.</summary>
     /// <param name="handle">The handle to inspect.</param>

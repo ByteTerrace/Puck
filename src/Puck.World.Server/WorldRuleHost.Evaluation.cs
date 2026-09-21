@@ -10,35 +10,28 @@ public sealed partial class WorldRuleHost {
         var applied = false;
         var lefts = m_carrierScratchLeft;
 
-        Carriers(
+        InteractionCarriers(
             into: lefts,
-            rowOrdinal: CarrierRowOrdinal(name: interaction.Left)
+            name: interaction.Left,
+            pool: interaction.LeftPool,
+            carrier: interaction.LeftCarrier,
+            snapshots: ref m_poolCarrierLeft,
+            bodies: ref m_poolCarrierLeftBody
         );
         latch.BeginSweep();
 
         if (interaction.CoOccurrence == WorldInteractionCoOccurrence.Region) {
             foreach (var left in lefts) {
+                var leftBody = ((interaction.LeftPool is null) ? left : m_poolCarrierLeftBody[left]);
+
                 if (!Host.Events.IsOccupant(
-                    body: left,
+                    body: leftBody,
                     placementId: interaction.Right
                 )) {
                     continue;
                 }
 
-                m_boundLeft = left;
-                m_boundRight = -1;
-                _ = m_evaluator.EvaluateOnce(
-                    applied: out var fired,
-                    binding: new LatchKey(
-                        Left: left,
-                        Right: -1
-                    ),
-                    bindings: bindings,
-                    latch: latch,
-                    rule: rule,
-                    stepTicks: stepTicks
-                );
-                applied |= fired;
+                applied |= FireInteractionPair(bindings: bindings, interaction: interaction, latch: latch, left: left, right: -1, rule: rule, stepTicks: stepTicks);
             }
         } else {
             var rights = m_carrierScratchRight;
@@ -49,25 +42,31 @@ public sealed partial class WorldRuleHost {
                 : FixedQ4816.MaxValue
             );
 
-            Carriers(
+            InteractionCarriers(
                 into: rights,
-                rowOrdinal: CarrierRowOrdinal(name: interaction.Right)
+                name: interaction.Right,
+                pool: interaction.RightPool,
+                carrier: interaction.RightCarrier,
+                snapshots: ref m_poolCarrierRight,
+                bodies: ref m_poolCarrierRightBody
             );
 
             var budget = interaction.Neighbours;
 
             foreach (var left in lefts) {
                 var kept = 0;
+                var leftBody = ((interaction.LeftPool is null) ? left : m_poolCarrierLeftBody[left]);
 
                 foreach (var right in rights) {
+                    var rightBody = ((interaction.RightPool is null) ? right : m_poolCarrierRightBody[right]);
                     // A carrier an earlier pair's effect despawned mid-sweep reads the sentinel, never a distance.
                     var distanceSquared = ReadBodyDistanceSquared(
-                        bodyA: left,
-                        bodyB: right
+                        bodyA: leftBody,
+                        bodyB: rightBody
                     );
 
                     if (
-                        (right == left) ||
+                        (rightBody == leftBody) ||
                         (distanceSquared == NoBodyDistance) ||
                         (distanceSquared > rangeSquared)
                     ) {
@@ -101,39 +100,13 @@ public sealed partial class WorldRuleHost {
                         continue;
                     }
 
-                    m_boundLeft = left;
-                    m_boundRight = right;
-                    _ = m_evaluator.EvaluateOnce(
-                        applied: out var pairFired,
-                        binding: new LatchKey(
-                            Left: left,
-                            Right: right
-                        ),
-                        bindings: bindings,
-                        latch: latch,
-                        rule: rule,
-                        stepTicks: stepTicks
-                    );
-                    applied |= pairFired;
+                    applied |= FireInteractionPair(bindings: bindings, interaction: interaction, latch: latch, left: left, right: right, rule: rule, stepTicks: stepTicks);
                 }
 
                 for (var index = 0; (index < kept); index++) {
                     var right = m_neighbourIndex[index];
 
-                    m_boundLeft = left;
-                    m_boundRight = right;
-                    _ = m_evaluator.EvaluateOnce(
-                        applied: out var pairFired,
-                        binding: new LatchKey(
-                            Left: left,
-                            Right: right
-                        ),
-                        bindings: bindings,
-                        latch: latch,
-                        rule: rule,
-                        stepTicks: stepTicks
-                    );
-                    applied |= pairFired;
+                    applied |= FireInteractionPair(bindings: bindings, interaction: interaction, latch: latch, left: left, right: right, rule: rule, stepTicks: stepTicks);
                 }
             }
         }
@@ -144,6 +117,7 @@ public sealed partial class WorldRuleHost {
 
         return applied;
     }
+
     // Resolves a document row once through the catalog's name -> handle dictionary (StateCatalog.TryResolve) and the
     // handle's own LaneOrdinal as a direct row-array index, instead of WorldDefinitionRows.FindStateRow's linear scan
     // over every declared row. Shared by every tick-path reader that starts from a row name (Carriers/CarrierKeys
@@ -169,6 +143,7 @@ public sealed partial class WorldRuleHost {
 
         return false;
     }
+
     // The catalog ordinal of a row a carrier sweep iterates, or -1.
     private int CarrierRowOrdinal(string name) => (Host.Arena.Catalog.TryResolve(
         handle: out var handle,
@@ -188,18 +163,17 @@ public sealed partial class WorldRuleHost {
             return;
         }
 
-        var count = Host.Arena.CellCount(rowOrdinal: rowOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < count); position++) {
+        while (Host.Arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
             if (
-                Host.Arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            ) &&
                 StateReader.TryParseCandidateIndex(
                 index: out var index,
-                key: Host.Arena.Catalog.Keys[key]
+                key: Host.Arena.Keys[key]
             )
             ) {
                 into.Add(item: index);
@@ -216,18 +190,17 @@ public sealed partial class WorldRuleHost {
             return;
         }
 
-        var count = Host.Arena.CellCount(rowOrdinal: rowOrdinal);
+        var cursor = 0;
 
-        for (var position = 0; (position < count); position++) {
+        while (Host.Arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
             if (
-                !Host.Arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            ) ||
                 !StateReader.TryParseCandidateIndex(
                 index: out var index,
-                key: Host.Arena.Catalog.Keys[key]
+                key: Host.Arena.Keys[key]
             ) ||
                 (Host.Body(index: index) is null) ||
                 (Host.ReadArenaCell(
@@ -243,6 +216,7 @@ public sealed partial class WorldRuleHost {
 
         into.Sort();
     }
+
     // Evaluates every compiled rule's gate and fires its effects in document order, then every compiled
     // interaction's on the same terms. That ordering is the same-tick effect tiebreak: a rule can set up a fact an
     // interaction's gate reads this tick, and two interactions cascade in their own declared order.
@@ -251,13 +225,11 @@ public sealed partial class WorldRuleHost {
     // they are done, and one delivery follows a tick that moved anything.
     internal void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
+        BeginUndoEvaluationTick(tick: tick);
         AdvanceHost(
             engineTick: Host.CompletedEngineTicks,
             tick: tick
         );
-        // The mark is taken while the installed document still equals the arena, so everything this tick writes —
-        // the identity lanes included — is what the export installs.
-        Host.MarkRowVersions();
         SyncIdentityFactLanes();
         FreezeDecisionPerception(rules: m_rules);
 
@@ -283,11 +255,12 @@ public sealed partial class WorldRuleHost {
             stepTicks: stepTicks
         );
         FlushIdentityFacts();
-        applied |= Host.InstallArenaExport();
+        applied |= Host.PublishArena();
         if (applied) {
             Host.Document.DeliverPending();
         }
     }
+
     // Every rule, every group trigger, and every decision the server installs is admitted against this host once,
     // at compile time. Nothing on the tick path asks again.
     /// <summary>Admits every compiled rule against this host, throwing when one names a need the host cannot

@@ -36,6 +36,10 @@ public class CompareValueKindBindingTests {
         var node = JsonNode.Parse(json);
 
         WorldExpressionJson.Lower(node: node);
+        WorldChannelNodes.Lower(
+            document: node,
+            type: typeof(WorldDefinition)
+        );
         return node!.ToJsonString();
     }
     private static JsonObject Lower(string body) {
@@ -68,7 +72,7 @@ public class CompareValueKindBindingTests {
         Assert.Contains(
             actualString: puck,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "gate: compareValue(comparison: \"Greater\", left: \"a\", right: \"b\")"
+            expectedSubstring: "gate: compareValue(comparison: Greater, left: a, right: b)"
         );
         AssertRoundTripsExactly(json: Json);
     }

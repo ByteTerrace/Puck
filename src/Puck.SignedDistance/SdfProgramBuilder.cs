@@ -1247,6 +1247,8 @@ public sealed partial class SdfProgramBuilder {
             instances: m_instances,
             instructions: m_instructions,
             materials: m_materials,
+            paths: m_paths,
+            reservedPathWords: m_reservedPathWords,
             screenSurfaces: m_screenSurfaces,
             sweepCurves: m_sweepCurves
         );

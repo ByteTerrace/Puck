@@ -214,6 +214,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteString(value: projection.ColorHex);
         writer.WriteNullableFixed(value: projection.MoveSpeed);
         writer.WriteNullableFixed(value: projection.TurnSpeed);
+        WorldIdentityRecordWire.Write(writer: writer, records: projection.Records);
     }
     private static WorldIdentityProjection ReadIdentityProjection(ref WireReader reader) => new(
         Id: reader.ReadString(
@@ -229,7 +230,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         ),
         MoveSpeed: reader.ReadNullableFixed(),
-        TurnSpeed: reader.ReadNullableFixed()
+        TurnSpeed: reader.ReadNullableFixed(),
+        Records: WorldIdentityRecordWire.Read(reader: ref reader)
     );
     // A traveler/committed-member identity is carried across a checkpoint restore through the identical reduction a
     // federated crossing already applies (WorldIdentity.Project()/FromProjection) — a body's own simulation never

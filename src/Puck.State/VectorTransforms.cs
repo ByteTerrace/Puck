@@ -14,12 +14,17 @@ public static class VectorTransforms {
     /// <param name="vectors">The component spans of each vector term.</param>
     /// <param name="weights">The integer weights for each term ([-1000, 1000], non-zero).</param>
     /// <param name="destination">The destination component span, matching the vectors' dimensions.</param>
+    /// <param name="sum">Working storage for the weighted sum, at least as wide as
+    /// <paramref name="destination"/>.</param>
     /// <param name="refusal">The refusal reason if the operation fails; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="sum"/> is narrower than
+    /// <paramref name="destination"/>.</exception>
     public static bool TryMix(
         ReadOnlySpan<ReadOnlyMemory<sbyte>> vectors,
         ReadOnlySpan<int> weights,
         Span<sbyte> destination,
+        Span<long> sum,
         [NotNullWhen(false)] out RuleRefusal? refusal
     ) {
         if ((vectors.Length == 0) || (vectors.Length > StateCapacity.MaxMixTerms) || (vectors.Length != weights.Length)) {
@@ -46,7 +51,14 @@ public static class VectorTransforms {
             }
         }
 
-        Span<long> sum = stackalloc long[dimensions];
+        if (sum.Length < dimensions) {
+            throw new ArgumentException(
+                message: $"The working storage holds {sum.Length} sums where the destination has {dimensions} dimensions.",
+                paramName: nameof(sum)
+            );
+        }
+
+        sum = sum[..dimensions];
         sum.Clear();
 
         for (var termIndex = 0; termIndex < vectors.Length; termIndex++) {
@@ -88,11 +100,16 @@ public static class VectorTransforms {
     /// <summary>Writes the normalized centroid (mean) of candidate vectors.</summary>
     /// <param name="candidates">The candidate vector component spans.</param>
     /// <param name="destination">The destination component span.</param>
+    /// <param name="sum">Working storage for the component sums, at least as wide as
+    /// <paramref name="destination"/>.</param>
     /// <param name="refusal">The refusal reason if the operation fails; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="sum"/> is narrower than
+    /// <paramref name="destination"/>.</exception>
     public static bool TryMean(
         ReadOnlySpan<ReadOnlyMemory<sbyte>> candidates,
         Span<sbyte> destination,
+        Span<long> sum,
         [NotNullWhen(false)] out RuleRefusal? refusal
     ) {
         if (candidates.Length == 0) {
@@ -111,7 +128,14 @@ public static class VectorTransforms {
             }
         }
 
-        Span<long> sum = stackalloc long[dimensions];
+        if (sum.Length < dimensions) {
+            throw new ArgumentException(
+                message: $"The working storage holds {sum.Length} sums where the destination has {dimensions} dimensions.",
+                paramName: nameof(sum)
+            );
+        }
+
+        sum = sum[..dimensions];
         sum.Clear();
 
         for (var candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++) {

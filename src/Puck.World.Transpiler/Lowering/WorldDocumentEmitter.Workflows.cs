@@ -128,12 +128,17 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
+        var group = new JsonObject {
+            ["name"] = JsonValue.Create(value: groupName),
+            ["shape"] = JsonValue.Create(value: "Staged"),
+            ["steps"] = steps,
+        };
+
+        if (workflowNode.Undo is { } undo) {
+            group["undo"] = LowerExpression(expr: undo, fieldKey: "undo", scope: scope);
+        }
         AppendRuleGroup(
-            group: new JsonObject {
-                ["name"] = JsonValue.Create(value: groupName),
-                ["shape"] = JsonValue.Create(value: "Staged"),
-                ["steps"] = steps,
-            },
+            group: group,
             parent: parent,
             scope: scope,
             span: workflowNode.Span

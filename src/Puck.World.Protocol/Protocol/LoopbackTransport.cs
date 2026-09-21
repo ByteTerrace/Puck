@@ -108,11 +108,15 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             return envelope.CorrelationId;
         }
 
+        completion?.Invoke(new WorldSubmissionResult.Refusal(
+            Code: "world.transport.codec_refused",
+            Detail: "the submission could not be encoded or decoded"
+        ));
         return 0;
     }
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
-    private long SubmitTapped<TPayload, TValue>(TPayload payload, WorldPrincipal principal, Func<TPayload, TValue> selectValue, Action<TValue, WorldPrincipal>? tap) where TPayload : WorldSubmissionPayload {
+    private long SubmitTapped<TPayload, TValue>(TPayload payload, WorldPrincipal principal, Func<TPayload, TValue> selectValue, Action<TValue, WorldPrincipal>? tap, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
         if (
             TryNextEnvelope(
             envelope: out var envelope,
@@ -125,11 +129,12 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 arg1: selectValue(arg: canonical),
                 arg2: envelope.Principal
             );
-            m_server.Submit(envelope: envelope);
+            m_server.Submit(completion: completion, envelope: envelope);
 
             return envelope.CorrelationId;
         }
 
+        completion?.Invoke(new WorldSubmissionResult.Refusal(Code: "world.transport.codec_refused", Detail: "the submission could not be encoded or decoded"));
         return 0;
     }
     // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
@@ -299,6 +304,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                     payload: undo,
                     principal: principal,
                     selectValue: static p => p.Count,
+                    completion: completion,
                     tap: UndoTap
                 );
             default:

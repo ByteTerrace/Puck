@@ -1,0 +1,7 @@
+world.state.cell.set request $value 2
+world.wait 1
+world.state moverCell
+world.state firstPushCell
+world.state secondPushCell
+world.state passableCell
+wire.errors

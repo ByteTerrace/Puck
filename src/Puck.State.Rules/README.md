@@ -6,7 +6,7 @@ the `RuleNeeds` the compiler read off its own facts; the evaluator fires it
 through one host, which is both the reader every operand answers from and the
 mutation door every write installs through.
 
-Four properties hold across every compiled shape:
+These properties hold across every compiled shape:
 
 - **Ordinal addressing.** A read or write addresses a `(row ordinal, CellKey)`
   pair. A row or key name leaves the compiler only inside a `Describe`
@@ -31,6 +31,15 @@ Four properties hold across every compiled shape:
   scope; with no `onFailure` the refusal propagates and the firing rewinds as
   one. An irreversible arm is queued during the scope, checked against the state
   the firing proposes to commit, and fired only after the commit.
+- **Pool bindings name lifetimes.** `claim`, `claimPair`, and `forEachPool`
+  carry generation-checked handles in distinct lexical registers; a release and
+  reclaim of the same slot cannot revive an old binding or edge latch. A
+  directly addressed `pool.field[key]` names that declared slot's generation-zero
+  lifetime, so stable authored actors can use logical field names without exposing
+  generated storage rows. An absent slot reads absent, and a released then reclaimed
+  slot no longer matches; liveness is runtime state and does not alter compilation.
+  Named row lookup refuses generated storage rows, including channel-object
+  spellings; resolved pool fields retain their ordinal metadata for costing.
 - **A transform has one implementation.** Every `StateTransform` case resolves
   once into an `ArenaTransform` and applies through `ArenaTransforms.TryApply`
   over the arena, whether the caller is the evaluator, a search judge, a
@@ -58,7 +67,7 @@ Four properties hold across every compiled shape:
 | `RuleLatch` / `RuleGroupState` | Edge history and group progress: simulation state, hashed, flattened and restored. |
 | `RuleEffectRefusal` | Every refusal the evaluator raises while firing, tagged under the `state.rule.fire` door. |
 | `ArenaTransform` / `ArenaTransforms` | A `StateTransform` resolved to ordinals and interned keys, and the one kernel per case that applies it. `RuleCompiler.TryResolveTransform` is the resolution door; `IArenaTransformHost` is what a host serves so a `transformState` effect can fire. |
-| `TransformRefusal` | Every refusal the eleven scalar transforms raise, tagged under the `state.transform` door; the four vector transforms pass `Puck.State.Vectors`' own catalogued codes through. |
+| `TransformRefusal` | Every refusal the twelve scalar transforms raise, tagged under the `state.transform` door; the four vector transforms pass `Puck.State.Vectors`' own catalogued codes through. |
 
 ## Documentation
 

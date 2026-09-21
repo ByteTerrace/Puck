@@ -506,7 +506,7 @@ public sealed class ArenaScopeLawTests {
                     position: position,
                     rowOrdinal: ordinal
                 )) {
-                    text.Append(value: catalog.Keys[key].Value)
+                    text.Append(value: arena.Keys[key].Value)
                         .Append(value: arena.Behavior(
                         key: key,
                         rowOrdinal: ordinal

@@ -6,6 +6,8 @@ public sealed partial class ArenaSearch {
 
     private int m_openScopes;
 
+    // How many moves the position the arena holds sits below the root. A chance draw opens a scope and is no move.
+    private static int MovePly(Job job) => (job.ScopeCount - job.ChanceScopes);
     // Opens one scope, writes the resolved candidate into it, and runs the judge, leaving the scope open: the
     // caller either pops it (a folded candidate) or leaves it as the deeper ply's position.
     private void PushScope(Job job, int shapeIndex, int token, int candidateIndex, int target, int mid, int companionIndex, int companionTarget, long code) {
@@ -28,7 +30,8 @@ public sealed partial class ArenaSearch {
             target: target,
             token: token
         );
-        _ = job.Judge.Judge(view: View(ply: job.ScopeCount));
+        job.Nodes++;
+        _ = job.Judge.Judge(view: View(ply: MovePly(job: job)));
     }
     // Opens one scope holding a chance draw's outcome instead of a candidate's move. The shape cursor is recorded
     // negative, which is how a replay and a checkpoint tell the two apart; the token cursor carries the outcome.
@@ -40,6 +43,7 @@ public sealed partial class ArenaSearch {
         job.ScopeTarget[index] = 0;
         job.ScopeToken[index] = outcome;
         job.ScopeCount = (index + 1);
+        job.ChanceScopes++;
         m_openScopes = job.ScopeCount;
 
         ApplyChanceOutcome(
@@ -53,11 +57,16 @@ public sealed partial class ArenaSearch {
         }
 
         job.ScopeCount--;
+        if (job.ScopeShape[job.ScopeCount] == ChanceScope) {
+            job.ChanceScopes--;
+        }
+
         m_openScopes = job.ScopeCount;
         m_arena.Rewind(mark: job.ScopeMark[job.ScopeCount]);
     }
     private void PopAllScopes(Job job) {
         Suspend(job: job);
+        job.ChanceScopes = 0;
         job.ScopeCount = 0;
     }
     // Rewinds every scope the job holds open while keeping the cursors that name them, so the arena a caller reads
@@ -72,6 +81,8 @@ public sealed partial class ArenaSearch {
     // the position the ones before it built. A candidate that no longer resolves means the job's own cursors no
     // longer describe a reachable line, which the caller answers by restarting the job.
     private bool Replay(Job job) {
+        var moves = 0;
+
         m_openScopes = 0;
 
         while (m_openScopes < job.ScopeCount) {
@@ -121,7 +132,8 @@ public sealed partial class ArenaSearch {
                 target: target,
                 token: token
             );
-            _ = job.Judge.Judge(view: View(ply: m_openScopes));
+            moves++;
+            _ = job.Judge.Judge(view: View(ply: moves));
         }
 
         return true;
@@ -413,7 +425,9 @@ public sealed partial class ArenaSearch {
     private bool TryResolveJumpChain(Job job, SearchShapePlan shape, int token, long from, int candidateIndex, out int target) {
         var radix = (shape.Directions.Length + 1);
         var topology = job.Plan.Topology!;
-        var visited = (stackalloc int[(shape.MaxHops + 1)]);
+        using var visitedLease = m_arena.Scratch.Rent<int>(length: (shape.MaxHops + 1));
+
+        var visited = visitedLease.Span;
         var visitedCount = 1;
         var current = ((int)from);
         var index = candidateIndex;

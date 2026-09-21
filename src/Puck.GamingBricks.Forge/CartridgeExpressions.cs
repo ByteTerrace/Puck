@@ -180,7 +180,7 @@ public static class CartridgeExpressions {
 
         if (index.Instructions is [{ Payload: InstructionPayload.State state }]) {
             return ((state.Key is null)
-                ? state.Name
+                ? state.Name.Spelling
                 : $"{RuleFacts.CellKeyPrefix}{state.Name}:{state.Key}"
             );
         }
@@ -222,7 +222,7 @@ public static class CartridgeExpressions {
             { Payload: InstructionPayload.Constant constant } => constant.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
             { Payload: InstructionPayload.State state } => ((state.Key is { } key)
             ? $"{state.Name}[{key}]"
-            : state.Name),
+            : state.Name.Spelling),
             _ => ExpressionVocabulary.Spelling(operation: token.Operation),
         });
     }

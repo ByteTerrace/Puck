@@ -231,10 +231,13 @@ public sealed partial class WorldInstanceHost {
             }
 
             var frame = adjacency.Boundary.CompileFrame();
-            var ownershipThreshold = WorldAdjacencyPolicy.OwnershipThreshold(
-                frame: in frame,
-                reciprocalHysteresis: reciprocalHysteresis,
-                verticalOwnershipDeadband: verticalOwnershipDeadband
+            var ownershipThreshold = FixedQ4816.Max(
+                x: FixedQ4816.FromDouble(value: adjacency.Hysteresis),
+                y: WorldAdjacencyPolicy.OwnershipThreshold(
+                    frame: in frame,
+                    reciprocalHysteresis: reciprocalHysteresis,
+                    verticalOwnershipDeadband: verticalOwnershipDeadband
+                )
             );
 
             for (var seat = 0; (seat < population.Capacity); seat++) {

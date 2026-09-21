@@ -6,11 +6,15 @@
   "properties": {
     "seatRig": {
       "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
-      "description": "The chase framing every seat\u0027s view resolves through by default."
+      "description": "The authored chase framing, or null for a document that seats no body; SeatRig is what a reader resolves through.",
+      "default": null
     },
     "seatControl": {
-      "description": "The structural constraints/reference for live seat camera input.",
-      "type": "object",
+      "description": "The authored constraints for live seat camera input, or null for a document that seats no body; SeatControl is what a reader resolves through.",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "yawReference": {
           "description": "What the camera yaw is relative to.",
@@ -59,76 +63,13 @@
         "maxPitch"
       ],
       "additionalProperties": false,
+      "default": null,
       "title": "WorldSeatViewControl"
     },
     "cameraRig": {
+      "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
       "description": "The program a seat\u0027s view resolves through while its published mode state targets CameraTarget \u2014 null for a world that authors no camera-targeting mode state. Resolved through the ordinary Puck.World.Client.WorldCameraRigCompiler pipeline against whichever body the seat currently perceives from (the possessed camera body \u2014 see Puck.World.Server.WorldEngagement), exactly like SeatRig resolves against the seat\u0027s own avatar; no bespoke per-frame integrator reads this field.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "name": {
-          "description": "The stable name a Blend op selects this program by.",
-          "type": "string"
-        },
-        "version": {
-          "description": "The instruction-set version.",
-          "type": "string"
-        },
-        "operations": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpList",
-          "description": "The selected ops, in authored evaluation order."
-        },
-        "anchorOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpAnchorNullable",
-          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
-        },
-        "blendOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpBlendNullable",
-          "description": "Gets the program\u0027s Blend op, or null."
-        },
-        "clampPitchOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpClampPitchNullable",
-          "description": "Gets the program\u0027s ClampPitch op, or null."
-        },
-        "dynamicsOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
-          "description": "Gets the program\u0027s Dynamics op, or null."
-        },
-        "fovOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFieldOfViewNullable",
-          "description": "Gets the program\u0027s FieldOfView op, or null."
-        },
-        "lookAtOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpLookAtNullable",
-          "description": "Gets the program\u0027s LookAt op, or null."
-        },
-        "offsetOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOffsetNullable",
-          "description": "Gets the program\u0027s Offset op, or null."
-        },
-        "orbitOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOrbitNullable",
-          "description": "Gets the program\u0027s Orbit op, or null."
-        },
-        "pathOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpPathNullable",
-          "description": "Gets the program\u0027s Path op, or null."
-        },
-        "selectOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectProgramNullable",
-          "description": "Gets the program\u0027s SelectProgram op, or null."
-        }
-      },
-      "required": [
-        "name",
-        "version",
-        "operations"
-      ],
-      "additionalProperties": false,
-      "default": null,
-      "title": "WorldCameraProgram"
+      "default": null
     },
     "shaderToolchain": {
       "description": "The directory holding the pipeline compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
@@ -140,7 +81,10 @@
     },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
-      "type": "array",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "description": "One named window composition \u2014 an ordered list of WorldViewSlots plus a transition envelope, selected for a given session shape by its SeatCount (0 = the catch-all for any joined-seat count). The data-side replacement for a compiled layout switch: an author can see it, change it, and add arrangements.",
         "type": [
@@ -153,16 +97,19 @@
             "type": "string"
           },
           "seatCount": {
-            "description": "The joined-seat count this layout composes for, or 0 for the catch-all.",
-            "type": "integer"
+            "description": "The joined-seat count this layout composes for, or 0 for the catch-all. Default 0.",
+            "type": "integer",
+            "default": 0
           },
           "transitionSeconds": {
-            "description": "How long the ease into this composition takes when it becomes active.",
-            "type": "number"
+            "description": "How long the ease into this composition takes when it becomes active. Default 0, a cut.",
+            "type": "number",
+            "default": 0
           },
           "transitionRenderScale": {
-            "description": "The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle), the compiled director\u0027s 0.5f now authored per layout.",
-            "type": "number"
+            "description": "The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle). Default 1, no dip.",
+            "type": "number",
+            "default": 1
           },
           "slots": {
             "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -172,34 +119,40 @@
               "type": "object",
               "properties": {
                 "x": {
-                  "description": "The rect\u0027s left edge, normalized [0, 1].",
-                  "type": "number"
+                  "description": "The rect\u0027s left edge, normalized [0, 1]. Default 0.",
+                  "type": "number",
+                  "default": 0
                 },
                 "y": {
-                  "description": "The rect\u0027s top edge, normalized [0, 1].",
-                  "type": "number"
+                  "description": "The rect\u0027s top edge, normalized [0, 1]. Default 0.",
+                  "type": "number",
+                  "default": 0
                 },
                 "width": {
-                  "description": "The rect\u0027s width, normalized (0, 1].",
-                  "type": "number"
+                  "description": "The rect\u0027s width, normalized (0, 1]. Default 1, so a slot that authors no rect fills the window.",
+                  "type": "number",
+                  "default": 1
                 },
                 "height": {
-                  "description": "The rect\u0027s height, normalized (0, 1].",
-                  "type": "number"
+                  "description": "The rect\u0027s height, normalized (0, 1]. Default 1.",
+                  "type": "number",
+                  "default": 1
                 },
                 "camera": {
                   "description": "The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).",
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "default": null
                 },
                 "pipeline": {
                   "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "default": null
                 }
               },
               "additionalProperties": false,
@@ -209,14 +162,12 @@
         },
         "required": [
           "name",
-          "seatCount",
-          "transitionSeconds",
-          "transitionRenderScale",
           "slots"
         ],
         "additionalProperties": false,
         "title": "WorldViewLayout"
-      }
+      },
+      "default": null
     },
     "pipelines": {
       "description": "Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -263,11 +214,6 @@
       "default": null
     }
   },
-  "required": [
-    "seatRig",
-    "seatControl",
-    "layouts"
-  ],
   "additionalProperties": false,
   "default": null,
   "title": "WorldViewDefaults"

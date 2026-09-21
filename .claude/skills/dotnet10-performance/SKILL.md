@@ -49,6 +49,13 @@ affected project file before changing code.
   existing `[JsonSerializable]` context and use `JsonTypeInfo` overloads so the
   analyzer can see the supported graph. Add or retain a project opt-out only
   when the project file documents a genuine structural blocker.
+- **World publication uses ReadyToRun.** `Puck.World` restores the `win-x64`
+  and `linux-x64` graphs and precompiles published assemblies; ordinary builds
+  still produce IL. Compare the exact published artifact with `puck bench startup
+  --world-artifact <path>` and account for its larger assemblies. The World
+  README owns the publish recipe; CI retains its compile-once contract. World
+  regenerates publish dependency metadata through a pinned SDK hook when
+  reusing portable IL; verify a real no-build published launch after SDK updates.
 
 ## Determinism outranks throughput
 
@@ -76,18 +83,19 @@ outside this contract and takes the references as written.
 ## Review discipline
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
-- **Two measurement harnesses exist: `Puck.Maths` kernels and the World server
-  tick path.** `puck bench` is the BenchmarkDotNet microscope for Maths —
+- **Three measurement harnesses exist: `Puck.Maths` kernels, the World server
+  tick path, and real-process startup.** `puck bench` is the BenchmarkDotNet microscope for Maths —
   disassembly, allocation columns, percentiles — and `puck bench world` is a
   stopwatch lane over server construction, the idle tick, and a scripted
-  Klondike deal. Both are documented in
-  [`src/Puck.Cli/README.md`](../../../src/Puck.Cli/README.md),
+  Klondike deal. `puck bench startup` measures console readiness and rendered
+  capture completion in isolated fresh processes without building. They are documented in
+  [`docs/reference/cli.md`](../../../docs/reference/cli.md),
   which also carries the measurement hygiene: numbers taken on a busy machine
   are garbage rather than merely pessimistic, and two runs disagreeing by more
   than ~10% mean the machine was not quiet. The pass/fail counterpart is the law
   suite's Bench tier in
   [`tests/Puck.Maths.Tests/README.md`](../../../tests/Puck.Maths.Tests/README.md).
-  Outside those two, say which harness you built and why it measures the claim.
+  Outside those three, say which harness you built and why it measures the claim.
 - Prefer idiomatic code the .NET 10 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;

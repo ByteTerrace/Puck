@@ -29,7 +29,9 @@ internal static class MtsdfGlyphField {
     private const float CornerTurnSine = 0.1411f;
 
     internal readonly record struct ColoredSegment(FontOutlineSegment Segment, byte Color);
-    internal sealed record PreparedCell(FontGlyphGeometry Geometry, IReadOnlyList<ColoredSegment> Edges);
+    // Rasterization walks every edge twice per texel. Keep the prepared edges contiguous so those walks use
+    // indexed array/span iteration without allocating interface enumerators for each pixel.
+    internal sealed record PreparedCell(FontGlyphGeometry Geometry, ColoredSegment[] Edges);
 
     // Orthogonality breaks |distance| ties at shared endpoints: the edge whose direction is more perpendicular to
     // the query offset owns the texel.
@@ -41,7 +43,7 @@ internal static class MtsdfGlyphField {
         var geometry = prepared.Geometry;
         var colored = prepared.Edges;
 
-        if (colored.Count == 0) { return; }
+        if (colored.Length == 0) { return; }
         for (var y = 0; (y < cellHeight); y++) {
             budget?.CancellationToken.ThrowIfCancellationRequested();
             for (var x = 0; (x < cellWidth); x++) {
@@ -205,7 +207,7 @@ internal static class MtsdfGlyphField {
         }
         budget?.Work(amount: checked((((2L * cellWidth) * cellHeight) * colored.Count)));
         return new(
-            Edges: colored,
+            Edges: colored.ToArray(),
             Geometry: geometry
         );
     }
@@ -447,7 +449,7 @@ internal static class MtsdfGlyphField {
         );
     }
     // Half-open Y intervals (not half-open curve parameters) count shared vertices exactly once.
-    private static int WindingAt(IReadOnlyList<ColoredSegment> segments, Vector2 point) {
+    private static int WindingAt(ReadOnlySpan<ColoredSegment> segments, Vector2 point) {
         var winding = 0;
 
         foreach (var colored in segments) {

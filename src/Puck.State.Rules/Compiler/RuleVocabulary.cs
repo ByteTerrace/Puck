@@ -22,27 +22,27 @@ public abstract class OperandFamily {
     /// <summary>Compiles an operand when this family claims its name; a name the family does not claim leaves
     /// <paramref name="fact"/> null and returns <see langword="false"/> so the next family may answer it. A claimed
     /// name that is malformed throws a <see cref="RuleException"/>.</summary>
-    /// <param name="name">The authored operand name.</param>
-    /// <param name="key">The authored cell key, or <see langword="null"/>.</param>
+    /// <param name="reference">The authored operand: a row name, or a reserved channel as a call.</param>
+    /// <param name="cell">The authored cell key, or <see langword="null"/>.</param>
     /// <param name="site">Where the operand is spelled.</param>
     /// <param name="context">The compile context.</param>
     /// <param name="fact">The compiled operand, when claimed.</param>
     /// <returns><see langword="true"/> when this family claims the name.</returns>
-    public abstract bool TryCompile(string name, string? key, in OperandSite site, RuleCompileContext context, out IRuleOperand? fact);
+    public abstract bool TryCompile(StateChannelRef reference, StateChannelRef? cell, in OperandSite site, RuleCompileContext context, out IRuleOperand? fact);
 }
 /// <summary>One dynamic cell-key spelling a document project answers beside the library's <c>$cell:</c> and bound
 /// tokens.</summary>
 public abstract class KeyFamily {
     /// <summary>Compiles a key when this family claims its spelling; a spelling the family does not claim returns
     /// <see langword="false"/>.</summary>
-    /// <param name="key">The authored key.</param>
+    /// <param name="reference">The authored key.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="verb">The authored verb, for refusal text.</param>
     /// <param name="keyFieldLabel">The field the key was spelled in, for refusal text.</param>
     /// <param name="context">The compile context.</param>
     /// <param name="cell">The compiled indirection, when claimed.</param>
     /// <returns><see langword="true"/> when this family claims the spelling.</returns>
-    public abstract bool TryCompile(string key, string ruleName, string verb, string keyFieldLabel, RuleCompileContext context, out CompiledCellRef cell);
+    public abstract bool TryCompile(StateChannelRef reference, string ruleName, string verb, string keyFieldLabel, RuleCompileContext context, out CompiledCellRef cell);
 }
 /// <summary>One authored effect arm a document project owns: the record type and its <c>$type</c> discriminator
 /// (registered onto <see cref="ActionEffect"/>'s polymorphism at serializer resolution), and its compile.</summary>

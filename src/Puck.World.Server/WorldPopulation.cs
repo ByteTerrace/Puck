@@ -151,7 +151,7 @@ public sealed partial class WorldPopulation {
         ((m_contactField as WorldColliderSet)?.AttachedRevision ?? 0UL)) +
         ((ulong)(m_fields?.Revision ?? 0)))
     );
-    /// <summary>Gets the authored engine-tick idle floor (<c>bodies.sleepAfterTicks</c>) before a non-seat body's
+    /// <summary>Gets the authored idle floor (<c>bodies.sleepAfterSeconds</c>), in engine ticks, before a non-seat body's
     /// motion program and contact solve stop running — 0 means never sleep.</summary>
     public ulong SleepAfterTicks => m_sleepAfterTicks;
     /// <summary>The world's compiled target-register table sharing the Drive reach-mask ordinal space.</summary>
@@ -194,7 +194,7 @@ public sealed partial class WorldPopulation {
     // Bumped once per ComposeContactField call — every document rebuild and every adjacency-source (re)configure,
     // regardless of whether the resulting reference actually differs. Folds into ContactFieldVersion.
     private ulong m_contactFieldInstallVersion;
-    // The compiled population.sleepAfterTicks — see ContactFieldVersion's own remarks and CompileFixedTables.
+    // The compiled bodies.sleepAfterSeconds, in engine ticks — see ContactFieldVersion's own remarks and CompileFixedTables.
     private ulong m_sleepAfterTicks;
     // The authoritative body-frame policy compiled from the collision requirements. Contact providers report
     // geometric facts; every body receives this policy separately so provider composition (including adjacency)

@@ -435,7 +435,7 @@ public sealed partial class InputRouter : IDisposable {
             text: injection.Text,
             value: injection.Value
         ) {
-            SubmissionBarrier = injection.SubmissionBarrier,
+            Session = injection.Session,
         });
     }
     private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick, bool focusExemptOnly) {
@@ -1901,10 +1901,15 @@ public sealed partial class InputRouter : IDisposable {
             m_inputSlotResolver.DeviceSlotChanging -= ReleaseHeld;
         }
 
+        var abandoned = new List<CapturedInjection>();
+
         lock (m_captureGate) {
-            m_capturedInjections.Clear();
+            m_capturedInjections.DrainAll(items: abandoned);
             m_capturedSignals.Clear();
             m_pendingInjections.Clear();
+        }
+        foreach (var captured in abandoned) {
+            RefuseInjection(injection: captured.Injection, reason: "the input router was disposed");
         }
 
         m_freeHeldStates.Clear();
@@ -2292,6 +2297,10 @@ public sealed partial class InputRouter : IDisposable {
     /// <summary>The analog magnitude below which a sample is a device at rest, not a hand on it — stick centring
     /// slop and gyro noise sit well under this; the lightest deliberate deflection sits well over it.</summary>
     public const float ActivityRestBand = 0.15f;
+    /// <summary>The smallest explicit capture stamp. Zero asks the router to stamp the capture clock's now, so this
+    /// is the stamp that precedes every tick's window: an injection carrying it is due in the next tick that
+    /// snapshots input, and sorts ahead of whatever the clock stamped in that tick.</summary>
+    public const ulong EarliestCaptureTick = 1UL;
 
     // A bound row's authored text payload rides the PRESS as a submitted line — "<command> <text>", dispatched by
     // the registry exactly as a typed line under the pressing seat's principal — so a wire-args verb is bindable

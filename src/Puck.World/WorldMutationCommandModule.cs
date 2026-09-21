@@ -29,7 +29,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -192,17 +192,17 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.reset",
             description: "Resets the running world to its BASE — the last world.save, or the boot document if never saved (the same base world.undo replays from; world.save compacts the base): world.reset. An ordered-domain submission like any other write: buffers, applies at the tick boundary, journal clears, admitted peer CONNECTIONS survive with their admission grant re-minted, screens/bodies/population re-derive from the base document. Profiles/player documents are UNTOUCHED — player data is not world state. The accept echo names what the base actually is. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the base's own canonical bytes at apply time — a re-drive refuses BY NAME rather than silently reproducing a base that has moved since the recording was made.",
             handler: (context, _) => {
-                link.SubmitRebuild(
+                return link.SubmitRebuild(
+                    echoes: echoes,
                     request: new WorldRebuildRequest(
                         Kind: WorldRebuildKind.Reset,
                         Definition: null,
                         PathHint: null,
                         Force: false
                     ),
-                    principal: context.ActingPrincipal()
+                    principal: context.ActingPrincipal(),
+                    verb: "world.reset"
                 );
-
-                return CommandResult.None;
             }
         );
         yield return Simulation(
@@ -252,7 +252,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return CommandResult.Error(output: $"[world.load: text assets refused: {reason}]");
                 }
 
-                link.SubmitRebuild(
+                return link.SubmitRebuild(
+                    echoes: echoes,
                     request: new WorldRebuildRequest(
                         ContentHash: contentHash,
                         Definition: loaded!,
@@ -260,10 +261,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         Kind: WorldRebuildKind.Load,
                         PathHint: fullPath
                     ),
-                    principal: context.ActingPrincipal()
+                    principal: context.ActingPrincipal(),
+                    verb: "world.load"
                 );
-
-                return CommandResult.None;
             }
         );
         // BINDABLE, unlike the rest of this module: it is a gesture, not a verb naming a document target (no path, no
@@ -304,7 +304,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return CommandResult.Error(output: $"[world.reload: text assets refused: {reason}]");
                 }
 
-                link.SubmitRebuild(
+                return link.SubmitRebuild(
+                    echoes: echoes,
                     request: new WorldRebuildRequest(
                         ContentHash: contentHash,
                         Definition: loaded!,
@@ -312,10 +313,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         Kind: WorldRebuildKind.Reload,
                         PathHint: path
                     ),
-                    principal: context.ActingPrincipal()
+                    principal: context.ActingPrincipal(),
+                    verb: "world.reload"
                 );
-
-                return CommandResult.None;
             }
         );
         yield return Simulation(
@@ -341,12 +341,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return CommandResult.Error(output: $"[world.undo: bad count '{args[0].ToString()}' — a positive integer]");
                 }
 
-                link.SubmitUndo(
+                return link.SubmitUndo(
+                    echoes: echoes,
+                    verb: "world.undo",
                     count: count,
                     principal: context.ActingPrincipal()
                 );
-
-                return CommandResult.None;
             }
         );
         yield return CommandDefinition.WithWireArgs(

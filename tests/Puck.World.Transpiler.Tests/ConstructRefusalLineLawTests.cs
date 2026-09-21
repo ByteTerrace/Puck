@@ -12,8 +12,8 @@ namespace Puck.World.Transpiler.Tests;
 /// nearest enclosing node instead — which is the line this law pins.</remarks>
 public class ConstructRefusalLineLawTests {
     private const string Rows = """
-                slot hp : Int = 1
-                slot flag : Int = 0
+                slot hp = 1
+                slot flag = 0
         """;
 
     private static string Doc(string body) => $"schema: \"puck.world.definition.v1\"\n\n{body}\n";
@@ -62,7 +62,7 @@ public class ConstructRefusalLineLawTests {
                 """)
         },
         { "when", Rule(body: "    when missingRow == 1\n    flag = 1") },
-        { "local", Rule(body: "    local acc : Int = missingRow + 1\n    flag = acc") },
+        { "local", Rule(body: "    local acc = missingRow + 1\n    flag = acc") },
         {
             "option",
             Rule(body: """

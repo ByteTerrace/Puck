@@ -29,7 +29,7 @@ public sealed class WorldConstructTable {
                 value: construct
             )) {
                 throw new ArgumentException(
-                    message: $"'{construct.Keyword}' is described more than once inside {(construct.Enclosing is null
+                    message: $"'{construct.Keyword}' is described more than once inside {((construct.Enclosing is null)
                         ? "the document"
                         : $"'{construct.Enclosing}'")}.",
                     paramName: nameof(constructs)
@@ -41,7 +41,7 @@ public sealed class WorldConstructTable {
             .ThenBy(keySelector: static construct => construct.Keyword, comparer: StringComparer.Ordinal)];
     }
 
-    private static string Cell(string text) => (text.Length == 0
+    private static string Cell(string text) => ((text.Length == 0)
         ? "—"
         : text
     );
@@ -55,11 +55,11 @@ public sealed class WorldConstructTable {
         values: names.Select(selector: Code)
     ));
     private static string MemberCard(WorldConstruct construct, WorldConstructMember member) =>
-        $"**`{member.Spelling()}`**\n\n{member.Summary} A `{construct.Keyword}` member{(member.DocumentKeys.Count == 0
+        $"**`{member.Spelling()}`**\n\n{member.Summary} A `{construct.Keyword}` member{((member.DocumentKeys.Count == 0)
             ? ((member.Lowering is null)
                 ? ""
                 : $", lowering to {member.Lowering}")
-            : $", lowering to {CodeList(names: member.DocumentKeys)}")}.{(member.Default is null
+            : $", lowering to {CodeList(names: member.DocumentKeys)}")}.{((member.Default is null)
                 ? ""
                 : $" Defaults to `{member.Default}`.")}";
     private static string Shape(WorldConstructShape shape) => shape switch {
@@ -84,13 +84,13 @@ public sealed class WorldConstructTable {
                     CultureInfo.InvariantCulture,
                     $"| {Code(text: member.Spelling())}{(member.Required
                         ? " (required)"
-                        : "")} | {member.Position.ToString().ToLowerInvariant()} | {member.Kind.ToString().ToLowerInvariant()}{(member.Choices.Count > 0
+                        : "")} | {member.Position.ToString().ToLowerInvariant()} | {member.Kind.ToString().ToLowerInvariant()}{((member.Choices.Count > 0)
                             ? $" ({CodeList(names: member.Choices)})"
                             : "")} | {((member.AdmittedKinds.Count == 0)
                                 ? "—"
                                 : CodeList(names: member.AdmittedKinds))} | {((member.DocumentKeys.Count == 0)
                                 ? Cell(text: (member.Lowering ?? ""))
-                                : CodeList(names: member.DocumentKeys))} | {(member.Default is null
+                                : CodeList(names: member.DocumentKeys))} | {((member.Default is null)
                                 ? "—"
                                 : Code(text: member.Default))} | {member.Summary} |"
                 );
@@ -227,9 +227,10 @@ public sealed class WorldConstructTable {
     /// written.</summary>
     /// <param name="keyword">The keyword as written.</param>
     /// <param name="construct">The described construct, when exactly one carries that keyword.</param>
-    /// <returns><see langword="true"/> when exactly one described construct carries that keyword.</returns>
-    /// <remarks>A keyword two constructs spell resolves to neither: the caller that knows where the word was
-    /// written takes the overload that says so.</remarks>
+    /// <returns><see langword="true"/> when one root construct, or exactly one construct anywhere, carries that
+    /// keyword.</returns>
+    /// <remarks>The root spelling wins when a keyword is also meaningful in a nested construct. A caller that
+    /// knows the nesting takes the contextual overload.</remarks>
     public bool TryGet(string keyword, out WorldConstruct? construct) {
         var matches = Constructs.Where(predicate: candidate => string.Equals(
             a: candidate.Keyword,
@@ -237,10 +238,10 @@ public sealed class WorldConstructTable {
             comparisonType: StringComparison.Ordinal
         )).ToArray();
 
-        construct = ((matches.Length == 1)
-            ? matches[0]
-            : null
-        );
+        construct = matches.FirstOrDefault(predicate: static candidate => (candidate.Enclosing is null));
+        if ((construct is null) && (matches.Length == 1)) {
+            construct = matches[0];
+        }
 
         return (construct is not null);
     }
@@ -433,7 +434,7 @@ public sealed class WorldConstructTable {
         foreach (var construct in Constructs) {
             _ = output.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"| {Code(text: construct.Keyword)} | {(construct.Enclosing is null
+                $"| {Code(text: construct.Keyword)} | {((construct.Enclosing is null)
                     ? "the document"
                     : Code(text: construct.Enclosing))} | {Shape(shape: construct.Shape)} | {Code(text: construct.DocumentMember)} | {construct.Summary} |"
             );

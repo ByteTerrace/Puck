@@ -151,4 +151,39 @@ public static class WorldExpressionJson {
             : string.Empty
         );
     }
+    /// <summary>Returns the infix spelling a decompiler writes into unquoted <c>.puck</c> source for an
+    /// expression-valued document member: a reserved channel as an author's call, and a plain row read one of the
+    /// caller's <see cref="ExpressionSpelling.WithLocals"/> shadows backquoted, so it still reads the row once the
+    /// printed source is recompiled under those locals.</summary>
+    /// <param name="node">The member's IR tree.</param>
+    /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
+    public static string SourceText(JsonNode? node) {
+        if (node is null) {
+            return string.Empty;
+        }
+
+        return (ExpressionSpelling.TryPrintSource(
+            program: ExpressionProgramJsonConverter.FromNode(node: node),
+            text: out var text
+        )
+            ? text
+            : string.Empty
+        );
+    }
+    /// <summary>Returns <see cref="SourceText"/> parenthesized on <see cref="ComparisonOperand"/>'s terms.</summary>
+    /// <param name="node">The operand's IR tree.</param>
+    /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
+    public static string SourceComparisonOperand(JsonNode? node) {
+        if (node is null) {
+            return string.Empty;
+        }
+
+        return (ExpressionSpelling.TryPrintSourceComparisonOperand(
+            program: ExpressionProgramJsonConverter.FromNode(node: node),
+            text: out var text
+        )
+            ? text
+            : string.Empty
+        );
+    }
 }

@@ -29,6 +29,7 @@ public sealed partial class WorldPersistence {
                     if (body is not null) {
                         hash.Add(value: ((uint)index));
                         body.AppendActionStateHash(hash: ref hash);
+                        WorldStateHashComposition.AppendIdentityRecords(hash: ref hash, identity: body.Profile);
                     }
                 }
 
@@ -38,6 +39,7 @@ public sealed partial class WorldPersistence {
                     hash: ref hash,
                     state: Host.Document.Definition.StateRaw
                 );
+                WorldStateHashComposition.AppendPoolBindings(hash: ref hash, definition: Host.Document.Definition);
 
                 break;
             case WorldStateHashComponent.Decisions:

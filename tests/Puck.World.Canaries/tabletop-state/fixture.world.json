@@ -104,8 +104,25 @@
                 "instructions": [
                   {
                     "op": "Operand",
-                    "key": "$cell:positions:scout",
-                    "name": "$board:pathCost:terrain:cell:destination:scout:100:16"
+                    "key": {
+                      "channel": "cell",
+                      "arguments": [
+                        "positions",
+                        "scout"
+                      ]
+                    },
+                    "name": {
+                      "channel": "board",
+                      "arguments": [
+                        "pathCost",
+                        "terrain",
+                        "cell",
+                        "destination",
+                        "scout",
+                        100,
+                        16
+                      ]
+                    }
                   },
                   {
                     "op": "Negate"
@@ -117,13 +134,25 @@
             },
             {
               "$type": "setState",
-              "key": "$cell:positions:scout",
+              "key": {
+                "channel": "cell",
+                "arguments": [
+                  "positions",
+                  "scout"
+                ]
+              },
               "state": "occupancy",
               "value": 0
             },
             {
               "$type": "setState",
-              "key": "$cell:positions:scout",
+              "key": {
+                "channel": "cell",
+                "arguments": [
+                  "positions",
+                  "scout"
+                ]
+              },
               "state": "terrain",
               "value": 1
             },
@@ -136,13 +165,25 @@
             },
             {
               "$type": "setState",
-              "key": "$cell:positions:scout",
+              "key": {
+                "channel": "cell",
+                "arguments": [
+                  "positions",
+                  "scout"
+                ]
+              },
               "state": "occupancy",
               "value": 1
             },
             {
               "$type": "setState",
-              "key": "$cell:positions:scout",
+              "key": {
+                "channel": "cell",
+                "arguments": [
+                  "positions",
+                  "scout"
+                ]
+              },
               "state": "terrain",
               "value": -1
             }
@@ -163,8 +204,25 @@
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "key": "$cell:positions:scout",
-            "state": "$board:pathCost:terrain:cell:destination:scout:100:16",
+            "key": {
+              "channel": "cell",
+              "arguments": [
+                "positions",
+                "scout"
+              ]
+            },
+            "state": {
+              "channel": "board",
+              "arguments": [
+                "pathCost",
+                "terrain",
+                "cell",
+                "destination",
+                "scout",
+                100,
+                16
+              ]
+            },
             "value": 0
           },
           {
@@ -172,8 +230,25 @@
             "comparandKey": "scout",
             "comparandState": "moves",
             "comparison": "LessOrEqual",
-            "key": "$cell:positions:scout",
-            "state": "$board:pathCost:terrain:cell:destination:scout:100:16"
+            "key": {
+              "channel": "cell",
+              "arguments": [
+                "positions",
+                "scout"
+              ]
+            },
+            "state": {
+              "channel": "board",
+              "arguments": [
+                "pathCost",
+                "terrain",
+                "cell",
+                "destination",
+                "scout",
+                100,
+                16
+              ]
+            }
           }
         ]
       },

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.State;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -165,6 +166,10 @@ public static partial class WorldDecompiler {
                 : "stabilize "))
             .Append(value: QuotedName(name: name));
 
+        if (group["undo"] is { } undo) {
+            _ = header.Append(value: " undo(").Append(value: FormatUndo(indentLevel: indentLevel, node: undo)).Append(value: ')');
+        }
+
         if (!staged) {
             if (group["passes"]?.ToString() is { Length: > 0 } passes) {
                 _ = header.Append(value: $" maxPasses({passes})");
@@ -199,19 +204,25 @@ public static partial class WorldDecompiler {
             var local = member[(name.Length + 1)..];
 
             if (staged) {
-                sb.AppendLine(
-                    CultureInfo.InvariantCulture,
-                    $"{new string(c: ' ', count: ((indentLevel + 1) * 4))}step {QuotedName(name: local)}{((stepObj["onRefusal"]?.ToString() == "Skip") ? " skip" : "")} {{"
-                );
-                AppendRuleBody(
-                    indentLevel: (indentLevel + 2),
-                    rule: rule,
-                    sb: sb
-                );
-                sb.AppendLine(
-                    CultureInfo.InvariantCulture,
-                    $"{new string(c: ' ', count: ((indentLevel + 1) * 4))}}}"
-                );
+                var stepBlock = new StringBuilder();
+
+                using (ExpressionSpelling.WithLocals(locals: RuleLocalNames(rule: rule))) {
+                    stepBlock.AppendLine(
+                        CultureInfo.InvariantCulture,
+                        $"{new string(c: ' ', count: ((indentLevel + 1) * 4))}step {QuotedName(name: local)}{((stepObj["onRefusal"]?.ToString() == "Skip") ? " skip" : "")} {{"
+                    );
+                    AppendRuleBody(
+                        indentLevel: (indentLevel + 2),
+                        rule: rule,
+                        sb: stepBlock
+                    );
+                    stepBlock.AppendLine(
+                        CultureInfo.InvariantCulture,
+                        $"{new string(c: ' ', count: ((indentLevel + 1) * 4))}}}"
+                    );
+
+                    sb.Append(value: Respell(text: stepBlock.ToString()));
+                }
             } else {
                 AppendRuleBlock(
                     indentLevel: (indentLevel + 1),
@@ -228,6 +239,17 @@ public static partial class WorldDecompiler {
             CultureInfo.InvariantCulture,
             $"{indent}}}"
         );
+    }
+    private static string FormatUndo(JsonNode node, int indentLevel) {
+        if (
+            (node is JsonObject undo) &&
+            (undo["rows"] is JsonArray rows) &&
+            (undo["depth"] is { } depth)
+        ) {
+            return $"{{ rows {FormatValue(indentLevel: indentLevel, node: rows)} depth: {FormatValue(indentLevel: indentLevel, node: depth)} }}";
+        }
+
+        return FormatValue(indentLevel: indentLevel, node: node);
     }
     private static JsonObject RenamedRule(JsonObject rule, string name) {
         var renamed = ((JsonObject)rule.DeepClone());

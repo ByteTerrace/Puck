@@ -1,5 +1,5 @@
 {
-  "basis": "../../src/Puck.World/Assets/worlds/games/hearts.world.json",
+  "basis": "phase-fixture.world.json",
   "grants": [
     {
       "capability": "Mutate",
@@ -24,7 +24,12 @@
           "condition": {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$phase:heartsPassPhase",
+            "state": {
+              "channel": "phase",
+              "arguments": [
+                "passPhase"
+              ]
+            },
             "value": 0
           },
           "else": [
@@ -46,7 +51,12 @@
         },
         {
           "$type": "setState",
-          "fromState": "$phase:heartsPassPhase",
+          "fromState": {
+            "channel": "phase",
+            "arguments": [
+              "passPhase"
+            ]
+          },
           "key": "generation",
           "state": "wrongGuardRefused"
         }
@@ -59,17 +69,17 @@
     "directory": "out",
     "rows": [
       {
-        "command": "world.state.transform {\"$type\":\"transfer\",\"from\":\"heartsDeck\",\"to\":\"heartsHand1\",\"selector\":\"First\"}",
+        "command": "world.state.transform {\"$type\":\"transfer\",\"from\":\"deck\",\"to\":\"hand\",\"selector\":\"First\"}",
         "principal": "seat1",
         "tick": 3
       },
       {
-        "command": "world.state.act heartsPassPhase 7 {\"$type\":\"transfer\",\"from\":\"heartsHand1\",\"to\":\"heartsPass1\",\"selector\":\"First\"}",
+        "command": "world.state.act passPhase 7 {\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pass\",\"selector\":\"First\"}",
         "principal": "seat1",
         "tick": 6
       },
       {
-        "command": "world.state.act heartsPassPhase 0 {\"$type\":\"transfer\",\"from\":\"heartsHand9\",\"to\":\"heartsPass1\",\"selector\":\"First\"}",
+        "command": "world.state.act passPhase 0 {\"$type\":\"transfer\",\"from\":\"missingHand\",\"to\":\"pass\",\"selector\":\"First\"}",
         "principal": "seat1",
         "tick": 8
       }
@@ -96,7 +106,7 @@
         "kind": "Int",
         "name": "wrongGuardRefused",
         "verdict": {
-          "gate": "a guarded transform naming generation 7 when heartsPassPhase stands at 0 is refused, so the generation never advances",
+          "gate": "a guarded transform naming generation 7 when passPhase stands at 0 is refused, so the generation never advances",
           "status": "ok"
         }
       }

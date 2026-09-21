@@ -140,7 +140,7 @@ public sealed partial class StateArena {
     // most the cell it left and the cell it entered, and a code write changes only the cell its own token stands
     // on.
     private void RecomputeDependents(int rowOrdinal, int slot, long previous, long next) {
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Shape is not (RowShape.Keyed or RowShape.Ordered)) {
             return;
@@ -191,7 +191,7 @@ public sealed partial class StateArena {
         }
     }
     private void RecomputeDerivedBoard(int boardOrdinal) {
-        var board = m_layout[boardOrdinal];
+        ref readonly var board = ref m_layout[boardOrdinal];
 
         for (var cell = 0; (cell < board.CellCapacity); cell++) {
             RecomputeDerivedCell(
@@ -202,25 +202,27 @@ public sealed partial class StateArena {
     }
     // Two tokens naming one cell: the later one, in the token row's own order, wins.
     private void RecomputeDerivedCell(int boardOrdinal, long cell) {
-        var board = m_layout[boardOrdinal];
+        ref readonly var board = ref m_layout[boardOrdinal];
 
         if (((ulong)cell) >= ((ulong)board.CellCapacity)) {
             return;
         }
 
-        var tokens = m_layout[board.InverseTokensOrdinal];
-        var codes = m_layout[board.InverseCodesOrdinal];
-        var count = ((int)m_memberCounts[board.InverseTokensOrdinal]);
+        ref readonly var tokens = ref m_layout[board.InverseTokensOrdinal];
+        ref readonly var codes = ref m_layout[board.InverseCodesOrdinal];
+        var sparseTokens = ((m_poolOfDomainRow.Length != 0) && m_catalog.IsPoolRow(rowOrdinal: board.InverseTokensOrdinal));
+        var count = (sparseTokens ? tokens.CellCapacity : ((int)m_memberCounts[board.InverseTokensOrdinal]));
         var winner = -1;
 
         for (var position = 0; (position < count); position++) {
-            if (m_numbers[(tokens.CellStart + position)] == cell) {
+            if ((m_numbers[(tokens.CellStart + position)] == cell) && (!sparseTokens || Bit(words: m_presence, index: (tokens.CellStart + position)))) {
                 winner = position;
             }
         }
 
         var slot = (board.CellStart + ((int)cell));
-        var value = (((winner >= 0) && (winner < m_memberCounts[board.InverseCodesOrdinal]))
+        var sparseCodes = ((m_poolOfDomainRow.Length != 0) && m_catalog.IsPoolRow(rowOrdinal: board.InverseCodesOrdinal));
+        var value = (((winner >= 0) && (sparseCodes ? ((winner < codes.CellCapacity) && Bit(words: m_presence, index: (codes.CellStart + winner))) : (winner < m_memberCounts[board.InverseCodesOrdinal])))
             ? m_numbers[(codes.CellStart + winner)]
             : board.Empty
         );

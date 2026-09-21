@@ -253,10 +253,10 @@ bodyMotionPrograms [
   {
     version: "puck.body.program.v1"
     name: "display"
-    kind: "Motion"
+    kind: Motion
     operations [
-      "ResolveYawAttitudeAndPlanarFrame"
-      "CommitPose"
+      ResolveYawAttitudeAndPlanarFrame
+      CommitPose
     ]
   }
 ]
@@ -264,7 +264,7 @@ bodyMotionPrograms [
 kits {
   rows [
     {
-      bodyContact: "Overlap"
+      bodyContact: Overlap
       bodyMotionProgram: "display"
       collider: null
       mass: 0
@@ -273,18 +273,18 @@ kits {
         groundStick: 2
         holds [
           {
-            bond: "Surface"
+            bond: Surface
             cone [0, 60]
             driveAlignment: 0
             envelope {
               sinkSpeed: 40
             }
-            forward: "Heading"
+            forward: Heading
             gravity {
               fall: 46
               rise: 28
             }
-            hold: "Gravity"
+            hold: Gravity
             lift: 0
             name: "ground"
             onDrive: false
@@ -294,14 +294,14 @@ kits {
             upLean: 0
           }
           {
-            bond: "Free"
+            bond: Free
             driveAlignment: 0
-            forward: "Heading"
+            forward: Heading
             gravity {
               fall: 46
               rise: 28
             }
-            hold: "Lift"
+            hold: Lift
             lift: 1
             name: "air"
             onDrive: false
@@ -311,7 +311,7 @@ kits {
             upLean: 0
           }
         ]
-        moveFrame: "World"
+        moveFrame: World
         shaping [
           {
             along {}
@@ -1419,10 +1419,10 @@ rules [
   }
   {
     name: "toggle-sky"
-    mode: "Edge"
-    gate: compareState(state: "$channel:1:skyToggle", comparison: "Equal", value: 1)
+    mode: Edge
+    gate: compareState(state: channel(1, skyToggle), comparison: Equal, value: 1)
     effects [
-      setState(state: "skyMode", expression: "0.5 - skyMode")
+      setState(state: skyMode, expression: 0.5 - skyMode)
     ]
   }
 ]
@@ -1498,7 +1498,7 @@ render {
     ]
   }
   cycle {
-    state: "skyMode"
+    state: skyMode
     keys [
       {
         at: 0
@@ -1628,7 +1628,7 @@ bindingOverlays [
                   sequence [
                     "keyboard.8"
                   ]
-                  mode: "Tapped"
+                  mode: Tapped
                 }
                 channel: "skyToggle"
               }
@@ -1655,7 +1655,7 @@ bindingOverlays [
 channels [
   {
     name: "skyToggle"
-    shape: "Binary"
+    shape: Binary
     composition: true
   }
 ]

@@ -53,13 +53,13 @@ public static partial class RuleCompiler {
         }
     }
 
-    private static ResolvedOperand ResolveBoardOperand(string name, string? key, string ruleName, RuleCompileContext context) {
+    private static ResolvedOperand ResolveBoardOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, RuleCompileContext context) {
         RuleException Invalid(string detail) => new(
             detail: detail,
             refusal: RuleRefusal.StateCellUnaddressable,
             ruleName: ruleName
         );
-        var tokens = name.Split(separator: ':');
+        var tokens = call.Tokens();
 
         if (
             (tokens.Length < 3) ||
@@ -80,6 +80,7 @@ public static partial class RuleCompiler {
         var kind = (tokens[1] switch {
             "neighbour" => BoardQueryKind.Neighbour,
             "pathCost" => BoardQueryKind.PathCost,
+            "jumpDistance" => BoardQueryKind.JumpDistance,
             "mask" => BoardQueryKind.Mask,
             "canonical" => BoardQueryKind.Canonical,
             "offset" => BoardQueryKind.Offset,
@@ -112,8 +113,8 @@ public static partial class RuleCompiler {
             if (TryResolveDynamicKey(
                 cell: out var dynamicKey,
                 context: context,
-                key: key,
                 keyFieldLabel: "key",
+                reference: key,
                 ruleName: ruleName,
                 verb: "board"
             )) {
@@ -122,14 +123,14 @@ public static partial class RuleCompiler {
                 (key is null) ||
                 !topology.TryCell(
                 cell: out _,
-                key: key
+                key: key.Spelling
             )
             ) {
                 throw Invalid(detail: "board query key must name a source cell or use a validated dynamic key");
             } else {
                 literalKey = InternKey(
                     context: context,
-                    name: key
+                    name: key.Spelling
                 );
             }
         } else if (key is not null) {
@@ -170,6 +171,21 @@ public static partial class RuleCompiler {
                 topology: topology,
                 upper: upper
             );
+        } else if (kind == BoardQueryKind.JumpDistance) {
+            var dynamicTarget = ((tokens.Length == 6) && (tokens[3] == "cell"));
+            var target = 0;
+
+            if ((row.Kind is not (CellKind.Int or CellKind.Bool)) ||
+                (!dynamicTarget && ((tokens.Length != 4) || !topology.TryCell(tokens[3], out target)))) {
+                throw Invalid(detail: "jumpDistance requires <targetCell> or cell:<row>:<key> on an integer or boolean board row");
+            }
+            if (dynamicTarget) {
+                pathTargetFrom = ResolveCellRef(channel: name, context: context, key: tokens[5], row: tokens[4], ruleName: ruleName);
+                if (pathTargetFrom.Value.Kind != CellKind.Int) {
+                    throw Invalid(detail: "jumpDistance requires an integer cell:<row>:<key> destination ordinal");
+                }
+            }
+            query = new BoardJumpDistanceQuery(target: target, targetIsLive: dynamicTarget, topology: topology);
         } else if (kind == BoardQueryKind.PathCost) {
             if (row.Kind != CellKind.Int) {
                 throw Invalid(detail: "pathCost requires <targetCell>:<maxCost>:<maxVisits> or cell:<row>:<key>:<maxCost>:<maxVisits> on an integer terrain row");
@@ -394,16 +410,16 @@ public static partial class RuleCompiler {
     // $match:<pattern>:<row>[:<direction>|:any][:<facet>] — a board source walks the ray from the operand key's
     // origin cell (exclusive) in the named direction, or every direction under `any`; an ordered zone reads the
     // pattern's attribute row in pile order; a keyed row reads its own cells in cell order.
-    private static ResolvedOperand ResolvePatternOperand(string name, string? key, string ruleName, RuleCompileContext context) {
+    private static ResolvedOperand ResolvePatternOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, RuleCompileContext context) {
         RuleException Invalid(string detail) => new(
             detail: detail,
             refusal: RuleRefusal.StateCellUnaddressable,
             ruleName: ruleName
         );
-        var tokens = RuleFacts.SplitChannel(name: name);
+        var tokens = call.Tokens();
 
-        if (tokens.Length is < 3 or > 5) {
-            throw Invalid(detail: "pattern match requires $match:<pattern>:<row>[:<direction>|:any][:prefix|:cell|:distance|:mask|:count]");
+        if (tokens.Length is < 3 or > 6) {
+            throw Invalid(detail: "pattern match requires $match:<pattern>:<row>[:<direction>|:any][:prefix|:cell|:distance|:at|:length][:<occurrence>]");
         }
 
         var patternRow = (FindPatternRow(
@@ -420,6 +436,7 @@ public static partial class RuleCompiler {
         }
 
         var facet = MatchFacet.Accept;
+        var occurrence = 0;
         StateRow? row = null;
 
         if (!TryResolveLiveRow(
@@ -485,21 +502,32 @@ public static partial class RuleCompiler {
             ) {
                 throw Invalid(detail: $"'{tokens[3]}' is not a direction of '{declaredBoard.Topology}'");
             }
-            if (tokens.Length == 5) {
+            if (tokens.Length >= 5) {
                 facet = (tokens[4] switch {
                     "prefix" when !every => MatchFacet.Prefix,
                     "cell" when !every => MatchFacet.Cell,
                     "distance" when !every => MatchFacet.Distance,
                     "mask" when every => MatchFacet.DirectionMask,
                     "count" when every => MatchFacet.DirectionCount,
-                    _ => throw Invalid(detail: $"'{tokens[4]}' is not a facet for this source: prefix, cell or distance on one direction, mask or count over any"),
+                    "at" when !every => MatchFacet.At,
+                    "length" when !every => MatchFacet.Length,
+                    _ => throw Invalid(detail: $"'{tokens[4]}' is not a facet for this source: prefix, cell, distance, at or length on one direction, mask or count over any"),
                 });
+            }
+            if (tokens.Length == 6) {
+                if (
+                    (facet is not (MatchFacet.At or MatchFacet.Length)) ||
+                    !int.TryParse(tokens[5], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out occurrence) ||
+                    (occurrence < 0)
+                ) {
+                    throw Invalid(detail: "only at and length take a non-negative occurrence ordinal");
+                }
             }
             if (TryResolveDynamicKey(
                 cell: out var dynamicKey,
                 context: context,
-                key: key,
                 keyFieldLabel: "key",
+                reference: key,
                 ruleName: ruleName,
                 verb: "match"
             )) {
@@ -508,14 +536,14 @@ public static partial class RuleCompiler {
                 (key is null) ||
                 !topology.TryCell(
                 cell: out _,
-                key: key
+                key: key.Spelling
             )
             ) {
                 throw Invalid(detail: "a board source's key must name the origin cell or use a validated dynamic key");
             } else {
                 literalKey = InternKey(
                     context: context,
-                    name: key
+                    name: key.Spelling
                 );
             }
 
@@ -525,14 +553,25 @@ public static partial class RuleCompiler {
             );
             kind = CellKind.Int;
         } else {
-            if (tokens.Length > 4) {
+            if (tokens.Length > 5) {
                 throw Invalid(detail: "a zone or keyed source takes no direction");
             }
-            if (tokens.Length == 4) {
-                facet = ((tokens[3] == "prefix")
-                    ? MatchFacet.Prefix
-                    : throw Invalid(detail: $"'{tokens[3]}' is not a facet for a word source; prefix is")
-                );
+            if (tokens.Length >= 4) {
+                facet = (tokens[3] switch {
+                    "prefix" => MatchFacet.Prefix,
+                    "at" => MatchFacet.At,
+                    "length" => MatchFacet.Length,
+                    _ => throw Invalid(detail: $"'{tokens[3]}' is not a facet for a word source; prefix, at or length is"),
+                });
+            }
+            if (tokens.Length == 5) {
+                if (
+                    (facet is not (MatchFacet.At or MatchFacet.Length)) ||
+                    !int.TryParse(tokens[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out occurrence) ||
+                    (occurrence < 0)
+                ) {
+                    throw Invalid(detail: "only at and length take a non-negative occurrence ordinal");
+                }
             }
             if (
                 (key is not null) &&
@@ -543,15 +582,15 @@ public static partial class RuleCompiler {
             if (TryResolveDynamicKey(
                 cell: out var startKey,
                 context: context,
-                key: key,
                 keyFieldLabel: "key",
+                reference: key,
                 ruleName: ruleName,
                 verb: "match"
             )) {
                 keyFrom = startKey;
             } else if (key is not null) {
                 if (!CellName.TryParse(
-                    candidate: key,
+                    candidate: key.Spelling,
                     name: out _,
                     reason: out _
                 )) {
@@ -560,7 +599,7 @@ public static partial class RuleCompiler {
 
                 literalKey = InternKey(
                     context: context,
-                    name: key
+                    name: key.Spelling
                 );
             }
 
@@ -586,6 +625,7 @@ public static partial class RuleCompiler {
                             key: literalKey,
                             keyFrom: keyFrom,
                             matchFacet: facet,
+                            occurrence: occurrence,
                             pattern: compiledPattern!,
                             rowFrom: live,
                             rowOrdinal: rowOrdinal,
@@ -638,6 +678,7 @@ public static partial class RuleCompiler {
                 key: literalKey,
                 keyFrom: keyFrom,
                 matchFacet: facet,
+                occurrence: occurrence,
                 pattern: compiledPattern!,
                 rowFrom: live,
                 rowOrdinal: rowOrdinal,

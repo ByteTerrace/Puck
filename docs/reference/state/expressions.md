@@ -40,6 +40,13 @@ The last entry is a **dynamic key**, not a numeric card value. Use it where
 an operation expects a key. [Live zones and absent endpoints](rules.md#the-facts)
 explain what happens when the pile is empty.
 
+In a world JSON document, a plain row or cell name is a string. A reserved
+channel is an object: `$tick` is `{ "channel": "tick" }`, for example.
+If present, `arguments` must be an array. Each element is a word, a Decimal
+number, or an object containing exactly one `zone` or `expression` program.
+Malformed shapes and numbers outside Decimal's range are refused; fields are
+never silently discarded. Imported fragments follow the same refusal contract.
+
 `row.key` and `row[key]` parse to the same read for a literal key: the dot
 form takes exactly one dot on an unreserved, unquoted name (more than one, or
 a key half that is itself reserved — `row.$each` — is a parse error naming the
@@ -66,6 +73,17 @@ The expression pipeline has one owner for each job:
 Every operation has exactly one operator-table row, so no operation is
 described in two places. Arithmetic domain checks remain in the evaluator.
 
+### Infer a local's kind
+
+An untyped local first chooses an Int or Fixed **carrier** for its operands.
+Reading a Fixed row, or using a fractional literal without an Int row that
+sets the scale, selects Fixed so `1.5` stays exact. The local stores the kind
+of the expression's result. A comparison and `sign` consume numeric operands
+but leave an Int, so both `1.5 == 1.5` and `sign(0.5)` bind the Int value `1`.
+That value can feed a later local, gate, or effect without turning a fixed
+literal into an integer first. Declare `kind` when the destination itself must
+be Fixed or Int; an explicit kind remains a required result kind.
+
 ### The IR on the wire
 
 A world document holds the IR and only the IR: an expression-valued member is
@@ -91,10 +109,15 @@ belongs to and is evaluated once per member, with the member in flight read by
 the binder's own name. A fold is priced as the family's size times its body's
 cost, and nests at most once.
 
-A program carries at most sixteen subprograms, each bounded by the same token
-ceiling as the program itself. The compiler compiles each subprogram once and
-every call site shares that body, refuses a cycle by the subprogram's name, and
-so bounds how deep a chain of calls can nest at evaluation.
+A program carries at most 64 subprograms, each bounded by the same 256-token
+ceiling as the program itself, and a function takes at most 16 arguments. The
+compiler compiles each subprogram once and every call site shares that body,
+refuses a cycle by the subprogram's name, and so bounds how deep a chain of
+calls can nest at evaluation. Sharing makes a chain cheap to write and not to
+run: a function that calls the level below twice doubles at every level, so a
+body carries the count of tokens one call evaluates, the compiler folds a
+constant subtree only when that count is small, and the work sheet prices the
+chain at what it runs, which admission refuses when it overflows.
 
 ### Answer an absent read
 

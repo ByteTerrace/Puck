@@ -939,28 +939,28 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
             var state = ((InstructionPayload.State)token.Payload!);
 
-            if (CartridgeExpressions.TryKey(name: state.Name, button: out var button, mode: out var mode)) {
+            if (CartridgeExpressions.TryKey(name: state.Name.Spelling, button: out var button, mode: out var mode)) {
                 Button(button: button, mode: mode, register: register);
 
                 return;
             }
 
-            if (CartridgeExpressions.Index(key: state.Key) is { } index) {
-                Element(array: state.Name, index: index, address: LowRegister.R2, guard: guard);
+            if (CartridgeExpressions.Index(key: state.Key?.Spelling) is { } index) {
+                Element(array: state.Name.Spelling, index: index, address: LowRegister.R2, guard: guard);
                 emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
 
                 return;
             }
 
-            if (guard && (state.Name == document.Scene)) {
+            if (guard && (state.Name.Spelling == document.Scene)) {
                 emitter.LoadConstant(destination: LowRegister.R2, value: SceneAddress);
                 emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
 
                 return;
             }
 
-            emitter.LoadConstant(destination: LowRegister.R2, value: variables[state.Name]);
-            if (widths[state.Name] == 2) {
+            emitter.LoadConstant(destination: LowRegister.R2, value: variables[state.Name.Spelling]);
+            if (widths[state.Name.Spelling] == 2) {
                 emitter.LoadHalf(destination: register, baseRegister: LowRegister.R2, byteOffset: 0);
             } else {
                 emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);

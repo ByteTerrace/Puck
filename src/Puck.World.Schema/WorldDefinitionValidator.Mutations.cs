@@ -88,6 +88,11 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 row: row
             );
+            ValidateWitnessRow(
+                definition: definition,
+                errors: errors,
+                row: row
+            );
 
             if (
                 (row.EffectiveDomain is StateDomain.CellsOf board) &&
@@ -156,71 +161,67 @@ public static partial class WorldDefinitionValidator {
 
         switch (transform) {
             case StateTransform.Observe observe:
-                names.Add(item: observe.Row);
+                names.Add(item: observe.Row.Spelling);
 
                 break;
             case StateTransform.Transfer transfer:
-                names.Add(item: transfer.From);
-                names.Add(item: transfer.To);
+                names.Add(item: transfer.From.Spelling);
+                names.Add(item: transfer.To.Spelling);
 
                 // A random selection advances the draw site's own cursor when the transfer commits (see
                 // StateTransform.Transfer's remarks), so the site is touched exactly like Shuffle's.
                 if (transfer.Draw is { } transferDraw) {
-                    names.Add(item: transferDraw);
+                    names.Add(item: transferDraw.Spelling);
                 }
 
                 break;
             case StateTransform.SetRay setRay:
-                names.Add(item: setRay.Row);
+                names.Add(item: setRay.Row.Spelling);
 
                 break;
             case StateTransform.Shuffle shuffle:
-                names.Add(item: shuffle.Row);
-                names.Add(item: shuffle.Draw);
+                names.Add(item: shuffle.Row.Spelling);
+                names.Add(item: shuffle.Draw.Spelling);
 
                 break;
-            case StateTransform.SortZone sortZone:
-                names.Add(item: sortZone.Row);
+            case StateTransform.Sort sort:
+                names.Add(item: sort.Row.Spelling);
 
-                foreach (var key in (sortZone.By ?? [])) {
+                foreach (var key in (sort.By ?? [])) {
                     if (key is not null) {
-                        names.Add(item: key.Row);
+                        names.Add(item: key.Row.Spelling);
                     }
                 }
 
                 break;
-            case StateTransform.SortKeyed sortKeyed:
-                names.Add(item: sortKeyed.Row);
-
-                break;
             case StateTransform.WriteSet writeSet:
-                names.Add(item: writeSet.Row);
-                names.Add(item: writeSet.Set);
+                names.Add(item: writeSet.Row.Spelling);
+                names.Add(item: writeSet.Set.Spelling);
 
                 break;
             case StateTransform.BoardCombine combine:
-                names.Add(item: combine.Row);
+                names.Add(item: combine.Row.Spelling);
 
                 if (combine.Left is { } left) {
-                    names.Add(item: left);
+                    names.Add(item: left.Spelling);
                 }
 
                 if (combine.Right is { } right) {
-                    names.Add(item: right);
+                    names.Add(item: right.Spelling);
                 }
 
                 break;
             case StateTransform.Arrange arrange:
-                names.Add(item: arrange.Row);
-                names.Add(item: arrange.From);
+                names.Add(item: arrange.Row.Spelling);
+                names.Add(item: arrange.From.Spelling);
 
                 break;
             case StateTransform.Push push:
-                names.Add(item: push.Row);
+                names.Add(item: push.Row.Spelling);
 
                 break;
             case StateTransform.ClearEnclosed clear:
-                names.Add(item: clear.Row);
+                names.Add(item: clear.Row.Spelling);
 
                 break;
             case StateTransform.Mix mix:
@@ -233,22 +234,22 @@ public static partial class WorldDefinitionValidator {
             case StateTransform.Mean mean:
                 AddSpellingRowName(mean.From, names);
                 AddSpellingRowName(mean.Into, names);
-                if (!string.IsNullOrWhiteSpace(value: mean.Where)) {
-                    AddSpellingRowName(mean.Where, names);
+                if (mean.Where is { } meanWhere) {
+                    names.Add(item: meanWhere.Spelling);
                 }
 
                 break;
             case StateTransform.Nearest nearest:
                 AddSpellingRowName(nearest.From, names);
                 AddSpellingRowName(nearest.Query, names);
-                AddSpellingRowName(nearest.Into, names);
-                if (!string.IsNullOrWhiteSpace(value: nearest.Where)) {
-                    AddSpellingRowName(nearest.Where, names);
+                names.Add(item: nearest.Into.Spelling);
+                if (nearest.Where is { } nearestWhere) {
+                    names.Add(item: nearestWhere.Spelling);
                 }
 
                 break;
             case StateTransform.Remember remember:
-                AddSpellingRowName(remember.Into, names);
+                names.Add(item: remember.Into.Spelling);
                 AddSpellingRowName(remember.From, names);
 
                 break;

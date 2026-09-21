@@ -12,8 +12,9 @@ public static partial class WorldDefinitionValidator {
     // Editable instances pay their actual cost; the template reserves only unoccupied slots.
     private static long ReservedPlacementCopies(WorldPlacement placement, IReadOnlyDictionary<string, int> childCounts, long ceiling) {
         var copies = WorldPlacementStamp.MaterializedCopyCeiling(ceiling: ceiling, placement: placement);
-        if (copies < ceiling && placement.Deal?.Preserve is { Prototype: true } or { Facets: true }) {
-            copies = Math.Max(0, copies - childCounts.GetValueOrDefault(placement.Id));
+
+        if ((copies < ceiling) && (placement.Deal?.Preserve is { Prototype: true } or { Facets: true })) {
+            copies = Math.Max(val1: 0, val2: (copies - childCounts.GetValueOrDefault(key: placement.Id)));
         }
         return copies;
     }
@@ -298,27 +299,27 @@ public static partial class WorldDefinitionValidator {
             ColliderCanDeriveRigidMass(collider: collider) &&
             (FixedWorldCollider.Compile(collider: collider, creations: []) is { } fixedCollider) &&
             !FixedWorldRigid.TryCompile(
-                rigid: rigid,
                 collider: fixedCollider,
                 compiled: out _,
-                reason: out var reason
+                reason: out var reason,
+                rigid: rigid
             )
         ) {
             errors.Add(item: $"{path} cannot compile deterministic mass properties: {reason}");
         }
     }
     private static bool ColliderCanDeriveRigidMass(WorldCollider? collider) => (collider switch {
-        WorldCollider.Sphere sphere => float.IsFinite(f: sphere.Radius) && (sphere.Radius > 0f),
-        WorldCollider.Capsule capsule => float.IsFinite(f: capsule.Radius) &&
+        WorldCollider.Sphere sphere => (float.IsFinite(f: sphere.Radius) && (sphere.Radius > 0f)),
+        WorldCollider.Capsule capsule => (float.IsFinite(f: capsule.Radius) &&
             (capsule.Radius > 0f) &&
             IsFinite(value: capsule.Endpoint) &&
-            (capsule.Endpoint.LengthSquared() > 0f),
-        WorldCollider.Box box => IsFinite(value: box.HalfExtents) &&
+            (capsule.Endpoint.LengthSquared() > 0f)),
+        WorldCollider.Box box => (IsFinite(value: box.HalfExtents) &&
             (box.HalfExtents.X > 0f) &&
             (box.HalfExtents.Y > 0f) &&
             (box.HalfExtents.Z > 0f) &&
             float.IsFinite(f: box.Rotation.LengthSquared()) &&
-            (box.Rotation.LengthSquared() > 0f),
+            (box.Rotation.LengthSquared() > 0f)),
         _ => false,
     });
     private static void ValidateCarry(WorldCarry? carry, string path, List<string> errors) {
@@ -785,7 +786,7 @@ public static partial class WorldDefinitionValidator {
             // creation — noise is a static-stamp facet.
             if (
                 (creation.Document.Noise is not null) &&
-                (creation.Document.Frames is { Count: > 0 } || creation.Document.Drivers is { Count: > 0 })
+                ((creation.Document.Frames is { Count: > 0 }) || (creation.Document.Drivers is { Count: > 0 }))
             ) {
                 errors.Add(item: $"{path}.doc.noise is refused on an animated creation — noise relief is a static-stamp facet.");
             }
@@ -988,7 +989,7 @@ public static partial class WorldDefinitionValidator {
         if (count.Row is { } countRow) {
             var countRowDeclaration = WorldDefinitionRows.FindStateRow(definition.State, countRow);
 
-            if (countRowDeclaration is not { Kind: CellKind.Int } || (countRowDeclaration.IsKeyed != (count.Key is not null))) {
+            if ((countRowDeclaration is not { Kind: CellKind.Int }) || (countRowDeclaration.IsKeyed != (count.Key is not null))) {
                 errors.Add(item: $"{path}.count must name a declared Int row with a matching key shape.");
             }
         } else if (
@@ -1018,7 +1019,7 @@ public static partial class WorldDefinitionValidator {
 
         var kits = definition.Kits;
         var hasMedium = HasMediumField(definition: definition);
-        var hasMoveUpChannel = definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp);
+        var hasMoveUpChannel = definition.Channels.Any(predicate: channel => (channel.Role == ChannelRole.MoveUp));
 
         // A kit is required exactly when the census implies a body to move (a derived refusal, not a flat floor):
         // zero declared capacity needs no kit at all.
@@ -1090,13 +1091,13 @@ public static partial class WorldDefinitionValidator {
             );
             ValidateNavigatedProducerMobility(
                 definition: definition,
+                errors: errors,
                 kit: kit,
                 motionProgram: motionProgram,
-                programRows: programRows,
                 path: $"{path}.producers",
-                errors: errors
+                programRows: programRows
             );
-            ValidateFlockMotion(definition, kit, motionProgram, path, errors);
+            ValidateFlockMotion(definition: definition, errors: errors, kit: kit, motion: motionProgram, path: path);
             RequireRange(
                 value: kit.Autonomy.MotionSeconds,
                 min: 0f,
@@ -1426,7 +1427,7 @@ public static partial class WorldDefinitionValidator {
 
                         if (part is null) {
                             errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names no part of creation '{partCreation.Id}'.");
-                        } else if ((partCreation.Document.Shapes ?? []).Any(predicate: shape => (shape.Id == part.ShapeId) && (shape.Domain is { Count: > 0 }))) {
+                        } else if ((partCreation.Document.Shapes ?? []).Any(predicate: shape => ((shape.Id == part.ShapeId) && (shape.Domain is { Count: > 0 })))) {
                             // A domain-bearing shape's slot carries its parent's delta frame, not a pose of its own
                             // (Client.WorldStampPool.PackTransforms), so a follower has no pose to ease — the same
                             // reason such a shape refuses its own swing/slide and a frame pose.
@@ -1524,12 +1525,13 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        var childCounts = new Dictionary<string, int>(StringComparer.Ordinal);
-        var slotCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var childCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var slotCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var occupiedSlots = new HashSet<(string Parent, int Slot)>();
+
         foreach (var child in placements) {
-            if (child is { Id: not null, Parent: { } parent } && placementsById.TryGetValue(parent, out var template) && WorldPlacementDeal.IsChild(child, template)) {
-                childCounts[parent] = childCounts.GetValueOrDefault(parent) + 1;
+            if ((child is { Id: not null, Parent: { } parent }) && placementsById.TryGetValue(key: parent, value: out var template) && WorldPlacementDeal.IsChild(parent: template, placement: child)) {
+                childCounts[parent] = (childCounts.GetValueOrDefault(key: parent) + 1);
             }
         }
 
@@ -1552,9 +1554,9 @@ public static partial class WorldDefinitionValidator {
             );
 
             ValidatePlacementSpatial(
-                placement: placement,
+                errors: errors,
                 path: path,
-                errors: errors
+                placement: placement
             );
 
             // A dealt child is the one row whose id may spell the child separator, and only in the exact shape the
@@ -1566,24 +1568,25 @@ public static partial class WorldDefinitionValidator {
             );
 
             var isDealtChild = WorldPlacementDeal.IsChild(
-                placement: placement,
-                parent: parentRow
+                parent: parentRow,
+                placement: placement
             );
+
             if (isDealtChild) {
                 if (placement.Deal is not null) {
-                    errors.Add($"{path}.deal cannot turn a source-owned child into another deal template.");
+                    errors.Add(item: $"{path}.deal cannot turn a source-owned child into another deal template.");
                 }
-                if (!slotCounts.TryGetValue(parentRow!.Id, out var slots)) {
-                    slots = WorldPlacementDeal.InstanceCount(parentRow, definition.Generation?.WorldSeed ?? 0UL);
-                    slotCounts.Add(parentRow.Id, slots);
+                if (!slotCounts.TryGetValue(key: parentRow!.Id, value: out var slots)) {
+                    slots = WorldPlacementDeal.InstanceCount(template: parentRow, worldSeed: (definition.Generation?.WorldSeed ?? 0UL));
+                    slotCounts.Add(key: parentRow.Id, value: slots);
                 }
-                if (placement.DealSlot is not { } slot || slot < 0 || slot >= slots) {
-                    errors.Add($"{path}.dealSlot must name a slot in parent '{parentRow!.Id}' (0..{slots - 1}).");
-                } else if (!occupiedSlots.Add((parentRow!.Id, slot))) {
-                    errors.Add($"{path}.dealSlot {slot} is already occupied under parent '{parentRow.Id}'.");
+                if ((placement.DealSlot is not { } slot) || (slot < 0) || (slot >= slots)) {
+                    errors.Add(item: $"{path}.dealSlot must name a slot in parent '{parentRow!.Id}' (0..{(slots - 1)}).");
+                } else if (!occupiedSlots.Add(item: (parentRow!.Id, slot))) {
+                    errors.Add(item: $"{path}.dealSlot {slot} is already occupied under parent '{parentRow.Id}'.");
                 }
             } else if (placement.DealSlot is not null) {
-                errors.Add($"{path}.dealSlot is reserved for a child of a deal template.");
+                errors.Add(item: $"{path}.dealSlot is reserved for a child of a deal template.");
             }
 
             if (
@@ -1602,6 +1605,11 @@ public static partial class WorldDefinitionValidator {
                 rowNoun: "creation",
                 errors: errors
             );
+
+            if (placement.Position is null) {
+                errors.Add(item: $"{path}.position is required.");
+                continue;
+            }
 
             if (!IsFinite(value: placement.Position)) {
                 errors.Add(item: $"{path}.position must contain finite coordinates.");
@@ -1722,7 +1730,7 @@ public static partial class WorldDefinitionValidator {
                                 continue;
                             }
 
-                            if (requiresField && solidShape.Profile?.Kind is SdfPrismProfileKind.Polygon or SdfPrismProfileKind.Ellipse) {
+                            if (requiresField && (solidShape.Profile?.Kind is SdfPrismProfileKind.Polygon or SdfPrismProfileKind.Ellipse or SdfPrismProfileKind.Path)) {
                                 errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} uses profile {solidShape.Profile.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.");
                             }
 
@@ -1752,7 +1760,7 @@ public static partial class WorldDefinitionValidator {
                     // The field provider compiles every solid row into ONE program instead of one collider per copy,
                     // so the analytic ceiling does not describe what it costs. Synchronized children use their
                     // template reservation; editable children pay their actual cost beside the remaining reserve.
-                    if (!requiresField && (!isDealtChild || parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true })) {
+                    if (!requiresField && (!isDealtChild || (parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true }))) {
                         var copies = ReservedPlacementCopies(
                             ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
                             childCounts: childCounts,
@@ -1848,7 +1856,7 @@ public static partial class WorldDefinitionValidator {
             if (
                 !isAnimated &&
                 (placement.Inhabit is null) &&
-                (!isDealtChild || parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true })
+                (!isDealtChild || (parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true }))
             ) {
                 // A scope-free static stamp materializes one engine instance PER SHAPE (the tight-bound emission
                 // split — Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
@@ -2001,8 +2009,8 @@ public static partial class WorldDefinitionValidator {
                     deal: deal,
                     definition: definition,
                     errors: errors,
-                    placement: placement,
                     path: path,
+                    placement: placement,
                     prototypeIds: prototypeIds
                 );
             }
@@ -2045,20 +2053,22 @@ public static partial class WorldDefinitionValidator {
     // show must be a declared static creation, and the template carries none of the facets a child cannot copy.
     private static void ValidatePlacementDeal(WorldPlacementDeal deal, WorldPlacement placement, WorldDefinition definition, HashSet<string> prototypeIds, string path, List<string> errors) {
         var dealPath = $"{path}.deal";
+
         if (deal.Reflow is { } reflow) {
-            if (deal.Preserve?.Transform != true || !HasOccupationSpatial(placement)) {
-                errors.Add($"{dealPath}.reflow requires preserve.transform and an occupation spatial volume.");
+            if ((deal.Preserve?.Transform != true) || !HasOccupationSpatial(placement: placement)) {
+                errors.Add(item: $"{dealPath}.reflow requires preserve.transform and an occupation spatial volume.");
             }
-            if (reflow.CandidateBudget is < 1 or > 65536 || reflow.CostPerMove < 0) {
-                errors.Add($"{dealPath}.reflow requires candidateBudget 1..65536 and nonnegative costPerMove.");
+            if ((reflow.CandidateBudget is < 1 or > 65536) || (reflow.CostPerMove < 0)) {
+                errors.Add(item: $"{dealPath}.reflow requires candidateBudget 1..65536 and nonnegative costPerMove.");
             }
             if (reflow.CostRow is { } costRow) {
                 var payer = WorldDefinitionRows.FindStateRow(definition.State, costRow);
-                if (payer is not { Kind: CellKind.Int } || payer.IsKeyed != (reflow.CostKey is not null)) {
-                    errors.Add($"{dealPath}.reflow.costRow must name an Int row with a matching costKey shape.");
+
+                if ((payer is not { Kind: CellKind.Int }) || (payer.IsKeyed != (reflow.CostKey is not null))) {
+                    errors.Add(item: $"{dealPath}.reflow.costRow must name an Int row with a matching costKey shape.");
                 }
-            } else if (reflow.CostPerMove != 0 || reflow.CostKey is not null) {
-                errors.Add($"{dealPath}.reflow requires costRow for payment.");
+            } else if ((reflow.CostPerMove != 0) || (reflow.CostKey is not null)) {
+                errors.Add(item: $"{dealPath}.reflow requires costRow for payment.");
             }
         }
 
@@ -2138,12 +2148,12 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (!RequireDeclared(
-                value: prototypeId,
                 declaredSet: prototypeIds,
-                path: entryPath,
+                errors: errors,
                 field: string.Empty,
+                path: entryPath,
                 rowNoun: "creation",
-                errors: errors
+                value: prototypeId
             )) {
                 continue;
             }
@@ -2157,9 +2167,8 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-
     private static bool HasOccupationSpatial(WorldPlacement placement) =>
-        placement.Spatial?.Any(static volume => volume.Role == WorldPlacementSpatialRole.Occupation) == true;
+        (placement.Spatial?.Any(predicate: static volume => (volume.Role == WorldPlacementSpatialRole.Occupation)) == true);
     // A deal's row reference: a declared state.world row that is keyed (a slot row deals nothing), of any cell kind.
     private static bool RequireDealtRow(string? name, WorldDefinition definition, string path, List<string> errors, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldStateRow? row) {
         row = null;

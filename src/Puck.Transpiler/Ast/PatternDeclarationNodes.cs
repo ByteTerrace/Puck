@@ -35,7 +35,7 @@ public sealed record PatternSymbolDeclarationNode(
 /// <param name="Match">The language, parsed from the <c>match:</c> text.</param>
 /// <param name="Attribute">The keyed row over a zone's token domain whose cell values form the word, or
 /// <see langword="null"/>.</param>
-/// <param name="Value">The per-token expression's authored infix text, or <see langword="null"/>.</param>
+/// <param name="Value">The parsed per-token operand, or <see langword="null"/>.</param>
 /// <param name="MaximumStates">The authored machine-state budget, or <see langword="null"/> for the default.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
@@ -47,7 +47,7 @@ public sealed record PatternDeclarationNode(
     IReadOnlyList<PatternSymbolDeclarationNode> Symbols,
     PatternNode Match,
     string? Attribute = null,
-    string? Value = null,
+    OperandExpressionNode? Value = null,
     int? MaximumStates = null,
     int Offset = 0,
     int Length = 0,

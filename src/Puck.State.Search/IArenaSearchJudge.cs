@@ -17,6 +17,11 @@ public interface IArenaSearchJudge {
     /// <remarks>A position key folds these beside the rows the plan itself names, so two positions differing only
     /// outside their union transpose.</remarks>
     IReadOnlyList<int> KeyRows { get; }
+    /// <summary>Gets a value indicating whether a verdict or score reads the live tick pair.</summary>
+    /// <remarks>When this is <see langword="true"/>, the search folds the tick pair into its candidate cache keys
+    /// and restarts this job when either value changes. A judge that reads time through a row with value-over-time
+    /// traits need not set it: the search derives that dependency from <see cref="KeyRows"/>.</remarks>
+    bool ReadsTick => false;
     /// <summary>Gets a value indicating whether the judge can score a position.</summary>
     bool Scores { get; }
     /// <summary>Gets how many rules a verdict evaluates, which the caller's own read-back prints.</summary>

@@ -11,6 +11,7 @@ public static partial class WorldConstructs {
         Required: true,
         Summary: "The cell the effect writes, read as one state token."
     );
+
     // The node a `transformState` effect's own arguments sit on: the effect carries one `transform` key, and the
     // arm's fields are that value's.
     private const string TransformNode = "rules[].effects[][transformState].transform";
@@ -52,7 +53,6 @@ public static partial class WorldConstructs {
         ),
         Summary: summary
     );
-
     private static IReadOnlyList<WorldConstruct> Rules() => [
         new(
             DocumentMember: "rules[]",
@@ -116,10 +116,11 @@ public static partial class WorldConstructs {
         ),
         new(
             DocumentMember: "ruleGroups[]",
-            Grammar: "stabilize name [maxPasses(n)] [until Gate] { rule \"name\" { … } … }",
+            Grammar: "stabilize name [undo({ rows: [row], depth: n })] [maxPasses(n)] [until Gate] { rule \"name\" { … } … }",
             Keyword: "stabilize",
             Members: [
                 RowName(summary: "The group's name, prefixed onto every rule it claims."),
+                new(DocumentKeys: ["undo"], Kind: WorldMemberKind.Value, Name: "undo", Position: WorldMemberPosition.Modifier, Summary: "The rows and bounded number of completed turns retained for rewindTurn."),
                 new(
                     DocumentKeys: ["passes"],
                     Kind: WorldMemberKind.Number,
@@ -157,10 +158,11 @@ public static partial class WorldConstructs {
         ),
         new(
             DocumentMember: "ruleGroups[]",
-            Grammar: "workflow name { step name [skip] { … } … }",
+            Grammar: "workflow name [undo({ rows: [row], depth: n })] { step name [skip] { … } … }",
             Keyword: "workflow",
             Members: [
                 RowName(summary: "The group's name, prefixed onto every step it claims."),
+                new(DocumentKeys: ["undo"], Kind: WorldMemberKind.Value, Name: "undo", Position: WorldMemberPosition.Modifier, Summary: "The rows and bounded number of completed turns retained for rewindTurn."),
                 new(
                     DocumentKeys: ["steps"],
                     Kind: WorldMemberKind.Statements,
@@ -230,19 +232,10 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "rules[].locals[]",
             Enclosing: "rule",
-            Grammar: "local name : Int|Fixed = <operand>",
+            Grammar: "local name = <operand>",
             Keyword: "local",
             Members: [
                 RowName(summary: "The local's name, read bare in every operand after it."),
-                new(
-                    Choices: ["Int", "Fixed"],
-                    DocumentKeys: ["kind"],
-                    Kind: WorldMemberKind.CellKind,
-                    Name: "kind",
-                    Position: WorldMemberPosition.Header,
-                    Required: true,
-                    Summary: "The local's domain; omitting it is refused rather than inferred."
-                ),
                 new(
                     DocumentKeys: ["expression"],
                     Kind: WorldMemberKind.Operand,
@@ -253,8 +246,8 @@ public static partial class WorldConstructs {
                 ),
             ],
             Shape: WorldConstructShape.Statement,
-            Snippet: "local ${1:name} : ${2|Int,Fixed|} = ${3:expression}",
-            Sugar: new(Fallback: "the explicit `locals` array", Open: true),
+            Snippet: "local ${1:name} = ${2:expression}",
+            Sugar: new(AdmittedKeys: ["kind"], Fallback: "the explicit `locals` array", Open: true),
             Summary: "One working value the rule computes before its effects."
         ),
         new(
@@ -372,6 +365,63 @@ public static partial class WorldConstructs {
             Summary: "A batch of effects that commits as one and rewinds as one."
         ),
         new(
+            DocumentMember: "rules[].effects[][claim]",
+            Enclosing: "rule",
+            Grammar: "claim pool as binding { <effect>* }",
+            Keyword: "claim",
+            Members: [
+                new(DocumentKeys: ["pool"], Kind: WorldMemberKind.Reference, Name: "pool", Position: WorldMemberPosition.Header, Required: true, Summary: "The pool to allocate from."),
+                new(DocumentKeys: ["binding"], Kind: WorldMemberKind.Reference, Name: "binding", Position: WorldMemberPosition.Header, Required: true, Summary: "The lexical name for the claimed instance."),
+                new(DocumentKeys: ["effects"], Kind: WorldMemberKind.Statements, Name: "effects", Position: WorldMemberPosition.Body, Required: true, Summary: "The effects evaluated with the claimed binding in scope."),
+            ],
+            Shape: WorldConstructShape.Block,
+            Snippet: "claim ${1:pool} as ${2:item} {\n    $0\n}",
+            Sugar: new(Fallback: "the call-form escape hatch", Open: true),
+            Summary: "Claims one available instance and binds its fields for nested effects."
+        ),
+        new(
+            DocumentMember: "rules[].effects[][claimPair]",
+            Enclosing: "rule",
+            Grammar: "claim pair pool between left, right as binding { <effect>* }",
+            Keyword: "claim pair",
+            Members: [
+                new(DocumentKeys: ["pool"], Kind: WorldMemberKind.Reference, Name: "pool", Position: WorldMemberPosition.Header, Required: true, Summary: "The pair pool to allocate from."),
+                new(DocumentKeys: ["left", "right"], Kind: WorldMemberKind.Reference, Name: "endpoints", Position: WorldMemberPosition.Header, Required: true, Summary: "The bound instances used as relationship endpoints."),
+                new(DocumentKeys: ["binding"], Kind: WorldMemberKind.Reference, Name: "binding", Position: WorldMemberPosition.Header, Required: true, Summary: "The lexical name for the claimed relationship."),
+                new(DocumentKeys: ["effects"], Kind: WorldMemberKind.Statements, Name: "effects", Position: WorldMemberPosition.Body, Required: true, Summary: "The effects evaluated with the relationship binding in scope."),
+            ],
+            Shape: WorldConstructShape.Block,
+            Snippet: "claim pair ${1:pool} between ${2:left}, ${3:right} as ${4:pair} {\n    $0\n}",
+            Sugar: new(Fallback: "the call-form escape hatch", Open: true),
+            Summary: "Claims one relationship between two bound record instances."
+        ),
+        new(
+            DocumentMember: "rules[].effects[][forEachPool]",
+            Enclosing: "rule",
+            Grammar: "for each binding in pool { <effect>* }",
+            Keyword: "for each",
+            Members: [
+                new(DocumentKeys: ["pool"], Kind: WorldMemberKind.Reference, Name: "pool", Position: WorldMemberPosition.Header, Required: true, Summary: "The pool whose live instances are visited."),
+                new(DocumentKeys: ["binding"], Kind: WorldMemberKind.Reference, Name: "binding", Position: WorldMemberPosition.Header, Required: true, Summary: "The lexical name for the current instance."),
+                new(DocumentKeys: ["effects"], Kind: WorldMemberKind.Statements, Name: "effects", Position: WorldMemberPosition.Body, Required: true, Summary: "The effects evaluated once for each live instance."),
+            ],
+            Shape: WorldConstructShape.Block,
+            Snippet: "for each ${1:item} in ${2:pool} {\n    $0\n}",
+            Sugar: new(Fallback: "the call-form escape hatch", Open: true),
+            Summary: "Visits every live instance in ascending slot order."
+        ),
+        new(
+            DocumentMember: "rules[].effects[][release]",
+            Enclosing: "rule",
+            Grammar: "release binding",
+            Keyword: "release",
+            Members: [new(DocumentKeys: ["binding"], Kind: WorldMemberKind.Reference, Name: "binding", Position: WorldMemberPosition.Header, Required: true, Summary: "The lexical instance binding to release.")],
+            Shape: WorldConstructShape.Statement,
+            Snippet: "release $0",
+            Sugar: new(Fallback: "the call-form escape hatch", Open: true),
+            Summary: "Releases the instance named by a lexical pool binding."
+        ),
+        new(
             DocumentMember: "rules[].effects[][transaction].onFailure",
             Enclosing: "transaction",
             Grammar: "onFailure { <effect>* }",
@@ -437,13 +487,6 @@ public static partial class WorldConstructs {
             ],
             snippet: "push ${1:row} = ${2:value}",
             summary: "Appends a value to an ordered row, minting its key."
-        ),
-        Effect(
-            documentMember: "rules[].effects[][countdownState]",
-            grammar: "countdown row[key]",
-            keyword: "countdown",
-            snippet: "countdown ${1:row}",
-            summary: "Decrements a cell toward zero and stops there."
         ),
         Effect(
             documentMember: "rules[].effects[][removeStateCell]",
@@ -581,7 +624,7 @@ public static partial class WorldConstructs {
                     Kind: WorldMemberKind.Number,
                     Name: "maxStates",
                     Position: WorldMemberPosition.Property,
-                    Summary: "The derivative machine's state budget, inside 1 to 256."
+                    Summary: "The derivative machine's state budget, inside 1 to 1,024."
                 ),
                 new(
                     DocumentKeys: ["symbols"],
@@ -660,22 +703,57 @@ public static partial class WorldConstructs {
             Grammar: "record Name { field: Kind … }",
             Keyword: "record",
             Members: [
-                RowName(summary: "The record's name, which a `table name : Name` declaration expands against."),
+                RowName(summary: "The record's name, which a `pool name of Name` declaration instantiates."),
                 new(
                     DocumentKeys: [],
                     Kind: WorldMemberKind.Statements,
-                    Lowering: "one `state.world[]` row per field of every table declared against the record",
+                    Lowering: "one field descriptor in `state.records[]`",
                     Name: "fields",
                     Position: WorldMemberPosition.Body,
                     Required: true,
-                    Summary: "The fields, each minting one `<table>_<field>` row over the table's own keys."
+                    Summary: "The fields that every instance of a pool using this record carries."
                 ),
             ],
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Block,
             Snippet: "record ${1:Name} {\n    ${2:field}: ${3|Int,Fixed,Bool,Text|}\n}",
             Sugar: WorldConstructSugar.None,
-            Summary: "One field set a table expands into prefixed rows at compile time."
+            Summary: "A typed field set instantiated by pools."
+        ),
+        new(
+            DocumentMember: "state.pools[]",
+            Grammar: "pool name of Record capacity(capacity) = [{ field: value … } …]",
+            Keyword: "pool",
+            Members: [
+                RowName(summary: "The pool's stable name."),
+                new(DocumentKeys: ["record"], Kind: WorldMemberKind.Reference, Name: "record", Position: WorldMemberPosition.Header, Required: true, Summary: "The record type shared by every instance."),
+                new(DocumentKeys: ["capacity"], Kind: WorldMemberKind.Number, Name: "slots", Position: WorldMemberPosition.Header, Required: true, Summary: "The positive maximum number of simultaneously live instances."),
+                new(DocumentKeys: ["initial"], Kind: WorldMemberKind.Value, Name: "initial", Position: WorldMemberPosition.Body, Summary: "Static slot seeds, each overriding selected record fields."),
+            ],
+            RootArm: WorldRootArm.State,
+            Shape: WorldConstructShape.Declaration,
+            Snippet: "pool ${1:name} of ${2:Record} capacity(${3:capacity}) = [\n    $0\n]",
+            Sugar: WorldConstructSugar.None,
+            Summary: "Declares a bounded typed instance pool with optional static seeds."
+        ),
+        new(
+            DocumentMember: "state.pairPools[]",
+            Grammar: "pairPool name record Record left Pool right Pool maxLive n directed flag allowSelf flag",
+            Keyword: "pairPool",
+            Members: [
+                RowName(summary: "The pair pool's stable name."),
+                new(DocumentKeys: ["record"], Kind: WorldMemberKind.Reference, Name: "record", Position: WorldMemberPosition.Header, Required: true, Summary: "The record type shared by every relationship."),
+                new(DocumentKeys: ["leftPool"], Kind: WorldMemberKind.Reference, Name: "left", Position: WorldMemberPosition.Header, Required: true, Summary: "The pool supplying each left endpoint."),
+                new(DocumentKeys: ["rightPool"], Kind: WorldMemberKind.Reference, Name: "right", Position: WorldMemberPosition.Header, Required: true, Summary: "The pool supplying each right endpoint."),
+                new(DocumentKeys: ["maxLive"], Kind: WorldMemberKind.Number, Name: "maxLive", Position: WorldMemberPosition.Header, Required: true, Summary: "The positive maximum number of live relationships."),
+                new(DocumentKeys: ["directed"], Kind: WorldMemberKind.Flag, Name: "directed", Position: WorldMemberPosition.Header, Summary: "Whether endpoint order distinguishes relationships."),
+                new(DocumentKeys: ["allowSelf"], Kind: WorldMemberKind.Flag, Name: "allowSelf", Position: WorldMemberPosition.Header, Summary: "Whether both endpoints may name the same instance."),
+            ],
+            RootArm: WorldRootArm.State,
+            Shape: WorldConstructShape.Declaration,
+            Snippet: "pairPool ${1:name} record ${2:Record} left ${3:left} right ${4:right} maxLive ${5:capacity} directed true allowSelf false",
+            Sugar: WorldConstructSugar.None,
+            Summary: "Declares a bounded pool of relationships between two ordinary pools."
         ),
         new(
             DocumentMember: "(nothing)",

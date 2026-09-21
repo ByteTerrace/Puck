@@ -71,6 +71,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkV = 0x56;
     private const int VkZ = 0x5A;
     private const uint WmChar = 0x0102;
+    private const uint WmCancelMode = 0x001F;
+    private const uint WmCaptureChanged = 0x0215;
     private const uint WmClose = 0x0010;
     private const uint WmDestroy = 0x0002;
     private const uint WmDisplayChange = 0x007E;
@@ -114,18 +116,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const ushort HidUsagePageGeneric = 0x01;
     private const ushort RiMouseMoveAbsolute = 0x01;
     private const ushort RiMouseVirtualDesktop = 0x02;
-    private const ushort RiMouseButton1Down = 0x0001;
-    private const ushort RiMouseButton1Up = 0x0002;
-    private const ushort RiMouseButton2Down = 0x0004;
-    private const ushort RiMouseButton2Up = 0x0008;
-    private const ushort RiMouseButton3Down = 0x0010;
-    private const ushort RiMouseButton3Up = 0x0020;
-    private const ushort RiMouseButton4Down = 0x0040;
-    private const ushort RiMouseButton4Up = 0x0080;
-    private const ushort RiMouseButton5Down = 0x0100;
-    private const ushort RiMouseButton5Up = 0x0200;
-    private const ushort RiMouseWheel = 0x0400;
-    private const ushort RiMouseHWheel = 0x0800;
     // RAWKEYBOARD.Flags: RI_KEY_BREAK (a release, vs. a make/press) and RI_KEY_E0 (the same left/right-disambiguating
     // extended-key bit WM_KEYDOWN's lParam bit 24 carries).
     private const ushort RiKeyBreak = 0x0001;
@@ -138,8 +128,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     // tablet, RDP) is normalized against. RAWMOUSE.Flags selects which space applies.
     private const int SmCxScreen = 0;
     private const int SmCyScreen = 1;
-    private const int SmXVirtualScreen = 76;
-    private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
     // WM_SETICON wParam.
@@ -175,7 +163,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     // One RAWKEYBOARD-fed BYTE[256] per physical keyboard handle, threaded into ToUnicodeEx so a dead key or a
     // held Shift on one keyboard never leaks into another's text derivation.
     private readonly Dictionary<nint, byte[]> m_rawKeyStates = new();
-    // One accumulated pointer per physical mouse handle — position, pending delta, and absolute-report tracking.
+    // Raw motion remains per device. Windows owns one aggregate cursor, including its buttons and wheel.
     private readonly Dictionary<nint, RawMouseState> m_rawMouseStates = new();
 
     private bool m_disposed;
@@ -186,6 +174,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
     private bool m_isVisible;
     private Vector2 m_frameMouseDelta;
+    private int m_pointerButtons;
     private bool m_pointerPositionDirty;
     private bool m_rawKeyboardRegistered;
     private bool m_rawMouseRegistered;
@@ -202,8 +191,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         public int? LastAbsoluteX;
         public int? LastAbsoluteY;
         public Vector2 PendingDelta;
-        public Vector2 Position;
-        public bool PositionDirty;
     }
 
     public Win32NativeWindow(IClipboardService clipboardService, IOptions<NativeWindowOptions> options) {
@@ -286,47 +273,25 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
     private void FlushPointerFrame() {
         if (!m_rawMouseRegistered) {
-            // Fallback path: raw mouse registration failed, so WM_MOUSEMOVE/WM_*BUTTON* fed these two legacy
-            // accumulators instead (see HandleMouseMove) — one aggregate, device-less pointer, exactly as before
-            // every mouse carried its own identity.
             if (m_frameMouseDelta != Vector2.Zero) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: m_frameMouseDelta));
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(m_frameMouseDelta));
                 m_frameMouseDelta = Vector2.Zero;
             }
-
-            if (
-                m_pointerPositionDirty &&
-                (m_lastMouseX is { } absoluteX) &&
-                (m_lastMouseY is { } absoluteY)
-            ) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(position: new Vector2(
-                    x: absoluteX,
-                    y: absoluteY
-                )));
-                m_pointerPositionDirty = false;
+        } else {
+            // Raw motion is accumulated once per physical device per frame.
+            foreach (var state in m_rawMouseStates.Values) {
+                if (state.PendingDelta != Vector2.Zero) {
+                    m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: state.PendingDelta, deviceId: state.DeviceId));
+                    state.PendingDelta = Vector2.Zero;
+                }
             }
-
-            return;
         }
-
-        // At most one PointerDelta and one PointerPosition PER DEVICE per frame, so a high-rate mouse that produced
-        // many WM_INPUT packets collapses to a single report each observer sees once.
-        foreach (var state in m_rawMouseStates.Values) {
-            if (state.PendingDelta != Vector2.Zero) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(
-                    delta: state.PendingDelta,
-                    deviceId: state.DeviceId
-                ));
-                state.PendingDelta = Vector2.Zero;
-            }
-
-            if (state.PositionDirty) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(
-                    deviceId: state.DeviceId,
-                    position: state.Position
-                ));
-                state.PositionDirty = false;
-            }
+        FlushPointerPosition();
+    }
+    private void FlushPointerPosition() {
+        if (m_pointerPositionDirty && (m_lastMouseX is { } x) && (m_lastMouseY is { } y)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(new Vector2(x: x, y: y)));
+            m_pointerPositionDirty = false;
         }
     }
 
@@ -377,6 +342,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         if (m_disposed) {
             return;
         }
+
+        ReleasePointerCapture();
 
         if (m_windowHandle != 0) {
             _ = User32.DestroyWindow(windowHandle: m_windowHandle);
@@ -546,8 +513,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
     // Registers the generic mouse AND the generic keyboard for raw input (flags 0 = follow focus, foreground only;
     // the launcher focus-gates anyway), independently — one class's registration failing never withholds the
-    // other. On failure, the corresponding m_raw*Registered flag stays false and the legacy WM_MOUSEMOVE/WM_KEYDOWN/
-    // WM_CHAR path takes over for that class instead (see HandleMouseMove, HandleKeyDown/Up, HandleCharacterInput).
+    // other. On failure, WM_MOUSEMOVE supplies the relative-motion fallback and WM_KEYDOWN/WM_CHAR supplies the
+    // keyboard fallback. The shared cursor's absolute position, buttons, and wheel always use window messages.
     private void RegisterRawInput(nint windowHandle) {
         m_rawMouseRegistered = RegisterRawInputDevice(
             usage: HidUsageGenericMouse,
@@ -604,6 +571,18 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                     windowHandle: windowHandle
                 );
             case WmKillFocus:
+                CancelPointerButtons();
+                ReleasePointerCapture();
+                m_lastMouseX = null;
+                m_lastMouseY = null;
+                m_pointerPositionDirty = false;
+                m_frameMouseDelta = Vector2.Zero;
+                foreach (var state in m_rawMouseStates.Values) {
+                    state.LastAbsoluteX = null;
+                    state.LastAbsoluteY = null;
+                    state.PendingDelta = Vector2.Zero;
+                }
+
                 // OS window focus loss (Alt-Tab away, click-away): a modifier key's own release can be delivered
                 // to whatever window just stole focus and never reach this process at all, permanently stranding
                 // a slot's chord tracker mid-page (the pre-existing lt/rt trigger modifiers self-heal because an
@@ -611,6 +590,13 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 // re-asserts). Surfaced through the same TryDequeueInput path as every other window event so the
                 // pump can release every held command AND every slot's chord state in one place.
                 m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
+                return 0;
+            case WmCancelMode:
+                CancelPointerButtons();
+                ReleasePointerCapture();
+                return 0;
+            case WmCaptureChanged:
+                CancelPointerButtons();
                 return 0;
             case WmShowWindow:
                 m_isVisible = (wParam != 0);
@@ -685,31 +671,35 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             case WmLButtonDown:
                 return HandlePointerButtonDown(
                     button: 0,
+                    lParam: lParam,
                     windowHandle: windowHandle
                 );
             case WmLButtonUp:
-                return HandlePointerButtonUp(button: 0);
+                return HandlePointerButtonUp(button: 0, lParam: lParam);
             case WmRButtonDown:
                 return HandlePointerButtonDown(
                     button: 1,
+                    lParam: lParam,
                     windowHandle: windowHandle
                 );
             case WmRButtonUp:
-                return HandlePointerButtonUp(button: 1);
+                return HandlePointerButtonUp(button: 1, lParam: lParam);
             case WmMButtonDown:
                 return HandlePointerButtonDown(
                     button: 2,
+                    lParam: lParam,
                     windowHandle: windowHandle
                 );
             case WmMButtonUp:
-                return HandlePointerButtonUp(button: 2);
+                return HandlePointerButtonUp(button: 2, lParam: lParam);
             case WmXButtonDown:
                 return HandlePointerButtonDown(
                     button: XButtonIndex(wParam: wParam),
+                    lParam: lParam,
                     windowHandle: windowHandle
                 );
             case WmXButtonUp:
-                return HandlePointerButtonUp(button: XButtonIndex(wParam: wParam));
+                return HandlePointerButtonUp(button: XButtonIndex(wParam: wParam), lParam: lParam);
             case WmClose:
                 _ = User32.DestroyWindow(windowHandle: windowHandle);
                 return 0;
@@ -1052,8 +1042,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         if (raw.Header.Type == RimTypeMouse) {
             HandleRawMouse(
                 deviceHandle: raw.Header.DeviceHandle,
-                mouse: in raw.Data.Mouse,
-                windowHandle: windowHandle
+                mouse: in raw.Data.Mouse
             );
         } else if (raw.Header.Type == RimTypeKeyboard) {
             HandleRawKeyboard(
@@ -1078,8 +1067,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             windowHandle: windowHandle
         );
     }
-    // Resolves (creating on first sight) a physical mouse's accumulated pointer state, seeded at the client centre
-    // so its first PointerPosition report is a sane on-screen value rather than the client origin.
+    // Resolves (creating on first sight) a physical mouse's accumulated pointer state.
     private RawMouseState GetOrCreateRawMouseState(nint deviceHandle) {
         if (!m_rawMouseStates.TryGetValue(
             key: deviceHandle,
@@ -1087,208 +1075,41 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         )) {
             state = new RawMouseState {
                 DeviceId = ResolveRawDeviceId(deviceHandle: deviceHandle),
-                Position = new Vector2(
-                x: (Width / 2f),
-                y: (Height / 2f)
-            ),
             };
             m_rawMouseStates[deviceHandle] = state;
         }
 
         return state;
     }
-    private void HandleRawMouse(nint deviceHandle, nint windowHandle, in RawMouse mouse) {
+    private void HandleRawMouse(nint deviceHandle, in RawMouse mouse) {
         var state = GetOrCreateRawMouseState(deviceHandle: deviceHandle);
 
         // Absolute mode (RDP / VMs / tablets / touch-as-mouse): LastX/LastY are absolute normalized coordinates
-        // across the virtual desktop, not deltas. The relative-delta report stays in raw device units (matching
-        // the relative-mode branch below); the accumulated on-screen POSITION is translated onto the client rect
-        // and clamped to it independently.
+        // across the declared desktop. Difference in that coordinate space before scaling to pixels: moving
+        // the window must not manufacture device motion, and subpixel differences must not be truncated.
         if ((mouse.Flags & RiMouseMoveAbsolute) != 0) {
             if (
                 (state.LastAbsoluteX is { } previousX) &&
                 (state.LastAbsoluteY is { } previousY)
             ) {
+                var virtualDesktop = ((mouse.Flags & RiMouseVirtualDesktop) != 0);
+
                 state.PendingDelta += new Vector2(
-                    x: (mouse.LastX - previousX),
-                    y: (mouse.LastY - previousY)
+                    (((mouse.LastX - previousX) / 65535f) * User32.GetSystemMetrics((virtualDesktop ? SmCxVirtualScreen : SmCxScreen))),
+                    (((mouse.LastY - previousY) / 65535f) * User32.GetSystemMetrics((virtualDesktop ? SmCyVirtualScreen : SmCyScreen)))
                 );
             }
 
             state.LastAbsoluteX = mouse.LastX;
             state.LastAbsoluteY = mouse.LastY;
-            state.Position = ClampToClient(position: TranslateAbsoluteRawMouse(
-                flags: mouse.Flags,
-                rawX: mouse.LastX,
-                rawY: mouse.LastY,
-                windowHandle: windowHandle
-            ));
         } else {
             state.LastAbsoluteX = null;
             state.LastAbsoluteY = null;
 
-            var delta = new Vector2(
+            state.PendingDelta += new Vector2(
                 x: mouse.LastX,
                 y: mouse.LastY
             );
-
-            state.PendingDelta += delta;
-            state.Position = ClampToClient(position: (state.Position + delta));
-        }
-
-        state.PositionDirty = true;
-
-        if (mouse.ButtonFlags != 0) {
-            HandleRawMouseButtons(
-                buttonData: mouse.ButtonData,
-                buttonFlags: mouse.ButtonFlags,
-                state: state,
-                windowHandle: windowHandle
-            );
-        }
-    }
-    private Vector2 ClampToClient(Vector2 position) {
-        return new Vector2(
-            x: Math.Clamp(
-                value: position.X,
-                min: 0f,
-                max: Width
-            ),
-            y: Math.Clamp(
-                value: position.Y,
-                min: 0f,
-                max: Height
-            )
-        );
-    }
-    // Maps a RAWMOUSE absolute report (normalized 0..65535) against the primary desktop by default, or the full
-    // virtual desktop only when the packet sets MOUSE_VIRTUAL_DESKTOP, then converts to client-relative pixels.
-    private static Vector2 TranslateAbsoluteRawMouse(nint windowHandle, int rawX, int rawY, ushort flags) {
-        var clientOrigin = new Point();
-
-        _ = User32.ClientToScreen(
-            point: ref clientOrigin,
-            windowHandle: windowHandle
-        );
-
-        return Win32RawInput.TranslateAbsolutePointer(
-            clientOrigin: new Vector2(
-                x: clientOrigin.X,
-                y: clientOrigin.Y
-            ),
-            primaryDesktop: new Win32DesktopBounds(
-                Left: 0,
-                Top: 0,
-                Width: User32.GetSystemMetrics(index: SmCxScreen),
-                Height: User32.GetSystemMetrics(index: SmCyScreen)
-            ),
-            rawX: rawX,
-            rawY: rawY,
-            usesVirtualDesktop: ((flags & RiMouseVirtualDesktop) != 0),
-            virtualDesktop: new Win32DesktopBounds(
-                Left: User32.GetSystemMetrics(index: SmXVirtualScreen),
-                Top: User32.GetSystemMetrics(index: SmYVirtualScreen),
-                Width: User32.GetSystemMetrics(index: SmCxVirtualScreen),
-                Height: User32.GetSystemMetrics(index: SmCyVirtualScreen)
-            )
-        );
-    }
-    private void HandleRawMouseButtons(RawMouseState state, nint windowHandle, ushort buttonFlags, ushort buttonData) {
-        ApplyRawMouseButton(
-            button: 0,
-            buttonFlags: buttonFlags,
-            downFlag: RiMouseButton1Down,
-            state: state,
-            upFlag: RiMouseButton1Up,
-            windowHandle: windowHandle
-        );
-        ApplyRawMouseButton(
-            button: 1,
-            buttonFlags: buttonFlags,
-            downFlag: RiMouseButton2Down,
-            state: state,
-            upFlag: RiMouseButton2Up,
-            windowHandle: windowHandle
-        );
-        ApplyRawMouseButton(
-            button: 2,
-            buttonFlags: buttonFlags,
-            downFlag: RiMouseButton3Down,
-            state: state,
-            upFlag: RiMouseButton3Up,
-            windowHandle: windowHandle
-        );
-        ApplyRawMouseButton(
-            button: 3,
-            buttonFlags: buttonFlags,
-            downFlag: RiMouseButton4Down,
-            state: state,
-            upFlag: RiMouseButton4Up,
-            windowHandle: windowHandle
-        );
-        ApplyRawMouseButton(
-            button: 4,
-            buttonFlags: buttonFlags,
-            downFlag: RiMouseButton5Down,
-            state: state,
-            upFlag: RiMouseButton5Up,
-            windowHandle: windowHandle
-        );
-
-        // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at
-        // human cadence, so each one is enqueued as it arrives. The delta rides ButtonData as a SIGNED quantum
-        // (positive = away from the user) — the same WHEEL_DELTA convention WM_MOUSEWHEEL's high word used.
-        if ((buttonFlags & RiMouseWheel) != 0) {
-            var notches = (unchecked((short)buttonData) / WheelDelta);
-
-            if (notches != 0f) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
-                    deviceId: state.DeviceId,
-                    notches: notches
-                ));
-            }
-        }
-
-        if ((buttonFlags & RiMouseHWheel) != 0) {
-            var notches = (unchecked((short)buttonData) / WheelDelta);
-
-            if (notches != 0f) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
-                    deviceId: state.DeviceId,
-                    notches: new Vector2(
-                        x: notches,
-                        y: 0f
-                    )
-                ));
-            }
-        }
-    }
-    // A left-button press captures the mouse: the OS then keeps routing raw reports to this window even after the
-    // pointer leaves the client area (or the whole window), so a drag that starts inside and ends outside still
-    // streams moves and the matching release edge, instead of going silent the moment the cursor crosses the
-    // border. Only the left button captures — see HandlePointerButtonDown's own remarks (the legacy-fallback twin
-    // of this same rule).
-    private void ApplyRawMouseButton(RawMouseState state, nint windowHandle, ushort downFlag, ushort upFlag, int button, ushort buttonFlags) {
-        if ((buttonFlags & downFlag) != 0) {
-            if (button == 0) {
-                _ = User32.SetCapture(windowHandle: windowHandle);
-            }
-
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
-                button: button,
-                deviceId: state.DeviceId,
-                phase: CommandPhase.Started
-            ));
-        } else if ((buttonFlags & upFlag) != 0) {
-            if (button == 0) {
-                _ = User32.ReleaseCapture();
-            }
-
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
-                button: button,
-                deviceId: state.DeviceId,
-                phase: CommandPhase.Completed
-            ));
         }
     }
     private void HandleRawKeyboard(nint deviceHandle, in RawKeyboard keyboard) {
@@ -1456,15 +1277,14 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
     }
     private nint HandleMouseMove(nint lParam) {
-        if (m_rawMouseRegistered) {
-            // Position and delta come entirely from the raw stream when it is available — see HandleRawMouse.
-            return 0;
-        }
-
         var mouseX = GetSignedLowWord(value: lParam);
         var mouseY = GetSignedHighWord(value: lParam);
 
+        // WM_MOUSEMOVE owns the absolute position (PointerAbsolute). It only owns the relative delta as a
+        // fallback when raw input could not be registered — otherwise WM_INPUT is the single delta emitter,
+        // so the two never both feed the pump-level accumulator for the same motion.
         if (
+            !m_rawMouseRegistered &&
             (m_lastMouseX is { } lastMouseX) &&
             (m_lastMouseY is { } lastMouseY)
         ) {
@@ -1479,31 +1299,31 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_pointerPositionDirty = true;
         return 0;
     }
+    // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at
+    // human cadence, so each one is enqueued as it arrives and consumers accumulate what they care about. The
+    // delta rides the SIGNED high word of wParam (positive = away from the user) — an unsigned read would turn
+    // every scroll toward the user into a large positive number.
     private nint HandleMouseWheel(nint wParam) {
-        if (m_rawMouseRegistered) {
-            return 0;
-        }
-
         var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
 
         if (notches != 0f) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: notches));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
+                notches: notches
+            ));
         }
 
         return 0;
     }
     private nint HandleMouseHWheel(nint wParam) {
-        if (m_rawMouseRegistered) {
-            return 0;
-        }
-
         var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
 
         if (notches != 0f) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: new Vector2(
-                x: notches,
-                y: 0f
-            )));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
+                notches: new Vector2(
+                    x: notches,
+                    y: 0f
+                )
+            ));
         }
 
         return 0;
@@ -1513,16 +1333,16 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private static int XButtonIndex(nint wParam) {
         return (2 + unchecked((ushort)(wParam.ToInt64() >> 16)));
     }
-    // Legacy button fallback — only live when raw mouse registration failed (see HandleRawMouseButtons for the
-    // normal, per-device door). A left-button press captures the mouse the same way; see that method's own remarks.
-    private nint HandlePointerButtonDown(int button, nint windowHandle) {
-        if (m_rawMouseRegistered) {
-            return 0;
-        }
-
-        if (button == 0) {
+    // Keep receiving releases outside the client while any aggregate pointer button is held. WM_*BUTTON* has
+    // no physical device identity; guessing the last WM_INPUT device can strand a held command on another mouse.
+    private nint HandlePointerButtonDown(int button, nint windowHandle, nint lParam) {
+        SetPointerPosition(lParam: lParam);
+        FlushPointerPosition();
+        if ((m_pointerButtons & (1 << button)) != 0) { return 0; }
+        if (m_pointerButtons == 0) {
             _ = User32.SetCapture(windowHandle: windowHandle);
         }
+        m_pointerButtons |= (1 << button);
 
         m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
             button: button,
@@ -1530,20 +1350,38 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         ));
         return 0;
     }
-    private nint HandlePointerButtonUp(int button) {
-        if (m_rawMouseRegistered) {
-            return 0;
-        }
-
-        if (button == 0) {
-            _ = User32.ReleaseCapture();
-        }
-
+    private nint HandlePointerButtonUp(int button, nint lParam) {
+        SetPointerPosition(lParam: lParam);
+        FlushPointerPosition();
+        if ((m_pointerButtons & (1 << button)) == 0) { return 0; }
+        m_pointerButtons &= ~(1 << button);
         m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
             button: button,
             phase: CommandPhase.Completed
         ));
+        if (m_pointerButtons == 0) { ReleasePointerCapture(); }
         return 0;
+    }
+    private void SetPointerPosition(nint lParam) {
+        m_lastMouseX = GetSignedLowWord(value: lParam);
+        m_lastMouseY = GetSignedHighWord(value: lParam);
+        m_pointerPositionDirty = true;
+    }
+    private void CancelPointerButtons() {
+        var held = m_pointerButtons;
+
+        m_pointerButtons = 0;
+        for (var button = 0; (button < 5); button++) {
+            if ((held & (1 << button)) != 0) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button, CommandPhase.Completed));
+            }
+        }
+    }
+    private void ReleasePointerCapture() {
+        // ReleaseCapture acts on the calling thread, not on this instance.
+        if ((m_windowHandle != 0) && (User32.GetCapture() == m_windowHandle)) {
+            _ = User32.ReleaseCapture();
+        }
     }
 
     internal static nint CreateFullscreenWindowStyle(nint currentStyle) {

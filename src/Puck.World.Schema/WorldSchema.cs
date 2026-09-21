@@ -1860,12 +1860,27 @@ public static partial class WorldSchema {
     private sealed class NestedExports {
         public Dictionary<Type, JsonNode> First { get; } = [];
         public List<(Type Type, JsonObject Placeholder)> Later { get; } = [];
+        // The types whose first export is still being built. A shape that reaches itself through its own members (a
+        // channel reference's expression argument reads channel references) refers back to that export.
+        public HashSet<Type> Open { get; } = [];
     }
+
+    // The types an export that hoists nothing is inside of. It has no first export to point back at, so a shape that
+    // reaches itself is left open at the point it recurs and described where it first appears.
+    [ThreadStatic]
+    private static HashSet<Type>? InlineOpen;
 
     private static JsonNode ExportNested(Type type, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (
+            (nested is null) &&
+            !(InlineOpen ??= []).Add(item: type)
+        ) {
+            return new JsonObject { ["$comment"] = $"{type.Name} holds itself here; its shape is the one described where it first appears." };
+        }
+
+        if (
             (nested is not null) &&
-            nested.First.ContainsKey(key: type)
+            (nested.First.ContainsKey(key: type) || nested.Open.Contains(item: type))
         ) {
             var placeholder = new JsonObject();
 
@@ -1884,11 +1899,17 @@ public static partial class WorldSchema {
         ),
             TreatNullObliviousAsNonNullable = true,
         };
+        _ = nested?.Open.Add(item: type);
+
         var exported = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
             type: type
         );
 
+        _ = nested?.Open.Remove(item: type);
+        if (nested is null) {
+            _ = InlineOpen!.Remove(item: type);
+        }
         nested?.First.Add(
             key: type,
             value: exported

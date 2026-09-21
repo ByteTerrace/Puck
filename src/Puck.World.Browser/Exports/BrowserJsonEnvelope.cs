@@ -20,6 +20,8 @@ public readonly record struct BrowserStateHashResult(bool Ok, [property: JsonCon
 public readonly record struct BrowserCellsResult(bool Ok, IReadOnlyList<BrowserCellGeometry>? Cells, string? Error);
 /// <summary>The <c>Rows</c> export's result envelope.</summary>
 public readonly record struct BrowserRowsResult(bool Ok, IReadOnlyList<BrowserRowSnapshot>? Rows, string? Error);
+/// <summary>The <c>Costs</c> export's result envelope.</summary>
+public readonly record struct BrowserCostsResult(bool Ok, BrowserCostReport? Report, string? Error);
 /// <summary>The <c>Judge</c> export's result envelope.</summary>
 public readonly record struct BrowserJudgeExportResult(bool Ok, BrowserJudgeResult? Trace, string? Error);
 /// <summary>The <c>ComposeTree</c> export's result envelope — the same shape <see cref="BrowserComposeResult"/>
@@ -30,6 +32,7 @@ public readonly record struct BrowserComposeExportResult(bool Ok, string? Compos
 /// two different exports' output sees consistent property naming (camelCase) throughout.</summary>
 [JsonSerializable(typeof(BrowserVersion))]
 [JsonSerializable(typeof(BrowserParseResult))]
+[JsonSerializable(typeof(BrowserCostAnalysisResult))]
 [JsonSerializable(typeof(BrowserCompileResult))]
 [JsonSerializable(typeof(BrowserOutcome))]
 [JsonSerializable(typeof(BrowserCellValue))]
@@ -38,6 +41,7 @@ public readonly record struct BrowserComposeExportResult(bool Ok, string? Compos
 [JsonSerializable(typeof(BrowserStateHashResult))]
 [JsonSerializable(typeof(BrowserCellsResult))]
 [JsonSerializable(typeof(BrowserRowsResult))]
+[JsonSerializable(typeof(BrowserCostsResult))]
 [JsonSerializable(typeof(BrowserJudgeExportResult))]
 [JsonSerializable(typeof(BrowserComposeExportResult))]
 [JsonSerializable(typeof(Dictionary<string, string>))]

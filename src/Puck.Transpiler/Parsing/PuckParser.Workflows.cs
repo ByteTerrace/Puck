@@ -42,6 +42,7 @@ public static partial class PuckParser {
         }
 
         ExpressionNode? maxPasses = null;
+        ExpressionNode? undo = null;
         PredicateNode? untilCondition = null;
 
         SkipWhiteSpace(context: context);
@@ -57,6 +58,11 @@ public static partial class PuckParser {
                 } else if (TryConsume(c: ':', context: context) || TryConsume(c: '=', context: context)) {
                     maxPasses = ParseExpression(context: context);
                 }
+            } else if (TryMatchKeyword(context: context, keyword: "undo")) {
+                if (undo is not null) {
+                    throw CreateException(context: context, message: "An undo modifier may be declared only once");
+                }
+                undo = ParseUndoModifier(context: context);
             } else if (TryMatchKeyword(context: context, keyword: "until")) {
                 SkipWhiteSpace(context: context);
                 untilCondition = ParseGate(context: context, diagnostics: diagnostics);
@@ -97,6 +103,7 @@ public static partial class PuckParser {
             Name: name,
             Offset: startOffset,
             Statements: statements,
+            Undo: undo,
             UntilCondition: untilCondition
         );
     }
@@ -109,6 +116,12 @@ public static partial class PuckParser {
         }
 
         SkipWhiteSpace(context: context);
+        ExpressionNode? undo = null;
+
+        if (TryMatchKeyword(context: context, keyword: "undo")) {
+            undo = ParseUndoModifier(context: context);
+            SkipWhiteSpace(context: context);
+        }
         if (!TryConsume(c: '{', context: context)) {
             throw CreateException(context: context, message: $"Expected '{{' starting body for workflow '{name}'");
         }
@@ -138,8 +151,22 @@ public static partial class PuckParser {
             Line: line,
             Name: name,
             Offset: startOffset,
-            Steps: steps
+            Steps: steps,
+            Undo: undo
         );
+    }
+    private static ExpressionNode ParseUndoModifier(ParseContext context) {
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: '(', context: context)) {
+            throw CreateException(context: context, message: "Expected '(' after undo");
+        }
+        var undo = ParseExpression(context: context);
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: ')', context: context)) {
+            throw CreateException(context: context, message: "Expected ')' after undo declaration");
+        }
+        return undo;
     }
     private static WorkflowStepNode? ParseWorkflowStep(ParseContext context, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;

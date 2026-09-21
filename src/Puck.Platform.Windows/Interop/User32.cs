@@ -149,6 +149,8 @@ internal static partial class User32 {
     public static partial uint GetRawInputDeviceInfo(nint deviceHandle, uint command, nint data, ref uint size);
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial nint SetCapture(nint windowHandle);
+    [LibraryImport("user32.dll")]
+    public static partial nint GetCapture();
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ReleaseCapture();

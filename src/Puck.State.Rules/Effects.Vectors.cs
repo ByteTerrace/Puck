@@ -76,7 +76,7 @@ public sealed class VectorCopyEffect : VectorEffect {
         Source.CollectReads(into: into);
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (512L + Dimensions);
+    public override RuleWork Cost(IRuleCostContext context) => (512L + Dimensions);
 }
 /// <summary>Writes the weighted mix of up to <see cref="StateCapacity.MaxMixTerms"/> vectors into a vector cell.</summary>
 public sealed class VectorMixEffect : VectorEffect {
@@ -112,7 +112,7 @@ public sealed class VectorMixEffect : VectorEffect {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (512L + (((long)m_terms.Length) * Dimensions));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)m_terms.Length) * Dimensions));
 }
 /// <summary>Writes the mean of a keyed vector table's admitted rows into a vector cell.</summary>
 public sealed class VectorMeanEffect : VectorEffect {
@@ -161,7 +161,7 @@ public sealed class VectorMeanEffect : VectorEffect {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * Dimensions));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * Dimensions));
 }
 /// <summary>Ranks a keyed vector table against a query and writes the nearest keys or scores.</summary>
 public sealed class VectorNearestEffect : VectorEffect {
@@ -247,7 +247,7 @@ public sealed class VectorNearestEffect : VectorEffect {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * (Dimensions + 1)));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)FromCapacity) * (Dimensions + 1)));
 }
 /// <summary>Stores a vector into a keyed table unless a near duplicate is already there.</summary>
 public sealed class VectorRememberEffect : VectorEffect {
@@ -292,5 +292,5 @@ public sealed class VectorRememberEffect : VectorEffect {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (512L + (((long)Capacity) * (Dimensions + 1)));
+    public override RuleWork Cost(IRuleCostContext context) => (512L + (((long)Capacity) * (Dimensions + 1)));
 }

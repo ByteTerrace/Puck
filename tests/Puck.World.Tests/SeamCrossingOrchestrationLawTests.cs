@@ -73,10 +73,9 @@ public sealed class SeamCrossingOrchestrationLawTests {
         );
     }
     // A minimal vertical-wall pair, mirroring the shipped quilt shards' own east/west seam (WorldFaceFrame.IsYawOnly)
-    // without any of the island's own geometry — the ownership threshold this pair carries is the reciprocal contact
-    // hysteresis alone (Fixtures.BuildDocument authors no seat collider, so TryBodyReach is zero and the threshold is
-    // the authored contact skin, 0.02).
-    private static WorldDefinition SeamRow(string neighbourFileName, float outwardYaw, string name, string counterpart) {
+    // without any of the island's own geometry. Fixtures.BuildDocument authors no seat collider, so its derived
+    // threshold is the contact skin, 0.02; a nonzero authored hysteresis may widen it.
+    private static WorldDefinition SeamRow(string neighbourFileName, float outwardYaw, string name, string counterpart, float hysteresis) {
         var document = Fixtures.BuildDocument();
 
         return document with {
@@ -100,13 +99,65 @@ public sealed class SeamCrossingOrchestrationLawTests {
                     OutwardPitchDegrees: 0f,
                     OutwardYawDegrees: outwardYaw,
                     Width: 8f
-                )
+                ),
+                Hysteresis: hysteresis
             )],
         };
     }
+    private static WorldAdjacency ProjectionEdge(string name, string destination, string counterpart, float yaw, float hysteresis = 0f) => new(
+        Name: SafeName.Parse(candidate: name), Destination: destination, Counterpart: counterpart,
+        Boundary: new WorldAdjacencyBoundary(Vector3.Zero, yaw, 0f, 8f, 8f), Hysteresis: hysteresis
+    );
+    private static WorldDefinition ProjectionRow((string Name, string Path)[] neighbours, params WorldAdjacency[] edges) => Fixtures.BuildDocument() with {
+        References = neighbours.Select(selector: neighbour => new WorldReference(SafeName.Parse(candidate: neighbour.Name), neighbour.Path)).ToArray(),
+        Destinations = neighbours.Select(selector: neighbour => new WorldDestination(SafeName.Parse(candidate: neighbour.Name), neighbour.Name, WorldDestinationDurability.Persisted, WorldDestinationScope.Global)).ToArray(),
+        Adjacencies = edges,
+    };
 
     [Fact]
-    public void ScanTriggeredCrossing_MintsWithinAFewTicks_NeverAfterAnArbitraryWait() {
+    public void CornerProjectionPathUsesTheIntermediateAuthoredOverlapDepth() {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-corner-projection-tests-").FullName;
+        var sourcePath = Path.Combine(path1: directory, path2: "source.world.json");
+        var eastPath = Path.Combine(path1: directory, path2: "east.world.json");
+        var southPath = Path.Combine(path1: directory, path2: "south.world.json");
+        var cornerPath = Path.Combine(path1: directory, path2: "corner.world.json");
+        var sourceDefinition = ProjectionRow([("east", eastPath), ("south", southPath), ("corner", cornerPath)], ProjectionEdge("east", "east", "west", 90f), ProjectionEdge("south", "south", "north", 0f));
+        var eastDefinition = ProjectionRow([("source", sourcePath), ("corner", cornerPath)], ProjectionEdge("west", "source", "east", -90f), ProjectionEdge(counterpart: "north", destination: "corner", hysteresis: 8f, name: "south", yaw: 0f));
+        var southDefinition = ProjectionRow([("source", sourcePath), ("corner", cornerPath)], ProjectionEdge("north", "source", "south", 180f), ProjectionEdge("east", "corner", "west", 90f));
+        var cornerDefinition = ProjectionRow([("east", eastPath), ("south", southPath)], ProjectionEdge(counterpart: "south", destination: "east", hysteresis: 8f, name: "north", yaw: 180f), ProjectionEdge("west", "south", "east", -90f));
+        var authored = Puck.Maths.FixedQ4816.FromDouble(value: 8d);
+        Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(local: eastDefinition, neighbour: cornerDefinition, depth: out var derived, reason: out var reason), reason);
+        Assert.True(derived < authored);
+
+        SeamFiles(rowA: sourceDefinition, rowAPath: sourcePath, rowB: eastDefinition, rowBPath: eastPath);
+        SeamFiles(rowA: southDefinition, rowAPath: southPath, rowB: cornerDefinition, rowBPath: cornerPath);
+        using var host = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None, admitsSpawn: true, machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: Guid.NewGuid(), resolver: new WorldSessionResolver(), seats: WorldEmbodiedSeats.None,
+            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-corner-projection-host-").FullName
+        );
+        var rows = new[] {
+            BuildFileBackedRow(definition: sourceDefinition, name: "source", path: sourcePath), BuildFileBackedRow(definition: eastDefinition, name: "east", path: eastPath),
+            BuildFileBackedRow(definition: southDefinition, name: "south", path: southPath), BuildFileBackedRow(definition: cornerDefinition, name: "corner", path: cornerPath),
+        };
+
+        try {
+            foreach (var row in rows) { host.Admit(row: row.Instance); }
+            using var fields = new WorldAdjacencyFields(instances: host, sourceInstanceName: "source");
+            var projection = fields.Visuals().Single(predicate: candidate => !candidate.Direct);
+
+            Assert.Equal(expected: authored, actual: projection.Path[0].OverlapDepth);
+            Assert.Equal(expected: authored, actual: projection.OverlapDepth);
+        } finally {
+            foreach (var row in rows) { row.Instance.Dispose(); }
+            try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
+        }
+    }
+    [InlineData(0f, 1.1f, true)]
+    [InlineData(2f, 1.1f, false)]
+    [InlineData(2f, 2.1f, true)]
+    [Theory]
+    public void ScanTriggeredCrossingHonoursTheAuthoredOwnershipThreshold(float hysteresis, float position, bool shouldCross) {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-seam-crossing-tests-files-").FullName;
         var rowAPath = Path.Combine(
             path1: directory,
@@ -118,12 +169,14 @@ public sealed class SeamCrossingOrchestrationLawTests {
         );
         var rowADefinition = SeamRow(
             counterpart: "west",
+            hysteresis: hysteresis,
             name: "east",
             neighbourFileName: rowBPath,
             outwardYaw: 90f
         );
         var rowBDefinition = SeamRow(
             counterpart: "east",
+            hysteresis: hysteresis,
             name: "west",
             neighbourFileName: rowAPath,
             outwardYaw: -90f
@@ -187,7 +240,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
             rowAServer.Body(index: actor.Index)!.Pose(
                 pitchRadians: 0f,
                 rollRadians: 0f,
-                x: 1.1f,
+                x: position,
                 y: ((float)((double)settled.Y)),
                 yawRadians: 0f,
                 z: ((float)((double)settled.Z))
@@ -207,10 +260,12 @@ public sealed class SeamCrossingOrchestrationLawTests {
                 }
             }
 
-            Assert.True(
-                condition: (mintedOnTick >= 0),
-                userMessage: $"a body 1.1 raw units past a yaw-only seam's ownership threshold never crossed within {Bound} host ticks — the mint is policy-gated, not a pure function of position"
-            );
+            Assert.Equal(actual: (mintedOnTick >= 0), expected: shouldCross);
+            if (!shouldCross) {
+                Assert.True(condition: rowAServer.Population.IsActive(index: actor.Index));
+                Assert.False(condition: rowBServer.Population.IsActive(index: actor.Index));
+                return;
+            }
             Assert.False(
                 condition: rowAServer.Population.IsActive(index: actor.Index),
                 userMessage: "the source seat stayed active after a settled crossing"
@@ -223,7 +278,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
 
             Assert.NotNull(@object: arrived);
             Assert.Equal(
-                expected: FixedQ4816(value: 1.1f),
+                expected: FixedQ4816(value: position),
                 actual: arrived!.FixedPosition.X
             );
         } finally {

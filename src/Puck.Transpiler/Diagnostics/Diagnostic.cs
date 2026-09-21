@@ -8,6 +8,9 @@ namespace Puck.Transpiler.Diagnostics;
 /// <param name="Severity">The severity level (Error, Warning, Information).</param>
 /// <param name="Span">The source span where the diagnostic applies.</param>
 public sealed record Diagnostic(string Code, string Message, DiagnosticSeverity Severity, SourceSpan Span) {
+    /// <summary>Gets the source that owns <see cref="Span"/> when it differs from the compilation root.</summary>
+    public string? SourcePath { get; init; }
+
     /// <summary>Creates an error diagnostic.</summary>
     public static Diagnostic Error(string code, string message, SourceSpan span) =>
         new(
@@ -18,6 +21,7 @@ public sealed record Diagnostic(string Code, string Message, DiagnosticSeverity 
         );
     /// <summary>Formats the diagnostic in standard compiler format: "file(line,col): severity code: message".</summary>
     public string Format(string? filePath = null) {
+        filePath = (SourcePath ?? filePath);
         var prefix = (string.IsNullOrEmpty(value: filePath)
             ? ""
             : $"{filePath}"

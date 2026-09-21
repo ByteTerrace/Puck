@@ -26,8 +26,8 @@ public sealed class StateDisclosureLawTests {
             CellKind.Bool,
             Cells: [Cell(
                     key: "ace",
-                    value: 1,
-                    kind: CellKind.Bool
+                    kind: CellKind.Bool,
+                    value: 1
                 )],
             Domain: new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
@@ -40,8 +40,8 @@ public sealed class StateDisclosureLawTests {
             CellKind.Bool,
             Cells: [Cell(
                     key: "king",
-                    value: 1,
-                    kind: CellKind.Bool
+                    kind: CellKind.Bool,
+                    value: 1
                 )],
             Domain: new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
@@ -77,16 +77,29 @@ public sealed class StateDisclosureLawTests {
                 )],
             World: [
                 new(
+                    Name(value: "pieces"),
+                    CellKind.Int,
+                    Capacity: 2,
+                    Cells: [Cell(key: "piece0", value: 0), Cell(key: "piece1", value: 1)]
+                ),
+                new(
                     Name(value: "truth"),
                     CellKind.Int,
                     Cells: [Cell(
-                            key: "0",
+                            key: "piece0",
                             value: 7
                         ), Cell(
-                            key: "1",
+                            key: "piece1",
                             value: 9
                         )],
-                    Domain: new StateDomain.CellsOf("map"),
+                    Domain: new StateDomain.KeysOf(Row: Name(value: "pieces")),
+                    Visibility: new([])
+                ),
+                new(
+                    Name(value: "positions"),
+                    CellKind.Int,
+                    Cells: [Cell(key: "piece0", value: 0), Cell(key: "piece1", value: 1)],
+                    Domain: new StateDomain.KeysOf(Row: Name(value: "pieces")),
                     Visibility: new([])
                 ),
                 new(
@@ -94,8 +107,8 @@ public sealed class StateDisclosureLawTests {
                     CellKind.Bool,
                     Cells: [Cell(
                             key: "0",
-                            value: 1,
-                            kind: CellKind.Bool
+                            kind: CellKind.Bool,
+                            value: 1
                         )],
                     Domain: new StateDomain.CellsOf("map"),
                     Visibility: new([])
@@ -103,11 +116,16 @@ public sealed class StateDisclosureLawTests {
                 new(
                     Name(value: "known"),
                     CellKind.Int,
-                    Cells: [],
-                    Domain: new StateDomain.CellsOf("map"),
+                    Cells: [new StateCell(
+                        Key: Name(value: "piece0"),
+                        Value: CellValue.Int(value: 0L),
+                        Observation: new StateObservation(Tick: 0, Visible: false)
+                    )],
+                    Domain: new StateDomain.KeysOf(Row: Name(value: "pieces")),
                     Visibility: new(["seat1"]),
                     Knowledge: new(
                         Mask: "sight",
+                        Positions: "positions",
                         Source: "truth"
                     )
                 )
@@ -152,7 +170,7 @@ public sealed class StateDisclosureLawTests {
         var changed = seen.WithWorldState(rows: seen.State.Select(selector: r => r.Name.Value switch {
             "truth" => r with {
                 Cells = [Cell(
-                key: "0",
+                key: "piece0",
                 value: 42
             )],
             },
@@ -188,6 +206,32 @@ public sealed class StateDisclosureLawTests {
             ),
             cell.Observation
         );
+        var moved = remembered.WithWorldState(rows: remembered.State.Select(selector: row => row.Name.Value switch {
+            "positions" => row with { Cells = [Cell(key: "piece0", value: 1), Cell(key: "piece1", value: 0)] },
+            "sight" => row with { Cells = [Cell(key: "1", kind: CellKind.Bool, value: 1)] },
+            _ => row,
+        }).ToArray());
+
+        Assert.True(
+            condition: WorldArenaTransforms.TryApply(
+                moved,
+                new StateTransform.Observe(Row: "known"),
+                WorldPrincipal.World,
+                16,
+                "test",
+                out var followed,
+                out reason
+            ),
+            userMessage: reason
+        );
+        var followedCell = Assert.Single(collection: Assert.Single(collection: Fixtures.Disclose(
+            definition: followed,
+            recipient: WorldPrincipal.Seat(slot: 0)
+        )!).Cells);
+
+        Assert.Equal("piece0", followedCell.Key);
+        Assert.Equal(42, followedCell.Value);
+        Assert.Equal(new StateObservation(Tick: 16, Visible: true), followedCell.Observation);
         var bytes = WorldDefinitionSerialization.Serialize(definition: remembered);
         var reloaded = System.Text.Json.JsonSerializer.Deserialize(
             bytes,

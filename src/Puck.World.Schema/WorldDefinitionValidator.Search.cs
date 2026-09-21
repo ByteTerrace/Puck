@@ -64,7 +64,7 @@ public static partial class WorldDefinitionValidator {
 
         if (!WorldSearchCompilation.TryPlanAll(
             definition: definition,
-            judge: out _,
+            judges: out _,
             plans: out _,
             reason: out var reason,
             rules: rules,

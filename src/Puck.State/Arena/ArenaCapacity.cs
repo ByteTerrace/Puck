@@ -6,12 +6,31 @@ namespace Puck.State;
 /// whose size is a function of the document and the input sequence alone is what lets two runs of the same world
 /// lay out identically.</remarks>
 public static class ArenaCapacity {
-    /// <summary>How many identity ordinals an arena's identity lane admits.</summary>
-    public const int DefaultIdentities = 64;
-    /// <summary>How many participant ordinals an arena's participant lane admits.</summary>
-    public const int DefaultParticipants = 64;
-    /// <summary>How many drawn masks one draw site can carry — one per generator context.</summary>
-    public const int MaxDrawnMasks = 64;
+    /// <summary>The most bytes one arena may occupy, as <see cref="StateArena.Bytes"/> measures it: every column
+    /// at its full width, the change stamps a settle keeps per position, the row, key, and pool-occupancy indexes, the vector
+    /// components, and the strings its reference columns point at, each counted at its length ceiling: a provenance
+    /// for every cell slot and a text for every slot of a text row. <see cref="StateArena.Bytes"/> adds the bounded,
+    /// normalized visibility payload retained by its declaration snapshot and live cell columns, and the retained
+    /// key names and table entries. It is a document's
+    /// memory bound, the one figure
+    /// every row's capacity, every board and every lane is counted against, and a section that lays out past it is
+    /// refused at the row that crossed.</summary>
+    public const long MaxBytes = ((64L * 1024L) * 1024L);
+    /// <summary>The bytes of undo record an arena's open scopes may hold, before a firing is refused and rewound:
+    /// its entries, the vector components it snapshotted, and the texts, provenances and other references it
+    /// overwrote, which the record alone keeps alive. It is checked between effects, so the record may pass it by
+    /// the writes of the one effect that crossed it. The positions a settle visits are a subset of the record's, so
+    /// this bounds that buffer too.</summary>
+    public const int MaxJournalBytes = ((16 * 1024) * 1024);
+    /// <summary>How many identity ordinals an arena's identity lane admits when its builder states no width: eight
+    /// bytes a lane row per ordinal.</summary>
+    public const int DefaultIdentities = 256;
+    /// <summary>How many participant ordinals an arena's participant lane admits when its builder states no width:
+    /// eight bytes a lane row per ordinal.</summary>
+    public const int DefaultParticipants = 256;
+    /// <summary>How many drawn masks one draw site can carry, one per generator context. A mask is four eight-byte
+    /// words, and a site over a named source reserves all of them: 8 KiB a site.</summary>
+    public const int MaxDrawnMasks = 256;
 }
 /// <summary>How wide an arena's participant and identity lanes are built.</summary>
 /// <param name="Participants">How many participant ordinals the participant lane admits.</param>

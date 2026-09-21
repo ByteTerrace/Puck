@@ -23,24 +23,24 @@ public sealed class ExpressionCostLawTests {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
-                text: text,
-                program: out var parsed
+                program: out var parsed,
+                text: text
             ),
             userMessage: error
         );
         return Rules.RuleCompiler.CompileExpression(
+            context: Context,
             expression: parsed,
             kind: kind,
             ruleName: "law",
-            verb: "law",
-            context: Context
+            verb: "law"
         );
     }
 
     [Fact]
     public void EveryExpressionOpcodeHasAStrictlyPositiveCost() {
         foreach (var op in Enum.GetValues<ExpressionOp>()) {
-            var cost = Rules.RuleWorkBudget.OperationCost(operation: op);
+            var cost = Rules.RuleWorkBudget.OperationCost(operation: op).Units;
 
             Assert.True(
                 condition: (cost >= 1L),
@@ -50,18 +50,18 @@ public sealed class ExpressionCostLawTests {
     }
     [Fact]
     public void HeuristicOperationsRetainTheirExistingTierOrdering() {
-        var alu = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Add);
-        var select = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Select);
-        var popcnt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.PopCount);
-        var pext = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.ParallelBitExtract);
-        var mul = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Multiply);
-        var div = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Divide);
-        var mod = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Modulo);
-        var sqrt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.SquareRoot);
-        var trig = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Sine);
-        var gcd = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.GreatestCommonDivisor);
-        var hilbert = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Hilbert);
-        var isPrime = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.IsPrime);
+        var alu = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Add).Units;
+        var select = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Select).Units;
+        var popcnt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.PopCount).Units;
+        var pext = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.ParallelBitExtract).Units;
+        var mul = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Multiply).Units;
+        var div = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Divide).Units;
+        var mod = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Modulo).Units;
+        var sqrt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.SquareRoot).Units;
+        var trig = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Sine).Units;
+        var gcd = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.GreatestCommonDivisor).Units;
+        var hilbert = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Hilbert).Units;
+        var isPrime = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.IsPrime).Units;
 
         Assert.Equal(
             actual: alu,
@@ -107,31 +107,24 @@ public sealed class ExpressionCostLawTests {
     public void HeuristicWeightsCannotMasqueradeAsCalibratedCycles() {
         var registered = ReferenceScheduleManifest.Coefficients.ToDictionary(
             comparer: StringComparer.Ordinal,
-            elementSelector: coefficient => coefficient.Bound,
+            elementSelector: coefficient => coefficient,
             keySelector: coefficient => coefficient.Operation
         );
 
         foreach (var operation in Enum.GetValues<ExpressionOp>()) {
             // A price is answerable only where the manifest records evidence for it; the heuristic weight beside it
             // is never that answer.
-            var bound = ReferenceSchedule.OperationCostBound(
-                operation,
-                CellKind.Int
-            );
+            var coefficient = registered[operation.ToString()];
 
-            Assert.Equal(
-                registered[operation.ToString()],
-                bound
-            );
-            Assert.Equal(
-                bound,
-                ReferenceSchedule.OperationCostBound(
-                    operation,
-                    CellKind.Fixed
-                )
-            );
+            foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
+                var bound = ReferenceSchedule.OperationCostBound(kind: kind, operation: operation);
+                var admitted = coefficient.NumericKinds.Contains(kind.ToString(), StringComparer.Ordinal);
+
+                Assert.Equal(admitted, (bound == coefficient.Bound));
+                if (!admitted) { Assert.True(condition: bound.IsUnmodeled); }
+            }
             Assert.InRange(
-                Rules.RuleWorkBudget.OperationCost(operation),
+                Rules.RuleWorkBudget.OperationCost(operation).Units,
                 1L,
                 (long.MaxValue - 1L)
             );
@@ -145,10 +138,7 @@ public sealed class ExpressionCostLawTests {
             Effects: 3,
             Setup: 0
         ).ToBound().IsUnmodeled);
-        Assert.Equal(
-            long.MaxValue,
-            Rules.RuleWorkBudget.OperationCost(((ExpressionOp)byte.MaxValue))
-        );
+        Assert.True(condition: Rules.RuleWorkBudget.OperationCost(((ExpressionOp)byte.MaxValue)).IsUnmodeled);
     }
     [Fact]
     public void RuntimeProgramsStillAccountForEveryOperation() {

@@ -25,11 +25,20 @@ internal sealed class DelegateJudge(StateArena arena, JudgeStep judge, ScoreStep
 /// <summary>One position authored once: an arena seeded from the section, and a compile context over that same
 /// section, so an authored rule compiles against the catalog the arena stores.</summary>
 internal sealed class Position {
-    public Position(StateRow[] rows) {
-        var section = new Section(rows: rows);
+    public Position(StateRow[] rows, bool reverseInternOrder = false, IReadOnlyList<StateRecord>? records = null, IReadOnlyList<StatePool>? pools = null) {
+        var section = new Section(pools: pools, records: records, rows: rows);
+        var catalog = StateCatalog.Compile(section: (reverseInternOrder
+            ? new Section(rows: [.. rows.Select(selector: static row => row with {
+                Cells = ((row.Cells is null)
+                    ? null
+                    : [.. row.Cells.Reverse()]
+                ),
+            })], records: records, pools: pools)
+            : section
+        ));
 
         Arena = new StateArena(
-            catalog: StateCatalog.Compile(section: section),
+            catalog: catalog,
             options: null,
             section: section,
             time: ArenaTime.Origin
@@ -68,10 +77,12 @@ internal sealed class Position {
         return handle.Ordinal;
     }
 
-    private sealed class Section(IReadOnlyList<StateRow> rows) : IStateSection {
+    private sealed class Section(IReadOnlyList<StateRow> rows, IReadOnlyList<StateRecord>? records, IReadOnlyList<StatePool>? pools) : IStateSection {
         public IReadOnlyList<IStateSlot>? IdentitySlots => null;
         public IReadOnlyList<LatticeTopology>? Lattices => null;
         public IReadOnlyList<IStateSlot>? ParticipantSlots => null;
+        public IReadOnlyList<StatePool>? Pools => pools;
+        public IReadOnlyList<StateRecord>? Records => records;
         public IReadOnlyList<StateRow> Rows => rows;
     }
 }

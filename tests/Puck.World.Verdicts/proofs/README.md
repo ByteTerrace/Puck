@@ -11,8 +11,8 @@ of these by path instead.
 | `unexpected-outcome.world.json` | a scheduled row the world refused, with the verdict still passing because the gate never depended on the row | exit 1, naming the row's index, its command and the recorded outcome |
 | `expected-outcome.world.json` | the same row declaring `expect: "Refused"` and the text the refusal must carry | exit 0 |
 
-Both are basis deltas over the shipped `games/hearts.world.json`, like the
-curated worlds, and act as `seat1` under the same two authored grants.
+Both are basis deltas over the parent directory's self-contained
+`phase-fixture.world.json` and act as `seat1` under the same two authored grants.
 
 `wrong-expectation.puck` is the `test` construct's red half: the same world and
 the same step as `../sources/seat-writes-a-cell.puck`, claiming a value the step

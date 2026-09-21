@@ -4,7 +4,7 @@
 // own beyond `engineTypes` — `engine.worker.ts` reuses it unmodified inside a Worker's own global scope, so the
 // wire-decoding rules (which field is a decimal-string 64-bit value, which failure shape throws versus returns an
 // `ok:false` arm) exist in exactly one place.
-import type { CellKindName, CellValue, EngineCell, EngineDiagnostic, EngineHostOptions, JudgeTrace, ParseResult, RowInfo, WorldEngine } from "./engineTypes";
+import type { CellKindName, CellValue, EngineCell, EngineCostBound, EngineCostReport, EngineDiagnostic, EngineHostOptions, JudgeTrace, ParseResult, RowInfo, WorldEngine } from "./engineTypes";
 
 /** The raw `[JSExport]` surface `main.mjs`'s `createEngine()` resolves — every member synchronous, taking and
  * returning JSON strings (see `Puck.World.Browser.Exports.BrowserExports`). */
@@ -15,8 +15,10 @@ export interface RawBrowserExports {
   ComposeTree(rootName: string, documentsJson: string, editedName: string, editedJson: string): string;
   Canonicalize(json: string): string;
   Compile(json: string): string;
+  AnalyzeCosts(json: string): string;
   Release(handle: string): string;
   Rows(handle: string): string;
+  Costs(handle: string): string;
   Rebind(handle: string, json: string): string;
   Judge(handle: string, tick: string): string;
   ReadRow(handle: string, row: string, key: string): string;
@@ -60,6 +62,50 @@ function decodeCellValue(kind: string | null, value: string | null): CellValue |
 function mapDiagnostics(errors: readonly { path: string | null; message: string }[]): EngineDiagnostic[] {
   return errors.map((error) => ({ path: error.path ?? "", message: error.message }));
 }
+type WireCostBound = { kind: string; cycles: string | null; reason: string | null };
+function decodeCostBound(bound: WireCostBound): EngineCostBound {
+  if (bound.kind === "Known" && bound.cycles !== null) {
+    return { kind: "Known", cycles: BigInt(bound.cycles), reason: null };
+  }
+  if ((bound.kind === "Unmodeled" || bound.kind === "Overflow") && bound.cycles === null) {
+    return { kind: bound.kind, cycles: null, reason: bound.reason };
+  }
+  throw new Error("The engine returned an invalid cost bound.");
+}
+type WireCostReport = Omit<EngineCostReport, "stepAllowanceCycles" | "recurringBound" | "searchReservations" | "totalBound" | "editBurstBound" | "contributors" | "resources"> & {
+  stepAllowanceCycles: string;
+  recurringBound: WireCostBound;
+  searchReservations: WireCostBound;
+  totalBound: WireCostBound;
+  editBurstBound: WireCostBound;
+  contributors: (Omit<EngineCostReport["contributors"][number], "multiplier"> & { multiplier: string })[];
+  resources: Omit<EngineCostReport["resources"], "vectorComponentBytes" | "layoutBytes" | "retainedVisibilityBytes" | "retainedKeyBytes" | "arenaFootprintBytes" | "arenaAdmissionCeilingBytes" | "journalAllowanceBytes"> & {
+    vectorComponentBytes: string; layoutBytes: string | null; retainedVisibilityBytes: string | null;
+    retainedKeyBytes: string | null; arenaFootprintBytes: string | null; arenaAdmissionCeilingBytes: string;
+    journalAllowanceBytes: string;
+  };
+};
+function mapCostReport(report: WireCostReport): EngineCostReport {
+  return {
+    ...report,
+    stepAllowanceCycles: BigInt(report.stepAllowanceCycles),
+    recurringBound: decodeCostBound(report.recurringBound),
+    searchReservations: decodeCostBound(report.searchReservations),
+    totalBound: decodeCostBound(report.totalBound),
+    editBurstBound: decodeCostBound(report.editBurstBound),
+    contributors: report.contributors.map(line => ({ ...line, multiplier: BigInt(line.multiplier) })),
+    resources: {
+      ...report.resources,
+      vectorComponentBytes: BigInt(report.resources.vectorComponentBytes),
+      layoutBytes: report.resources.layoutBytes === null ? null : BigInt(report.resources.layoutBytes),
+      retainedVisibilityBytes: report.resources.retainedVisibilityBytes === null ? null : BigInt(report.resources.retainedVisibilityBytes),
+      retainedKeyBytes: report.resources.retainedKeyBytes === null ? null : BigInt(report.resources.retainedKeyBytes),
+      arenaFootprintBytes: report.resources.arenaFootprintBytes === null ? null : BigInt(report.resources.arenaFootprintBytes),
+      arenaAdmissionCeilingBytes: BigInt(report.resources.arenaAdmissionCeilingBytes),
+      journalAllowanceBytes: BigInt(report.resources.journalAllowanceBytes),
+    },
+  };
+}
 function mapParseResult(rawJson: string): ParseResult {
   const raw = JSON.parse(rawJson) as
     | { ok: true; document: string; deferred: string[] | null }
@@ -93,6 +139,19 @@ function mapJudgeTrace(raw: {
  * supported unload path of its own. */
 export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void): WorldEngine {
   return {
+    async costs(handle) {
+      const result = JSON.parse(raw.Costs(handle)) as { ok: true; report: WireCostReport } | { ok: false; error: string };
+      if (!result.ok) throw new Error(result.error);
+      return mapCostReport(result.report);
+    },
+    async analyzeCosts(json) {
+      const result = JSON.parse(raw.AnalyzeCosts(json)) as
+        | { ok: true; validated: boolean; report: WireCostReport; validationErrors: { path: string | null; message: string }[] | null; deferred: string[] | null }
+        | { ok: false; validated: false; errors: { path: string | null; message: string }[] };
+      return result.ok
+        ? { ok: true, validated: result.validated, report: mapCostReport(result.report), validationErrors: mapDiagnostics(result.validationErrors ?? []), deferred: result.deferred ?? [] }
+        : { ok: false, validated: false, errors: mapDiagnostics(result.errors) };
+    },
     async version() {
       return JSON.parse(raw.Version()) as { schemaVersion: string; engine: string; commit: string };
     },

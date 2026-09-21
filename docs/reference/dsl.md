@@ -27,21 +27,49 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 ## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```puck
-table name : Kind [modifier(...)]* { key = value [modifier(...)]* ... }
-slot name : Kind [= value] [modifier(...)]*
+table name [modifier(...)]* { key = value [modifier(...)]* ... }
+slot name [= value] [modifier(...)]*
 pile name of tokenRow [modifier(...)]* { token ... }
-grid name : Kind [modifier(...)]* [{ key = value ... }]
+grid name [modifier(...)]* [{ key = value ... }]
 ```
 
 `Ast/StateDeclarationNodes.cs` and `Parsing/PuckParser.StateDeclarations.cs` parse this shape for every vocabulary:
-a declared name, an optional kind spelled as a bare identifier, an optional bare-identifier reference (`pile`'s
+a declared name, an optional bare-identifier reference (`pile`'s
 `of tokenRow`), zero or more `name(args)` modifier calls (reusing the ordinary call-expression grammar verbatim),
 and an optional `{ }` body — `key = value` cell entries with their own modifiers (`table`/`grid`), or bare `token`
-entries (`pile`). The core assigns no meaning to `Kind`, a reference, a modifier's name, or where a declaration is
+entries (`pile`). The core assigns no meaning to a reference, a modifier's name, or where a declaration is
 legal; it is a syntax shape only, so a second document vocabulary with its own row-shaped concept could reuse it
 without touching this project. `Puck.World.Transpiler` is `puck.world.definition.v1`'s vocabulary for it today —
 see its [README](../../src/Puck.World.Transpiler/README.md#state-declarations) for `state.world`'s exact lowering,
 defaults, and refusals.
+
+A member has one spelling wherever it stands: a call's argument, an object literal's property, a block's
+property line. Lowering carries a position — the vocabulary's own token for the shape a value fills
+(`IDocumentVocabulary.CallContext`, `MemberContext`) — and asks the vocabulary what the member there holds
+(`ClassifyMember`): a name, a cell key, a value expression or a word of a closed vocabulary is written bare, and
+free text is a string literal. A plain string literal where a member is bare is PUCK110 and a bare word where
+one is text is PUCK111. An interpolated string computes one name, one key, one number or text, and never an
+expression: it is a name's, a key's or a text member's whole value, and inside a bare expression or key it is an
+atom the operand grammar reads as the one token it computes. An expression written as an interpolated string is
+PUCK112.
+
+Operands carry parsed `OperandExpressionNode.Syntax` trees. The source parser uses the state expression
+parser's lexer, precedence and nesting bounds, with unresolved names and interpolation atoms represented as
+nodes. Sugar assignments, comparisons, locals, scores, derives and pattern values take this path. A block
+member parsed by the compile-time grammar is converted structurally when the vocabulary classifies it;
+lowering does not print and reparse that AST or rewrite identifiers in source text.
+
+Binding distinguishes expression names, row names, literal keys and quoted names. An interpolation atom is
+resolved once, so its value cannot inject an operator or become another compile-time binding. Parentheses in
+key position remain significant: `row[key]` names a literal key, while `row[(key)]` reads the key expression.
+Family folds retain their runtime subprograms. Embedded vector literals resolve in the instruction program,
+including its subprograms. A vocabulary that classifies nothing leaves values to the compile-time grammar.
+The world vocabulary's [README](../../src/Puck.World.Transpiler/README.md) describes its member positions.
+
+For world state, the row kind is inferred from authored values and bindings, `space(...)`, and fractional bounds or
+advances. A declaration does not spell `: Int` or another kind; those legacy annotations are refused with PUCK107.
+When decompilation cannot prove that declaration sugar preserves a row's kind—especially an empty non-`Int` row—it
+keeps the explicit `row` form so a round trip does not silently change the domain.
 
 A few invariants hold across every declaration form the world vocabulary lowers:
 
@@ -60,6 +88,21 @@ A few invariants hold across every declaration form the world vocabulary lowers:
   JSON equivalent. Dot access keeps the authored operand text, so it is judged by semantic equivalence instead:
   identical tokens and identical compiled rule facts against the bracket spelling.
 
+Records and pools use `record Name { field: Kind ... }` and
+`pool name of Name capacity(n)`. Field bounds spell a range as
+`bounds(lo..hi)` with an optional `overflow: Refuse|Saturate`; Vector fields
+name their embedding space with `space(name)`. A rule can visit a stable
+snapshot of live handles with `rule name for each x in pool { ... }`, read its
+size with `count(pool)`, claim with `claim pool as x { ... }`, and release with
+`release x`. A binding's `x.field` access is lexical and generation checked.
+Binding names must not collide with state row names, because `x[key]` would
+otherwise have two meanings.
+
+Record fields currently carry kind, bounds, default, overflow, and Vector
+space. Timed row traits such as `advance` and scheduling still belong to rows;
+pool migrations that need those traits remain open until the generated field
+row can inherit them without changing row semantics.
+
 ### Vector spaces, `embeds(...)`, and vector literals
 
 The state section supports declared embedding spaces and vector rows:
@@ -70,20 +113,20 @@ state {
         space lore { model: "puck-fixture" revision: "1" dimensions: 256 }
     }
     world {
-        table events : Vector {
+        table events space(lore) {
             ambush = "Bandits ambushed the caravan on the north road"
         }
-        table lines : Text embeds(lineVectors) {
+        table lines embeds(lineVectors) {
             warn = "Stay close to the wagons tonight."
         }
-        slot situation : Vector = "Travellers approach the gate at dusk"
+        slot situation space(lore) = "Travellers approach the gate at dusk"
     }
 }
 ```
 
 - **`spaces` block**: declares one or more named vector embedding spaces with `model`, `revision`, and `dimensions`.
-- **`Vector` kind**: creates rows of unit-normalized signed 8-bit vectors. In source, values are written as plain text literals.
-- **`embeds(vectorRow)` modifier**: links a `Text` table to an auto-generated or explicitly paired `Vector` table, automatically embedding each text entry into vector state.
+- **`Vector` kind**: rows of unit-normalized signed 8-bit vectors, inferred from a `space(...)` modifier's presence — a row's kind is never authored (see [world-vocabulary.md](world-vocabulary.md)). In source, values are written as plain text literals.
+- **`embeds(vectorRow)` modifier**: links a `Text` table (inferred from its own string cell values) to an auto-generated or explicitly paired `Vector` table, automatically embedding each text entry into vector state.
 - **Embedding literals**: `embed("text")` produces a vector operand inside rule gates and effects, resolved during transpilation against the companion `.embeddings.json` lock file produced by `puck embed`.
 
 ## `for`, over an array known at compile time
@@ -183,6 +226,16 @@ The two evaluators fold a name differently, on purpose:
   rule language's `Q48.16` fixed point to agree with it bit-for-bit would quantize the authored value to 1/65536
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
   double fold already agrees with the fixed-point one exactly on whole numbers.
+- A fractional literal lowers as the decimal its text spells, to the 28 significant digits a `decimal` holds, and
+  stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, and a unit whose scale
+  is a power of ten (`ms`, `cm`, `mm`, `%`). A result a `decimal` would overflow on or round, a product or a
+  conversion too small for its scale included, is computed in `double` instead, which keeps its magnitude. A
+  quotient, a remainder, a folded function and degrees into radians are always computed in `double`; a decimal
+  field reads such a result at its 15 significant digits, the same on every runtime. One value has one spelling:
+  `1.50` lowers as `1.5`, and `2.0` and `1.5e3` lower as the integers they are.
+- A comparison, and the ordering and equality `sort` and `distinct` use, is decided on the
+  exact value of each number, whether it is held as an integer, a decimal or a double. `1.0000000000000001 > 1`
+  is true, and the double nearest `0.1` is not equal to the decimal `0.1`.
 - `select(condition, whenTrue, whenFalse)` reads its condition first and lowers only the arm it takes—the other
   arm is never evaluated, which is what lets an untaken arm reference something the taken one does not need.
 
@@ -228,7 +281,9 @@ order, each value the array of items that produced it.
 `map` and `filter` pass the item and, optionally, its index; `reduce` takes the running value and the item.
 A lambda parameter shadows a constant of the same name for the length of one application.
 
-The builtin names are reserved in VALUE position only: a statement-position call of the same name belongs to its
+The builtin names apply in compile-time value positions. A call constructing a declared document arm uses that
+arm instead: `sort([3, 1, 2])` computes an array, while `transform sort(row: scores, by: [{ row: scores }])`
+constructs a state transform. Nested document calls use the same expected-type rule. A statement-position call belongs to its
 own vocabulary (a cartridge's `map(row:, column:, tile:)` rule step is untouched).
 
 ## Comparisons are 1 or 0
@@ -360,23 +415,20 @@ of one the author commented is the case to watch — carry the old node's
 
 ### What the descent reaches, and what it hands over whole
 
-Every node reaches a hook, and every syntax-node child of every node is
-rebuilt—a law over each concrete node type enforces both. What the descent
-cannot do is reach *inside* a member that carries its own sub-grammar as text,
-so a rewrite matching `IdentifierExpressionNode` silently misses a name written
-in one. These are those members; a rewrite that must reach one edits the string
-on the node the hook hands it:
+Every syntax-node child reaches a rewrite hook. Operand-bearing sugar nodes descend through
+`OperandExpressionNode`; `RewriteOperandSyntax` reaches parsed names, accesses, calls and operators, and the
+ordinary expression hook still reaches interpolation holes. The operand hook receives the position's form:
+a bare key is literal, while a grouped key is an expression. A changed tree is printed with its rewritten atoms;
+an unchanged tree keeps the author's spelling. A rewrite must keep `Syntax` and `Text` consistent.
+
+The following members still carry their own text grammar and are handed over whole:
 
 | Member | Carries |
 |---|---|
-| `EmbeddedBlockNode.Body` | the whole `sql { }` dialect, as one span of text |
-| `ComparisonPredicateNode.LeftText`, `.RightText` | a gate's operands |
-| `RhsOperandNode.Text` | an effect's right-hand side |
-| `LocalStatementNode.ExpressionText` | a `local`'s initializer |
-| `ScoreStatementNode.Text` | an option's score |
+| `EmbeddedBlockNode.Body` | the whole `sql { }` dialect |
 | `CellSetDeclarationNode.Expression` | a `set`'s cell-set algebra |
-| `PatternDeclarationNode.Value`, `.Attribute` | a pattern's per-token expression and source row |
-| `LiteralExpressionNode.RawText`, `DerivedStateNode.RawExpression` | the author's own digits and infix text, preferred over the value beside them—see the refusal above |
+| `PatternDeclarationNode.Attribute` | a pattern's source row |
+| `LiteralExpressionNode.RawText` | the author's numeric spelling, which must change with its value |
 
 `PatternDeclarationNode.Match` is the one child that is not a syntax node at all
 (it is a `Puck.State.PatternNode`), so the descent has no hook for the match

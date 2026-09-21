@@ -27,6 +27,120 @@ public sealed class WorldCostReportLawTests {
     );
 
     [Fact]
+    public void CompilationSharesOneReportAndRetainsItsEvidenceIdentity() {
+        var definition = Document();
+        var compilation = WorldRuleCompilation.Compile(definition: definition);
+        var report = compilation.CostReport;
+
+        Parallel.For(0, 16, _ => Assert.Same(report, compilation.CostReport));
+        Assert.Same(compilation.WorkContributors, report.Contributors);
+        Assert.Equal(compilation.WorkBudget, report.WorkBudget);
+        Assert.Equal(WorldRuleWorkBudget.Measure(definition: definition), report.WorkBudget);
+        Assert.Equal(CostModel.Default.EvidenceDigest, report.EvidenceDigest);
+        Assert.False(condition: string.IsNullOrWhiteSpace(report.EvidenceDigest));
+        Assert.True(report.EditBurstBound.IsUnmodeled);
+        Assert.Null(report.Resources.MeasurementIssue);
+        Assert.NotNull(report.Resources.ArenaFootprintBytes);
+        Assert.Contains(
+            expectedSubstring: "Total memory is unmodeled",
+            actualString: report.Resources.UnmodeledTotalMemoryReason
+        );
+
+        var replacement = WorldRuleCompilation.Compile(definition: Document(rate: 30)).CostReport;
+
+        Assert.NotSame(report, replacement);
+        Assert.Equal(240, report.SimulationRateHz);
+        Assert.Equal(30, replacement.SimulationRateHz);
+        Assert.Equal(report.HeuristicWorkUnitsPerTick, replacement.HeuristicWorkUnitsPerTick);
+        Assert.NotEqual(report.StepAllowanceCycles, replacement.StepAllowanceCycles);
+    }
+    [Fact]
+    public void ResourceDimensionsMatchTheAdmittedLayoutWithoutCallingAllowancesAllocations() {
+        var definition = Document();
+        var report = WorldCostReport.Generate(definition: definition);
+        var resources = report.Resources;
+        var layout = ArenaLayout.Build(
+            catalog: definition.StateCatalog,
+            options: WorldSlotLanes.Options(definition: definition),
+            section: definition.StateRaw
+        );
+
+        Assert.True(condition: StateArena.TryMeasureVisibility(
+            bytes: out var visibilityBytes,
+            reason: out var reason,
+            section: definition.StateRaw
+        ), userMessage: reason);
+        Assert.Equal(expected: definition.StateCatalog.Count, actual: resources.RowCount);
+        Assert.Equal(expected: 0, actual: resources.TopologyCount);
+        Assert.Equal(expected: definition.Population.Capacity, actual: resources.PopulationCapacity);
+        Assert.Equal(expected: layout.CellSlotCount, actual: resources.CellSlotCount);
+        Assert.Equal(expected: layout.VectorByteCount, actual: resources.VectorComponentBytes);
+        Assert.Equal(expected: layout.LaneSlotCount, actual: resources.LaneSlotCount);
+        Assert.Equal(expected: layout.LaneRosterCount, actual: resources.LaneRosterCount);
+        Assert.Equal(expected: layout.MaskWordCount, actual: resources.DrawMaskWordCount);
+        Assert.Equal(expected: layout.Bytes, actual: resources.LayoutBytes);
+        Assert.Equal(expected: visibilityBytes, actual: resources.RetainedVisibilityBytes);
+        Assert.Equal(expected: definition.StateCatalog.Keys.Bytes, actual: resources.RetainedKeyBytes);
+        Assert.Equal(
+            expected: checked((checked((layout.Bytes + visibilityBytes)) + definition.StateCatalog.Keys.Bytes)),
+            actual: resources.ArenaFootprintBytes
+        );
+        Assert.Equal(expected: ArenaCapacity.MaxBytes, actual: resources.ArenaAdmissionCeilingBytes);
+        Assert.Equal(expected: ArenaCapacity.MaxJournalBytes, actual: resources.JournalAllowanceBytes);
+        Assert.DoesNotContain(expectedSubstring: "allocated", actualString: resources.UnmodeledTotalMemoryReason);
+    }
+    [Fact]
+    public void ResourceMeasurementRetainsVisibilityRefusalsInsteadOfReportingZeroBytes() {
+        var definition = Document() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                    Name: CellName.Parse(candidate: "count"),
+                    Kind: CellKind.Int,
+                    Cells: [new StateCell(
+                            Key: WorldStateRow.SlotKey,
+                            Value: CellValue.Int(value: 0L)
+                        )],
+                    Visibility: new StateVisibility(Readers: Enumerable.Repeat(
+                        element: "reader",
+                        count: (StateCapacity.MaxVisibilityReaders + 1)
+                    ).ToArray())
+                )]),
+        };
+        var resources = WorldResourceDimensions.Measure(definition: definition);
+
+        Assert.Null(resources.ArenaFootprintBytes);
+        Assert.Null(resources.RetainedVisibilityBytes);
+        Assert.NotNull(resources.MeasurementIssue);
+        Assert.Contains(expectedSubstring: "reader limit", actualString: resources.MeasurementIssue);
+    }
+    [Fact]
+    public void OverCeilingDraftRetainsItsExactArenaFootprintAndRefusal() {
+        var readers = Enumerable.Range(start: 0, count: StateCapacity.MaxVisibilityReaders)
+            .Select(selector: index => new string(c: ((char)('a' + (index % 26))), count: StateCapacity.MaxVisibilityReaderLength))
+            .ToArray();
+        var visibility = new StateVisibility(Readers: readers);
+        var cells = new[] { "a", "b", "c", "d" }.Select(selector: key => new StateCell(
+            Key: CellName.Parse(candidate: key),
+            Value: CellValue.Int(value: 0L),
+            Visibility: visibility
+        )).ToArray();
+        var rows = Enumerable.Range(count: 512, start: 0)
+            .Select(selector: index => new WorldStateRow(
+                Name: CellName.Parse(candidate: $"row{index}"),
+                Kind: CellKind.Int,
+                Capacity: cells.Length,
+                Cells: cells
+            ))
+            .ToArray();
+        var resources = WorldResourceDimensions.Measure(definition: new WorldDefinition(
+            StateRaw: new WorldStateSection(World: rows)
+        ));
+
+        Assert.NotNull(resources.ArenaFootprintBytes);
+        Assert.True(condition: (resources.ArenaFootprintBytes > resources.ArenaAdmissionCeilingBytes));
+        Assert.NotNull(resources.MeasurementIssue);
+        Assert.Contains(expectedSubstring: "past the", actualString: resources.MeasurementIssue);
+    }
+    [Fact]
     public void ConversionsDoNotLosePrecisionOrSaturateBeforeDivision() {
         var profile = CostModelProfile.Portable;
 
@@ -94,10 +208,12 @@ public sealed class WorldCostReportLawTests {
     }
     [Fact]
     public void FailedSearchPlanningIsUnmodeledRatherThanAFreeReservation() {
-        var definition = Document() with { SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(
+        var definition = Document() with {
+            SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(
                 Name: "missing",
                 Tokens: "absent"
-            )]) };
+            )]),
+        };
         var report = WorldCostReport.Generate(definition);
 
         Assert.True(condition: report.SearchReservations.IsUnmodeled);

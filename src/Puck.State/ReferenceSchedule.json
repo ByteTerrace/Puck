@@ -724,187 +724,133 @@
             "id": "state.expression.program",
             "entryPoint": "Puck.State.Rules.RuleExpressions.TryEvaluate(IStateReader?, ReadOnlySpan<CompiledExpressionToken>, CellKind, out long, out ExpressionFault)",
             "symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run",
-            "sources": [{"path": "src/Puck.State.Rules/RuleExpressions.cs", "sha256": "0758d8045519344ddbe3a54a71f0d0cce33f9b9599207925555d423451d5753c"}],
+            "sources": [
+                {
+                    "path": "src/Puck.State.Rules/RuleExpressions.cs",
+                    "sha256": "891a90c85227ce6413e80b2686e74741bca3f9c2e9d856ddf9c7594f02dbfc24"
+                }
+            ],
             "formula": "setup + MaxExpressionTokens * (dispatch + the maximum arm) + teardown; the arm maximum is unresolved while the function kernel is",
-            "loopBounds": [{"symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run", "iterations": 64, "contract": "the token walk visits each instruction of a compiled program once, and RuleCapacity.MaxExpressionTokens caps a program at 64"}],
+            "loopBounds": [
+                {
+                    "symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run",
+                    "iterations": 64,
+                    "contract": "the token walk visits each instruction of a compiled program once, and RuleCapacity.MaxExpressionTokens caps a program at 64"
+                }
+            ],
             "includedOverhead": "not established",
             "inputDomainBound": "not established",
             "targets": {
                 "x64.znver4": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "x64.znver3": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "x64.alderlake": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "x64.skylake-avx512": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.neoverse-n2": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.neoverse-v2": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.cortex-a78": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.cortex-a510": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 }
             },
-            "representativeService": {"unmodeled": "at least one pinned evidence target left this kernel unresolved; see targets"}
+            "representativeService": {
+                "unmodeled": "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
+            }
         },
         {
             "id": "state.expression.fold",
             "entryPoint": "Puck.State.Rules.RuleExpressions.TryFold(CompiledFold, IStateReader?, ReadOnlySpan<long>, out long, out ExpressionFault)",
             "symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__TryFold",
-            "sources": [{"path": "src/Puck.State.Rules/RuleExpressions.cs", "sha256": "0758d8045519344ddbe3a54a71f0d0cce33f9b9599207925555d423451d5753c"}],
-            "formula": "setup + family size * (member read + the subprogram) + teardown; unresolved while the program kernel is",
-            "loopBounds": [{"symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__TryFold", "iterations": 256, "contract": "every declared cell of the family is visited once, and StateCapacity.MaxRows caps a family at 256"}],
+            "sources": [
+                {
+                    "path": "src/Puck.State.Rules/RuleExpressions.cs",
+                    "sha256": "891a90c85227ce6413e80b2686e74741bca3f9c2e9d856ddf9c7594f02dbfc24"
+                }
+            ],
+            "formula": "setup + row position capacity * (presence/key read + the subprogram for each live member) + teardown; unresolved while the program kernel is",
+            "loopBounds": [
+                {
+                    "symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__TryFold",
+                    "iterations": 4096,
+                    "contract": "the fold visits each addressable row position once, skips absent identities, and StateCapacity.MaxCellsPerRow caps a row at 4096"
+                }
+            ],
             "includedOverhead": "not established",
             "inputDomainBound": "not established",
             "targets": {
                 "x64.znver4": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "x64.znver3": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "x64.alderlake": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "x64.skylake-avx512": {
                     "unresolved": [
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int32>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<Int64>: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BinaryIntegerFunctions__GreatestCommonDivisor<System_Runtime_Numerics_System_Numerics_BigInteger>: indirect call with no resolvable target"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.neoverse-n2": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.neoverse-v2": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.cortex-a78": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 },
                 "arm64.cortex-a510": {
                     "unresolved": [
-                        "Object__MemberwiseClone: 1 indirect exit(s) with no candidate target in the body",
-                        "Object__MemberwiseClone: indirect call with no resolvable target",
-                        "Object__MemberwiseClone: loop with no declared source-contract iteration bound",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: 1 indirect exit(s) with no candidate target in the body",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: indirect call with no resolvable target",
-                        "Puck_Maths_Puck_Maths_BigIntegerFunctions__SquareRoot: loop with no declared source-contract iteration bound"
+                        "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
                     ]
                 }
             },
-            "representativeService": {"unmodeled": "at least one pinned evidence target left this kernel unresolved; see targets"}
+            "representativeService": {
+                "unmodeled": "source changed to use held-cell cursors; native lowering and instruction-service evidence must be regenerated"
+            }
         }
     ],
     "coefficients": [
@@ -1043,11 +989,15 @@
         {"vocabulary": "effect", "operation": "addState", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
         {"vocabulary": "effect", "operation": "pushState", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
         {"vocabulary": "effect", "operation": "transformState", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
-        {"vocabulary": "effect", "operation": "countdownState", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
         {"vocabulary": "effect", "operation": "generate", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
         {"vocabulary": "effect", "operation": "removeStateCell", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
         {"vocabulary": "effect", "operation": "scheduleState", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
         {"vocabulary": "effect", "operation": "transaction", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
-        {"vocabulary": "effect", "operation": "if", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}}
+        {"vocabulary": "effect", "operation": "if", "numericKinds": ["Int", "Fixed", "Text"], "shapeParameters": [], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for the effect vocabulary; this evidence package covers the compiled expression path only"}},
+        {"vocabulary": "effect", "operation": "claim", "numericKinds": ["Int", "Fixed", "Text", "Vector"], "shapeParameters": ["pool.capacity", "record.fields"], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for bounded pool allocation"}},
+        {"vocabulary": "effect", "operation": "release", "numericKinds": ["Int", "Fixed", "Text", "Vector"], "shapeParameters": ["pool.capacity", "record.fields", "pair.cascade"], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for pool release and dependent-pair cascade"}},
+        {"vocabulary": "effect", "operation": "forEachPool", "numericKinds": ["Int", "Fixed", "Text", "Vector"], "shapeParameters": ["pool.capacity", "body.effects"], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for generation-checked pool iteration"}},
+        {"vocabulary": "effect", "operation": "rewindTurn", "numericKinds": ["Int", "Fixed", "Text", "Vector"], "shapeParameters": ["undo.rows", "undo.entries", "undo.payloadBytes"], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for retained-turn restoration and reindexing"}},
+        {"vocabulary": "effect", "operation": "claimPair", "numericKinds": ["Int", "Fixed", "Text", "Vector"], "shapeParameters": ["left.capacity", "right.capacity", "pair.maxLive", "record.fields"], "kernel": null, "bound": {"unmodeled": "no reference kernel has been captured for stable pair allocation"}}
     ]
 }

@@ -36,6 +36,19 @@ are authored documents, not generated), re-run `puck parity`, and re-calibrate
 the station's contract entry from the run's observed deltas in the same
 change.
 
+`paths.puck` (compiled to `paths.world.json`) is a separate offscreen fixture for bounded Path profiles:
+two circular lobes with a clamped polynomial shear, a smooth tapered quadratic
+stroke, an outline with a hole, and an anisotropically scaled cubic stroke.
+Boot it once with `--backend vulkan` and once with `--backend directx`, using
+separate `--state-dir` and `--capture-dir` directories. Feed `world.wait 100`,
+`wire.errors`, and `quit` on separate stdin lines. Its captures occur at ticks
+60 and 90. Compare the capture directories with `puck parity compare <vulkan>
+<directx> --contract tests/Puck.Parity/paths.contract.json`. The default
+`puck parity` command continues to run `parity.world.json`. Its census palette
+uses observed shaded colors and a separate background entry: the red, gold,
+and cyan coverage was 11,993, 5,930, and 10,225 pixels on the verification frame.
+The floors retain roughly half that coverage; background cannot satisfy them.
+
 ## Documentation
 
 📚 [Engine manual](../../docs/README.md) · 🛠️ [Development](../../docs/development/README.md)

@@ -44,7 +44,7 @@ public class ConstructSugarGuardLawTests {
     /// lowers to, and the text that proves the printer took the fallback instead.</summary>
     private static readonly Dictionary<string, (string Source, string Path, string Fallback)> Fixtures = new(comparer: StringComparer.Ordinal) {
         ["grid"] = (
-            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        grid board : Int dimensions(width: 2, depth: 2)\n    }\n}\n",
+            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        grid board dimensions(width: 2, depth: 2)\n    }\n}\n",
             "state/world/0",
             "row {"
         ),
@@ -54,7 +54,7 @@ public class ConstructSugarGuardLawTests {
             "patterns ["
         ),
         ["pile"] = (
-            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        table deck : Int {\n            a = 1\n        }\n\n        pile stock of deck {\n            a\n        }\n    }\n}\n",
+            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        table deck {\n            a = 1\n        }\n\n        pile stock of deck {\n            a\n        }\n    }\n}\n",
             "state/world/1",
             "row {"
         ),
@@ -64,12 +64,12 @@ public class ConstructSugarGuardLawTests {
             "sets ["
         ),
         ["slot"] = (
-            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        slot hp : Int = 1\n    }\n}\n",
+            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        slot hp = 1\n    }\n}\n",
             "state/world/0",
             "row {"
         ),
         ["table"] = (
-            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        table bag : Int {\n            a = 1\n        }\n    }\n}\n",
+            "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        table bag {\n            a = 1\n        }\n    }\n}\n",
             "state/world/0",
             "row {"
         ),

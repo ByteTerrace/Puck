@@ -2,11 +2,41 @@ using Xunit;
 
 namespace Puck.State.Rules.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <c>sortKeyed</c> and <c>shuffle</c> permute a row whose order is its own — a keyed
+/// <summary>CONTRACT UNDER TEST: <c>sort</c> and <c>shuffle</c> permute a row whose order is its own — a keyed
 /// row or an ordered zone. A board's position is a topology cell and a ring's is a slot, so neither carries an order
 /// to permute: the compiler refuses one of those rows where the transform is authored, and the kernel refuses a
 /// transform built by hand around the compiler.</summary>
 public sealed class TransformRowShapeLawTests {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void ASortRefusesMissingDuplicateAndMixedKeys(int shape) {
+        var (_, context) = Arrange();
+        IReadOnlyList<SortKey> keys = shape switch {
+            0 => [],
+            1 => [null!],
+            2 => [new(Row: "rank"), new(Row: "rank")],
+            _ => [new(Row: "deck"), new(Row: "rank")],
+        };
+        Assert.False(condition: Resolves(context, new StateTransform.Sort(Row: "deck", By: keys), out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "sort");
+    }
+
+    [Fact]
+    public void ASortSelectsItsStoragePathAtCompilationAndKeepsDirection() {
+        var (_, context) = Arrange();
+        Assert.True(condition: RuleCompiler.TryResolveTransform(
+            new StateTransform.Sort(Row: "scores", By: [new(Row: "scores", Descending: true)]),
+            context, out var own, out var reason), userMessage: reason);
+        Assert.True(condition: Assert.IsType<ArenaTransform.SortKeyed>(@object: own).Descending);
+        Assert.True(condition: RuleCompiler.TryResolveTransform(
+            new StateTransform.Sort(Row: "deck", By: [new(Row: "rank", Descending: true)]),
+            context, out var attributes, out reason), userMessage: reason);
+        Assert.True(condition: Assert.Single(collection: Assert.IsType<ArenaTransform.SortZone>(@object: attributes).By).Descending);
+    }
+
     private static (ArenaEffectHost Host, RuleCompileContext Context) Arrange() {
         var section = TransformFixture.Section();
         var context = TransformFixture.Context(section: section);
@@ -32,7 +62,7 @@ public sealed class TransformRowShapeLawTests {
         Assert.True(condition: Resolves(
             context: context,
             reason: out var reason,
-            transform: new StateTransform.SortKeyed(Row: row)
+            transform: new StateTransform.Sort(Row: row, By: [new SortKey(Row: row)])
         ), userMessage: reason);
     }
     [InlineData("log")]
@@ -44,11 +74,11 @@ public sealed class TransformRowShapeLawTests {
         Assert.False(condition: Resolves(
             context: context,
             reason: out var reason,
-            transform: new StateTransform.SortKeyed(Row: row)
+            transform: new StateTransform.Sort(Row: row, By: [new SortKey(Row: row)])
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "sortKeyed requires a keyed or ordered numeric row"
+            expectedSubstring: "sort by own values requires a keyed or ordered numeric row"
         );
     }
     [InlineData("scores")]

@@ -46,6 +46,11 @@ namespace Puck.World;
 /// document-authored grant reads the same compact <c>world.grant</c> tokens rather than a raw field object.
 /// </summary>
 [JsonSerializable(typeof(WorldDefinition))]
+[JsonSerializable(typeof(CellValueJsonConverter.IntShape))]
+[JsonSerializable(typeof(CellValueJsonConverter.FixedShape))]
+[JsonSerializable(typeof(CellValueJsonConverter.BoolShape))]
+[JsonSerializable(typeof(CellValueJsonConverter.TextShape))]
+[JsonSerializable(typeof(CellValueJsonConverter.VectorShape))]
 // puck.world.projection.v1 — the egress document (see WorldProjection). It rides this same context deliberately:
 // one strictness policy, one enum regime, one Vector3 spelling for both document families.
 [JsonSerializable(typeof(WorldProjectionDocument))]
@@ -276,6 +281,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.RemovePlacement))]
 [JsonSerializable(typeof(WorldEffect.Save))]
 [JsonSerializable(typeof(WorldEffect.Pose))]
+[JsonSerializable(typeof(WorldEffect.PoseCell))]
 [JsonSerializable(typeof(WorldEffect.SetIdentityFact))]
 [JsonSerializable(typeof(WorldIdentityFacts))]
 [JsonSerializable(typeof(WorldPredicate.Now))]
@@ -395,6 +401,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldCurveRow> WorldCurveRow => Get<WorldCurveRow>();
     /// <summary>Gets the type info for <see cref="WorldDefinition"/>.</summary>
     public JsonTypeInfo<WorldDefinition> WorldDefinition => Get<WorldDefinition>();
+    /// <summary>Gets the source-generated type info for a complete state declaration and continuation.</summary>
+    public JsonTypeInfo<WorldStateSection> WorldStateSection => Get<WorldStateSection>();
     /// <summary>Gets the type info for <see cref="WorldFrameSource"/>.</summary>
     public JsonTypeInfo<WorldFrameSource> WorldFrameSource => Get<WorldFrameSource>();
     /// <summary>Gets the type info for <see cref="WorldGroupKind"/>.</summary>
@@ -660,7 +668,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 /// <summary>The document row's wire shape: the engine's <see cref="StateRowJsonConverter{TRow}"/> plus the members
-/// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c>/<c>verdict</c> beside the traits.</summary>
+/// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c>/<c>verdict</c>/<c>witness</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
     protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
@@ -668,10 +676,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
     protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
 
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…},\"verdict\":{\"gate\":…,\"status\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…},\"verdict\":{\"gate\":…,\"status\":…},\"witness\":…}";
 
     /// <inheritdoc/>
-    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field" or "verdict");
+    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field" or "verdict" or "witness");
     /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
         row: row,
@@ -701,6 +709,16 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 options: options,
                 context: $"state row '{members.Name}'.verdict"
             )
+        : null),
+        witness: (members.Claimed.TryGetValue(
+            key: "witness",
+            value: out var witness
+        )
+        ? ReadNested<CellName>(
+                element: witness,
+                options: options,
+                context: $"state row '{members.Name}'.witness"
+            )
         : null)
     );
     /// <inheritdoc/>
@@ -718,6 +736,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
         new(
             Name: "verdict",
             Schema: exportType(typeof(WorldVerdictTrait))
+        ),
+        new(
+            Name: "witness",
+            Schema: exportType(typeof(CellName))
         ),
     ];
     /// <inheritdoc/>
@@ -755,6 +777,13 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 propertyName: "verdict",
                 value: verdictTrait,
                 writer: writer
+            );
+        }
+
+        if (row.Witness is { } witness) {
+            writer.WriteString(
+                propertyName: "witness",
+                value: witness.Value
             );
         }
     }
@@ -1150,7 +1179,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
 /// with no BOM, LF newlines, two-space indentation, and exactly one trailing newline at EOF, so a load→save reproduces
 /// the file byte-for-byte and world files stay diffable and git-friendly.
 /// </summary>
-public static class WorldDefinitionSerialization {
+public static partial class WorldDefinitionSerialization {
     /// <summary>Deserializes, migrates, and validates a definition from its canonical UTF-8 JSON bytes — the inverse
     /// of <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes
     /// ride a file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as
@@ -1166,20 +1195,7 @@ public static class WorldDefinitionSerialization {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
 
         try {
-            var definition = (JsonSerializer.Deserialize(
-                utf8Json: utf8Json,
-                jsonTypeInfo: WorldJsonContext.Default.WorldDefinition
-            )
-                ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null."));
-
-            definition = WorldDefinitionMigrations.Apply(definition: definition);
-
-            if (!WorldStateDocumentValues.TryResolve(
-                definition: definition,
-                reason: out var spatialReason
-            )) {
-                throw new InvalidOperationException(message: spatialReason);
-            }
+            var definition = ParseEmbedded(utf8Json: utf8Json);
 
             // An embedded document already crossed a boundary that proved its cross-document claims (a boot load,
             // replay recording, identity issue, or authority projection). This storage-free rehydration cannot
@@ -1194,10 +1210,7 @@ public static class WorldDefinitionSerialization {
 
             return definition;
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
-            throw new InvalidDataException(
-                message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}",
-                innerException: exception
-            );
+            throw InvalidEmbedded(exception: exception);
         }
     }
     /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path).</summary>

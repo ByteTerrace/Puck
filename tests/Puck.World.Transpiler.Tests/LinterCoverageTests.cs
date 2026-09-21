@@ -130,7 +130,7 @@ public class LinterCoverageTests {
     public void ModuleWithNoSchemaAndNoBasisIsNotARoot() {
         var fullPath = Path.Combine(
             path1: ShippedWorlds.FindDirectory(),
-            path2: "games/chess.world.json"
+            path2: "games/dominoes.world.json"
         );
 
         var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path: fullPath))!.AsObject();
@@ -150,8 +150,8 @@ public class LinterCoverageTests {
         // "claimTicks" is a state row the root itself declares and reads inside a rule's own `when` clause —
         // corrupting this one read (never the row declaration, and never another read of the same row) isolates
         // exactly one bad reference in an otherwise-clean document.
-        const string Original = "when claimTicks > 0";
-        const string Misspelled = "when claimTicksXTYPO > 0";
+        const string Original = "when $tick >= claimTicks";
+        const string Misspelled = "when $tick >= claimTicksXTYPO";
         var typoAt = decompiled.IndexOf(
             comparisonType: StringComparison.Ordinal,
             value: Original

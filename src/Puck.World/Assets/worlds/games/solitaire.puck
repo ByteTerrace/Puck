@@ -14,7 +14,7 @@ export read solitaire, solitaireFreecell, solitaireKlondike, solitaireSpider
 
 state {
   world {
-    table solitaire: Int capacity(1) {
+    table solitaire capacity(1) {
       table = 0
     }
   }

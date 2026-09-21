@@ -8,7 +8,7 @@ namespace Puck.World;
 
 /// <summary>
 /// What travels with an identity across a federation seam: the appearance a destination renders it with and the
-/// motion-envelope rates it claims. Everything else an owned world carries — chat allow-list grants, controller
+/// motion-envelope rates it claims and its explicitly owned records. Other owned state — chat allow-list grants, controller
 /// history, cross-game state rows, bindings, the private HUD panel — stays at home, so walking into a stranger's
 /// world discloses none of it.
 /// </summary>
@@ -19,9 +19,10 @@ namespace Puck.World;
 /// the seat then moves at the kit's own authored rate. A claimed rate is clamped against the destination's kit
 /// envelope.</param>
 /// <param name="TurnSpeed">The claimed turn rate, or <see langword="null"/>, clamped the same way.</param>
-public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed);
+/// <param name="Records">Only the explicitly identity-owned typed record pools and their dependencies.</param>
+public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed, WorldStateSection? Records = null);
 /// <summary>A live identity backed by one owned <see cref="WorldDefinition"/>.</summary>
-public sealed class WorldIdentity {
+public sealed partial class WorldIdentity {
     private readonly string m_neutralColor;
     private readonly float m_noseFactor;
 
@@ -207,9 +208,8 @@ public sealed class WorldIdentity {
         }
     }
 
-    /// <summary>Rebuilds an arriving traveler's identity from its projection alone — no owned document, so
-    /// <see cref="Document"/> is null and every durable read answers as it does for a
-    /// <see cref="Pinned"/> identity.</summary>
+    /// <summary>Rebuilds an arriving traveler's identity from its projection alone. <see cref="Document"/> is
+    /// null; only explicitly transferred <see cref="RecordState"/> is available as typed durable state.</summary>
     /// <param name="projection">The projection the wire carried.</param>
     /// <param name="defaults">The destination's player defaults.</param>
     /// <returns>The arriving identity.</returns>
@@ -217,7 +217,7 @@ public sealed class WorldIdentity {
     public static WorldIdentity FromProjection(in WorldIdentityProjection projection, WorldPlayerDefaults defaults) {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
-        return new WorldIdentity(
+        var identity = new WorldIdentity(
             name: projection.Name,
             moveSpeed: projection.MoveSpeed,
             turnSpeed: projection.TurnSpeed,
@@ -225,6 +225,10 @@ public sealed class WorldIdentity {
             id: projection.Id,
             colorHex: projection.ColorHex
         );
+
+        WorldIdentityRecords.Validate(section: projection.Records);
+        identity.m_travelRecords = projection.Records;
+        return identity;
     }
     /// <summary>Parses a hex color with a fallback.</summary>
     /// <param name="hex">The <c>#RRGGBB</c> hex color to parse.</param>
@@ -259,7 +263,8 @@ public sealed class WorldIdentity {
             Name: Name,
             ColorHex: ColorHex,
             MoveSpeed: m_moveSpeed,
-            TurnSpeed: m_turnSpeed
+            TurnSpeed: m_turnSpeed,
+            Records: RecordState
         );
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
@@ -377,7 +382,7 @@ public sealed class WorldIdentity {
             key: out var victim,
             rowOrdinal: handle.Ordinal
         )) {
-            evictedKey = arena.Catalog.Keys[victim];
+            evictedKey = arena.Keys[victim];
         }
 
         if (!arena.TryMint(
@@ -479,10 +484,12 @@ public sealed class WorldIdentity {
                 return false;
             }
 
-            WriteState(row: declared with { Cells = [.. cells, new StateCell(
+            WriteState(row: declared with {
+                Cells = [.. cells, new StateCell(
                     Key: key,
                     Value: CellValue.Int(value: value)
-                )] });
+                )],
+            });
         } else {
             WriteState(row: new WorldStateRow(
                 Name: definition.State,
@@ -506,7 +513,7 @@ public sealed class WorldIdentity {
         if (Document is null) {
             return;
         }
-        var state = Document.State.Where(predicate: candidate => !string.Equals(
+        var state = Document.AuthoredState.Where(predicate: candidate => !string.Equals(
             a: candidate.Name,
             b: row.Name,
             comparisonType: StringComparison.Ordinal
@@ -522,7 +529,7 @@ public sealed class WorldIdentity {
             return true;
         }
 
-        var hostByName = hostSpaces.Where(predicate: static s => s is not null).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
+        var hostByName = hostSpaces.Where(predicate: static s => (s is not null)).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
 
         foreach (var space in identitySpaces) {
             if (space is null) {

@@ -4,25 +4,71 @@ using Puck.Maths;
 namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
+    /// <summary>Resolves a qualified pool field (<c>binding.field</c>) in the active lexical instance scope.</summary>
+    public static bool TryResolveInstanceField(StateChannelRef reference, RuleCompileContext context, out RuleInstanceBinding binding, out StatePoolFieldDescriptor field) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+        if (reference.PoolField is not { Binding: { } bindingName, Pool: null, Slot: null } typed) {
+            binding = default;
+            field = default;
+            return false;
+        }
+        if (!context.TryInstanceBinding(name: bindingName, binding: out binding)) {
+            field = default;
+            return false;
+        }
+
+        foreach (var candidate in binding.Pool.Fields) {
+            if (string.Equals(a: candidate.Name.Value, b: typed.Field, comparisonType: StringComparison.Ordinal)) {
+                field = candidate;
+                return true;
+            }
+        }
+        field = default;
+        return false;
+    }
+
+    private static bool TryResolveStaticInstanceField(StateChannelRef reference, StateChannelRef? cell, RuleCompileContext context, out StatePoolDescriptor? pool, out StatePoolFieldDescriptor field, out StateInstanceHandle handle) {
+        pool = null;
+        field = default;
+        handle = default;
+        if ((reference.PoolField is not { Pool: { } poolName, Slot: { } slot, Binding: null } typed) || (cell is not null) || !context.TryStaticPoolHandle(poolName: poolName, slot: slot, pool: out pool, handle: out handle) || (pool is null)) {
+            return false;
+        }
+        foreach (var candidate in pool.Fields) {
+            if (string.Equals(a: candidate.Name.Value, b: typed.Field, comparisonType: StringComparison.Ordinal)) {
+                field = candidate;
+                return true;
+            }
+        }
+        pool = null;
+        handle = default;
+        return false;
+    }
+
     /// <summary>Resolves any read operand — a compareState's primary (state, key) pair, its comparand, a
     /// setState/addState's live copy source, an expression's state token — through the same reserved-channel/state-row
     /// walk, so no two of them can drift into different readings of the same name. The registered families are
     /// consulted first, then the library's own channels, then the declared rows.</summary>
-    /// <param name="name">The authored operand name.</param>
-    /// <param name="key">The authored cell key, or <see langword="null"/>.</param>
+    /// <param name="operand">The authored operand: a row name, or a reserved channel as a call.</param>
+    /// <param name="cell">The authored cell key, or <see langword="null"/>.</param>
     /// <param name="site">Where the operand is spelled.</param>
     /// <param name="context">The compile context.</param>
     /// <returns>The resolved operand.</returns>
-    public static ResolvedOperand ResolveOperand(string name, string? key, in OperandSite site, RuleCompileContext context) {
+    public static ResolvedOperand ResolveOperand(StateChannelRef operand, StateChannelRef? cell, in OperandSite site, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
-        ArgumentNullException.ThrowIfNull(argument: name);
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        // The spellings are what a refusal and a read-back quote; the call is what the walk dispatches on.
+        var call = operand.Call;
+        var key = cell?.Spelling;
+        var name = operand.Spelling;
 
         foreach (var family in context.Vocabulary.Operands) {
             if (family.TryCompile(
+                cell: cell,
                 context: context,
                 fact: out var fact,
-                key: key,
-                name: name,
+                reference: operand,
                 site: in site
             )) {
                 context.Needs.AddFact(fact: fact);
@@ -37,75 +83,133 @@ public static partial class RuleCompiler {
             }
         }
 
+        if (TryResolveInstanceField(binding: out var instance, context: context, field: out var field, reference: operand)) {
+            if (cell is not null) {
+                throw new RuleException(
+                    detail: $"'{site.Verb}' addresses pool field '{name}' with a cell key — a qualified field already selects one instance cell",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: site.RuleName
+                );
+            }
+            if ((field.Kind == CellKind.Text) && !site.AllowText) {
+                throw new RuleException(
+                    detail: $"pool field '{name}' is kind=Text — a rule compares numbers, never text",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: site.RuleName
+                );
+            }
+            if (field.Kind == CellKind.Vector) {
+                throw new RuleException(
+                    detail: $"pool field '{name}' is kind=Vector — a scalar operand site cannot read it",
+                    refusal: RuleRefusal.VectorEffectNotAdmitted,
+                    ruleName: site.RuleName
+                );
+            }
+            return new ResolvedOperand(
+                describe: name,
+                operand: new InstanceFieldOperand(pool: instance.Pool, field: field, bindingSlot: instance.Slot)
+            );
+        }
+        if (TryResolveStaticInstanceField(cell: cell, context: context, field: out var staticField, handle: out var staticHandle, pool: out var staticPool, reference: operand)) {
+            if ((staticField.Kind == CellKind.Text) && !site.AllowText) {
+                throw new RuleException(
+                    detail: $"pool field '{name}' is kind=Text — a rule compares numbers, never text",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: site.RuleName
+                );
+            }
+            if (staticField.Kind == CellKind.Vector) {
+                throw new RuleException(
+                    detail: $"pool field '{name}' is kind=Vector — a scalar operand site cannot read it",
+                    refusal: RuleRefusal.VectorEffectNotAdmitted,
+                    ruleName: site.RuleName
+                );
+            }
+            return new ResolvedOperand(
+                describe: name,
+                operand: new StaticInstanceFieldOperand(field: staticField, handle: staticHandle, pool: staticPool!)
+            );
+        }
+        if (operand.PoolField is { Binding: { } bindingName } bindingField) {
+            throw new RuleException(
+                detail: (context.TryInstanceBinding(name: bindingName, binding: out _)
+                    ? $"pool binding '{bindingName}' has no field '{bindingField.Field}'"
+                    : $"pool binding '{bindingName}' is not live at this use"),
+                refusal: RuleRefusal.StateRowUnknown,
+                ruleName: site.RuleName
+            );
+        }
+        if (operand.PoolField is { Pool: { } poolName, Slot: { } slot } poolField) {
+            if (!context.Catalog.TryGetPool(name: CellName.Parse(candidate: poolName), pool: out var declaredPool) || (declaredPool is null)) {
+                throw new RuleException(detail: $"'{poolName}' names no declared pool", refusal: RuleRefusal.StateRowUnknown, ruleName: site.RuleName);
+            }
+            throw new RuleException(
+                detail: ((((uint)slot) >= ((uint)declaredPool.Capacity))
+                    ? $"pool '{poolName}' slot {slot} lies outside capacity {declaredPool.Capacity}"
+                    : $"pool '{poolName}' has no field '{poolField.Field}'"),
+                refusal: RuleRefusal.StateCellUnaddressable,
+                ruleName: site.RuleName
+            );
+        }
+
         var ruleName = site.RuleName;
 
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "$phase:"
-        )) {
-            return ResolvePhaseOperand(
-                context: context,
-                key: key,
-                name: name,
-                ruleName: ruleName
-            );
-        }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "$board:"
-        )) {
-            return ResolveBoardOperand(
-                context: context,
-                key: key,
-                name: name,
-                ruleName: ruleName
-            );
-        }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.MatchPrefix
-        )) {
-            return ResolvePatternOperand(
-                context: context,
-                key: key,
-                name: name,
-                ruleName: ruleName
-            );
-        }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.HistoryPrefix
-        )) {
-            return ResolveHistoryOperand(
-                context: context,
-                key: key,
-                name: name,
-                ruleName: ruleName
-            );
-        }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.LocalPrefix
-        )) {
-            return ResolveLocalOperand(
-                context: context,
-                key: key,
-                keyFieldLabel: site.KeyFieldLabel,
-                name: name,
-                ruleName: ruleName
-            );
-        }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.TablePrefix
-        )) {
-            return ResolveTableOperand(
-                context: context,
-                key: key,
-                keyFieldLabel: site.KeyFieldLabel,
-                name: name,
-                ruleName: ruleName
-            );
+        // A reserved channel is dispatched on its name; what each argument means is the channel's own compiler's
+        // business.
+        switch (call?.Channel) {
+            case "phase":
+                return ResolvePhaseOperand(
+                    call: call,
+                    context: context,
+                    key: cell,
+                    name: name,
+                    ruleName: ruleName
+                );
+            case "board":
+                return ResolveBoardOperand(
+                    call: call,
+                    context: context,
+                    key: cell,
+                    name: name,
+                    ruleName: ruleName
+                );
+            case "match":
+                return ResolvePatternOperand(
+                    call: call,
+                    context: context,
+                    key: cell,
+                    name: name,
+                    ruleName: ruleName
+                );
+            case "history":
+                return ResolveHistoryOperand(
+                    call: call,
+                    context: context,
+                    key: cell,
+                    name: name,
+                    ruleName: ruleName
+                );
+            case "local":
+                return ResolveLocalOperand(
+                    context: context,
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+            case "table":
+                return ResolveTableOperand(
+                    context: context,
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+            case "search" when (name == RuleFacts.SearchPly):
+                RefuseKeyOnReservedChannel(key: cell, keyFieldLabel: site.KeyFieldLabel, name: name, ruleName: ruleName);
+                context.Needs.MarkVolatile();
+
+                return new ResolvedOperand(describe: name, operand: SearchPlyOperand.Instance);
         }
 
         var describe = Describe(
@@ -119,7 +223,7 @@ public static partial class RuleCompiler {
             comparisonType: StringComparison.Ordinal
         )) {
             RefuseKeyOnReservedChannel(
-                key: key,
+                key: cell,
                 keyFieldLabel: site.KeyFieldLabel,
                 name: name,
                 ruleName: ruleName
@@ -131,27 +235,23 @@ public static partial class RuleCompiler {
                 operand: TickOperand.Instance
             );
         }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.ReducePrefix
-        )) {
+        if (call?.Channel == "reduce") {
             return ResolveReduceOperand(
+                call: call,
                 context: context,
                 describe: describe,
-                key: key,
+                key: cell,
                 keyFieldLabel: site.KeyFieldLabel,
                 name: name,
                 ruleName: ruleName
             );
         }
-        if (name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RuleFacts.SymmetryPrefix
-        )) {
+        if (call?.Channel == "symmetry") {
             return ResolveSymmetryOperand(
+                call: call,
                 context: context,
                 describe: describe,
-                key: key,
+                key: cell,
                 name: name,
                 site: in site
             );
@@ -166,7 +266,7 @@ public static partial class RuleCompiler {
             return ResolveLiveRowCell(
                 context: context,
                 describe: describe,
-                key: key,
+                key: cell,
                 live: live!,
                 site: in site
             );
@@ -217,7 +317,7 @@ public static partial class RuleCompiler {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: key,
+            reference: cell,
             keyFieldLabel: site.KeyFieldLabel,
             ruleName: ruleName,
             verb: site.Verb
@@ -295,13 +395,21 @@ public static partial class RuleCompiler {
     private static string Describe(string name, string? key) => $"{name}{((key is { } spelled)
         ? $".{spelled}"
         : string.Empty)}";
-    private static ResolvedOperand ResolveLocalOperand(string name, string? key, string ruleName, string keyFieldLabel, RuleCompileContext context) {
+    private static ResolvedOperand ResolveLocalOperand(string name, StateChannelRef? key, string ruleName, string keyFieldLabel, RuleCompileContext context) {
         RefuseKeyOnReservedChannel(
             key: key,
             keyFieldLabel: keyFieldLabel,
             name: name,
             ruleName: ruleName
         );
+
+        if (name.Length <= RuleFacts.LocalPrefix.Length) {
+            throw new RuleException(
+                detail: $"'{name}' does not spell '{RuleFacts.LocalPrefix}<name>'",
+                refusal: RuleRefusal.StateCellUnaddressable,
+                ruleName: ruleName
+            );
+        }
 
         var bound = name[RuleFacts.LocalPrefix.Length..];
         var scope = (context.RuleLocals ?? []);
@@ -334,16 +442,13 @@ public static partial class RuleCompiler {
     // other spelling is an int expression evaluated per read, whose result outside 0..capacity-1 reads the ring's
     // empty value exactly as an out-of-range constant would. The age is everything after the second colon, so a
     // ternary's own colon stays inside it.
-    private static ResolvedOperand ResolveHistoryOperand(string name, string? key, string ruleName, RuleCompileContext context) {
+    private static ResolvedOperand ResolveHistoryOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, RuleCompileContext context) {
         RuleException Invalid(string detail) => new(
             detail: detail,
             refusal: RuleRefusal.StateCellUnaddressable,
             ruleName: ruleName
         );
-        var tokens = name.Split(
-            count: 3,
-            separator: ':'
-        );
+        var tokens = call.Tokens();
 
         if (
             (tokens.Length != 3) ||
@@ -412,7 +517,7 @@ public static partial class RuleCompiler {
     }
     // A live row's cell: the key resolves exactly as a fixed row's would, but no cell can be proven declared at
     // compile — a zone's members come and go — so a literal key is only proven well-formed.
-    private static ResolvedOperand ResolveLiveRowCell(LiveRow live, string? key, in OperandSite site, RuleCompileContext context, string describe) {
+    private static ResolvedOperand ResolveLiveRowCell(LiveRow live, StateChannelRef? key, in OperandSite site, RuleCompileContext context, string describe) {
         var ruleName = site.RuleName;
         var kind = ((live.Table is { } table)
             ? table.Kind
@@ -423,7 +528,7 @@ public static partial class RuleCompiler {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: key,
+            reference: key,
             keyFieldLabel: site.KeyFieldLabel,
             ruleName: ruleName,
             verb: site.Verb
@@ -447,7 +552,7 @@ public static partial class RuleCompiler {
             );
         }
         if (!CellName.TryParse(
-            candidate: key,
+            candidate: key?.Spelling,
             name: out var parsed,
             reason: out var reason
         )) {
@@ -470,8 +575,8 @@ public static partial class RuleCompiler {
         );
     }
     // $phase:<row> — the row's own generation, the same value a PhaseGuard checks against it.
-    private static ResolvedOperand ResolvePhaseOperand(string name, string? key, string ruleName, RuleCompileContext context) {
-        var tokens = name.Split(separator: ':');
+    private static ResolvedOperand ResolvePhaseOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, RuleCompileContext context) {
+        var tokens = call.Tokens();
 
         if (
             (key is not null) ||
@@ -493,7 +598,7 @@ public static partial class RuleCompiler {
             ))
         );
     }
-    private static ResolvedOperand ResolveReduceOperand(string name, string? key, string ruleName, string keyFieldLabel, RuleCompileContext context, string describe) {
+    private static ResolvedOperand ResolveReduceOperand(ChannelCall call, string name, StateChannelRef? key, string ruleName, string keyFieldLabel, RuleCompileContext context, string describe) {
         RefuseKeyOnReservedChannel(
             key: key,
             keyFieldLabel: keyFieldLabel,
@@ -501,19 +606,15 @@ public static partial class RuleCompiler {
             ruleName: ruleName
         );
 
-        var suffix = name[RuleFacts.ReducePrefix.Length..];
-        var separator = suffix.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            value: ':'
-        );
+        var op = StateReduceOp.None;
 
         if (
-            (separator < 0) ||
+            (call.Count < 2) ||
             !TryParseReduceOp(
-            op: out var op,
-            text: suffix[..separator]
+            op: out op,
+            text: call.Text(index: 0)
         ) ||
-            string.IsNullOrEmpty(value: suffix[(separator + 1)..])
+            string.IsNullOrEmpty(value: call.Text(index: 1))
         ) {
             throw new RuleException(
                 detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}<max|min|sum|count|arrangementRank>:<row>'",
@@ -522,7 +623,7 @@ public static partial class RuleCompiler {
             );
         }
 
-        var parts = RuleFacts.SplitChannel(name: suffix[(separator + 1)..]);
+        var parts = call.Texts(start: 1);
         var rowName = parts[0];
         string? filterRowName = null;
         (decimal Lower, decimal Upper)? bounds = null;
@@ -572,11 +673,22 @@ public static partial class RuleCompiler {
         var ordered = true;
         var rowKind = CellKind.Int;
         var rowOrdinal = -1;
+        LiveRow? live = null;
 
-        if (!TryResolveLiveRow(
+        if (
+            (op == StateReduceOp.Count) &&
+            (filterRowName is null) &&
+            (bounds is null) &&
+            CellName.TryParse(candidate: rowName, name: out var poolName, reason: out _) &&
+            context.Catalog.TryGetPool(name: poolName, pool: out var pool) &&
+            (pool is not null)
+        ) {
+            capacity = pool.Capacity;
+            rowOrdinal = pool.DomainRowOrdinal;
+        } else if (!TryResolveLiveRow(
             context: context,
             name: rowName,
-            row: out var live,
+            row: out live,
             ruleName: ruleName,
             where: $"'{name}' row"
         )) {
@@ -682,7 +794,7 @@ public static partial class RuleCompiler {
     }
     // $symmetry:<function>[:<argument>]:<row> — the row is the last token, the function the first, and whatever
     // sits between is the argument the function takes.
-    private static ResolvedOperand ResolveSymmetryOperand(string name, string? key, in OperandSite site, RuleCompileContext context, string describe) {
+    private static ResolvedOperand ResolveSymmetryOperand(ChannelCall call, string name, StateChannelRef? key, in OperandSite site, RuleCompileContext context, string describe) {
         static RuleException Malformed(string ruleName, string name, string detail) => new(
             detail: $"'{name}' {detail} — a symmetry channel spells '{RuleFacts.SymmetryPrefix}<ring|antipode|canonicalRay|cycle:<steps>|reflect:<node|cell:<row>[.<key>]>|orthogonal:<node|cell:<row>[.<key>]>|innerProduct:<node|cell:<row>[.<key>]>|projectionX|projectionY>:<row>'",
             refusal: RuleRefusal.SymmetryChannelMalformed,
@@ -690,7 +802,7 @@ public static partial class RuleCompiler {
         );
 
         var ruleName = site.RuleName;
-        var tokens = RuleFacts.SplitChannel(name: name[RuleFacts.SymmetryPrefix.Length..]);
+        var tokens = call.Texts();
 
         if (tokens.Length < 2) {
             throw Malformed(
@@ -735,8 +847,8 @@ public static partial class RuleCompiler {
 
         var source = ResolveOperand(
             context: context,
-            key: key,
-            name: rowName,
+            cell: key,
+            operand: StateChannelRef.Parse(spelling: rowName),
             site: site with { AllowText = false }
         );
 
@@ -781,8 +893,8 @@ public static partial class RuleCompiler {
                 );
                 var resolved = ResolveOperand(
                     context: context,
-                    key: otherKey,
-                    name: otherRow,
+                    cell: StateChannelRef.OfNullable(spelling: otherKey),
+                    operand: StateChannelRef.Parse(spelling: otherRow),
                     site: site with { AllowText = false }
                 );
 
@@ -831,13 +943,21 @@ public static partial class RuleCompiler {
         );
     }
     // $table:<name>:<key> for a single-value table, $table:<name>:<column>:<key> for a column table.
-    private static ResolvedOperand ResolveTableOperand(string name, string? key, string ruleName, RuleCompileContext context, string keyFieldLabel) {
+    private static ResolvedOperand ResolveTableOperand(string name, StateChannelRef? key, string ruleName, RuleCompileContext context, string keyFieldLabel) {
         RefuseKeyOnReservedChannel(
             key: key,
             keyFieldLabel: keyFieldLabel,
             name: name,
             ruleName: ruleName
         );
+
+        if (name.Length <= RuleFacts.TablePrefix.Length) {
+            throw new RuleException(
+                detail: $"'{name}' does not spell '{RuleFacts.TablePrefix}<table>:<key>' or '{RuleFacts.TablePrefix}<table>:<column>:<key>'",
+                refusal: RuleRefusal.StateCellUnaddressable,
+                ruleName: ruleName
+            );
+        }
 
         var rest = name[RuleFacts.TablePrefix.Length..];
         var firstColon = rest.IndexOf(value: ':');
@@ -905,7 +1025,7 @@ public static partial class RuleCompiler {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            key: spelledKey,
+            reference: StateChannelRef.Parse(spelling: spelledKey),
             keyFieldLabel: "key",
             ruleName: ruleName,
             verb: name

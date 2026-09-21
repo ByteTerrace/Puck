@@ -181,7 +181,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
     private readonly IGpuBuffer m_viewportDeviceBuffer;
     private readonly IGpuBuffer m_dynamicTransformDeviceBuffer;
-    private readonly IGpuBuffer m_instanceGridDeviceBuffer;
+    private IGpuBuffer m_instanceGridDeviceBuffer;
 
     // The frame instance grid's written word count — the copy window (UploadProgram seeds it for an invariant grid,
     // PrepareFrame for a per-frame rebuild).
@@ -216,18 +216,18 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuExportableStorageImage? m_exportableImage;
     private readonly IGpuComputeServices m_gpu;
     private readonly uint m_height;
-    private readonly int m_instanceCapacity;
+    private int m_instanceCapacity;
     private readonly IGpuComputePipeline m_instanceCullPipeline;
     private readonly IGpuShaderModule m_instanceCullShaderModule;
-    private readonly SdfInstanceGridInput[] m_instanceGridInputScratch;
-    private readonly int m_instanceGridWordCapacity;
-    private readonly SdfInstanceGrid.Workspace m_instanceGridWorkspace;
-    private readonly IGpuBuffer m_instanceMaskBuffer;
-    private readonly int m_instanceMaskWordCount;
+    private SdfInstanceGridInput[] m_instanceGridInputScratch;
+    private int m_instanceGridWordCapacity;
+    private SdfInstanceGrid.Workspace m_instanceGridWorkspace;
+    private IGpuBuffer m_instanceMaskBuffer;
+    private int m_instanceMaskWordCount;
     private readonly bool m_liveArmedTiming;
     private readonly nint m_pool;
-    private readonly IGpuStorageBuffer m_programBuffer;
-    private readonly int m_programWordCapacity;
+    private IGpuStorageBuffer m_programBuffer;
+    private int m_programWordCapacity;
     private readonly nint m_screenSampler;
     private readonly IGpuStorageImage m_screenSourceFiller;
     // Shares Stage 1's exact bindings array (viewsBindings) and push/sampler shape, so its descriptor-set layout is
@@ -237,7 +237,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuShaderModule m_skyShaderModule;
     private readonly IGpuStorageImage?[] m_sourceTextures;
     private readonly IGpuStorageImage m_storageImage;
-    private readonly IGpuBuffer m_tileBuffer;
+    private IGpuBuffer m_tileBuffer;
     private readonly uint m_tileGridX;
     private readonly uint m_tileGridY;
     // Timing is AVAILABLE when a supported factory + recorder were supplied; whether a given frame is timed is a
@@ -659,7 +659,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // cull before the beam (a UAV, so device-local too), read by Stage 1 to gate its masked map() calls. The
         // buffer is sized for the CONSTRUCTION program's width (ceil(instanceCount/32) uints, at least 1 —
         // SdfProgram.InstanceMaskWordCount); the kernels index with the LIVE uploaded program's width, pushed per
-        // frame (m_liveInstanceMaskWordCount), which UploadProgram caps at this construction width.
+        // frame (m_liveInstanceMaskWordCount). UploadProgram grows this reserve when necessary.
         m_instanceMaskWordCount = Math.Max(
             val1: options.Program.InstanceMaskWordCount,
             val2: SdfProgram.InstanceMaskWordCountFor(instanceCount: options.InstanceCapacity)

@@ -17,6 +17,12 @@ same catalog used to construct machines. World admission supplies that catalog t
 machine checks. Semantic author tools report those missing checks. There is no
 machine registration fallback or machine vocabulary module initializer.
 
+Machine preparation accepts the current operation's `WorldDefinitionAdmission`
+from the server, so it need not validate the whole unchanged world again. The
+receipt must name this exact candidate and catalog; prepared assets and runtime
+outputs still pass the machine host's own checks. See the
+[admission ownership contract](../Puck.World.Schema/README.md#the-rules-documentthe-per-body-action-primitive-one-level-up).
+
 Every engine publishes a `MachineEngineDescriptor` for its versioned configuration,
 ports, operations, and hardware spaces. Structured construction takes a
 `MachineCreationRequest` containing host-prepared assets. Field metadata distinguishes

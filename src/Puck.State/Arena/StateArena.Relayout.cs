@@ -15,12 +15,14 @@ public sealed partial class StateArena {
     /// capacity, or symbolic domain will not admit is refused by row and cell name, leaving the arena as it was.
     /// <para>Every value crosses through the same admission door an authored write does, so a relayout cannot land
     /// a value no write could.</para>
+    /// <para>The complete committed key ledger also crosses by name, including orphan names no row currently
+    /// references, because those names remain part of future mint admission and the arena hash.</para>
     /// <para>The participant and identity lanes cross whole — the roster and each named lane slot's values — since
     /// they belong to the host's session rather than to the document being re-declared.</para>
     /// <para>Three structures are layout-bound and rebuilt rather than carried: the per-row key-to-slot index, the
-    /// change-walk scratch, and every span <see cref="TryReadVector"/> has handed out, which aliases storage this
-    /// replaces. Cell keys are interned per catalog, so a <see cref="CellKey"/> resolved before a relayout
-    /// addresses nothing after it.</para>
+    /// change-walk scratch, and every span <see cref="StateArena.TryReadVector(int, CellKey, out ReadOnlySpan{SByte})"/> has handed out, which aliases storage this
+    /// replaces. Runtime cell keys belong to the replaced key table and must be resolved again after relayout.
+    /// Compiled keys remain usable only when the replacement uses their source catalog.</para>
     /// <para>Each of the three per-row counters lands above every value any row held before, because the ordinals
     /// they are indexed by have been reassigned.</para>
     /// </remarks>
@@ -40,7 +42,7 @@ public sealed partial class StateArena {
 
         var carried = new List<StateRow>(capacity: m_rows.Count);
 
-        foreach (var row in ToRows()) {
+        foreach (var row in ExportRows(includePoolRows: true)) {
             if (catalog.TryResolve(
                 handle: out _,
                 lane: StateLane.Document,
@@ -61,16 +63,27 @@ public sealed partial class StateArena {
             return false;
         }
 
-        if (!rebuilt.TryLoad(
+        rebuilt.m_poolMutationDepth++;
+        var loaded = rebuilt.TryLoad(
             reason: out reason,
             rows: carried,
             time: in time
+        );
+
+        rebuilt.m_poolMutationDepth--;
+        if (!loaded) {
+            return false;
+        }
+        if (!rebuilt.TryRestoreKeys(
+            names: m_keys.Names,
+            reason: out reason
         )) {
             return false;
         }
 
         CarryLanes(target: rebuilt);
         Adopt(source: rebuilt);
+        ClearUndo();
 
         reason = string.Empty;
 
@@ -100,7 +113,7 @@ public sealed partial class StateArena {
         );
 
         for (var rowOrdinal = 0; (rowOrdinal < m_layout.RowCount); rowOrdinal++) {
-            var from = m_layout[rowOrdinal];
+            ref readonly var from = ref m_layout[rowOrdinal];
 
             if (from.LaneSlotStart < 0) {
                 continue;
@@ -153,6 +166,7 @@ public sealed partial class StateArena {
         m_appendGenerations = source.m_appendGenerations;
         m_behaviors = source.m_behaviors;
         m_catalog = source.m_catalog;
+        m_keys = source.m_keys;
         m_clockEpochEngineTicks = source.m_clockEpochEngineTicks;
         m_clockEpochTicks = source.m_clockEpochTicks;
         m_clockSubstepTicks = source.m_clockSubstepTicks;
@@ -169,6 +183,9 @@ public sealed partial class StateArena {
         m_numbers = source.m_numbers;
         m_observations = source.m_observations;
         m_phaseSequences = source.m_phaseSequences;
+        m_poolOfDomainRow = source.m_poolOfDomainRow;
+        m_poolOccupancy = source.m_poolOccupancy;
+        m_poolAddresses = source.m_poolAddresses;
         m_presence = source.m_presence;
         m_clockSet = source.m_clockSet;
         m_provenance = source.m_provenance;
@@ -182,6 +199,9 @@ public sealed partial class StateArena {
         m_texts = source.m_texts;
         m_vectors = source.m_vectors;
         m_visibilities = source.m_visibilities;
+        m_declarationVisibilityBytes = source.m_declarationVisibilityBytes;
+        m_visibilityBytes = source.m_visibilityBytes;
+        m_keys.SetByteBudget(budget: KeyByteBudget);
 
         m_changeDiffers = [];
         m_changeStamp = [];

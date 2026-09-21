@@ -22,6 +22,19 @@ The Windows concrete backends behind `Puck.Platform`'s contracts.
   WinRT/`Microsoft.Windows.SDK.NET` projection the Windows Graphics Capture
   path needs.
 
+## Pointer input
+
+The Windows system cursor supplies client-space positions, buttons, and wheel
+events as an aggregate source. Raw Input supplies relative motion per physical
+mouse; these deltas are never integrated to estimate the system cursor, whose
+movement also depends on Windows pointer acceleration and desktop bounds.
+Applications needing individually addressed mouse buttons need a separate raw
+button lane; the system cursor does not identify which mouse generated a click.
+
+Button coordinates are queued before their transitions. Capture lasts until
+the last held button is released; losing capture or focus releases held buttons.
+Disposing a window releases capture only when that window owns it.
+
 ## Camera capture
 
 `Win32MediaFoundationCameraService.EnumerateDevices` reports every attached

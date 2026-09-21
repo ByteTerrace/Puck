@@ -28,3 +28,11 @@ The reference game's remaining engineering, its creatures and scale, the finder 
 Durable GPU fixtures, per-pass timing, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, and how authored world data reaches the GPU, as one page of packages. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so the packages after the foundation are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
 
 The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
+
+S7's engine and language substrate is present, including generation-aware
+single and pair pools, snapshots, lexical claim/release/iteration, and authored
+round trips. It remains an open package until mutable body attachments,
+identity-owned transfer, pair interactions through the real World host, record
+field traits, and the promised Pong/Arena migrations and executable evidence
+land. The detailed evidence list stays in the
+[records and pools contract](records-and-pools.md).

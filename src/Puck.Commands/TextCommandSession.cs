@@ -18,9 +18,11 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     private readonly Lock m_enqueueGate = new();
 
     private readonly Action<string, CommandResult>? m_onResult;
+    private readonly Action<string, CommandResult>? m_onSettled;
     private readonly TextCommandSource m_source;
 
     private bool m_disposed;
+    private int m_resultCallbackFaults;
     private Func<bool>? m_wait;
 
     internal TextCommandSession(
@@ -31,9 +33,12 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         Action<string, CommandResult>? onResult,
         Func<bool>? hold = null,
         Func<IDisposable>? scope = null,
-        Func<CommandMetadata, bool>? authorize = null
+        Func<CommandMetadata, bool>? authorize = null,
+        bool dueNextTick = false,
+        Action<string, CommandResult>? onSettled = null
     ) {
         m_onResult = onResult;
+        m_onSettled = onSettled;
         m_source = source;
         Hold = hold;
         Principal = principal;
@@ -41,11 +46,13 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         SimulationSink = simulationSink;
         Slot = slot;
         Authorize = authorize;
+        DueNextTick = dueNextTick;
     }
 
     internal Func<CommandMetadata, bool>? Authorize { get; }
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;
+    internal bool SettlesResults => (m_onSettled is not null);
     // This session's own hold predicate, or null for a session nothing suspends on its own (the ordinary case; the
     // source-wide HoldGate is reserved for host-wide holds). While it returns true, Collect rotates this session to the
     // tail exactly like a read-after-write-blocked one, leaving every other session's drain unaffected.
@@ -57,10 +64,17 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     internal Func<IDisposable>? Scope { get; }
     internal CommandInjectionSink? SimulationSink { get; }
 
+    /// <summary>Gets a value indicating whether a simulation-routed line from this ingress is due in the first tick
+    /// that snapshots input after it was submitted, whatever the capture clock reads. A scripted ingress sets it:
+    /// the capture clock is wall time, and a simulation running behind it would otherwise take the line up a
+    /// varying number of ticks later.</summary>
+    public bool DueNextTick { get; }
     /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>
     public CommandPrincipal Principal { get; }
     /// <summary>Gets the logical player slot this ingress targets.</summary>
     public int Slot { get; }
+    /// <summary>Gets the number of result callbacks that threw. A reporting failure cannot cancel command execution.</summary>
+    public int ResultCallbackFaults => Volatile.Read(location: ref m_resultCallbackFaults);
 
     internal void EnqueuePending(TextSessionWork work) {
         lock (m_enqueueGate) {
@@ -84,10 +98,44 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         m_wait = null;
         return false;
     }
-    internal void PublishResult(string line, CommandResult result) => m_onResult?.Invoke(
-        line,
-        result
-    );
+
+    // The line the registry queued into the simulation lane during the submit in flight, so the source can tell a
+    // queued line, whose result settles when its tick applies, from one whose submit-time result is final.
+    internal string? QueuedLine { get; set; }
+
+    internal void PublishResult(string line, CommandResult result) => Publish(callback: m_onResult, line: line, result: result);
+
+    private void Publish(Action<string, CommandResult>? callback, string line, CommandResult result) {
+        try {
+            callback?.Invoke(line, result);
+        } catch (Exception) {
+            Interlocked.Increment(location: ref m_resultCallbackFaults);
+        }
+    }
+
+    // Reports a line's settled result: the handler's own, or the verdict of the work it started. While a verdict is
+    // pending the barrier stays held, so this session's next line and its captures order behind it. A session that
+    // settles nothing keeps the submit-time ordering it always had.
+    internal void Settle(string line, CommandResult result) {
+        if (m_onSettled is not { } onSettled) {
+            return;
+        }
+
+        if (result.Settlement is not { } settlement) {
+            Publish(callback: onSettled, line: line, result: result);
+
+            return;
+        }
+
+        m_barrier.Begin();
+        settlement.OnSettled(continuation: verdict => {
+            try {
+                Publish(callback: onSettled, line: line, result: verdict);
+            } finally {
+                m_barrier.Complete();
+            }
+        });
+    }
     internal bool TryDequeuePending(out TextSessionWork? work) => m_pending.TryDequeue(result: out work);
     internal bool TryPeekPending(out TextSessionWork? work) => m_pending.TryPeek(result: out work);
 

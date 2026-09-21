@@ -30,6 +30,17 @@ test('worker transport correlates out-of-order replies and preserves bigint', as
   await engine.dispose();
 });
 
+test('cost analysis travels through the worker with its exact counts', async () => {
+  const worker = new WorkerHarness(), engine = await ready(worker);
+  const pending = engine.costs('current');
+  const call = worker.messages.at(-1);
+  assert.equal(call.method, 'costs');
+  assert.deepEqual(call.args, ['current']);
+  worker.reply({ kind: 'result', id: call.id, ok: true, value: { stepAllowanceCycles: 9223372036854775807n } });
+  assert.equal((await pending).stepAllowanceCycles, 9223372036854775807n);
+  await engine.dispose();
+});
+
 test('disposal rejects pending and subsequent calls and terminates exactly once', async () => {
   const worker = new WorkerHarness(), engine = await ready(worker);
   const pending = assert.rejects(engine.compile('{}'), /disposed/);

@@ -403,7 +403,7 @@ public class StateSqlLspTests {
 
     [Fact]
     public async Task CompletionOutsideSqlBlockDoesNotOfferSqlKeywords() {
-        var source = "schema: \"puck.world.definition.v1\"\n\nsql {\n    DECLARE turnCount INT DEFAULT 1;\n}\n\nstate {\n    world {\n        slot mysqlRow : Int = |\n    }\n}\n";
+        var source = "schema: \"puck.world.definition.v1\"\n\nsql {\n    DECLARE turnCount INT DEFAULT 1;\n}\n\nstate {\n    world {\n        slot mysqlRow = |\n    }\n}\n";
         var response = await CompletionAtAsync(markedSource: source);
         var items = response["result"]?["items"] as JsonArray;
         if (items is not null) {

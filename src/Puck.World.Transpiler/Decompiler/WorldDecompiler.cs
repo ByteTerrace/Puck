@@ -1,3 +1,4 @@
+using Puck.State;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -27,12 +28,83 @@ public static partial class WorldDecompiler {
 
         return Decompile(embeddings: embeddings, root: rootObj);
     }
+
+    // Every section prints the document's own spelling of an expression. The finished text is respelled once as an
+    // author writes it, outside its string literals and comments: a string argument of a document-form call holds
+    // the document's spelling by definition.
+    private static string Respell(string text) {
+        var into = new StringBuilder(capacity: text.Length);
+        var code = 0;
+
+        void Flush(int end) {
+            if (end > code) {
+                into.Append(value: ExpressionSpelling.ToSourceDialect(text: text[code..end]));
+            }
+        }
+
+        for (var index = 0; (index < text.Length); index++) {
+            var character = text[index];
+
+            if (character == '"') {
+                var close = (index + 1);
+
+                while ((close < text.Length) && (text[close] != '"') && (text[close] != '\n')) {
+                    close += ((text[close] == '\\')
+                        ? 2
+                        : 1
+                    );
+                }
+
+                close = Math.Min(
+                    val1: close,
+                    val2: (text.Length - 1)
+                );
+                // The `$` of an interpolated string belongs to the literal, not to the code before it.
+                var open = (((index > 0) && (text[(index - 1)] == '$'))
+                    ? (index - 1)
+                    : index
+                );
+
+                Flush(end: open);
+                into.Append(value: text[open..(close + 1)]);
+                index = close;
+                code = (close + 1);
+            } else if ((character == '/') && ((index + 1) < text.Length) && (text[(index + 1)] == '/')) {
+                var end = text.IndexOf(
+                    startIndex: index,
+                    value: '\n'
+                );
+
+                end = ((end < 0)
+                    ? text.Length
+                    : end
+                );
+                Flush(end: index);
+                into.Append(value: text[index..end]);
+                index = (end - 1);
+                code = end;
+            }
+        }
+
+        Flush(end: text.Length);
+
+        return into.ToString();
+    }
+
     /// <summary>Decompiles a root <see cref="JsonObject"/> into formatted Puck source code.</summary>
     /// <param name="root">The root JSON object representing the world definition.</param>
     /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
     public static string Decompile(JsonObject root, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(root);
+
+        // Every section prints a reference from its colon spelling, so the copy printed from holds that spelling
+        // where the document holds a call node.
+        root = ((JsonObject)root.DeepClone());
+        WorldChannelNodes.Raise(
+            document: root,
+            type: typeof(WorldDefinition)
+        );
 
         var sb = new StringBuilder();
 
@@ -303,12 +375,13 @@ public static partial class WorldDecompiler {
                     sb,
                     key,
                     value,
+                    holder: typeof(WorldDefinition),
                     indentLevel: 0
                 );
             }
         }
 
-        return (sb.ToString().TrimEnd() + "\n");
+        return Respell(text: (sb.ToString().TrimEnd() + "\n"));
     }
 
     // One printer per root arm. Each answers whether it printed the section as its construct: a node whose shape
@@ -830,13 +903,17 @@ public static partial class WorldDecompiler {
         : ": "
     );
     // One field, in the one spelling its value's shape calls for.
-    internal static void EmitField(StringBuilder sb, string key, JsonNode? value, int indentLevel) {
+    internal static void EmitField(StringBuilder sb, string key, JsonNode? value, int indentLevel, Type? holder = null) {
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
         );
+        var position = ((holder is null) ? null : WorldCallArguments.MemberType(member: key, owner: holder));
+        var form = ((holder is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: key, owner: holder));
+        var text = PrintsAsText(form: form, node: value);
 
         if (
+            !text &&
             (value is JsonObject obj) &&
             RendersAsContainer(value: value)
         ) {
@@ -845,7 +922,8 @@ public static partial class WorldDecompiler {
                 key,
                 null,
                 obj,
-                indentLevel
+                indentLevel,
+                holder: position
             );
 
             return;
@@ -853,7 +931,9 @@ public static partial class WorldDecompiler {
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{indent}{key}{FieldSeparator(value: value)}{FormatValue(
+            $"{indent}{key}{(text ? ": " : FieldSeparator(value: value))}{FormatArgument(
+                context: position,
+                form: form,
                 indentLevel: indentLevel,
                 node: value
             )}"
@@ -866,7 +946,8 @@ public static partial class WorldDecompiler {
         string? name,
         JsonObject blockObj,
         int indentLevel,
-        HashSet<string>? excludedKeys = null
+        HashSet<string>? excludedKeys = null,
+        Type? holder = null
     ) {
         var indent = new string(
             c: ' ',
@@ -914,6 +995,7 @@ public static partial class WorldDecompiler {
                 );
             } else {
                 EmitField(
+                    holder: holder,
                     indentLevel: (indentLevel + 1),
                     key: k,
                     sb: sb,
@@ -927,7 +1009,7 @@ public static partial class WorldDecompiler {
             $"{indent}}}"
         );
     }
-    private static string FormatValue(JsonNode? node, int indentLevel) {
+    private static string FormatValue(JsonNode? node, int indentLevel, Type? context = null) {
         if (node is null) {
             return "null";
         }
@@ -966,6 +1048,7 @@ public static partial class WorldDecompiler {
                 var items = string.Join(
                     separator: ", ",
                     values: arr.Select(selector: i => FormatValue(
+                        context: context,
                         indentLevel: 0,
                         node: i
                     ))
@@ -989,6 +1072,7 @@ public static partial class WorldDecompiler {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
                     $"{itemIndent}{FormatValue(
+                        context: context,
                         indentLevel: (indentLevel + 1),
                         node: item
                     )}"
@@ -1014,6 +1098,7 @@ public static partial class WorldDecompiler {
                 typeVal.TryGetValue<string>(value: out _)
             ) {
                 return FormatCallForm(
+                    context: context,
                     indentLevel: indentLevel,
                     obj: obj
                 );
@@ -1035,7 +1120,9 @@ public static partial class WorldDecompiler {
                 // container. The literal grammar admits `key { }` and `key [ ]` directly.
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"{itemIndent}{k}{FieldSeparator(value: v)}{FormatValue(
+                    $"{itemIndent}{k}{(PrintsAsText(form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)), node: v) ? ": " : FieldSeparator(value: v))}{FormatArgument(
+                        context: ((context is null) ? null : WorldCallArguments.MemberType(member: k, owner: context)),
+                        form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)),
                         indentLevel: (indentLevel + 1),
                         node: v
                     )}"
@@ -1054,9 +1141,10 @@ public static partial class WorldDecompiler {
     // emitter's positional heuristics only exist for `orbit`/`fov`, so a named spelling is the only one guaranteed
     // to round-trip any `$type` object). Recurses through `FormatValue` for nested arguments, so a `$type` object
     // nested inside another call's argument prints as a nested call too.
-    private static string FormatCallForm(JsonObject obj, int indentLevel) {
+    private static string FormatCallForm(JsonObject obj, int indentLevel, Type? context = null) {
         var type = (obj["$type"]?.ToString() ?? "");
         var args = new List<string>();
+        var arm = WorldCallArguments.ArmType(baseType: context, discriminator: type);
 
         foreach (var (k, v) in obj) {
             if (string.Equals(
@@ -1067,6 +1155,8 @@ public static partial class WorldDecompiler {
                 continue;
             }
             args.Add(item: $"{k}: {FormatArgument(
+                context: ((arm is null) ? null : WorldCallArguments.MemberType(member: k, owner: arm)),
+                form: ((arm is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: arm)),
                 indentLevel: indentLevel,
                 node: v
             )}");
@@ -1076,17 +1166,47 @@ public static partial class WorldDecompiler {
             values: args
         )})";
     }
-    // A call-form argument that is an expression program is spelled as its infix text, never as the IR tree.
-    private static string FormatArgument(JsonNode? node, int indentLevel) => ((
+    // An expression program prints as its infix text where the model says the member holds an expression, which is
+    // where a source's bare text lowers back to the program; anywhere else it prints as the object it is.
+    private static bool PrintsAsText(JsonNode? node, WorldArgumentForm form) => (
+        (form == WorldArgumentForm.Expression) &&
         (node is JsonObject { Count: > 0 } program) &&
         (program["instructions"] is JsonArray) &&
-        (WorldExpressionJson.Text(node: node) is { Length: > 0 } spelling)
-    )
-        ? $"\"{EscapeString(s: spelling)}\""
-        : FormatValue(
+        (WorldExpressionJson.Text(node: node) is { Length: > 0 })
+    );
+    // An argument is printed in its one spelling: a name, a key, an expression and a closed word bare, text quoted.
+    // The bare forms print the document's spelling and the finished text is respelled with the rest of the source;
+    // a key is the exception, since its document spelling reads as an operand anywhere outside brackets.
+    private static string FormatArgument(JsonNode? node, WorldArgumentForm form, int indentLevel, Type? context = null) {
+        if (PrintsAsText(form: form, node: node)) {
+            return WorldExpressionJson.Text(node: node);
+        }
+        if ((node is JsonObject reference) && (form == WorldArgumentForm.Name) && (reference["field"] is not null)) {
+            return StateChannelRefJsonConverter.FromNode(node: reference).Spelling;
+        }
+        if ((node is JsonArray array) && (form is WorldArgumentForm.Name or WorldArgumentForm.Choice or WorldArgumentForm.Key or WorldArgumentForm.Expression) && array.All(predicate: static item => (item is JsonValue))) {
+            return $"[{string.Join(
+                separator: ", ",
+                values: array.Select(selector: item => FormatArgument(context: context, form: form, indentLevel: indentLevel, node: item))
+            )}]";
+        }
+        if ((node is JsonValue value) && value.TryGetValue<string>(value: out var written) && (written.Length > 0)) {
+            switch (form) {
+                case WorldArgumentForm.Name:
+                    return DocumentLowering.BareSpelling(form: DocumentValueForm.Name, written: written);
+                case WorldArgumentForm.Expression or WorldArgumentForm.Choice:
+                    return written;
+                case WorldArgumentForm.Key:
+                    return DocumentLowering.BareSpelling(form: DocumentValueForm.Key, written: written);
+            }
+        }
+
+        return FormatValue(
+            context: context,
             indentLevel: indentLevel,
             node: node
-        ));
+        );
+    }
     private static string EscapeString(string s) {
         return s.Replace(
             comparisonType: StringComparison.Ordinal,

@@ -1,0 +1,6 @@
+world.state.cell.set request $value 0
+world.wait 1
+world.state first
+world.state second
+world.state done
+wire.errors

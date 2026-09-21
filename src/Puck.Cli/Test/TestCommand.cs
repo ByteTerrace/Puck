@@ -6,15 +6,16 @@ using Puck.World;
 namespace Puck.Cli.Test;
 
 /// <summary>
-/// <c>puck test</c> — boots each authored test world through the real <c>Puck.World</c> executable, headless, to
+/// <c>puck test</c> — boots each authored test world through the real <c>Puck.World</c> executable, headless and
+/// unpaced, to
 /// the tick its own <c>schedule</c> section declares its state export at, then reads the verdict rows out of that
 /// export: one line per verdict naming the gate and the values it saw, and exit 0 only when every verdict passes.
 /// </summary>
 /// <remarks>
-/// Every world runs twice, into sibling directories, and a world whose two exports differ byte for byte is refused
-/// rather than reported: a verdict read off a world that does not reproduce says nothing. The export tick is the
-/// document's, not the runner's, which is what makes the two runs comparable at all — see
-/// <see cref="WorldScheduleSection"/>.
+/// Each collected world owns a numbered directory, independent of its filename, so parallel worlds never share
+/// persistence, transcripts or verdict exports.
+/// With <c>--reproduce</c>, every world runs twice into sibling directories and a world whose two exports differ
+/// byte for byte is refused. Ordinary authored tests run once; reproducibility qualification is an explicit tier.
 /// </remarks>
 internal static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";
@@ -22,7 +23,7 @@ internal static partial class TestCommand {
 
     private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
-    private static int Run(string path, TestHost host, string? worldArtifact, string? keep) {
+    private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             Console.Error.WriteLine(value: "ERROR: puck test must run inside the repository.");
 
@@ -76,21 +77,39 @@ internal static partial class TestCommand {
                 return 2;
             }
 
-            var failed = false;
+            var results = new TestWorldRun[worlds.Count];
+            var parallelism = Math.Clamp(
+                value: jobs,
+                min: 1,
+                max: Math.Max(1, worlds.Count)
+            );
 
-            foreach (var world in worlds) {
-                var verdict = RunWorld(
+            Parallel.For(
+                fromInclusive: 0,
+                toExclusive: worlds.Count,
+                parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
+                body: index => results[index] = RunWorldCaptured(
                     artifact: artifact!,
-                    runDirectory: runDirectory,
-                    world: world
-                );
+                    reproduce: reproduce,
+                    world: worlds[index],
+                    worldDirectory: Path.Combine(
+                        path1: runDirectory,
+                        path2: "worlds",
+                        path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture)
+                    )
+                )
+            );
 
-                if (verdict == 2) {
-                    return 2;
-                }
-
-                failed |= (verdict != 0);
+            foreach (var result in results) {
+                Console.Out.Write(value: result.Output);
+                Console.Error.Write(value: result.Error);
             }
+
+            if (results.Any(result => result.Verdict == 2)) {
+                return 2;
+            }
+
+            var failed = results.Any(result => result.Verdict != 0);
 
             if (failed) {
                 Console.Error.WriteLine(value: "FAIL: one or more worlds did not pass — a failing verdict, or a step whose recorded outcome was not the one it declared.");
@@ -98,7 +117,10 @@ internal static partial class TestCommand {
                 return 1;
             }
 
-            Console.WriteLine(value: $"PASS: every verdict in {worlds.Count} test world(s) passed, and each world's two runs exported identical bytes.");
+            Console.WriteLine(value: (reproduce
+                ? $"PASS: every verdict in {worlds.Count} test world(s) passed, and each world's two runs exported identical bytes."
+                : $"PASS: every verdict in {worlds.Count} test world(s) passed."
+            ));
 
             return 0;
         } finally {
@@ -116,47 +138,65 @@ internal static partial class TestCommand {
             }
         }
     }
-    // One world: two runs, a byte comparison of their exports, then the verdict report off the first.
-    private static int RunWorld(string world, string artifact, string runDirectory) {
+    private static TestWorldRun RunWorldCaptured(string world, string artifact, string worldDirectory, bool reproduce) {
+        using var output = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
+        using var error = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
+        var verdict = RunWorld(
+            artifact: artifact,
+            error: error,
+            output: output,
+            reproduce: reproduce,
+            world: world,
+            worldDirectory: worldDirectory
+        );
+
+        return new TestWorldRun(
+            Error: error.ToString(),
+            Output: output.ToString(),
+            Verdict: verdict
+        );
+    }
+    // One world: one ordinary run, or two plus a byte comparison for explicit reproducibility qualification.
+    private static int RunWorld(string world, string artifact, string worldDirectory, TextWriter output, TextWriter error, bool reproduce) {
         var name = Path.GetFileNameWithoutExtension(path: Path.GetFileNameWithoutExtension(path: world));
 
-        Console.WriteLine(value: $"test {name}: {world}");
+        output.WriteLine(value: $"test {name}: {world}");
+        output.WriteLine(value: $"  artifacts: {worldDirectory.Replace(oldChar: '\\', newChar: '/')}");
 
         if (!TryReadSchedule(
             reason: out var scheduleReason,
             schedule: out var schedule,
             world: world
         )) {
-            Console.Error.WriteLine(value: $"ERROR: {scheduleReason}");
+            error.WriteLine(value: $"ERROR: {scheduleReason}");
 
             return 2;
         }
 
-        var legDirectory = Path.Combine(
-            path1: runDirectory,
-            path2: name
-        );
         TestReading? first = null;
         string? unexpected = null;
 
-        for (var run = 1; (run <= 2); run++) {
+        var runCount = (reproduce ? 2 : 1);
+
+        for (var run = 1; (run <= runCount); run++) {
             if (!TryRunLeg(
                 artifact: artifact,
                 exportTick: schedule!.ExportTick,
                 legDirectory: Path.Combine(
-                path1: legDirectory,
+                path1: worldDirectory,
                 path2: $"run{run.ToString(provider: CultureInfo.InvariantCulture)}"
             ),
                 rateHz: schedule.RateHz,
                 reading: out var reading,
+                error: error,
                 world: world
             )) {
                 return 2;
             }
 
             // Reaching the authored tick, accounting for every declared row, and every row answering what it declared
-            // are part of the verdict, and they are checked on EACH leg: two identically truncated runs reproduce
-            // each other perfectly.
+            // are part of the verdict, and they are checked on each requested leg: two identically truncated runs
+            // reproduce each other perfectly.
             switch (TestReconciliation.Judge(
                 name: name,
                 reading: reading!,
@@ -164,14 +204,14 @@ internal static partial class TestCommand {
                 schedule: schedule
             )) {
                 case TestReconciliationVerdict.Unmeasured:
-                    Console.Error.WriteLine(value: $"  REFUSED: {judged}");
+                    error.WriteLine(value: $"  REFUSED: {judged}");
 
                     return 2;
                 case TestReconciliationVerdict.Unexpected:
                     if (unexpected is null) {
                         unexpected = judged;
 
-                        Console.Error.WriteLine(value: $"  OUTCOME: {judged}");
+                        error.WriteLine(value: $"  OUTCOME: {judged}");
                     }
 
                     break;
@@ -186,20 +226,22 @@ internal static partial class TestCommand {
             }
 
             if (!first!.ExportBytes.AsSpan().SequenceEqual(other: reading!.ExportBytes.AsSpan())) {
-                Console.Error.WriteLine(value: $"  REFUSED: the two runs of {name} exported different bytes at tick {schedule.ExportTick} — the world does not reproduce, so its verdicts say nothing.");
+                error.WriteLine(value: $"  REFUSED: the two runs of {name} exported different bytes at tick {schedule.ExportTick} — the world does not reproduce, so its verdicts say nothing.");
 
                 return 2;
             }
 
             if (!first.ManifestBytes.AsSpan().SequenceEqual(other: reading.ManifestBytes.AsSpan())) {
-                Console.Error.WriteLine(value: $"  REFUSED: the two runs of {name} recorded different {WorldScheduleSection.ManifestFileName} bytes — what the run did is not reproducible, so the refusals it reports are evidence of nothing.");
+                error.WriteLine(value: $"  REFUSED: the two runs of {name} recorded different {WorldScheduleSection.ManifestFileName} bytes — what the run did is not reproducible, so the refusals it reports are evidence of nothing.");
 
                 return 2;
             }
         }
 
         var reported = Report(
+            error: error,
             name: name,
+            output: output,
             reading: first!
         );
 
@@ -211,9 +253,9 @@ internal static partial class TestCommand {
             )
         );
     }
-    private static int Report(string name, TestReading reading) {
+    private static int Report(string name, TestReading reading, TextWriter output, TextWriter error) {
         if (reading.Verdicts.Count == 0) {
-            Console.Error.WriteLine(value: $"ERROR: {name} declares no verdict row — a test world with nothing to answer is a usage error, not a pass.");
+            error.WriteLine(value: $"ERROR: {name} declares no verdict row — a test world with nothing to answer is a usage error, not a pass.");
 
             return 2;
         }
@@ -227,17 +269,17 @@ internal static partial class TestCommand {
             )}]{Stamp(verdict: verdict)}";
 
             if (WorldVerdict.IsPass(status: verdict.Judged)) {
-                Console.WriteLine(value: line);
+                output.WriteLine(value: line);
             } else {
                 failures++;
 
-                Console.Error.WriteLine(value: line);
+                error.WriteLine(value: line);
             }
         }
 
         foreach (var submission in reading.Submissions) {
             if (submission.Outcome != WorldScheduleSection.OutcomeSubmitted) {
-                Console.Error.WriteLine(value: $"  submission tick={submission.Tick} {submission.Principal}: {submission.Outcome} {submission.Command}{((submission.Detail is { } detail)
+                error.WriteLine(value: $"  submission tick={submission.Tick} {submission.Principal}: {submission.Outcome} {submission.Command}{((submission.Detail is { } detail)
                     ? $" — {detail}"
                     : string.Empty)}");
             }
@@ -245,11 +287,11 @@ internal static partial class TestCommand {
 
         foreach (var echo in reading.Echoes) {
             if (echo.Rejected) {
-                Console.Error.WriteLine(value: $"  refusal: {echo.Message}");
+                error.WriteLine(value: $"  refusal: {echo.Message}");
             }
         }
 
-        Console.WriteLine(value: $"  {reading.Verdicts.Count - failures}/{reading.Verdicts.Count} verdict(s) passed at export tick {reading.ExportTick}.");
+        output.WriteLine(value: $"  {reading.Verdicts.Count - failures}/{reading.Verdicts.Count} verdict(s) passed at export tick {reading.ExportTick}.");
 
         return ((failures == 0)
             ? 0
@@ -271,6 +313,8 @@ internal static partial class TestCommand {
             )
         )
     );
+
+    private sealed record TestWorldRun(int Verdict, string Output, string Error);
     // The export tick and the simulation rate come from the document's own text rather than a composed load: the
     // schedule and the rate are the two things this verb needs before it can boot anything, and composing a document
     // that names a basis is the host's job, not the runner's.

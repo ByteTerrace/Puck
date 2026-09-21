@@ -20,6 +20,10 @@ namespace Puck.State;
 /// recomputes the board — from <see cref="Tokens"/>/<see cref="Codes"/>'s CURRENT values — on every keyed write to
 /// either row and on every load, so the exported document already carries the derived cells and a hand-authored or
 /// stale board never survives past the next tick.</para>
+/// <para>Validation and arena construction also require the effective domain of <see cref="Codes"/> — its envelope
+/// intersected with its optional enum — to be contained by the board's effective domain. The board's declared empty
+/// value must be admitted by both its envelope and enum, so changing either row's bounds or symbols can refuse the
+/// inverse declaration before any state is loaded.</para>
 /// </remarks>
 /// <param name="Tokens">The keyed <see cref="CellKind.Int"/> row whose cell values name cells of the board's
 /// topology — a value naming no cell means that token is off the board.</param>

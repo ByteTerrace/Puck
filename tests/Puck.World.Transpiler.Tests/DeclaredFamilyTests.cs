@@ -19,8 +19,8 @@ public class DeclaredFamilyTests {
 
         state {
             world {
-                slot Pile[0, 2..3] : Int = 0
-                slot idx : Int = 2
+                slot Pile[0, 2..3] = 0
+                slot idx = 2
             }
         }
 
@@ -29,7 +29,7 @@ public class DeclaredFamilyTests {
         }
 
         rule "live" {
-            local k : Int = idx
+            local k = idx
             Pile[$local:k] += 1
         }
         """;
@@ -117,7 +117,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot Pile[0, 2..3] : Int = 0
+                    slot Pile[0, 2..3] = 0
                 }
             }
 
@@ -137,7 +137,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot Pile[0..2] : Int = 0
+                    slot Pile[0..2] = 0
                 }
             }
 
@@ -150,7 +150,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot Pile[3] : Int = 0
+                    slot Pile[3] = 0
                 }
             }
 
@@ -174,7 +174,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot board : Int = 1
+                    slot board = 1
                 }
             }
 
@@ -212,7 +212,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot board : Int = 1
+                    slot board = 1
                 }
             }
 
@@ -255,7 +255,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot board : Int = 1
+                    slot board = 1
                 }
             }
 
@@ -281,7 +281,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot board : Int = 1
+                    slot board = 1
                 }
             }
 
@@ -304,7 +304,7 @@ public class DeclaredFamilyTests {
 
             state {
                 world {
-                    slot board : Int = 1
+                    slot board = 1
                 }
             }
 

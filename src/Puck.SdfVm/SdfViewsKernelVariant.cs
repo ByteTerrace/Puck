@@ -108,6 +108,7 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Superellipsoid:
                         case SdfShapeType.ConvexPolygon:
                         case SdfShapeType.Sweep:
+                        case SdfShapeType.Path:
                             return $"shape {((SdfShapeType)instruction.Shape)}";
                         default:
                             break;

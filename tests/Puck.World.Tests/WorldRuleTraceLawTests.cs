@@ -50,9 +50,9 @@ public sealed class WorldRuleTraceLawTests {
                 Value: 0m
             ),
             Locals: [new RuleLocal(
-                    CellName.Parse(candidate: "dealt"),
-                    CellKind.Int,
-                    Expr(text: "minimum(damage, hp)")
+                    Expression: Expr(text: "minimum(damage, hp)"),
+                    Kind: CellKind.Int,
+                    Name: CellName.Parse(candidate: "dealt")
                 )]
         )],
     };
@@ -198,9 +198,9 @@ public sealed class WorldRuleTraceLawTests {
             )]),
             Rules = [Document().Rules![0] with {
                 Locals = [new RuleLocal(
-                    CellName.Parse(candidate: "dealt"),
-                    CellKind.Int,
-                    Expr(text: "damage / zero")
+                    Expression: Expr(text: "damage / zero"),
+                    Kind: CellKind.Int,
+                    Name: CellName.Parse(candidate: "dealt")
                 )],
             }],
         };
@@ -300,10 +300,13 @@ public sealed class WorldRuleTraceLawTests {
             budget[0]
         );
         Assert.StartsWith(
-            "[world.budget.rules strike x1 unit=",
+            "[world.budget.rules strike x1 setup=0 check=",
             budget[1],
             StringComparison.Ordinal
         );
+        Assert.Contains(collection: budget, filter: line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.budget.rules reference: model=")
+            && line.Contains(comparisonType: StringComparison.Ordinal, value: "cycles=unmodeled:")
+            && line.EndsWith(comparisonType: StringComparison.Ordinal, value: "certified=False]")));
     }
     [Fact]
     public void TracingIsAnObserverThatLeavesTheStateHashAlone() {

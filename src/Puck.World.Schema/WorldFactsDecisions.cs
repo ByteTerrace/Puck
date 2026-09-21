@@ -67,6 +67,22 @@ public sealed record CompiledWorldFactsRule : CompiledRule {
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         base.CollectReads(into: into);
+        if (Interaction is { } interaction) {
+            if (interaction.LeftPool is { } left) {
+                into.Add(item: new CellAccess(RowOrdinal: left.DomainRowOrdinal, Key: default));
+                into.Add(item: new CellAccess(RowOrdinal: left.GenerationRowOrdinal, Key: default));
+                if (interaction.LeftCarrier is { } carrier) {
+                    into.Add(item: new CellAccess(left.Fields[carrier.FieldOrdinal].RowOrdinal, default));
+                }
+            }
+            if (interaction.RightPool is { } right) {
+                into.Add(item: new CellAccess(RowOrdinal: right.DomainRowOrdinal, Key: default));
+                into.Add(item: new CellAccess(RowOrdinal: right.GenerationRowOrdinal, Key: default));
+                if (interaction.RightCarrier is { } carrier) {
+                    into.Add(item: new CellAccess(right.Fields[carrier.FieldOrdinal].RowOrdinal, default));
+                }
+            }
+        }
         if (Decision is not { } decision) {
             return;
         }
@@ -108,18 +124,28 @@ public sealed record CompiledWorldFactsRule : CompiledRule {
             }
         }
     }
-    /// <summary>Adds the decision's cost: every option's gate, the costliest branch, the score of every retained
-    /// candidate, and the perception sampling a neighbours option inspects.</summary>
+    /// <summary>Prices what only a world evaluates beside the library's rule: an interaction's carrier sweep as
+    /// setup, and a decision's perception, scoring, and selection as check, with its costliest branch as effects.</summary>
     /// <inheritdoc/>
     public override RuleCost CostBreakdown(IRuleCostContext context) {
         var baseBreakdown = base.CostBreakdown(context: context);
 
+        if (Interaction is { } interaction) {
+            return (baseBreakdown with {
+                Setup = (baseBreakdown.Setup + WorldInteractionBound.Of(
+                    context: ((WorldFactsCompileContext)context),
+                    interaction: interaction
+                ).Setup),
+            });
+        }
         if (Decision is not { } decision) {
             return baseBreakdown;
         }
 
+        var capacity = ((long)((WorldFactsCompileContext)context).Definition.Population.Capacity);
         var check = baseBreakdown.Check;
-        var currentGate = 0L;
+        var choices = 0L;
+        var currentGate = RuleWork.Zero;
         var branch = RuleWorkBudget.EffectsCost(
             context: context,
             effects: decision.OnNoChoice
@@ -136,85 +162,73 @@ public sealed record CompiledWorldFactsRule : CompiledRule {
                 tokens: option.Score
             );
 
-            currentGate = Math.Max(
-                val1: currentGate,
-                val2: gate
+            currentGate = RuleWork.Max(
+                left: currentGate,
+                right: gate
             );
             if (option.Neighbors is { } neighbors) {
-                // Physical sampling and eligibility inspect at most the candidate budget; only retained candidates score.
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: RuleWorkBudget.SaturatingMultiply(
-                        left: neighbors.Source.CandidateBudget,
-                        right: RuleWorkBudget.SaturatingAdd(
-                            left: 1L,
-                            right: gate
-                        )
-                    )
-                );
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: RuleWorkBudget.SaturatingMultiply(
-                        left: neighbors.Source.MaxCandidates,
-                        right: RuleWorkBudget.SaturatingAdd(
-                            left: 1L,
-                            right: score
-                        )
-                    )
-                );
-                // Grid cell lookups, independent of crowd density.
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: 27L
-                );
-                if (neighbors.Source.RequiresLineOfSight) {
-                    check = RuleWorkBudget.SaturatingAdd(
-                        left: check,
-                        right: neighbors.Source.CandidateBudget
-                    );
-                }
+                var budget = ((long)neighbors.Source.CandidateBudget);
+                var retained = ((long)neighbors.Source.MaxCandidates);
+                var sift = RuleWorkBudget.SearchSteps(count: budget);
+
+                // The 27 cells around the observer, each found by a binary search of the grid's cells.
+                check += (27L * (1L + RuleWorkBudget.SearchSteps(count: capacity)));
+                // The query's cursor visits every found cell between two examinations once the small cells are
+                // spent; each examination is a distance test and one sift into the retained heap, and the heap is
+                // drained by one sift per retained neighbour.
+                check += (budget * RuleWork.Known(units: ((27L + 1L) + (2L * sift))));
+                // Each neighbour the query wrote is tested for perception, then against the option's gate.
+                check += (budget * ((neighbors.Source.RequiresLineOfSight
+                    ? (1L + WorldRuleCapacity.SightTestWork)
+                    : 1L
+                ) + gate));
+                check += (retained * (1L + score));
+                check += RuleWorkBudget.IntrosortWork(count: retained);
+                choices += retained;
             } else {
-                check = RuleWorkBudget.SaturatingAdd(
-                    left: check,
-                    right: RuleWorkBudget.SaturatingAdd(
-                        left: RuleWorkBudget.SaturatingAdd(
-                            left: 1L,
-                            right: gate
-                        ),
-                        right: score
-                    )
-                );
+                check += ((1L + gate) + score);
+                choices++;
             }
 
-            branch = Math.Max(
-                val1: branch,
-                val2: RuleWorkBudget.EffectsCost(
+            branch = RuleWork.Max(
+                left: branch,
+                right: RuleWorkBudget.EffectsCost(
                     context: context,
                     effects: option.Effects
                 )
             );
         }
 
-        check = RuleWorkBudget.SaturatingAdd(
-            left: check,
-            right: currentGate
+        // The incumbent's gate is read again to learn whether it lost eligibility, the interrupt gate bypasses the
+        // period, and selection walks every gathered choice twice: once to total or rank, once to pick.
+        check += currentGate;
+        check += RuleWorkBudget.GateCost(
+            context: context,
+            tokens: (decision.Interrupt ?? [])
         );
-        check = RuleWorkBudget.SaturatingAdd(
-            left: check,
-            right: RuleWorkBudget.GateCost(
-                context: context,
-                tokens: (decision.Interrupt ?? [])
-            )
-        );
+        check += (2L * choices);
 
         return new RuleCost(
             Check: check,
-            Effects: RuleWorkBudget.SaturatingAdd(
-                left: baseBreakdown.Effects,
-                right: branch
-            ),
-            Setup: baseBreakdown.Setup
+            Effects: (baseBreakdown.Effects + branch),
+            Setup: (baseBreakdown.Setup + DecisionSetup(
+                context: context,
+                rule: this
+            ))
         );
+    }
+
+    // A decision's sweep gathers the iterated row's integer keys and sorts them, drops the bindings of keys that
+    // left by a binary search each, and copies the distinct keys. The library's own forEach setup already pays for
+    // the key snapshot.
+    private static RuleWork DecisionSetup(CompiledRule rule, IRuleCostContext context) {
+        if (rule.ForEachOrdinal < 0) {
+            return RuleWork.Known(units: 1L);
+        }
+
+        var keys = context.RowCapacity(rowOrdinal: rule.ForEachOrdinal);
+
+        return (RuleWorkBudget.IntrosortWork(count: keys) + (keys * RuleWork.Known(units: (1L + RuleWorkBudget.SearchSteps(count: keys)))));
     }
 }
 public static partial class WorldFactsCompiler {
@@ -243,7 +257,7 @@ public static partial class WorldFactsCompiler {
             throw Refuse(detail: "requires Level rule mode");
         }
         if (string.Equals(
-            a: rule.ForEach,
+            a: rule.ForEach?.Spelling,
             b: RuleFacts.ForEachZones,
             comparisonType: StringComparison.Ordinal
         )) {

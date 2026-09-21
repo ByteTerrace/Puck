@@ -1190,22 +1190,32 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        ValidateProgram(
-            curveNames: curveNames,
-            definition: definition,
-            dynamicsNames: dynamicsNames,
-            errors: errors,
-            path: "views.seatRig",
-            placementIds: placementIds,
-            program: views.SeatRig
-        );
-        ValidateSeatControl(
-            control: views.SeatControl,
-            path: "views.seatControl",
-            errors: errors
-        );
-        if (views.SeatRig?.OrbitOp is null) {
-            errors.Add(item: "views.seatRig must contain an 'orbit' op because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+        // A document that seats no body looks through no seat rig, so it may author layouts and pipelines alone.
+        if ((views.SeatRigRaw is null) || (views.SeatControlRaw is null)) {
+            if (capacity > 0) {
+                errors.Add(item: $"views.seatRig and views.seatControl are required when bodies.capacity ({capacity}) is nonzero; the engine declares no seat rig (author both, or name a basis document that does).");
+            } else if ((views.SeatRigRaw is null) != (views.SeatControlRaw is null)) {
+                errors.Add(item: "views.seatRig and views.seatControl are authored together or not at all.");
+            }
+        }
+        if ((views.SeatRigRaw is { } seatRig) && (views.SeatControlRaw is { } seatControl)) {
+            ValidateProgram(
+                curveNames: curveNames,
+                definition: definition,
+                dynamicsNames: dynamicsNames,
+                errors: errors,
+                path: "views.seatRig",
+                placementIds: placementIds,
+                program: seatRig
+            );
+            ValidateSeatControl(
+                control: seatControl,
+                errors: errors,
+                path: "views.seatControl"
+            );
+            if (seatRig.OrbitOp is null) {
+                errors.Add(item: "views.seatRig must contain an 'orbit' op because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+            }
         }
 
         if (views.CameraRig is { } cameraRig) {

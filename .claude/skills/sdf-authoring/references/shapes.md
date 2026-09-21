@@ -67,6 +67,13 @@ only.
 | `Ellipse` | none | **no — renderable only** |
 | `ChamferedRectangle` | `cornerRadius` as a chamfer fraction, [0,1] | yes |
 | `Convex` | `vertices`, 3 to 8 points; `cornerRadius` rounds them uniformly | yes |
+| `Path` | `path` contours; `cornerRadius: 0`; bounded line/Bezier/arc flattening, optional stroke or filled-outline shear | no — renderable only |
+
+Path uses extrusion only, up to 128 compiled edges, and explicit normalized-space
+tolerance. Panel, trims (including a trim referencing a Path), rounding, and
+chamfer are refused. Curves compile once into a packed edge table. Consult
+`docs/rendering/sdf/reference/materials-and-primitives.md#curved-path-profiles`
+for fields and semantics; `tests/Puck.Parity/paths.puck` is the forcing fixture.
 
 A convex hull's points must lie in [-1, 1] on both axes, be distinct and
 non-collinear, and wind **strictly clockwise**.
